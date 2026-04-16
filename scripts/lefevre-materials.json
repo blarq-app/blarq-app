@@ -1,0 +1,310 @@
+[
+  {
+    "id": "cmnxwn5vd0019rtw2bfnskau5",
+    "name": "ADHESIVO MONTAJE AGOREX PL500 3,8KG",
+    "unit": "UN",
+    "netPrice": 28815,
+    "category": "TUBO CALAFATERA"
+  },
+  {
+    "id": "cmnxwn5y3004ertw2w2u0wad4",
+    "name": "AISLANGLASS R122 50MM 0,6X10M ROLLO LIBRE",
+    "unit": "UN",
+    "netPrice": 12341,
+    "category": "AISLANTES"
+  },
+  {
+    "id": "cmnxwn60z007mrtw2zfpksxh0",
+    "name": "CABLE EVA FLEX",
+    "unit": "UN",
+    "netPrice": 10000,
+    "category": "ELECTRICIDAD"
+  },
+  {
+    "id": "cmnxwn5v0000urtw2lsw5klr7",
+    "name": "CAVEBOND 20LT TINETA",
+    "unit": "UN",
+    "netPrice": 71462,
+    "category": "TINETAS"
+  },
+  {
+    "id": "cmnxwn614007trtw2zfsnqfih",
+    "name": "CAÑERIA COBRE \"L\" 1/2.  3MTS (INSTALACION AGUA)",
+    "unit": "UN",
+    "netPrice": 15462,
+    "category": "SAN. COBRE BRONCE"
+  },
+  {
+    "id": "cmnxwn61z008qrtw2xw92bvb8",
+    "name": "CAÑERIA COBRE \"M\" 1/2.  1MTS (INSTALACION GAS)",
+    "unit": "UN",
+    "netPrice": 4025,
+    "category": "GAS"
+  },
+  {
+    "id": "cmnxwn61u008krtw209g7lyyh",
+    "name": "CELOSIA DE VENTILACION 35X35",
+    "unit": "UN",
+    "netPrice": 3866,
+    "category": "SANITARIO"
+  },
+  {
+    "id": "cmnxwn5z4005grtw2lu09bs1u",
+    "name": "CINTA PARA ENMASCARAR 48MM 40MTS",
+    "unit": "UN",
+    "netPrice": 3186,
+    "category": "GENERAL"
+  },
+  {
+    "id": "cmnxwn5z5005hrtw22wlkb6ck",
+    "name": "CINTA PARA ENMASCARAR AZUL 48MM X 55MTS",
+    "unit": "UN",
+    "netPrice": 6210,
+    "category": "GENERAL"
+  },
+  {
+    "id": "cmnxwn5y2004crtw2zioxio25",
+    "name": "CINTA PARA JUNTAS 5CM X 90MTS",
+    "unit": "UN",
+    "netPrice": 4950,
+    "category": "VOLCANITA"
+  },
+  {
+    "id": "cmnxwn5zx006ertw2223ztk5s",
+    "name": "CLICK NIVELADOR PORCELANATO 1,5MM  BOLSA 100",
+    "unit": "UN",
+    "netPrice": 2345,
+    "category": "PROVISIONES"
+  },
+  {
+    "id": "cmnxwn5zy006frtw23qxz9e4s",
+    "name": "CUÑA NIVELADORA PORCELANATO 1,5MM BOLSA 100",
+    "unit": "UN",
+    "netPrice": 2739,
+    "category": "PROVISIONES"
+  },
+  {
+    "id": "cmnxwn61w008mrtw200g7f048",
+    "name": "DESAGUE DUCHA + SIFON",
+    "unit": "UN",
+    "netPrice": 5882,
+    "category": "SANITARIO"
+  },
+  {
+    "id": "cmnxwn5uz000srtw2unpjh300",
+    "name": "ESMALTE AL AGUA SATIN SW SKT TINETA",
+    "unit": "UN",
+    "netPrice": 105000,
+    "category": "TINETAS"
+  },
+  {
+    "id": "cmnxwn5v0000trtw2edrng2qe",
+    "name": "ESMALTE AL AGUA SINTETICO SEMI BRILLO CERESITA GALON",
+    "unit": "UN",
+    "netPrice": 31504,
+    "category": "TINETAS"
+  },
+  {
+    "id": "cmnxwn5zz006grtw2r5ecyok5",
+    "name": "ESPACIADOR CON TOMADOR 3MM 200 UNIDADES",
+    "unit": "UN",
+    "netPrice": 2513,
+    "category": "PROVISIONES"
+  },
+  {
+    "id": "cmnxwn5zp0065rtw26io39xlp",
+    "name": "ESPUMA NIVELADORA 10M2",
+    "unit": "UN",
+    "netPrice": 5454,
+    "category": "PROVISIONES"
+  },
+  {
+    "id": "cmnxwn610007nrtw284kzztsk",
+    "name": "EXTRACTOR DE AIRE FANALOSA 4\"",
+    "unit": "UN",
+    "netPrice": 15958,
+    "category": "ELECTRICIDAD"
+  },
+  {
+    "id": "cmnxwn61e0083rtw2bcmub5g1",
+    "name": "FITTING COBRE Y BRONCE COCINA",
+    "unit": "UN",
+    "netPrice": 60000,
+    "category": "SAN. COBRE BRONCE"
+  },
+  {
+    "id": "cmnxwn61y008prtw2c9z1xg4a",
+    "name": "FITTING PVC COCINA",
+    "unit": "UN",
+    "netPrice": 60000,
+    "category": "SANITARIO"
+  },
+  {
+    "id": "cmnxwn5uh000artw2pmff4344",
+    "name": "FRAGUE BEKRON BOLSA 5KG",
+    "unit": "UN",
+    "netPrice": 7555,
+    "category": "SACOS"
+  },
+  {
+    "id": "cmnxwn5wg002jrtw2gf44559m",
+    "name": "GUARDAPOLVO FOLIADO 15X90X2400MM",
+    "unit": "UN",
+    "netPrice": 4193,
+    "category": "GUARDAPOLVO"
+  },
+  {
+    "id": "cmnxwn5uy000rrtw2wagigpg5",
+    "name": "LATEX EXTRACUBRIENTE SIPA TINETA",
+    "unit": "UN",
+    "netPrice": 75622,
+    "category": "TINETAS"
+  },
+  {
+    "id": "cmnxwn5z7005jrtw2yxjhdfqz",
+    "name": "LIJA 120",
+    "unit": "UN",
+    "netPrice": 210,
+    "category": "GENERAL"
+  },
+  {
+    "id": "cmnxwn623008vrtw2wj2uxrad",
+    "name": "LLAVE PASO GAS SOBRE CUBIERTA",
+    "unit": "UN",
+    "netPrice": 12269,
+    "category": "GAS"
+  },
+  {
+    "id": "cmnxwn60y007lrtw27h1x70d7",
+    "name": "MATERIALES ELECTRICOS (CAJA, SALIDA CAJA, CURVAS, CONDUIT)",
+    "unit": "UN",
+    "netPrice": 3000,
+    "category": "ELECTRICIDAD"
+  },
+  {
+    "id": "cmnxwn60s007ertw2year0p5d",
+    "name": "MODULO SINTHESI S33",
+    "unit": "UN",
+    "netPrice": 8403,
+    "category": "ELECTRICIDAD"
+  },
+  {
+    "id": "cmnxwn5ub0006rtw2wdwaxhfz",
+    "name": "NIVELADOR DE PISO TOPEX SACO 25KG",
+    "unit": "UN",
+    "netPrice": 4748,
+    "category": "SACOS"
+  },
+  {
+    "id": "cmnxwn5uw000prtw2tw4jyh0o",
+    "name": "PASTA MURO F-15 TAJAMAR TINETA",
+    "unit": "UN",
+    "netPrice": 15118,
+    "category": "TINETAS"
+  },
+  {
+    "id": "cmnxwn5x9003jrtw2d4yleufm",
+    "name": "PERFIL METALCON ECO. C 60X20X0.5MM 2.4MTS",
+    "unit": "UN",
+    "netPrice": 1924,
+    "category": "METALCON"
+  },
+  {
+    "id": "cmnxwn5x6003grtw25g8tqcrv",
+    "name": "PERFIL METALCON ECO. U 39X20X0.5MM 3MTS",
+    "unit": "UN",
+    "netPrice": 1504,
+    "category": "METALCON"
+  },
+  {
+    "id": "cmnxwn5x7003hrtw2m2oewrcr",
+    "name": "PERFIL METALCON ECO. U 61X20X0.5MM 3MTS",
+    "unit": "UN",
+    "netPrice": 1672,
+    "category": "METALCON"
+  },
+  {
+    "id": "cmnxwn5vf001drtw25om9xs6g",
+    "name": "PLACA OSB ESTRUCTURAL 9.5MM 122X244CM",
+    "unit": "UN",
+    "netPrice": 13437,
+    "category": "MADERA"
+  },
+  {
+    "id": "cmnxwn5z7005krtw2h204ggmh",
+    "name": "RODILLO DE FIBRA 0,6X12CM",
+    "unit": "UN",
+    "netPrice": 2431,
+    "category": "GENERAL"
+  },
+  {
+    "id": "cmnxwn5z2005frtw26nwlrlgq",
+    "name": "ROLLO CARTON CORRUGADO 1,2X25MTS",
+    "unit": "UN",
+    "netPrice": 23521,
+    "category": "GENERAL"
+  },
+  {
+    "id": "cmnxwn5ui000brtw2k93mhfsp",
+    "name": "SACO DE ESCOMBROS 25UNIDADES",
+    "unit": "UN",
+    "netPrice": 6622,
+    "category": "SACOS"
+  },
+  {
+    "id": "cmnxwn5u30000rtw223uk9g56",
+    "name": "SACO YESO 25KG",
+    "unit": "UN",
+    "netPrice": 4361,
+    "category": "SACOS"
+  },
+  {
+    "id": "cmnxwn61x008nrtw29vc0xs0f",
+    "name": "SIFON LAVAMANOS",
+    "unit": "UN",
+    "netPrice": 2092,
+    "category": "SANITARIO"
+  },
+  {
+    "id": "cmnxwn5ue0008rtw2hc8f2jz3",
+    "name": "SIKACERAM 110 EXTRA SACO 25KG",
+    "unit": "UN",
+    "netPrice": 7134,
+    "category": "SACOS"
+  },
+  {
+    "id": "cmnxwn5vd001artw24uc2lxg6",
+    "name": "SILICONA PINTABLE TOPEX 370GR",
+    "unit": "UN",
+    "netPrice": 2261,
+    "category": "TUBO CALAFATERA"
+  },
+  {
+    "id": "cmnxwn61t008jrtw2ey0ugkth",
+    "name": "SOPORTE DE TINA STANDARD D25 H13",
+    "unit": "UN",
+    "netPrice": 14034,
+    "category": "SANITARIO"
+  },
+  {
+    "id": "cmnxwn5ys0055rtw2qoi4fqqh",
+    "name": "TORNILLO AUTOPERFORANTE YESO-CARTON 6MMX1\" CAJA 1000",
+    "unit": "UN",
+    "netPrice": 9824,
+    "category": "CLAVO, TORNILLO, PERNO"
+  },
+  {
+    "id": "cmnxwn5xv0045rtw2p8uaoukd",
+    "name": "VOLCANITA RH 12.5MM 120X240CM",
+    "unit": "UN",
+    "netPrice": 11924,
+    "category": "VOLCANITA"
+  },
+  {
+    "id": "cmnxwn5xs0044rtw2wf22i7lc",
+    "name": "VOLCANITA ST 15MM 120X240CM",
+    "unit": "UN",
+    "netPrice": 8227,
+    "category": "VOLCANITA"
+  }
+]

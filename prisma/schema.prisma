@@ -1,0 +1,396 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USUARIOS ====================
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("admin") // admin | colaborador
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==================== PROYECTOS ====================
+
+model Project {
+  id              String   @id @default(cuid())
+  name            String
+  clientName      String
+  clientPhone     String?
+  clientEmail     String?
+  address         String?
+  status          String   @default("cotizacion") // cotizacion | aprobado | en_ejecucion | terminado
+  startDate       DateTime?
+  estimatedEndDate DateTime?
+  actualEndDate   DateTime?
+  currentVersion  String   @default("V1")
+  ufReference     Float?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  budgetVersions  BudgetVersion[]
+  invoices        Invoice[]
+  maestroId       String?
+  maestro         Maestro?        @relation(fields: [maestroId], references: [id])
+  estadosPago     EstadoPago[]
+  shoppingItems   ShoppingItem[]
+
+  @@index([maestroId])
+}
+
+// ==================== MAESTROS (mano de obra) ====================
+
+model Maestro {
+  id            String   @id @default(cuid())
+  name          String
+  rut           String?
+  phone         String?
+  emitsInvoice  Boolean  @default(false) // ¿emite factura?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  projects      Project[]
+}
+
+// ==================== ESTADOS DE PAGO ====================
+
+model EstadoPago {
+  id          String   @id @default(cuid())
+  projectId   String
+  number      Int      // correlativo por proyecto: 1, 2, 3...
+  date        DateTime @default(now())
+  status      String   @default("borrador") // borrador | enviado | pagado
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items       EstadoPagoItem[]
+
+  @@unique([projectId, number])
+  @@index([projectId])
+}
+
+model EstadoPagoItem {
+  id                  String   @id @default(cuid())
+  estadoPagoId        String
+  obraItemId          String
+  // Snapshot al momento del EP
+  chapter             String
+  itemNumber          String
+  name                String
+  unit                String
+  quantity            Float
+  laborUnitPrice      Float    // MO unitaria de esta partida
+  laborTotal          Float    // laborUnitPrice * quantity
+  pctAccumulated      Float    @default(0) // % avance acumulado (0-100)
+  sortOrder           Int      @default(0)
+
+  estadoPago          EstadoPago @relation(fields: [estadoPagoId], references: [id], onDelete: Cascade)
+
+  @@unique([estadoPagoId, obraItemId])
+  @@index([estadoPagoId])
+  @@index([obraItemId])
+}
+
+// ==================== PRESUPUESTOS ====================
+
+model BudgetVersion {
+  id          String   @id @default(cuid())
+  projectId   String
+  version     String   // V1, V2, V3...
+  date        DateTime @default(now())
+  status      String   @default("borrador") // borrador | enviado | aprobado | rechazado
+  type        String   // obra | muebles | artefactos
+  observations String?
+  ggPercentage    Float?  @default(20)  // Solo para obra
+  utilityPercentage Float? @default(5)  // Solo para obra
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  obraItems   ObraItem[]
+  muebleItems MuebleItem[]
+  artefactoItems ArtefactoItem[]
+  paymentTerms PaymentTerm[]
+
+  @@index([projectId])
+}
+
+// Partidas de obra
+model ObraItem {
+  id                String  @id @default(cuid())
+  budgetVersionId   String
+  chapter           String  // demoliciones, reparaciones, electricas, sanitarias, terminaciones, limpieza
+  itemNumber        String  // 1.1, 1.2, etc
+  name              String
+  description       String?
+  unit              String  // M2, ML, UN, GL
+  quantity          Float
+  unitPrice         Float
+  total             Float
+  // Desglose interno (no visible al cliente)
+  costMaterial      Float?
+  costLabor         Float?
+  costSubcontract   Float?
+  costMargin        Float?
+  costTools         Float?
+  costLoss          Float?
+  sortOrder         Int     @default(0)
+  catalogPartidaId  String?
+
+  budgetVersion     BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)
+
+  @@index([budgetVersionId])
+  @@index([catalogPartidaId])
+}
+
+// Items de muebles
+model MuebleItem {
+  id                String  @id @default(cuid())
+  budgetVersionId   String
+  subcategory       String  // mueble | cubierta | herraje
+  description       String
+  supplier          String?
+  costDistributor   Float   // Costo distribuidor (interno)
+  utilityPercentage Float   // % utilidad (interno)
+  clientPrice       Float   // Precio neto al cliente (calculado)
+  clientPriceIva    Float   // Precio con IVA al cliente (calculado)
+  sortOrder         Int     @default(0)
+
+  budgetVersion     BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)
+
+  @@index([budgetVersionId])
+}
+
+// Items de artefactos
+model ArtefactoItem {
+  id                String  @id @default(cuid())
+  budgetVersionId   String
+  room              String  // baño_principal, baño_secundario, cocina, etc
+  subcategory       String  // sanitario | cocina | iluminacion
+  name              String  // WC, GRIFERIA, etc
+  detail            String? // Descripcion del producto
+  brand             String?
+  quantity          Int     @default(1)
+  listPrice         Float   // Precio lista
+  discountPercent   Float?  // % descuento al cliente
+  clientPrice       Float   // Precio final al cliente
+  // Interno (no visible al cliente)
+  realCostBlarq     Float?  // Lo que realmente paga BLARQ
+  referenceLink     String?
+  sortOrder         Int     @default(0)
+
+  budgetVersion     BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)
+
+  @@index([budgetVersionId])
+}
+
+// Formas de pago por presupuesto
+model PaymentTerm {
+  id                String  @id @default(cuid())
+  budgetVersionId   String
+  stage             String  // anticipo | avance1 | avance2 | saldo
+  percentage        Float
+  amount            Float?  // Calculado
+  sortOrder         Int     @default(0)
+
+  budgetVersion     BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)
+
+  @@index([budgetVersionId])
+}
+
+// ==================== CATALOGO DE PARTIDAS ====================
+
+// Partida del catálogo global (reutilizable entre proyectos)
+model PartidaCatalog {
+  id            String   @id @default(cuid())
+  category      String   // OBRAS PRELIMINARES, DEMOLICIONES, etc
+  name          String   // CIERRE OSB, DEMOLICION TABIQUE, etc
+  unit          String   // M2, ML, UN, GL
+  unitPrice     Float    @default(0) // Precio unitario de referencia
+  // Desglose de costos
+  costMaterial  Float    @default(0)
+  costLabor     Float    @default(0)
+  costTools     Float    @default(0)
+  costMargin    Float    @default(0)
+  costLoss      Float    @default(0)
+  costSubcontract Float  @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  components    PartidaComponent[]
+
+  @@unique([category, name])
+  @@index([category])
+}
+
+// Componentes de una partida (materiales, mano de obra, etc.)
+model PartidaComponent {
+  id            String   @id @default(cuid())
+  partidaId     String
+  type          String   // material | mano_obra | margen | herramientas | subcontrato | perdida
+  description   String   // SACO YESO 25KG, MAESTRO, etc
+  unit          String   // UN, M2, ML, %, GL, DIA
+  quantity      Float    @default(0)
+  unitCost      Float    @default(0) // P. CONCEPTO NETO
+  totalCost     Float    @default(0) // P.U NETO (qty * unitCost)
+  referenceLink String?  // Link Sodimac, etc
+  materialId    String?  // Referencia al catálogo de materiales
+  sortOrder     Int      @default(0)
+
+  partida       PartidaCatalog @relation(fields: [partidaId], references: [id], onDelete: Cascade)
+  material      MaterialCatalog? @relation(fields: [materialId], references: [id])
+
+  @@index([partidaId])
+  @@index([materialId])
+}
+
+// ==================== CATALOGO DE MATERIALES ====================
+
+model MaterialCatalog {
+  id            String   @id @default(cuid())
+  category      String   // SACOS, FIJACIONES, PINTURAS, etc
+  name          String   @unique // SACO YESO 25KG, etc
+  unit          String   @default("UN")
+  netPrice      Float    @default(0) // Precio neto actualizado
+  referenceLink String?  // Link Sodimac, etc
+  lastUpdated   DateTime @default(now())
+  lastResearchAt DateTime? // última vez que buscamos precios online
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  components    PartidaComponent[]
+  shoppingItems ShoppingItem[]
+  priceOffers   MaterialPriceOffer[]
+}
+
+// Ofertas de precio por tienda para un material
+model MaterialPriceOffer {
+  id           String   @id @default(cuid())
+  materialId   String
+  store        String   // sodimac | easy | construmart | mercadolibre | imperial | chilemat | otro
+  productName  String   // nombre exacto en la tienda
+  productUrl   String?
+  price        Float    // precio (con IVA tal como aparece en la web)
+  priceNet     Float?   // precio neto calculado (price / 1.19)
+  available    Boolean  @default(true)
+  isPinned     Boolean  @default(false) // elegido por el usuario como fuente oficial
+  notes        String?
+  checkedAt    DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  material     MaterialCatalog @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([materialId])
+  @@index([store])
+}
+
+// Historial de precios (snapshot cada vez que se refresca)
+model MaterialPriceHistory {
+  id         String   @id @default(cuid())
+  materialId String
+  store      String
+  price      Float
+  checkedAt  DateTime @default(now())
+
+  @@index([materialId])
+  @@index([checkedAt])
+}
+
+// ==================== LISTA DE COMPRA ====================
+
+model ShoppingItem {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String
+  unit        String   @default("UN")
+  qtyNeeded   Float    @default(0)
+  qtyBought   Float    @default(0)
+  notes       String?
+  materialId  String?
+  manualAdd   Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  material    MaterialCatalog? @relation(fields: [materialId], references: [id])
+
+  @@index([projectId])
+  @@index([materialId])
+}
+
+// ==================== CATEGORIAS DE COSTO ====================
+
+model CostCategory {
+  id          String  @id @default(cuid())
+  name        String
+  parentId    String? // Para subcategorias
+  type        String  @default("directo") // directo | indirecto
+  sortOrder   Int     @default(0)
+
+  parent      CostCategory?  @relation("CategoryParent", fields: [parentId], references: [id])
+  children    CostCategory[] @relation("CategoryParent")
+  invoices    Invoice[]
+
+  @@index([parentId])
+}
+
+// ==================== FACTURAS ====================
+
+model Invoice {
+  id              String   @id @default(cuid())
+  projectId       String?
+  categoryId      String?
+  type            String   // emitida | recibida
+  folioNumber     String?
+  rutIssuer       String?
+  businessName    String?
+  issueDate       DateTime
+  dueDate         DateTime?
+  netAmount       Float
+  iva             Float
+  totalAmount     Float
+  status          String   @default("pendiente") // pendiente | pagada | anulada
+  origin          String   @default("manual") // manual | sii_automatica
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project         Project?      @relation(fields: [projectId], references: [id])
+  category        CostCategory? @relation(fields: [categoryId], references: [id])
+  bankMovements   BankMovement[]
+
+  @@index([projectId])
+  @@index([categoryId])
+}
+
+// ==================== MOVIMIENTOS BANCO ====================
+
+model BankMovement {
+  id          String   @id @default(cuid())
+  date        DateTime
+  description String
+  amount      Float
+  type        String   // cargo | abono
+  invoiceId   String?
+  status      String   @default("sin_asignar") // sin_asignar | conciliado | sin_factura
+  createdAt   DateTime @default(now())
+
+  invoice     Invoice? @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+}

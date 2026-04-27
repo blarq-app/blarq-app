@@ -531,9 +531,21 @@ export default function MueblesEditor({
 
   return (
     <div className="space-y-6">
-      {/* Capítulos */}
-      {chapters.map((ch) => (
-        <ChapterBlock
+      {/* Tabla de presupuesto — vista similar al PDF que se entrega al cliente.
+          El cálculo interno (proveedor / costo / utilidad / comparativa de
+          alternativas) está oculto detrás de un toggle por ítem. */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        {/* Header de columnas (mismo grid que las filas) */}
+        <div className="grid grid-cols-[3rem_minmax(0,1fr)_5rem_8rem_2rem] items-center gap-3 px-4 py-2 border-y-2 border-gray-900 text-[10px] font-bold text-gray-900 uppercase tracking-wider">
+          <div>Item</div>
+          <div>Partida / Descripción</div>
+          <div className="text-center">Cantidad</div>
+          <div className="text-right">Total</div>
+          <div></div>
+        </div>
+
+        {chapters.map((ch) => (
+          <ChapterBlock
           key={ch.id}
           chapter={ch}
           onUpdate={(patch) => updateChapter(ch.id, patch)}
@@ -559,14 +571,15 @@ export default function MueblesEditor({
             activateQuote(ch.id, itemId, quoteId)
           }
         />
-      ))}
+        ))}
 
-      <button
-        onClick={addChapter}
-        className="text-sm text-gray-600 hover:text-gray-900 border border-dashed border-gray-300 hover:border-gray-500 px-4 py-3 rounded-lg w-full"
-      >
-        + Agregar capítulo (ej. Cocina, Closet dormitorio, Walk-in)
-      </button>
+        <button
+          onClick={addChapter}
+          className="text-xs text-gray-500 hover:text-gray-900 px-4 py-2 w-full text-left border-t border-gray-100"
+        >
+          + Agregar capítulo (ej. Cocina, Closet dormitorio, Walk-in)
+        </button>
+      </div>
 
       {/* Resumen interno */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -724,20 +737,21 @@ function ChapterBlock({
     0
   );
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      {/* Header capítulo */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-[#DBDBDB]">
-        <span className="font-bold text-gray-900 tabular-nums w-6">
+    <>
+      {/* Fila de capítulo (gris, mismo grid que el resto) */}
+      <div className="grid grid-cols-[3rem_minmax(0,1fr)_5rem_8rem_2rem] items-center gap-3 px-4 py-2.5 bg-[#DBDBDB] border-b border-gray-300">
+        <span className="font-bold text-gray-900 tabular-nums">
           {chapter.chapterNumber}
         </span>
         <input
           type="text"
           value={chapter.name}
           onChange={(e) => onUpdate({ name: e.target.value.toUpperCase() })}
-          className="flex-1 bg-transparent border-0 p-0 font-bold text-gray-900 uppercase tracking-wide outline-none"
+          className="bg-transparent border-0 p-0 font-bold text-gray-900 uppercase tracking-wide outline-none"
         />
-        <span className="text-xs text-gray-700 tabular-nums">
-          Subtotal {formatCLP(subtotal)}
+        <div></div>
+        <span className="text-right font-bold tabular-nums text-gray-900">
+          {formatCLP(subtotal)}
         </span>
         <button
           onClick={onDelete}
@@ -748,37 +762,36 @@ function ChapterBlock({
         </button>
       </div>
 
-      {/* Items */}
-      <div className="divide-y divide-gray-100">
-        {chapter.items.map((item) => (
-          <ItemBlock
-            key={item.id}
-            item={item}
-            onUpdate={(patch) => onUpdateItem(item.id, patch)}
-            onDelete={() => onDeleteItem(item.id)}
-            onAddDetail={() => onAddDetail(item.id)}
-            onUpdateDetail={(detailId, patch) =>
-              onUpdateDetail(item.id, detailId, patch)
-            }
-            onDeleteDetail={(detailId) => onDeleteDetail(item.id, detailId)}
-            onAddQuote={() => onAddQuote(item.id)}
-            onUpdateQuote={(quoteId, patch) =>
-              onUpdateQuote(item.id, quoteId, patch)
-            }
-            onDeleteQuote={(quoteId) => onDeleteQuote(item.id, quoteId)}
-            onActivateQuote={(quoteId) => onActivateQuote(item.id, quoteId)}
-          />
-        ))}
-        <div className="p-3">
-          <button
-            onClick={onAddItem}
-            className="text-xs text-gray-500 hover:text-gray-900"
-          >
-            + Agregar item al capítulo (ej. Muebles, Herrajes, Cubiertas)
-          </button>
-        </div>
+      {/* Items del capítulo */}
+      {chapter.items.map((item) => (
+        <ItemBlock
+          key={item.id}
+          item={item}
+          onUpdate={(patch) => onUpdateItem(item.id, patch)}
+          onDelete={() => onDeleteItem(item.id)}
+          onAddDetail={() => onAddDetail(item.id)}
+          onUpdateDetail={(detailId, patch) =>
+            onUpdateDetail(item.id, detailId, patch)
+          }
+          onDeleteDetail={(detailId) => onDeleteDetail(item.id, detailId)}
+          onAddQuote={() => onAddQuote(item.id)}
+          onUpdateQuote={(quoteId, patch) =>
+            onUpdateQuote(item.id, quoteId, patch)
+          }
+          onDeleteQuote={(quoteId) => onDeleteQuote(item.id, quoteId)}
+          onActivateQuote={(quoteId) => onActivateQuote(item.id, quoteId)}
+        />
+      ))}
+
+      <div className="px-4 py-1.5 border-b border-gray-100">
+        <button
+          onClick={onAddItem}
+          className="text-[11px] text-gray-400 hover:text-gray-900"
+        >
+          + Agregar item al capítulo (ej. Muebles, Herrajes, Cubiertas)
+        </button>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -806,131 +819,208 @@ function ItemBlock({
   onActivateQuote: (quoteId: string) => void;
 }) {
   const alternatives = item.quotes.filter((q) => !q.isSelected);
-  const [showAlternatives, setShowAlternatives] = useState(
-    alternatives.length > 0
-  );
+  // Costo interno colapsado por default — la vista por default refleja el PDF.
+  // El usuario expande cuando quiere ver/editar el cálculo o comparar proveedores.
+  const [showCost, setShowCost] = useState(false);
+  // Layout que mirrors el PDF: el grid de columnas es el mismo que el header
+  // de la tabla y que la fila del capítulo. Item-row = 3rem | 1fr | 5rem | 8rem | 2rem
+  const ROW_GRID = "grid grid-cols-[3rem_minmax(0,1fr)_5rem_8rem_2rem] items-baseline gap-3";
   return (
-    <div className="px-4 py-3 space-y-2">
-      <div className="flex items-baseline gap-3">
+    <>
+      {/* Fila principal del item: número, nombre, cantidad, total */}
+      <div className={`${ROW_GRID} px-4 pt-2 pb-1 border-b border-gray-100`}>
         <input
           type="text"
           value={item.itemNumber}
           onChange={(e) => onUpdate({ itemNumber: e.target.value })}
-          className="w-12 bg-transparent border-0 p-0 text-sm font-medium tabular-nums text-gray-700 outline-none"
+          className="bg-transparent border-0 p-0 text-sm tabular-nums text-gray-700 outline-none"
         />
         <input
           type="text"
           value={item.name}
           onChange={(e) => onUpdate({ name: e.target.value.toUpperCase() })}
-          className="flex-1 bg-transparent border-0 p-0 text-sm font-semibold uppercase text-gray-900 outline-none"
+          className="bg-transparent border-0 p-0 text-sm font-bold uppercase text-gray-900 outline-none"
         />
-        <span className="text-xs text-gray-600 tabular-nums">
-          qty:{" "}
-          <input
-            type="number"
-            step="0.01"
-            value={item.quantity}
-            onChange={(e) =>
-              onUpdate({ quantity: parseFloat(e.target.value) || 0 })
-            }
-            className="w-12 bg-transparent border-0 p-0 text-right tabular-nums outline-none"
-          />
-        </span>
-        <span className="text-sm font-bold text-gray-900 tabular-nums w-28 text-right">
+        <input
+          type="number"
+          step="0.01"
+          value={item.quantity}
+          onChange={(e) =>
+            onUpdate({ quantity: parseFloat(e.target.value) || 0 })
+          }
+          className="bg-transparent border-0 p-0 text-center text-sm tabular-nums text-gray-700 outline-none"
+        />
+        <span className="text-right text-sm font-bold tabular-nums text-gray-900">
           {formatCLP(item.clientPriceIva * item.quantity)}
         </span>
         <button
           onClick={onDelete}
-          className="text-gray-400 hover:text-red-600 text-sm"
+          className="text-gray-400 hover:text-red-600 text-sm leading-none"
+          title="Eliminar item"
         >
           ✕
         </button>
       </div>
 
-      <input
-        type="text"
-        value={item.descriptionGeneral ?? ""}
-        onChange={(e) => onUpdate({ descriptionGeneral: e.target.value })}
-        placeholder="Descripción general (ej. SEGÚN PLANOS ARQUITECTURA)"
-        className="w-full text-xs text-gray-600 bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-gray-400 p-0 py-1 outline-none"
-      />
-
-      {/* Cálculo costo (interno, no va al PDF) */}
-      <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-xs bg-gray-50 rounded px-2.5 py-1.5">
-        <label className="flex items-center gap-1.5">
-          <span className="text-gray-500">Proveedor</span>
-          <input
-            type="text"
-            value={item.supplier ?? ""}
-            onChange={(e) => onUpdate({ supplier: e.target.value })}
-            className="w-28 bg-white border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-gray-900 font-bold text-gray-900"
-          />
-        </label>
-        <label className="flex items-center gap-1.5">
-          <span className="text-gray-500">Costo dist.</span>
-          <ThousandsInput
-            value={item.costDistributor}
-            onChange={(v) => onUpdate({ costDistributor: v })}
-            placeholder="0"
-            className="w-28 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900 font-bold text-gray-900"
-          />
-        </label>
-        <label className="flex items-center gap-1.5">
-          <span className="text-gray-500">% util.</span>
-          <input
-            type="number"
-            step="1"
-            value={
-              item.utilityPercentage
-                ? Math.round(item.utilityPercentage * 100)
-                : ""
-            }
-            onChange={(e) =>
-              onUpdate({
-                utilityPercentage: (parseFloat(e.target.value) || 0) / 100,
-              })
-            }
-            placeholder="30"
-            className="w-14 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900 font-bold text-gray-900"
-          />
-          <span className="text-gray-500">%</span>
-        </label>
-        <span className="text-gray-300">→</span>
-        <span className="text-gray-500">
-          Neto{" "}
-          <span className="text-gray-900 font-bold tabular-nums">
-            {formatCLP(item.clientPriceNet)}
-          </span>
-        </span>
-        <span className="text-gray-300">·</span>
-        <span className="text-gray-500">
-          C/IVA{" "}
-          <span className="text-gray-900 font-bold tabular-nums">
-            {formatCLP(item.clientPriceIva)}
-          </span>
-        </span>
-        <span className="text-gray-300">·</span>
-        <span className="text-green-700 font-bold tabular-nums">
-          util {formatCLP(item.clientPriceNet - item.costDistributor)}
-        </span>
+      {/* Descripción general (italic, debajo del nombre, dentro del grid) */}
+      <div className={`${ROW_GRID} px-4 py-0.5 border-b border-gray-100`}>
+        <div></div>
+        <input
+          type="text"
+          value={item.descriptionGeneral ?? ""}
+          onChange={(e) => onUpdate({ descriptionGeneral: e.target.value })}
+          placeholder="descripción general (ej. SEGÚN PLANOS ARQUITECTURA)"
+          className="text-[11px] italic text-gray-600 bg-transparent border-0 p-0 outline-none"
+        />
+        <div></div>
+        <div></div>
+        <div></div>
       </div>
 
-      {/* Comparativa de cotizaciones */}
-      <div>
-        <button
-          onClick={() => setShowAlternatives((v) => !v)}
-          className="text-[11px] text-gray-500 hover:text-gray-900 flex items-center gap-1"
+      {/* Componentes (CUERPO INTERIOR / TRASERA / etc) — sub-filas indentadas
+          en la columna PARTIDA, con grid interno (nombre | materialidad | ✕) */}
+      {item.details.map((d) => (
+        <div
+          key={d.id}
+          className={`${ROW_GRID} px-4 py-0.5 border-b border-gray-50`}
         >
-          <span className="inline-block w-3">{showAlternatives ? "▾" : "▸"}</span>
-          Comparar con otros proveedores
-          {alternatives.length > 0 && (
-            <span className="text-gray-400">
-              ({alternatives.length} alternativa{alternatives.length > 1 ? "s" : ""})
-            </span>
+          <div></div>
+          <div className="grid grid-cols-[10rem_minmax(0,1fr)_1rem] gap-2 items-baseline">
+            <input
+              type="text"
+              value={d.name}
+              onChange={(e) =>
+                onUpdateDetail(d.id, { name: e.target.value.toUpperCase() })
+              }
+              placeholder="COMPONENTE"
+              className="bg-transparent border-0 p-0 text-[11px] uppercase tracking-tight text-gray-700 outline-none"
+            />
+            <input
+              type="text"
+              value={d.material}
+              onChange={(e) =>
+                onUpdateDetail(d.id, { material: e.target.value })
+              }
+              placeholder="materialidad…"
+              className="bg-transparent border-0 p-0 text-[11px] text-gray-600 outline-none"
+            />
+            <button
+              onClick={() => onDeleteDetail(d.id)}
+              className="text-gray-300 hover:text-red-500 text-[10px]"
+              title="Eliminar componente"
+            >
+              ✕
+            </button>
+          </div>
+          <div></div>
+          <div></div>
+          <div></div>
+        </div>
+      ))}
+
+      {/* Botón "+ Componente" en la columna PARTIDA */}
+      <div className={`${ROW_GRID} px-4 pb-1 border-b border-gray-100`}>
+        <div></div>
+        <button
+          onClick={onAddDetail}
+          className="text-[10px] text-gray-400 hover:text-gray-900 text-left"
+        >
+          + Componente
+        </button>
+        <div></div>
+        <div></div>
+        <div></div>
+      </div>
+
+      {/* Costo interno — colapsado por default. Cuando se expande, muestra el
+          panel de cálculo del proveedor activo + tabla de comparativa. */}
+      <div className="px-4 py-1.5 border-b border-gray-100 bg-gray-50/40">
+        <button
+          onClick={() => setShowCost((v) => !v)}
+          className="text-[11px] text-gray-500 hover:text-gray-900 flex items-center gap-1.5 w-full text-left"
+        >
+          <span className="inline-block w-3">{showCost ? "▾" : "▸"}</span>
+          <span className="font-medium">Costo interno</span>
+          <span className="text-gray-400">·</span>
+          <span className="text-gray-700">{item.supplier || "—"}</span>
+          <span className="text-gray-400">·</span>
+          <span className="text-gray-700 tabular-nums">
+            {formatCLP(item.clientPriceIva)} c/iva
+          </span>
+          {item.quotes.length > 1 && (
+            <>
+              <span className="text-gray-400">·</span>
+              <span className="text-gray-500">
+                {item.quotes.length} cotizaciones
+              </span>
+            </>
           )}
         </button>
-        {showAlternatives && (
-          <div className="mt-1.5 border border-gray-200 rounded overflow-hidden">
+
+        {showCost && (
+          <div className="mt-2 space-y-2">
+            {/* Cálculo activo */}
+            <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-xs bg-white border border-gray-200 rounded px-2.5 py-1.5">
+              <label className="flex items-center gap-1.5">
+                <span className="text-gray-500">Proveedor</span>
+                <input
+                  type="text"
+                  value={item.supplier ?? ""}
+                  onChange={(e) => onUpdate({ supplier: e.target.value })}
+                  className="w-28 bg-white border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-gray-900 font-bold text-gray-900"
+                />
+              </label>
+              <label className="flex items-center gap-1.5">
+                <span className="text-gray-500">Costo dist.</span>
+                <ThousandsInput
+                  value={item.costDistributor}
+                  onChange={(v) => onUpdate({ costDistributor: v })}
+                  placeholder="0"
+                  className="w-28 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900 font-bold text-gray-900"
+                />
+              </label>
+              <label className="flex items-center gap-1.5">
+                <span className="text-gray-500">% util.</span>
+                <input
+                  type="number"
+                  step="1"
+                  value={
+                    item.utilityPercentage
+                      ? Math.round(item.utilityPercentage * 100)
+                      : ""
+                  }
+                  onChange={(e) =>
+                    onUpdate({
+                      utilityPercentage: (parseFloat(e.target.value) || 0) / 100,
+                    })
+                  }
+                  placeholder="30"
+                  className="w-14 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900 font-bold text-gray-900"
+                />
+                <span className="text-gray-500">%</span>
+              </label>
+              <span className="text-gray-300">→</span>
+              <span className="text-gray-500">
+                Neto{" "}
+                <span className="text-gray-900 font-bold tabular-nums">
+                  {formatCLP(item.clientPriceNet)}
+                </span>
+              </span>
+              <span className="text-gray-300">·</span>
+              <span className="text-gray-500">
+                C/IVA{" "}
+                <span className="text-gray-900 font-bold tabular-nums">
+                  {formatCLP(item.clientPriceIva)}
+                </span>
+              </span>
+              <span className="text-gray-300">·</span>
+              <span className="text-green-700 font-bold tabular-nums">
+                util {formatCLP(item.clientPriceNet - item.costDistributor)}
+              </span>
+            </div>
+
+            {/* Comparativa de cotizaciones */}
+            <div className="border border-gray-200 rounded overflow-hidden bg-white">
             <table className="w-full text-[11px]">
               <thead className="bg-gray-50 text-gray-500 uppercase tracking-wider text-[9.5px]">
                 <tr>
@@ -1047,51 +1137,10 @@ function ItemBlock({
                 + Agregar cotización de otro proveedor
               </button>
             </div>
+            </div>
           </div>
         )}
       </div>
-
-      {/* Detalles (componentes con materialidad) — emula la lista del PDF */}
-      <div className="pl-6 border-l border-gray-100 space-y-0.5">
-        {item.details.map((d) => (
-          <div
-            key={d.id}
-            className="flex items-baseline gap-2 text-[11px] leading-tight"
-          >
-            <input
-              type="text"
-              value={d.name}
-              onChange={(e) =>
-                onUpdateDetail(d.id, { name: e.target.value.toUpperCase() })
-              }
-              placeholder="COMPONENTE"
-              className="w-40 bg-transparent border-0 p-0 uppercase text-gray-700 outline-none tracking-tight"
-            />
-            <input
-              type="text"
-              value={d.material}
-              onChange={(e) =>
-                onUpdateDetail(d.id, { material: e.target.value })
-              }
-              placeholder="materialidad…"
-              className="flex-1 bg-transparent border-0 p-0 text-gray-600 outline-none"
-            />
-            <button
-              onClick={() => onDeleteDetail(d.id)}
-              className="text-gray-300 hover:text-red-500 text-[10px]"
-              title="Eliminar componente"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-        <button
-          onClick={onAddDetail}
-          className="text-[10px] text-gray-400 hover:text-gray-700 mt-0.5"
-        >
-          + Componente
-        </button>
-      </div>
-    </div>
+    </>
   );
 }

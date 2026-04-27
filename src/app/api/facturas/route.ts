@@ -1,6 +1,65 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
+// Listar facturas con filtros opcionales:
+//   ?type=emitida|recibida
+//   ?status=pendiente|pagada|anulada
+//   ?origin=manual|sii_automatica
+//   ?projectId=<id>|sin-asignar
+//   ?categoryId=<id>
+//   ?q=<texto> (busca en folioNumber, businessName, rutIssuer, notes)
+//   ?from=YYYY-MM-DD&to=YYYY-MM-DD
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const type = searchParams.get("type");
+  const status = searchParams.get("status");
+  const origin = searchParams.get("origin");
+  const projectId = searchParams.get("projectId");
+  const categoryId = searchParams.get("categoryId");
+  const q = searchParams.get("q");
+  const from = searchParams.get("from");
+  const to = searchParams.get("to");
+
+  const where: Record<string, unknown> = {};
+  if (type) where.type = type;
+  if (status) where.status = status;
+  if (origin) where.origin = origin;
+  if (categoryId) where.categoryId = categoryId;
+  if (projectId === "sin-asignar") where.projectId = null;
+  else if (projectId) where.projectId = projectId;
+  if (from || to) {
+    where.issueDate = {
+      ...(from ? { gte: new Date(from) } : {}),
+      ...(to ? { lte: new Date(to) } : {}),
+    };
+  }
+  if (q) {
+    where.OR = [
+      { folioNumber: { contains: q } },
+      { businessName: { contains: q } },
+      { rutIssuer: { contains: q } },
+      { notes: { contains: q } },
+    ];
+  }
+
+  const invoices = await prisma.invoice.findMany({
+    where,
+    orderBy: { issueDate: "desc" },
+    include: {
+      project: { select: { id: true, name: true } },
+      category: {
+        select: {
+          id: true,
+          name: true,
+          parent: { select: { id: true, name: true } },
+        },
+      },
+    },
+    take: 500,
+  });
+  return NextResponse.json(invoices);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json();

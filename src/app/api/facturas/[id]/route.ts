@@ -1,6 +1,24 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const invoice = await prisma.invoice.findUnique({
+    where: { id },
+    include: {
+      project: { select: { id: true, name: true } },
+      category: { select: { id: true, name: true } },
+    },
+  });
+  if (!invoice) {
+    return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
+  }
+  return NextResponse.json(invoice);
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

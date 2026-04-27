@@ -1,8 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import { renderToBuffer } from "@react-pdf/renderer";
-import React from "react";
-import ListaCompraPDF, { ListaCompraRow } from "@/lib/pdf/ListaCompraPDF";
+import {
+  renderListaCompraHTML,
+  buildListaCompraFooter,
+  type ListaCompraRow,
+} from "@/lib/pdf/ListaCompraPDF.html";
+import { renderPDF } from "@/lib/pdf/renderPDF";
 
 export async function GET(
   request: NextRequest,
@@ -90,7 +93,14 @@ export async function GET(
             prev.qtyNeeded += qty;
             prev.totalBudgeted += budgeted;
           } else {
-            agg.set(key, { key, name, unit, materialId: c.materialId || null, qtyNeeded: qty, totalBudgeted: budgeted });
+            agg.set(key, {
+              key,
+              name,
+              unit,
+              materialId: c.materialId || null,
+              qtyNeeded: qty,
+              totalBudgeted: budgeted,
+            });
           }
         }
       }
@@ -140,21 +150,27 @@ export async function GET(
       year: "numeric",
     });
 
-    const doc = (
-      <ListaCompraPDF
-        projectName={project.name}
-        budgetVersion={selectedBudget?.version || "—"}
-        filter={filter}
-        rows={filteredRows}
-        generatedAt={generatedAt}
-      />
-    );
+    const html = renderListaCompraHTML({
+      projectName: project.name,
+      budgetVersion: selectedBudget?.version || "—",
+      filter,
+      rows: filteredRows,
+      generatedAt,
+    });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pdfBuffer = await renderToBuffer(doc as any);
+    // Landscape lo handlea el CSS @page size: A4 landscape en el template HTML.
+    const pdfBuffer = await renderPDF(html, {
+      format: "A4",
+      displayHeaderFooter: true,
+      headerTemplate: "<div></div>",
+      footerTemplate: buildListaCompraFooter(project.name),
+      margin: { top: "10mm", bottom: "14mm", left: "12mm", right: "12mm" },
+    });
+
     const filename = `BLARQ_ListaCompra_${project.name.replace(/\s+/g, "_")}.pdf`;
-
-    return new NextResponse(new Uint8Array(pdfBuffer), {
+    const body = new Uint8Array(pdfBuffer.byteLength);
+    body.set(pdfBuffer);
+    return new NextResponse(body, {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${filename}"`,

@@ -14,7 +14,7 @@ model User {
   name      String
   email     String   @unique
   password  String
-  role      String   @default("admin") // admin | colaborador
+  role      String   @default("colaborador") // admin | colaborador
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

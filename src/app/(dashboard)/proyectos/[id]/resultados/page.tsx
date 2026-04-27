@@ -210,6 +210,34 @@ export default async function ResultadosPage({
   const margenReal =
     totalCobrado > 0 ? (utilidadReal / totalCobrado) * 100 : 0;
 
+  // ==================== Alertas ====================
+  const now = new Date();
+  const facturasVencidas = facturasRecibidas.filter(
+    (i) => i.status === "pendiente" && i.dueDate && i.dueDate < now
+  );
+  const alertas: Array<{ severity: "danger" | "warning"; message: string }> = [];
+  for (const r of conceptRows) {
+    if (r.presupuesto === 0) continue;
+    if (r.desviacion >= 100) {
+      alertas.push({
+        severity: "danger",
+        message: `${r.label}: ${r.desviacion.toFixed(0)}% del presupuesto consumido (excedido)`,
+      });
+    } else if (r.desviacion >= 80) {
+      alertas.push({
+        severity: "warning",
+        message: `${r.label}: ${r.desviacion.toFixed(0)}% del presupuesto consumido`,
+      });
+    }
+  }
+  if (facturasVencidas.length > 0) {
+    const monto = facturasVencidas.reduce((s, i) => s + i.totalAmount, 0);
+    alertas.push({
+      severity: "danger",
+      message: `${facturasVencidas.length} factura${facturasVencidas.length > 1 ? "s" : ""} vencida${facturasVencidas.length > 1 ? "s" : ""} pendiente${facturasVencidas.length > 1 ? "s" : ""} de pago — ${formatCLP(monto)}`,
+    });
+  }
+
   // ==================== Desglose por categoría (tabla general) ====================
   const categories = await prisma.costCategory.findMany({
     where: { parentId: null },
@@ -275,6 +303,30 @@ export default async function ResultadosPage({
               Artefactos {lastArtefactos.version} · {lastArtefactos.status}
             </span>
           )}
+        </div>
+      )}
+
+      {/* Alertas */}
+      {alertas.length > 0 && (
+        <div className="mb-5 space-y-2">
+          {alertas.map((a, i) => {
+            const isDanger = a.severity === "danger";
+            return (
+              <div
+                key={i}
+                className={`rounded-lg px-4 py-2.5 flex items-center gap-3 text-sm ${
+                  isDanger
+                    ? "bg-red-50 border border-red-200 text-red-900"
+                    : "bg-amber-50 border border-amber-200 text-amber-900"
+                }`}
+              >
+                <span className={`text-lg ${isDanger ? "text-red-600" : "text-amber-700"}`}>
+                  ⚠
+                </span>
+                <span>{a.message}</span>
+              </div>
+            );
+          })}
         </div>
       )}
 

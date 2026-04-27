@@ -1,17 +1,25 @@
 import { prisma } from "@/lib/prisma";
 import { formatCLP, PROJECT_STATUSES, ProjectStatus } from "@/lib/utils";
+import {
+  computeProjectMetrics,
+  PROJECT_METRICS_INCLUDE,
+  type ProjectAlert,
+} from "@/lib/projects/metrics";
 import Link from "next/link";
 
 export default async function DashboardPage() {
   const projects = await prisma.project.findMany({
     orderBy: { updatedAt: "desc" },
-    include: {
-      invoices: true,
-    },
+    include: PROJECT_METRICS_INCLUDE,
   });
 
-  const activeProjects = projects.filter(
-    (p) => p.status !== "terminado"
+  const projectsWithMetrics = projects.map((p) => ({
+    project: p,
+    metrics: computeProjectMetrics(p),
+  }));
+
+  const activeProjects = projectsWithMetrics.filter(
+    (x) => x.project.status !== "terminado"
   );
 
   const totalByStatus = {
@@ -21,19 +29,32 @@ export default async function DashboardPage() {
     terminado: projects.filter((p) => p.status === "terminado").length,
   };
 
-  const totalPorCobrar = projects.reduce((acc, p) => {
-    const emitidas = p.invoices
-      .filter((i) => i.type === "emitida" && i.status === "pendiente")
-      .reduce((sum, i) => sum + i.totalAmount, 0);
-    return acc + emitidas;
+  const totalPorCobrar = projectsWithMetrics.reduce((acc, x) => {
+    return (
+      acc +
+      x.project.invoices
+        .filter((i) => i.type === "emitida" && i.status === "pendiente")
+        .reduce((s, i) => s + i.totalAmount, 0)
+    );
   }, 0);
 
-  const totalPorPagar = projects.reduce((acc, p) => {
-    const recibidas = p.invoices
-      .filter((i) => i.type === "recibida" && i.status === "pendiente")
-      .reduce((sum, i) => sum + i.totalAmount, 0);
-    return acc + recibidas;
+  const totalPorPagar = projectsWithMetrics.reduce((acc, x) => {
+    return (
+      acc +
+      x.project.invoices
+        .filter((i) => i.type === "recibida" && i.status === "pendiente")
+        .reduce((s, i) => s + i.totalAmount, 0)
+    );
   }, 0);
+
+  // Alertas globales: facturas vencidas, proyectos con desviaciones críticas
+  const totalOverdueInvoices = projectsWithMetrics.reduce(
+    (s, x) => s + x.metrics.invoicesOverdueCount,
+    0
+  );
+  const projectsWithDanger = projectsWithMetrics.filter((x) =>
+    x.metrics.alerts.some((a) => a.severity === "danger")
+  );
 
   return (
     <div>
@@ -47,81 +68,277 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
+      {/* Banners globales */}
+      {(totalOverdueInvoices > 0 || projectsWithDanger.length > 0) && (
+        <div className="mb-6 space-y-2">
+          {totalOverdueInvoices > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-red-600 text-lg">⚠</span>
+                <p className="text-sm text-red-900">
+                  <span className="font-semibold">
+                    {totalOverdueInvoices} factura
+                    {totalOverdueInvoices > 1 ? "s" : ""}
+                  </span>{" "}
+                  vencida{totalOverdueInvoices > 1 ? "s" : ""} pendiente
+                  {totalOverdueInvoices > 1 ? "s" : ""} de pago
+                </p>
+              </div>
+              <Link
+                href="/facturas?status=pendiente&type=recibida"
+                className="text-xs text-red-800 underline hover:text-red-900"
+              >
+                Ver facturas →
+              </Link>
+            </div>
+          )}
+          {projectsWithDanger.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-center gap-3">
+              <span className="text-amber-700 text-lg">⚠</span>
+              <p className="text-sm text-amber-900">
+                <span className="font-semibold">
+                  {projectsWithDanger.length} proyecto
+                  {projectsWithDanger.length > 1 ? "s" : ""}
+                </span>{" "}
+                con alguna categoría excedida o factura vencida — revisá las
+                tarjetas abajo.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Stats cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-sm text-gray-500">En Cotización</p>
-          <p className="text-3xl font-bold text-yellow-600 mt-1">
-            {totalByStatus.cotizacion}
-          </p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-sm text-gray-500">En Ejecución</p>
-          <p className="text-3xl font-bold text-green-600 mt-1">
-            {totalByStatus.en_ejecucion}
-          </p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-sm text-gray-500">Por Cobrar</p>
-          <p className="text-2xl font-bold text-blue-600 mt-1">
-            {formatCLP(totalPorCobrar)}
-          </p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-sm text-gray-500">Por Pagar</p>
-          <p className="text-2xl font-bold text-red-600 mt-1">
-            {formatCLP(totalPorPagar)}
-          </p>
-        </div>
+        <Stat
+          label="En Cotización"
+          value={totalByStatus.cotizacion.toString()}
+          accent="text-yellow-600"
+        />
+        <Stat
+          label="En Ejecución"
+          value={totalByStatus.en_ejecucion.toString()}
+          accent="text-green-600"
+        />
+        <Stat
+          label="Por Cobrar"
+          value={formatCLP(totalPorCobrar)}
+          accent="text-blue-600"
+          dense
+        />
+        <Stat
+          label="Por Pagar"
+          value={formatCLP(totalPorPagar)}
+          accent="text-red-600"
+          dense
+        />
       </div>
 
       {/* Active projects */}
-      <div className="bg-white rounded-xl border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Proyectos Activos
-          </h2>
-        </div>
-        {activeProjects.length === 0 ? (
-          <div className="p-12 text-center text-gray-500">
-            <p className="text-lg mb-2">No hay proyectos activos</p>
-            <Link
-              href="/proyectos/nuevo"
-              className="text-gray-900 underline text-sm"
-            >
-              Crear primer proyecto
-            </Link>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {activeProjects.map((project) => {
-              const status = PROJECT_STATUSES[project.status as ProjectStatus];
-              return (
-                <Link
-                  key={project.id}
-                  href={`/proyectos/${project.id}`}
-                  className="flex items-center justify-between p-6 hover:bg-gray-50 transition-colors"
-                >
-                  <div>
-                    <h3 className="font-medium text-gray-900">
-                      {project.name}
-                    </h3>
-                    <p className="text-sm text-gray-500 mt-0.5">
-                      {project.clientName}
-                      {project.address && ` — ${project.address}`}
-                    </p>
-                  </div>
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-medium ${status.color}`}
-                  >
-                    {status.label}
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        )}
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-900">
+          Proyectos Activos
+        </h2>
+        <Link
+          href="/proyectos"
+          className="text-xs text-gray-500 hover:text-gray-900 underline"
+        >
+          Ver todos
+        </Link>
       </div>
+      {activeProjects.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-500">
+          <p className="text-lg mb-2">No hay proyectos activos</p>
+          <Link
+            href="/proyectos/nuevo"
+            className="text-gray-900 underline text-sm"
+          >
+            Crear primer proyecto
+          </Link>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {activeProjects.map((x) => (
+            <ProjectCard key={x.project.id} project={x.project} metrics={x.metrics} />
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  accent,
+  dense,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+  dense?: boolean;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <p className="text-xs text-gray-500 uppercase tracking-wider">{label}</p>
+      <p
+        className={`mt-1 font-bold tabular-nums ${accent} ${dense ? "text-xl" : "text-3xl"}`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function ProjectCard({
+  project,
+  metrics,
+}: {
+  project: { id: string; name: string; clientName: string; status: string };
+  metrics: ReturnType<typeof computeProjectMetrics>;
+}) {
+  const status = PROJECT_STATUSES[project.status as ProjectStatus];
+  const dangerAlerts = metrics.alerts.filter((a) => a.severity === "danger");
+  const warningAlerts = metrics.alerts.filter((a) => a.severity === "warning");
+
+  return (
+    <Link
+      href={`/proyectos/${project.id}/resultados`}
+      className="block bg-white rounded-xl border border-gray-200 hover:border-gray-400 p-5 transition-colors"
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between mb-4">
+        <div className="min-w-0">
+          <h3 className="font-semibold text-gray-900 truncate">{project.name}</h3>
+          <p className="text-xs text-gray-500 mt-0.5 truncate">
+            {project.clientName}
+          </p>
+        </div>
+        <span
+          className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded ${status.color}`}
+        >
+          {status.label}
+        </span>
+      </div>
+
+      {/* Métricas: 4 cifras */}
+      <div className="grid grid-cols-4 gap-2 mb-3 text-center">
+        <Metric label="Acordado" value={formatCLP(metrics.totalAcordado)} />
+        <Metric
+          label="Cobrado"
+          value={`${metrics.pctCobrado.toFixed(0)}%`}
+          tone="text-blue-600"
+        />
+        <Metric label="Gastado" value={formatCLP(metrics.totalGastado)} tone="text-red-600" />
+        <Metric
+          label="Avance"
+          value={`${metrics.avanceObraPct.toFixed(0)}%`}
+        />
+      </div>
+
+      {/* Barra de progreso de cobro */}
+      <div className="mb-3">
+        <div className="w-full bg-gray-100 rounded-full h-1.5">
+          <div
+            className="bg-blue-500 h-1.5 rounded-full"
+            style={{ width: `${Math.min(metrics.pctCobrado, 100)}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Worst deviation */}
+      {metrics.worstDeviation && metrics.worstDeviation.pct > 50 && (
+        <div className="text-[11px] text-gray-600 mb-2 flex items-center justify-between">
+          <span>Categoría más cargada: {metrics.worstDeviation.name}</span>
+          <span
+            className={`tabular-nums font-medium ${
+              metrics.worstDeviation.pct >= 100
+                ? "text-red-600"
+                : metrics.worstDeviation.pct >= 80
+                ? "text-amber-700"
+                : "text-gray-700"
+            }`}
+          >
+            {metrics.worstDeviation.pct.toFixed(0)}%
+          </span>
+        </div>
+      )}
+
+      {/* Alertas */}
+      {(dangerAlerts.length > 0 || warningAlerts.length > 0) && (
+        <div className="border-t border-gray-100 pt-2 mt-2 space-y-1">
+          {dangerAlerts.slice(0, 2).map((a, i) => (
+            <AlertLine key={`d${i}`} alert={a} />
+          ))}
+          {warningAlerts.slice(0, 1).map((a, i) => (
+            <AlertLine key={`w${i}`} alert={a} />
+          ))}
+          {metrics.alerts.length > 3 && (
+            <p className="text-[10px] text-gray-400 italic">
+              + {metrics.alerts.length - 3} más
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Compromisos */}
+      {(metrics.invoicesPendingCount > 0 || metrics.draftEPsCount > 0) && (
+        <div className="border-t border-gray-100 pt-2 mt-2 flex items-center gap-3 text-[11px] text-gray-500">
+          {metrics.invoicesPendingCount > 0 && (
+            <span>
+              <span className="font-medium text-gray-700">
+                {metrics.invoicesPendingCount}
+              </span>{" "}
+              factura{metrics.invoicesPendingCount > 1 ? "s" : ""} por pagar
+            </span>
+          )}
+          {metrics.draftEPsCount > 0 && (
+            <span>
+              <span className="font-medium text-gray-700">
+                {metrics.draftEPsCount}
+              </span>{" "}
+              EP{metrics.draftEPsCount > 1 ? "s" : ""} en borrador
+            </span>
+          )}
+        </div>
+      )}
+    </Link>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wider text-gray-500">
+        {label}
+      </p>
+      <p className={`text-sm font-semibold tabular-nums mt-0.5 ${tone ?? "text-gray-900"}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function AlertLine({ alert }: { alert: ProjectAlert }) {
+  const tone =
+    alert.severity === "danger"
+      ? "text-red-700"
+      : alert.severity === "warning"
+      ? "text-amber-700"
+      : "text-gray-600";
+  const icon = alert.severity === "danger" ? "⚠" : "•";
+  return (
+    <p className={`text-[11px] leading-tight ${tone}`}>
+      <span className="mr-1">{icon}</span>
+      {alert.message}
+    </p>
   );
 }

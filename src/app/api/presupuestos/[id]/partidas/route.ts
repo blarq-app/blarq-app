@@ -30,6 +30,10 @@ export async function POST(
 
     const total = (data.quantity || 0) * (data.unitPrice || 0);
 
+    // isCustomized: true si la partida no viene del catálogo (creada manual);
+    // false si viene del catálogo (sus precios/datos pueden refrescarse luego).
+    const fromCatalog = !!data.catalogPartidaId;
+
     const item = await prisma.obraItem.create({
       data: {
         budgetVersionId,
@@ -49,6 +53,7 @@ export async function POST(
         costTools: data.costTools || null,
         costLoss: data.costLoss || null,
         catalogPartidaId: data.catalogPartidaId || null,
+        isCustomized: !fromCatalog,
         sortOrder: nextSortOrder,
       },
     });
@@ -72,6 +77,8 @@ export async function PUT(
     await params; // consume params
     const { items } = await request.json();
 
+    // Cualquier edit a una partida la marca como customizada — habilita
+    // distinguirla del estado original del catálogo a futuro (refresh-from-catalog).
     const updated = [];
     for (const item of items) {
       const total = (item.quantity || 0) * (item.unitPrice || 0);
@@ -92,6 +99,7 @@ export async function PUT(
           costTools: item.costTools,
           costLoss: item.costLoss,
           sortOrder: item.sortOrder,
+          isCustomized: true,
         },
       });
       updated.push(result);

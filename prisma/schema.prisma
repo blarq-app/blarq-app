@@ -125,6 +125,7 @@ model BudgetVersion {
   id          String   @id @default(cuid())
   projectId   String
   version     String   // V1, V2, V3...
+  parentVersionId String? // Versión origen cuando se duplica (V2.parentVersionId = V1.id). Null para versiones creadas desde cero.
   date        DateTime @default(now())
   status      String   @default("borrador") // borrador | enviado | aprobado | rechazado
   type        String   // obra | muebles | artefactos
@@ -135,6 +136,8 @@ model BudgetVersion {
   updatedAt   DateTime @updatedAt
 
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentVersion BudgetVersion? @relation("VersionLineage", fields: [parentVersionId], references: [id], onDelete: SetNull)
+  childVersions BudgetVersion[] @relation("VersionLineage")
   obraItems   ObraItem[]
   muebleItems MuebleItem[]
   artefactoItems ArtefactoItem[]
@@ -142,6 +145,7 @@ model BudgetVersion {
   estadosPago EstadoPago[]
 
   @@index([projectId])
+  @@index([parentVersionId])
 }
 
 // Partidas de obra
@@ -167,6 +171,7 @@ model ObraItem {
   costLoss          Float?
   sortOrder         Int     @default(0)
   catalogPartidaId  String?
+  isCustomized      Boolean @default(false) // True si la partida fue editada respecto a su PartidaCatalog origen, o si fue creada manualmente sin catálogo. Habilita "refrescar precios desde catálogo" sin pisar customizaciones.
 
   budgetVersion     BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)
 

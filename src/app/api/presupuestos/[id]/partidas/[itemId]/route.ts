@@ -28,6 +28,7 @@ export async function PUT(
         costTools: data.costTools,
         costLoss: data.costLoss,
         sortOrder: data.sortOrder,
+        isCustomized: true,
       },
     });
 

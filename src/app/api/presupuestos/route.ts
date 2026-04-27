@@ -26,21 +26,22 @@ export async function POST(request: NextRequest) {
     }, 0);
     const version = `V${maxV + 1}`;
 
+    // Computar baseId antes de crear: si se duplica desde otra versión, ese id
+    // queda como parentVersionId para trazabilidad explícita del lineage de versiones.
+    const baseId = data.baseVersionId || (existing.length > 0 ? existing[0].id : null);
+
     const budget = await prisma.budgetVersion.create({
       data: {
         projectId: data.projectId,
         version,
         type: data.type,
         status: "borrador",
+        parentVersionId: baseId,
         observations: data.observations || null,
         ggPercentage: data.ggPercentage ?? 20,
         utilityPercentage: data.utilityPercentage ?? 5,
       },
     });
-
-    // Si hay una versión anterior, copiar las partidas
-    // Usa baseVersionId si se especifica, si no usa la más reciente
-    const baseId = data.baseVersionId || (existing.length > 0 ? existing[0].id : null);
     if (baseId) {
       const previousVersion = await prisma.budgetVersion.findUnique({ where: { id: baseId } });
       if (!previousVersion) return NextResponse.json({ error: "Versión base no encontrada" }, { status: 404 });
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
               costTools: item.costTools,
               costLoss: item.costLoss,
               catalogPartidaId: item.catalogPartidaId,
+              isCustomized: item.isCustomized, // preservar customizaciones al duplicar
               sortOrder: item.sortOrder,
             },
           });

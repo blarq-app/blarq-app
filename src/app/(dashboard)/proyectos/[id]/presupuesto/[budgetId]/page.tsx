@@ -27,7 +27,10 @@ export default async function PresupuestoDetailPage({
         include: {
           items: {
             orderBy: { sortOrder: "asc" },
-            include: { details: { orderBy: { sortOrder: "asc" } } },
+            include: {
+              details: { orderBy: { sortOrder: "asc" } },
+              quotes: { orderBy: { sortOrder: "asc" } },
+            },
           },
         },
       },

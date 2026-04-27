@@ -89,6 +89,7 @@ export async function POST(request: NextRequest) {
               orderBy: { sortOrder: "asc" },
               include: {
                 details: { orderBy: { sortOrder: "asc" } },
+                quotes: { orderBy: { sortOrder: "asc" } },
               },
             },
           },
@@ -126,6 +127,22 @@ export async function POST(request: NextRequest) {
                   name: det.name,
                   material: det.material,
                   sortOrder: det.sortOrder,
+                },
+              });
+            }
+            // Clonar cotizaciones (preservando cuál está activa)
+            for (const q of item.quotes) {
+              await prisma.muebleQuote.create({
+                data: {
+                  itemId: newItem.id,
+                  supplier: q.supplier,
+                  costDistributor: q.costDistributor,
+                  utilityPercentage: q.utilityPercentage,
+                  clientPriceNet: q.clientPriceNet,
+                  clientPriceIva: q.clientPriceIva,
+                  notes: q.notes,
+                  isSelected: q.isSelected,
+                  sortOrder: q.sortOrder,
                 },
               });
             }

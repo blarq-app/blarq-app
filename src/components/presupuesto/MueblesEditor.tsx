@@ -49,6 +49,18 @@ type MuebleDetail = {
   sortOrder: number;
 };
 
+type MuebleQuote = {
+  id: string;
+  supplier: string | null;
+  costDistributor: number;
+  utilityPercentage: number; // decimal
+  clientPriceNet: number;
+  clientPriceIva: number;
+  notes: string | null;
+  isSelected: boolean;
+  sortOrder: number;
+};
+
 type MuebleItem = {
   id: string;
   itemNumber: string;
@@ -62,6 +74,7 @@ type MuebleItem = {
   clientPriceIva: number;
   sortOrder: number;
   details: MuebleDetail[];
+  quotes: MuebleQuote[];
 };
 
 type MuebleChapter = {
@@ -321,6 +334,113 @@ export default function MueblesEditor({
     );
   }
 
+  // ── Cotizaciones alternativas ──
+  async function addQuote(chapterId: string, itemId: string) {
+    const res = await fetch(`/api/presupuestos/${budgetId}/muebles/quotes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemId, supplier: "", costDistributor: 0, utilityPercentage: 0.30 }),
+    });
+    if (!res.ok) return alert("Error al agregar cotización");
+    const created: MuebleQuote = await res.json();
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) =>
+                i.id !== itemId ? i : { ...i, quotes: [...i.quotes, created] }
+              ),
+            }
+      )
+    );
+  }
+
+  async function updateQuote(
+    chapterId: string,
+    itemId: string,
+    quoteId: string,
+    patch: Partial<MuebleQuote>
+  ) {
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) => {
+                if (i.id !== itemId) return i;
+                const updatedQuotes = i.quotes.map((q) => {
+                  if (q.id !== quoteId) return q;
+                  const cost = patch.costDistributor ?? q.costDistributor;
+                  const util = patch.utilityPercentage ?? q.utilityPercentage;
+                  const net = cost * (1 + util);
+                  const iva = net * 1.19;
+                  return {
+                    ...q,
+                    ...patch,
+                    clientPriceNet: net,
+                    clientPriceIva: iva,
+                  };
+                });
+                // Si la quote actualizada es la activa, sincronizar item
+                const active = updatedQuotes.find((q) => q.isSelected);
+                if (active && active.id === quoteId) {
+                  return {
+                    ...i,
+                    supplier: active.supplier,
+                    costDistributor: active.costDistributor,
+                    utilityPercentage: active.utilityPercentage,
+                    clientPriceNet: active.clientPriceNet,
+                    clientPriceIva: active.clientPriceIva,
+                    quotes: updatedQuotes,
+                  };
+                }
+                return { ...i, quotes: updatedQuotes };
+              }),
+            }
+      )
+    );
+    await fetch(`/api/presupuestos/${budgetId}/muebles/quotes/${quoteId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+  }
+
+  async function deleteQuote(
+    chapterId: string,
+    itemId: string,
+    quoteId: string
+  ) {
+    const res = await fetch(
+      `/api/presupuestos/${budgetId}/muebles/quotes/${quoteId}`,
+      { method: "DELETE" }
+    );
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      alert(j.error || "Error al eliminar cotización");
+      return;
+    }
+    // Refrescar desde el server para reflejar promoción automática si era activa
+    router.refresh();
+  }
+
+  async function activateQuote(
+    chapterId: string,
+    itemId: string,
+    quoteId: string
+  ) {
+    const res = await fetch(
+      `/api/presupuestos/${budgetId}/muebles/quotes/${quoteId}/activate`,
+      { method: "POST" }
+    );
+    if (!res.ok) return alert("Error al activar cotización");
+    // Refrescar para que el item denormalizado se muestre con los nuevos valores
+    router.refresh();
+  }
+
   // ── Guardar formas de pago + observaciones ──
   async function saveAll() {
     setSaving(true);
@@ -365,6 +485,16 @@ export default function MueblesEditor({
           }
           onDeleteDetail={(itemId, detailId) =>
             deleteDetail(ch.id, itemId, detailId)
+          }
+          onAddQuote={(itemId) => addQuote(ch.id, itemId)}
+          onUpdateQuote={(itemId, quoteId, patch) =>
+            updateQuote(ch.id, itemId, quoteId, patch)
+          }
+          onDeleteQuote={(itemId, quoteId) =>
+            deleteQuote(ch.id, itemId, quoteId)
+          }
+          onActivateQuote={(itemId, quoteId) =>
+            activateQuote(ch.id, itemId, quoteId)
           }
         />
       ))}
@@ -500,6 +630,10 @@ function ChapterBlock({
   onAddDetail,
   onUpdateDetail,
   onDeleteDetail,
+  onAddQuote,
+  onUpdateQuote,
+  onDeleteQuote,
+  onActivateQuote,
 }: {
   chapter: MuebleChapter;
   onUpdate: (patch: Partial<MuebleChapter>) => void;
@@ -514,6 +648,14 @@ function ChapterBlock({
     patch: Partial<MuebleDetail>
   ) => void;
   onDeleteDetail: (itemId: string, detailId: string) => void;
+  onAddQuote: (itemId: string) => void;
+  onUpdateQuote: (
+    itemId: string,
+    quoteId: string,
+    patch: Partial<MuebleQuote>
+  ) => void;
+  onDeleteQuote: (itemId: string, quoteId: string) => void;
+  onActivateQuote: (itemId: string, quoteId: string) => void;
 }) {
   const subtotal = chapter.items.reduce(
     (s, i) => s + i.clientPriceIva * i.quantity,
@@ -557,6 +699,12 @@ function ChapterBlock({
               onUpdateDetail(item.id, detailId, patch)
             }
             onDeleteDetail={(detailId) => onDeleteDetail(item.id, detailId)}
+            onAddQuote={() => onAddQuote(item.id)}
+            onUpdateQuote={(quoteId, patch) =>
+              onUpdateQuote(item.id, quoteId, patch)
+            }
+            onDeleteQuote={(quoteId) => onDeleteQuote(item.id, quoteId)}
+            onActivateQuote={(quoteId) => onActivateQuote(item.id, quoteId)}
           />
         ))}
         <div className="p-3">
@@ -579,6 +727,10 @@ function ItemBlock({
   onAddDetail,
   onUpdateDetail,
   onDeleteDetail,
+  onAddQuote,
+  onUpdateQuote,
+  onDeleteQuote,
+  onActivateQuote,
 }: {
   item: MuebleItem;
   onUpdate: (patch: Partial<MuebleItem>) => void;
@@ -586,7 +738,15 @@ function ItemBlock({
   onAddDetail: () => void;
   onUpdateDetail: (detailId: string, patch: Partial<MuebleDetail>) => void;
   onDeleteDetail: (detailId: string) => void;
+  onAddQuote: () => void;
+  onUpdateQuote: (quoteId: string, patch: Partial<MuebleQuote>) => void;
+  onDeleteQuote: (quoteId: string) => void;
+  onActivateQuote: (quoteId: string) => void;
 }) {
+  const alternatives = item.quotes.filter((q) => !q.isSelected);
+  const [showAlternatives, setShowAlternatives] = useState(
+    alternatives.length > 0
+  );
   return (
     <div className="px-4 py-3 space-y-2">
       <div className="flex items-baseline gap-3">
@@ -691,6 +851,139 @@ function ItemBlock({
         <span className="text-green-700 tabular-nums">
           util {formatCLP(item.clientPriceNet - item.costDistributor)}
         </span>
+      </div>
+
+      {/* Comparativa de cotizaciones */}
+      <div>
+        <button
+          onClick={() => setShowAlternatives((v) => !v)}
+          className="text-[11px] text-gray-500 hover:text-gray-900 flex items-center gap-1"
+        >
+          <span className="inline-block w-3">{showAlternatives ? "▾" : "▸"}</span>
+          Comparar con otros proveedores
+          {alternatives.length > 0 && (
+            <span className="text-gray-400">
+              ({alternatives.length} alternativa{alternatives.length > 1 ? "s" : ""})
+            </span>
+          )}
+        </button>
+        {showAlternatives && (
+          <div className="mt-1.5 border border-gray-200 rounded overflow-hidden">
+            <table className="w-full text-[11px]">
+              <thead className="bg-gray-50 text-gray-500 uppercase tracking-wider text-[9.5px]">
+                <tr>
+                  <th className="text-left px-2 py-1 font-bold">Proveedor</th>
+                  <th className="text-right px-2 py-1 font-bold w-24">Costo dist.</th>
+                  <th className="text-right px-2 py-1 font-bold w-14">% util</th>
+                  <th className="text-right px-2 py-1 font-bold w-24">Neto</th>
+                  <th className="text-right px-2 py-1 font-bold w-24">C/IVA</th>
+                  <th className="text-right px-2 py-1 font-bold w-20">Util</th>
+                  <th className="px-2 py-1 w-28"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {item.quotes.map((q) => {
+                  const isActive = q.isSelected;
+                  return (
+                    <tr
+                      key={q.id}
+                      className={
+                        isActive
+                          ? "bg-green-50/50"
+                          : "hover:bg-gray-50/50"
+                      }
+                    >
+                      <td className="px-2 py-1">
+                        <div className="flex items-center gap-1.5">
+                          {isActive && (
+                            <span className="text-[8px] uppercase tracking-wider px-1 py-0.5 rounded bg-green-700 text-white font-bold">
+                              activa
+                            </span>
+                          )}
+                          <input
+                            type="text"
+                            value={q.supplier ?? ""}
+                            onChange={(e) =>
+                              onUpdateQuote(q.id, { supplier: e.target.value })
+                            }
+                            placeholder="proveedor"
+                            className="flex-1 bg-transparent border-0 p-0 outline-none text-gray-900"
+                          />
+                        </div>
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        <ThousandsInput
+                          value={q.costDistributor}
+                          onChange={(v) =>
+                            onUpdateQuote(q.id, { costDistributor: v })
+                          }
+                          placeholder="0"
+                          className="w-full bg-transparent border-0 p-0 text-right tabular-nums outline-none"
+                        />
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        <input
+                          type="number"
+                          step="1"
+                          value={
+                            q.utilityPercentage
+                              ? Math.round(q.utilityPercentage * 100)
+                              : ""
+                          }
+                          onChange={(e) =>
+                            onUpdateQuote(q.id, {
+                              utilityPercentage:
+                                (parseFloat(e.target.value) || 0) / 100,
+                            })
+                          }
+                          placeholder="30"
+                          className="w-full bg-transparent border-0 p-0 text-right tabular-nums outline-none"
+                        />
+                      </td>
+                      <td className="px-2 py-1 text-right tabular-nums text-gray-700">
+                        {formatCLP(q.clientPriceNet)}
+                      </td>
+                      <td className="px-2 py-1 text-right tabular-nums text-gray-900 font-medium">
+                        {formatCLP(q.clientPriceIva)}
+                      </td>
+                      <td className="px-2 py-1 text-right tabular-nums text-green-700">
+                        {formatCLP(q.clientPriceNet - q.costDistributor)}
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {!isActive && (
+                            <button
+                              onClick={() => onActivateQuote(q.id)}
+                              className="text-[10px] uppercase tracking-wider text-green-700 hover:text-green-900 font-bold"
+                              title="Hacer esta la cotización activa (usa esta en el PDF)"
+                            >
+                              Activar
+                            </button>
+                          )}
+                          <button
+                            onClick={() => onDeleteQuote(q.id)}
+                            className="text-gray-300 hover:text-red-500"
+                            title="Eliminar cotización"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="px-2 py-1.5 bg-gray-50 border-t border-gray-200">
+              <button
+                onClick={onAddQuote}
+                className="text-[10px] text-gray-500 hover:text-gray-900"
+              >
+                + Agregar cotización de otro proveedor
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Detalles (componentes con materialidad) — emula la lista del PDF */}

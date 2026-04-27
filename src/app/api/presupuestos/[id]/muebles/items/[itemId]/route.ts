@@ -29,6 +29,21 @@ export async function PUT(
         sortOrder: data.sortOrder,
       },
     });
+
+    // Mantener la quote activa sincronizada con los valores del item
+    // (si el usuario edita supplier/cost/utility desde el panel principal,
+    // se refleja también en la cotización activa).
+    await prisma.muebleQuote.updateMany({
+      where: { itemId, isSelected: true },
+      data: {
+        supplier: updated.supplier,
+        costDistributor: updated.costDistributor,
+        utilityPercentage: updated.utilityPercentage,
+        clientPriceNet: updated.clientPriceNet,
+        clientPriceIva: updated.clientPriceIva,
+      },
+    });
+
     return NextResponse.json(updated);
   } catch (error) {
     console.error("Error updating mueble item:", error);

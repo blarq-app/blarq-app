@@ -217,9 +217,31 @@ model MuebleItem {
   budgetVersion      BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)
   chapter            MuebleChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   details            MuebleDetail[]
+  quotes             MuebleQuote[]
 
   @@index([budgetVersionId])
   @@index([chapterId])
+}
+
+// Cotizaciones alternativas para un MuebleItem. Una está marcada como
+// `isSelected=true` (la activa) — sus valores se denormalizan en el item
+// y son los que se muestran en el PDF al cliente y cuentan en totales.
+// Las otras quedan como referencia para comparar precios entre proveedores.
+model MuebleQuote {
+  id                String  @id @default(cuid())
+  itemId            String
+  supplier          String?
+  costDistributor   Float   @default(0)
+  utilityPercentage Float   @default(0) // decimal: 0.36 = 36%
+  clientPriceNet    Float   @default(0) // calculado: cost × (1 + util)
+  clientPriceIva    Float   @default(0) // calculado: net × 1.19
+  notes             String?
+  isSelected        Boolean @default(false)
+  sortOrder         Int     @default(0)
+
+  item              MuebleItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
 }
 
 // Detalle de componentes bajo un MuebleItem.

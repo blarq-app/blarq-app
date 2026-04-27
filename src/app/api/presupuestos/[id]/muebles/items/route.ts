@@ -54,6 +54,22 @@ export async function POST(
         sortOrder: nextSort,
       },
     });
+
+    // Crear quote activa inicial reflejando los valores del item.
+    // Cualquier alternativa adicional se agrega después con POST /quotes.
+    await prisma.muebleQuote.create({
+      data: {
+        itemId: item.id,
+        supplier: item.supplier,
+        costDistributor: item.costDistributor,
+        utilityPercentage: item.utilityPercentage,
+        clientPriceNet: item.clientPriceNet,
+        clientPriceIva: item.clientPriceIva,
+        isSelected: true,
+        sortOrder: 0,
+      },
+    });
+
     return NextResponse.json(item);
   } catch (error) {
     console.error("Error creating mueble item:", error);

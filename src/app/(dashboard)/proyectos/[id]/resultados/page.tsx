@@ -31,7 +31,7 @@ export default async function ResultadosPage({
       budgetVersions: {
         include: {
           obraItems: true,
-          muebleItems: true,
+          muebleChapters: { include: { items: true } },
           artefactoItems: true,
           paymentTerms: { orderBy: { sortOrder: "asc" } },
         },
@@ -64,12 +64,17 @@ export default async function ResultadosPage({
   const obraNeto = obraSubtotal + obraUtilidad;
   const obraTotal = obraNeto * 1.19;
 
-  const mueblesTotal = lastMuebles
-    ? lastMuebles.muebleItems.reduce((sum, i) => sum + i.clientPriceIva, 0)
-    : 0;
-  const mueblesCosto = lastMuebles
-    ? lastMuebles.muebleItems.reduce((sum, i) => sum + i.costDistributor, 0)
-    : 0;
+  const mueblesAllItems = lastMuebles
+    ? lastMuebles.muebleChapters.flatMap((c) => c.items)
+    : [];
+  const mueblesTotal = mueblesAllItems.reduce(
+    (sum, i) => sum + i.clientPriceIva * i.quantity,
+    0
+  );
+  const mueblesCosto = mueblesAllItems.reduce(
+    (sum, i) => sum + i.costDistributor * i.quantity,
+    0
+  );
 
   const artefactosTotal = lastArtefactos
     ? lastArtefactos.artefactoItems.reduce((sum, i) => sum + i.clientPrice, 0)

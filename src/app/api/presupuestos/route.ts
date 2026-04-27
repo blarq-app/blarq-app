@@ -80,24 +80,56 @@ export async function POST(request: NextRequest) {
       }
 
       if (data.type === "muebles") {
-        const items = await prisma.muebleItem.findMany({
+        // Duplicar capítulos → items → detalles preservando estructura
+        const chapters = await prisma.muebleChapter.findMany({
           where: { budgetVersionId: previousVersion.id },
           orderBy: { sortOrder: "asc" },
+          include: {
+            items: {
+              orderBy: { sortOrder: "asc" },
+              include: {
+                details: { orderBy: { sortOrder: "asc" } },
+              },
+            },
+          },
         });
-        for (const item of items) {
-          await prisma.muebleItem.create({
+        for (const ch of chapters) {
+          const newChapter = await prisma.muebleChapter.create({
             data: {
               budgetVersionId: budget.id,
-              subcategory: item.subcategory,
-              description: item.description,
-              supplier: item.supplier,
-              costDistributor: item.costDistributor,
-              utilityPercentage: item.utilityPercentage,
-              clientPrice: item.clientPrice,
-              clientPriceIva: item.clientPriceIva,
-              sortOrder: item.sortOrder,
+              chapterNumber: ch.chapterNumber,
+              name: ch.name,
+              sortOrder: ch.sortOrder,
             },
           });
+          for (const item of ch.items) {
+            const newItem = await prisma.muebleItem.create({
+              data: {
+                budgetVersionId: budget.id,
+                chapterId: newChapter.id,
+                itemNumber: item.itemNumber,
+                name: item.name,
+                descriptionGeneral: item.descriptionGeneral,
+                quantity: item.quantity,
+                supplier: item.supplier,
+                costDistributor: item.costDistributor,
+                utilityPercentage: item.utilityPercentage,
+                clientPriceNet: item.clientPriceNet,
+                clientPriceIva: item.clientPriceIva,
+                sortOrder: item.sortOrder,
+              },
+            });
+            for (const det of item.details) {
+              await prisma.muebleDetail.create({
+                data: {
+                  itemId: newItem.id,
+                  name: det.name,
+                  material: det.material,
+                  sortOrder: det.sortOrder,
+                },
+              });
+            }
+          }
         }
       }
 

@@ -19,7 +19,7 @@ export default async function PresupuestoPage({
         orderBy: { createdAt: "desc" },
         include: {
           obraItems: true,
-          muebleItems: true,
+          muebleChapters: { include: { items: true } },
           artefactoItems: true,
           paymentTerms: true,
         },
@@ -208,7 +208,7 @@ export default async function PresupuestoPage({
                         {formatDate(budget.date)}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
-                        {budget.muebleItems.length} items
+                        {budget.muebleChapters.reduce((s, c) => s + c.items.length, 0)} items en {budget.muebleChapters.length} cap.
                       </td>
                       <td className="px-6 py-4">
                         <span

@@ -22,7 +22,15 @@ export default async function PresupuestoDetailPage({
     where: { id: budgetId },
     include: {
       obraItems: { orderBy: { sortOrder: "asc" } },
-      muebleItems: { orderBy: { sortOrder: "asc" } },
+      muebleChapters: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          items: {
+            orderBy: { sortOrder: "asc" },
+            include: { details: { orderBy: { sortOrder: "asc" } } },
+          },
+        },
+      },
       artefactoItems: { orderBy: { sortOrder: "asc" } },
       paymentTerms: { orderBy: { sortOrder: "asc" } },
     },

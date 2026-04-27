@@ -4,144 +4,295 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP } from "@/lib/utils";
 
-interface MuebleItem {
+type MuebleDetail = {
   id: string;
-  subcategory: string;
-  description: string;
+  name: string;
+  material: string;
+  sortOrder: number;
+};
+
+type MuebleItem = {
+  id: string;
+  itemNumber: string;
+  name: string;
+  descriptionGeneral: string | null;
+  quantity: number;
   supplier: string | null;
   costDistributor: number;
-  utilityPercentage: number;
-  clientPrice: number;
+  utilityPercentage: number; // decimal, e.g. 0.36
+  clientPriceNet: number;
   clientPriceIva: number;
   sortOrder: number;
-}
+  details: MuebleDetail[];
+};
 
-interface PaymentTerm {
+type MuebleChapter = {
   id: string;
+  chapterNumber: number;
+  name: string;
+  sortOrder: number;
+  items: MuebleItem[];
+};
+
+type PaymentTerm = {
   stage: string;
   percentage: number;
-  amount: number | null;
-}
+};
 
-interface Budget {
+type Budget = {
   id: string;
   version: string;
   observations: string | null;
-  muebleItems: MuebleItem[];
+  muebleChapters: MuebleChapter[];
   paymentTerms: PaymentTerm[];
-}
+};
 
-const SUBCATEGORIES = [
-  { value: "mueble", label: "Mueble" },
-  { value: "cubierta", label: "Cubierta" },
-  { value: "herraje", label: "Herraje" },
-];
-
-const DEFAULT_PAYMENT = [
+const DEFAULT_PAYMENT: PaymentTerm[] = [
   { stage: "Anticipo", percentage: 60 },
-  { stage: "Avance", percentage: 30 },
-  { stage: "Saldo final", percentage: 10 },
+  { stage: "Inicio instalación", percentage: 30 },
+  { stage: "Saldo", percentage: 10 },
 ];
 
 export default function MueblesEditor({
   budget: initialBudget,
-  projectId,
 }: {
   budget: Budget;
   projectId: string;
 }) {
   const router = useRouter();
-  const [items, setItems] = useState<MuebleItem[]>(initialBudget.muebleItems);
-  const [observations, setObservations] = useState(initialBudget.observations || "");
-  const [paymentTerms, setPaymentTerms] = useState(
+  const budgetId = initialBudget.id;
+  const [chapters, setChapters] = useState<MuebleChapter[]>(
+    initialBudget.muebleChapters
+  );
+  const [observations, setObservations] = useState(
+    initialBudget.observations || ""
+  );
+  const [paymentTerms, setPaymentTerms] = useState<PaymentTerm[]>(
     initialBudget.paymentTerms.length > 0
-      ? initialBudget.paymentTerms.map((t) => ({ stage: t.stage, percentage: t.percentage }))
+      ? initialBudget.paymentTerms
       : DEFAULT_PAYMENT
   );
   const [saving, setSaving] = useState(false);
-  const [adding, setAdding] = useState(false);
-  const [newItem, setNewItem] = useState({
-    subcategory: "mueble",
-    description: "",
-    supplier: "",
-    costDistributor: 0,
-    utilityPercentage: 30,
-  });
 
-  // Totales
-  const totalCostBlarq = items.reduce((sum, i) => sum + i.costDistributor, 0);
-  const totalClientNeto = items.reduce((sum, i) => sum + i.clientPrice, 0);
-  const totalClientIva = items.reduce((sum, i) => sum + i.clientPriceIva, 0);
-  const totalUtilidad = totalClientNeto - totalCostBlarq;
+  // ── Totales ──
+  const allItems = chapters.flatMap((c) => c.items);
+  const totalCostBlarq = allItems.reduce(
+    (s, i) => s + i.costDistributor * i.quantity,
+    0
+  );
+  const totalClientNet = allItems.reduce(
+    (s, i) => s + i.clientPriceNet * i.quantity,
+    0
+  );
+  const totalClientIva = allItems.reduce(
+    (s, i) => s + i.clientPriceIva * i.quantity,
+    0
+  );
+  const totalUtilidad = totalClientNet - totalCostBlarq;
 
-  // Agrupar por subcategoría
-  const grouped = SUBCATEGORIES.map((sub) => ({
-    ...sub,
-    items: items.filter((i) => i.subcategory === sub.value),
-    subtotal: items
-      .filter((i) => i.subcategory === sub.value)
-      .reduce((sum, i) => sum + i.clientPriceIva, 0),
-  }));
+  // ── Helpers de mutación local + servidor ──
 
-  async function handleAddItem() {
-    if (!newItem.description) return;
-    try {
-      const res = await fetch(`/api/presupuestos/${initialBudget.id}/muebles`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newItem),
-      });
-      if (!res.ok) throw new Error("Error");
-      const created = await res.json();
-      setItems([...items, created]);
-      setNewItem({ subcategory: "mueble", description: "", supplier: "", costDistributor: 0, utilityPercentage: 30 });
-      setAdding(false);
-    } catch {
-      alert("Error al agregar item");
-    }
+  function recalc(item: Partial<MuebleItem>): Partial<MuebleItem> {
+    const cost = item.costDistributor ?? 0;
+    const utility = item.utilityPercentage ?? 0;
+    const net = cost * (1 + utility);
+    const iva = net * 1.19;
+    return { clientPriceNet: net, clientPriceIva: iva };
   }
 
-  async function handleDeleteItem(itemId: string) {
-    try {
-      await fetch(`/api/presupuestos/${initialBudget.id}/muebles/${itemId}`, { method: "DELETE" });
-      setItems(items.filter((i) => i.id !== itemId));
-    } catch {
-      alert("Error al eliminar");
-    }
-  }
-
-  async function handleUpdateItem(itemId: string, field: string, value: string | number) {
-    const updatedItems = items.map((item) => {
-      if (item.id !== itemId) return item;
-      const updated = { ...item, [field]: value };
-      if (field === "costDistributor" || field === "utilityPercentage") {
-        updated.clientPrice = updated.costDistributor * (1 + updated.utilityPercentage / 100);
-        updated.clientPriceIva = updated.clientPrice * 1.19;
-      }
-      return updated;
+  // ── Capítulos ──
+  async function addChapter() {
+    const res = await fetch(`/api/presupuestos/${budgetId}/muebles/chapters`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "NUEVO CAPITULO" }),
     });
-    setItems(updatedItems);
-
-    const item = updatedItems.find((i) => i.id === itemId);
-    if (!item) return;
-    try {
-      await fetch(`/api/presupuestos/${initialBudget.id}/muebles/${itemId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(item),
-      });
-    } catch { /* silent */ }
+    if (!res.ok) return alert("Error al crear capítulo");
+    const created: MuebleChapter = await res.json();
+    setChapters([...chapters, { ...created, items: [] }]);
   }
 
-  async function handleSave() {
+  async function updateChapter(chapterId: string, patch: Partial<MuebleChapter>) {
+    setChapters((prev) =>
+      prev.map((c) => (c.id === chapterId ? { ...c, ...patch } : c))
+    );
+    await fetch(`/api/presupuestos/${budgetId}/muebles/chapters/${chapterId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+  }
+
+  async function deleteChapter(chapterId: string) {
+    if (!confirm("¿Eliminar este capítulo y todos sus items?")) return;
+    await fetch(`/api/presupuestos/${budgetId}/muebles/chapters/${chapterId}`, {
+      method: "DELETE",
+    });
+    setChapters((prev) => prev.filter((c) => c.id !== chapterId));
+  }
+
+  // ── Items ──
+  async function addItem(chapterId: string) {
+    const res = await fetch(`/api/presupuestos/${budgetId}/muebles/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chapterId, name: "NUEVO ITEM" }),
+    });
+    if (!res.ok) return alert("Error al crear item");
+    const created: MuebleItem = await res.json();
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id === chapterId
+          ? { ...c, items: [...c.items, { ...created, details: [] }] }
+          : c
+      )
+    );
+  }
+
+  async function updateItem(
+    chapterId: string,
+    itemId: string,
+    patch: Partial<MuebleItem>
+  ) {
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) =>
+                i.id === itemId
+                  ? {
+                      ...i,
+                      ...patch,
+                      ...recalc({ ...i, ...patch }),
+                    }
+                  : i
+              ),
+            }
+      )
+    );
+    const updated = chapters
+      .find((c) => c.id === chapterId)
+      ?.items.find((i) => i.id === itemId);
+    if (!updated) return;
+    const merged = { ...updated, ...patch, ...recalc({ ...updated, ...patch }) };
+    await fetch(`/api/presupuestos/${budgetId}/muebles/items/${itemId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        itemNumber: merged.itemNumber,
+        name: merged.name,
+        descriptionGeneral: merged.descriptionGeneral,
+        quantity: merged.quantity,
+        supplier: merged.supplier,
+        costDistributor: merged.costDistributor,
+        utilityPercentage: merged.utilityPercentage,
+      }),
+    });
+  }
+
+  async function deleteItem(chapterId: string, itemId: string) {
+    if (!confirm("¿Eliminar este item?")) return;
+    await fetch(`/api/presupuestos/${budgetId}/muebles/items/${itemId}`, {
+      method: "DELETE",
+    });
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id === chapterId ? { ...c, items: c.items.filter((i) => i.id !== itemId) } : c
+      )
+    );
+  }
+
+  // ── Detalles ──
+  async function addDetail(chapterId: string, itemId: string) {
+    const res = await fetch(`/api/presupuestos/${budgetId}/muebles/details`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemId, name: "COMPONENTE", material: "" }),
+    });
+    if (!res.ok) return alert("Error al crear componente");
+    const created: MuebleDetail = await res.json();
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) =>
+                i.id === itemId ? { ...i, details: [...i.details, created] } : i
+              ),
+            }
+      )
+    );
+  }
+
+  async function updateDetail(
+    chapterId: string,
+    itemId: string,
+    detailId: string,
+    patch: Partial<MuebleDetail>
+  ) {
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) =>
+                i.id !== itemId
+                  ? i
+                  : {
+                      ...i,
+                      details: i.details.map((d) =>
+                        d.id === detailId ? { ...d, ...patch } : d
+                      ),
+                    }
+              ),
+            }
+      )
+    );
+    await fetch(`/api/presupuestos/${budgetId}/muebles/details/${detailId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+  }
+
+  async function deleteDetail(
+    chapterId: string,
+    itemId: string,
+    detailId: string
+  ) {
+    await fetch(`/api/presupuestos/${budgetId}/muebles/details/${detailId}`, {
+      method: "DELETE",
+    });
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) =>
+                i.id !== itemId
+                  ? i
+                  : { ...i, details: i.details.filter((d) => d.id !== detailId) }
+              ),
+            }
+      )
+    );
+  }
+
+  // ── Guardar formas de pago + observaciones ──
+  async function saveAll() {
     setSaving(true);
     try {
-      await fetch(`/api/presupuestos/${initialBudget.id}`, {
+      await fetch(`/api/presupuestos/${budgetId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ observations }),
       });
-      await fetch(`/api/presupuestos/${initialBudget.id}/forma-pago`, {
+      await fetch(`/api/presupuestos/${budgetId}/forma-pago`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -153,8 +304,6 @@ export default function MueblesEditor({
         }),
       });
       router.refresh();
-    } catch {
-      alert("Error al guardar");
     } finally {
       setSaving(false);
     }
@@ -162,184 +311,369 @@ export default function MueblesEditor({
 
   return (
     <div className="space-y-6">
-      {/* Tabla por subcategoría */}
-      {grouped.map((group) => (
-        <div key={group.value} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="flex items-center justify-between p-4 bg-gray-50 border-b border-gray-200">
-            <h3 className="font-semibold text-gray-900">{group.label}s</h3>
-            <span className="text-sm font-medium text-gray-600">
-              Subtotal IVA inc: {formatCLP(group.subtotal)}
-            </span>
-          </div>
-          {group.items.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="text-left px-4 py-2 text-xs text-gray-500">Descripcion</th>
-                    <th className="text-left px-4 py-2 text-xs text-gray-500">Proveedor</th>
-                    <th className="text-right px-4 py-2 text-xs text-gray-500">Costo Dist.</th>
-                    <th className="text-right px-4 py-2 text-xs text-gray-500">% Util.</th>
-                    <th className="text-right px-4 py-2 text-xs text-gray-500">Precio Neto</th>
-                    <th className="text-right px-4 py-2 text-xs text-gray-500">Precio IVA</th>
-                    <th className="w-10"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {group.items.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2">
-                        <input type="text" value={item.description}
-                          onChange={(e) => handleUpdateItem(item.id, "description", e.target.value)}
-                          className="w-full bg-transparent border-0 p-0 text-gray-900 focus:ring-0 outline-none" />
-                      </td>
-                      <td className="px-4 py-2">
-                        <input type="text" value={item.supplier || ""}
-                          onChange={(e) => handleUpdateItem(item.id, "supplier", e.target.value)}
-                          className="w-full bg-transparent border-0 p-0 text-gray-600 focus:ring-0 outline-none" />
-                      </td>
-                      <td className="px-4 py-2">
-                        <input type="number" value={item.costDistributor}
-                          onChange={(e) => handleUpdateItem(item.id, "costDistributor", parseFloat(e.target.value) || 0)}
-                          className="w-24 bg-transparent border-0 p-0 text-right text-gray-900 focus:ring-0 outline-none" />
-                      </td>
-                      <td className="px-4 py-2">
-                        <input type="number" step="1" value={item.utilityPercentage}
-                          onChange={(e) => handleUpdateItem(item.id, "utilityPercentage", parseFloat(e.target.value) || 0)}
-                          className="w-16 bg-transparent border-0 p-0 text-right text-gray-900 focus:ring-0 outline-none" />
-                      </td>
-                      <td className="px-4 py-2 text-right text-gray-600">{formatCLP(item.clientPrice)}</td>
-                      <td className="px-4 py-2 text-right font-medium text-gray-900">{formatCLP(item.clientPriceIva)}</td>
-                      <td className="px-4 py-2">
-                        <button onClick={() => handleDeleteItem(item.id)} className="text-gray-400 hover:text-red-500">x</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+      {/* Capítulos */}
+      {chapters.map((ch) => (
+        <ChapterBlock
+          key={ch.id}
+          chapter={ch}
+          onUpdate={(patch) => updateChapter(ch.id, patch)}
+          onDelete={() => deleteChapter(ch.id)}
+          onAddItem={() => addItem(ch.id)}
+          onUpdateItem={(itemId, patch) => updateItem(ch.id, itemId, patch)}
+          onDeleteItem={(itemId) => deleteItem(ch.id, itemId)}
+          onAddDetail={(itemId) => addDetail(ch.id, itemId)}
+          onUpdateDetail={(itemId, detailId, patch) =>
+            updateDetail(ch.id, itemId, detailId, patch)
+          }
+          onDeleteDetail={(itemId, detailId) =>
+            deleteDetail(ch.id, itemId, detailId)
+          }
+        />
       ))}
 
-      {/* Agregar item */}
-      {!adding ? (
-        <button onClick={() => setAdding(true)}
-          className="text-sm text-gray-600 hover:text-gray-900 font-medium">
-          + Agregar Item de Mueble
-        </button>
-      ) : (
-        <div className="bg-blue-50 rounded-xl border border-blue-200 p-4">
-          <div className="grid grid-cols-12 gap-3 items-end">
-            <div className="col-span-2">
-              <label className="block text-xs text-gray-600 mb-1">Tipo</label>
-              <select value={newItem.subcategory} onChange={(e) => setNewItem({ ...newItem, subcategory: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none">
-                {SUBCATEGORIES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
-            </div>
-            <div className="col-span-3">
-              <label className="block text-xs text-gray-600 mb-1">Descripcion</label>
-              <input type="text" value={newItem.description}
-                onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none" autoFocus />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs text-gray-600 mb-1">Proveedor</label>
-              <input type="text" value={newItem.supplier}
-                onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none" />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs text-gray-600 mb-1">Costo Dist.</label>
-              <input type="number" value={newItem.costDistributor || ""}
-                onChange={(e) => setNewItem({ ...newItem, costDistributor: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none" />
-            </div>
-            <div className="col-span-1">
-              <label className="block text-xs text-gray-600 mb-1">% Util.</label>
-              <input type="number" value={newItem.utilityPercentage}
-                onChange={(e) => setNewItem({ ...newItem, utilityPercentage: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none" />
-            </div>
-            <div className="col-span-2 flex gap-2">
-              <button onClick={handleAddItem} className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800">Agregar</button>
-              <button onClick={() => setAdding(false)} className="text-gray-500 px-3 py-2 rounded-lg text-sm hover:bg-gray-200">Cancelar</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <button
+        onClick={addChapter}
+        className="text-sm text-gray-600 hover:text-gray-900 border border-dashed border-gray-300 hover:border-gray-500 px-4 py-3 rounded-lg w-full"
+      >
+        + Agregar capítulo (ej. Cocina, Closet dormitorio, Walk-in)
+      </button>
 
       {/* Resumen interno */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Resumen (Vista Interna)</h2>
-        <div className="max-w-md space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Costo BLARQ (distribuidor)</span>
-            <span className="font-medium">{formatCLP(totalCostBlarq)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Precio Neto al Cliente</span>
-            <span className="font-medium">{formatCLP(totalClientNeto)}</span>
-          </div>
-          <div className="flex justify-between text-sm text-green-700">
-            <span>Utilidad</span>
-            <span className="font-medium">{formatCLP(totalUtilidad)}</span>
-          </div>
-          <div className="flex justify-between text-base font-bold border-t-2 border-gray-900 pt-2">
-            <span>Total al Cliente (IVA inc.)</span>
-            <span>{formatCLP(totalClientIva)}</span>
-          </div>
+        <h2 className="text-base font-semibold text-gray-900 mb-3">
+          Resumen interno
+        </h2>
+        <div className="max-w-md grid grid-cols-2 gap-y-1 text-sm">
+          <span className="text-gray-500">Costo BLARQ (distribuidor)</span>
+          <span className="text-right tabular-nums">
+            {formatCLP(totalCostBlarq)}
+          </span>
+          <span className="text-gray-500">Precio Neto al Cliente</span>
+          <span className="text-right tabular-nums">
+            {formatCLP(totalClientNet)}
+          </span>
+          <span className="text-green-700">Utilidad</span>
+          <span className="text-right tabular-nums text-green-700 font-medium">
+            {formatCLP(totalUtilidad)}
+          </span>
+          <span className="font-bold border-t-2 border-gray-900 pt-2">
+            Total al Cliente (IVA inc.)
+          </span>
+          <span className="text-right tabular-nums font-bold border-t-2 border-gray-900 pt-2">
+            {formatCLP(totalClientIva)}
+          </span>
         </div>
       </div>
 
       {/* Forma de pago */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Forma de Pago</h2>
-        <div className="space-y-3 max-w-lg">
-          {paymentTerms.map((term, index) => (
-            <div key={index} className="grid grid-cols-12 gap-3 items-center">
-              <div className="col-span-5">
-                <input type="text" value={term.stage}
-                  onChange={(e) => { const u = [...paymentTerms]; u[index] = { ...u[index], stage: e.target.value }; setPaymentTerms(u); }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none" />
+        <h2 className="text-base font-semibold text-gray-900 mb-3">
+          Forma de pago
+        </h2>
+        <div className="space-y-2 max-w-lg">
+          {paymentTerms.map((t, i) => (
+            <div key={i} className="grid grid-cols-12 gap-2 items-center text-sm">
+              <input
+                type="text"
+                value={t.stage}
+                onChange={(e) => {
+                  const next = [...paymentTerms];
+                  next[i] = { ...next[i], stage: e.target.value };
+                  setPaymentTerms(next);
+                }}
+                className="col-span-6 px-2 py-1.5 border border-gray-300 rounded outline-none focus:ring-1 focus:ring-gray-900"
+              />
+              <div className="col-span-3 flex items-center gap-1">
+                <input
+                  type="number"
+                  value={t.percentage}
+                  onChange={(e) => {
+                    const next = [...paymentTerms];
+                    next[i] = {
+                      ...next[i],
+                      percentage: parseFloat(e.target.value) || 0,
+                    };
+                    setPaymentTerms(next);
+                  }}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-right outline-none focus:ring-1 focus:ring-gray-900"
+                />
+                <span className="text-gray-500">%</span>
               </div>
-              <div className="col-span-3">
-                <div className="flex items-center gap-1">
-                  <input type="number" value={term.percentage}
-                    onChange={(e) => { const u = [...paymentTerms]; u[index] = { ...u[index], percentage: parseFloat(e.target.value) || 0 }; setPaymentTerms(u); }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none" />
-                  <span className="text-sm text-gray-500">%</span>
-                </div>
-              </div>
-              <div className="col-span-3 text-sm text-right text-gray-600">
-                {formatCLP((totalClientIva * term.percentage) / 100)}
-              </div>
-              <div className="col-span-1">
-                <button onClick={() => setPaymentTerms(paymentTerms.filter((_, i) => i !== index))} className="text-gray-400 hover:text-red-500 text-sm">x</button>
-              </div>
+              <span className="col-span-3 text-right text-gray-600 tabular-nums">
+                {formatCLP((totalClientIva * t.percentage) / 100)}
+              </span>
             </div>
           ))}
-          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-            <button onClick={() => setPaymentTerms([...paymentTerms, { stage: `Etapa ${paymentTerms.length + 1}`, percentage: 0 }])}
-              className="text-sm text-gray-600 hover:text-gray-900 font-medium">+ Agregar etapa</button>
-            <span className="text-sm text-gray-500">Total: {paymentTerms.reduce((s, t) => s + t.percentage, 0)}%</span>
+          <div className="flex justify-between pt-1 border-t border-gray-100">
+            <button
+              onClick={() =>
+                setPaymentTerms([
+                  ...paymentTerms,
+                  { stage: `Etapa ${paymentTerms.length + 1}`, percentage: 0 },
+                ])
+              }
+              className="text-xs text-gray-500 hover:text-gray-900"
+            >
+              + Agregar etapa
+            </button>
+            <span className="text-xs text-gray-500">
+              Total: {paymentTerms.reduce((s, t) => s + t.percentage, 0)}%
+            </span>
           </div>
         </div>
       </div>
 
       {/* Observaciones */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Observaciones</h2>
-        <textarea value={observations} onChange={(e) => setObservations(e.target.value)}
-          rows={4} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm outline-none resize-none"
-          placeholder="Condiciones de la cotizacion de muebles..." />
+        <h2 className="text-base font-semibold text-gray-900 mb-3">
+          Observaciones (opcional)
+        </h2>
+        <textarea
+          value={observations}
+          onChange={(e) => setObservations(e.target.value)}
+          rows={3}
+          placeholder="Las observaciones generales del PDF van automáticamente. Acá podés agregar notas específicas adicionales para esta cotización."
+          className="w-full px-3 py-2 border border-gray-300 rounded text-sm outline-none resize-y focus:ring-1 focus:ring-gray-900"
+        />
       </div>
 
       <div className="flex justify-end">
-        <button onClick={handleSave} disabled={saving}
-          className="bg-gray-900 text-white px-8 py-3 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50">
-          {saving ? "Guardando..." : "Guardar Todo"}
+        <button
+          onClick={saveAll}
+          disabled={saving}
+          className="bg-gray-900 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-700 disabled:opacity-50"
+        >
+          {saving ? "Guardando..." : "Guardar pago + observaciones"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Sub-componentes ───────────────────────────────────────────────
+
+function ChapterBlock({
+  chapter,
+  onUpdate,
+  onDelete,
+  onAddItem,
+  onUpdateItem,
+  onDeleteItem,
+  onAddDetail,
+  onUpdateDetail,
+  onDeleteDetail,
+}: {
+  chapter: MuebleChapter;
+  onUpdate: (patch: Partial<MuebleChapter>) => void;
+  onDelete: () => void;
+  onAddItem: () => void;
+  onUpdateItem: (itemId: string, patch: Partial<MuebleItem>) => void;
+  onDeleteItem: (itemId: string) => void;
+  onAddDetail: (itemId: string) => void;
+  onUpdateDetail: (
+    itemId: string,
+    detailId: string,
+    patch: Partial<MuebleDetail>
+  ) => void;
+  onDeleteDetail: (itemId: string, detailId: string) => void;
+}) {
+  const subtotal = chapter.items.reduce(
+    (s, i) => s + i.clientPriceIva * i.quantity,
+    0
+  );
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Header capítulo */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-[#DBDBDB]">
+        <span className="font-bold text-gray-900 tabular-nums w-6">
+          {chapter.chapterNumber}
+        </span>
+        <input
+          type="text"
+          value={chapter.name}
+          onChange={(e) => onUpdate({ name: e.target.value.toUpperCase() })}
+          className="flex-1 bg-transparent border-0 p-0 font-bold text-gray-900 uppercase tracking-wide outline-none"
+        />
+        <span className="text-xs text-gray-700 tabular-nums">
+          Subtotal {formatCLP(subtotal)}
+        </span>
+        <button
+          onClick={onDelete}
+          className="text-gray-500 hover:text-red-600 text-sm"
+          title="Eliminar capítulo"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Items */}
+      <div className="divide-y divide-gray-100">
+        {chapter.items.map((item) => (
+          <ItemBlock
+            key={item.id}
+            item={item}
+            onUpdate={(patch) => onUpdateItem(item.id, patch)}
+            onDelete={() => onDeleteItem(item.id)}
+            onAddDetail={() => onAddDetail(item.id)}
+            onUpdateDetail={(detailId, patch) =>
+              onUpdateDetail(item.id, detailId, patch)
+            }
+            onDeleteDetail={(detailId) => onDeleteDetail(item.id, detailId)}
+          />
+        ))}
+        <div className="p-3">
+          <button
+            onClick={onAddItem}
+            className="text-xs text-gray-500 hover:text-gray-900"
+          >
+            + Agregar item al capítulo (ej. Muebles, Herrajes, Cubiertas)
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ItemBlock({
+  item,
+  onUpdate,
+  onDelete,
+  onAddDetail,
+  onUpdateDetail,
+  onDeleteDetail,
+}: {
+  item: MuebleItem;
+  onUpdate: (patch: Partial<MuebleItem>) => void;
+  onDelete: () => void;
+  onAddDetail: () => void;
+  onUpdateDetail: (detailId: string, patch: Partial<MuebleDetail>) => void;
+  onDeleteDetail: (detailId: string) => void;
+}) {
+  return (
+    <div className="px-4 py-3 space-y-2">
+      <div className="flex items-baseline gap-3">
+        <input
+          type="text"
+          value={item.itemNumber}
+          onChange={(e) => onUpdate({ itemNumber: e.target.value })}
+          className="w-12 bg-transparent border-0 p-0 text-sm font-medium tabular-nums text-gray-700 outline-none"
+        />
+        <input
+          type="text"
+          value={item.name}
+          onChange={(e) => onUpdate({ name: e.target.value.toUpperCase() })}
+          className="flex-1 bg-transparent border-0 p-0 text-sm font-semibold uppercase text-gray-900 outline-none"
+        />
+        <span className="text-xs text-gray-600 tabular-nums">
+          qty:{" "}
+          <input
+            type="number"
+            step="0.01"
+            value={item.quantity}
+            onChange={(e) =>
+              onUpdate({ quantity: parseFloat(e.target.value) || 0 })
+            }
+            className="w-12 bg-transparent border-0 p-0 text-right tabular-nums outline-none"
+          />
+        </span>
+        <span className="text-sm font-bold text-gray-900 tabular-nums w-28 text-right">
+          {formatCLP(item.clientPriceIva * item.quantity)}
+        </span>
+        <button
+          onClick={onDelete}
+          className="text-gray-400 hover:text-red-600 text-sm"
+        >
+          ✕
+        </button>
+      </div>
+
+      <input
+        type="text"
+        value={item.descriptionGeneral ?? ""}
+        onChange={(e) => onUpdate({ descriptionGeneral: e.target.value })}
+        placeholder="Descripción general (ej. SEGÚN PLANOS ARQUITECTURA)"
+        className="w-full text-xs text-gray-600 bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-gray-400 p-0 py-1 outline-none"
+      />
+
+      {/* Cálculo costo */}
+      <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 rounded p-2">
+        <span>Proveedor:</span>
+        <input
+          type="text"
+          value={item.supplier ?? ""}
+          onChange={(e) => onUpdate({ supplier: e.target.value })}
+          className="w-24 bg-white border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-gray-900"
+        />
+        <span className="ml-2">Costo dist:</span>
+        <input
+          type="number"
+          value={item.costDistributor || ""}
+          onChange={(e) =>
+            onUpdate({ costDistributor: parseFloat(e.target.value) || 0 })
+          }
+          placeholder="0"
+          className="w-24 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900"
+        />
+        <span className="ml-2">% util:</span>
+        <input
+          type="number"
+          step="0.01"
+          value={item.utilityPercentage || ""}
+          onChange={(e) =>
+            onUpdate({ utilityPercentage: parseFloat(e.target.value) || 0 })
+          }
+          placeholder="0.30"
+          className="w-16 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900"
+        />
+        <span className="ml-3 text-gray-400">→ Neto</span>
+        <span className="text-gray-700 tabular-nums">
+          {formatCLP(item.clientPriceNet)}
+        </span>
+        <span className="ml-1 text-gray-400">· C/IVA</span>
+        <span className="text-gray-900 font-medium tabular-nums">
+          {formatCLP(item.clientPriceIva)}
+        </span>
+        <span className="ml-2 text-green-700 tabular-nums">
+          util: {formatCLP(item.clientPriceNet - item.costDistributor)}
+        </span>
+      </div>
+
+      {/* Detalles */}
+      <div className="pl-4 border-l-2 border-gray-100 space-y-1">
+        {item.details.map((d) => (
+          <div key={d.id} className="flex items-center gap-2 text-xs">
+            <input
+              type="text"
+              value={d.name}
+              onChange={(e) =>
+                onUpdateDetail(d.id, { name: e.target.value.toUpperCase() })
+              }
+              placeholder="COMPONENTE"
+              className="w-44 bg-transparent border-0 p-0 font-medium uppercase text-gray-700 outline-none"
+            />
+            <input
+              type="text"
+              value={d.material}
+              onChange={(e) =>
+                onUpdateDetail(d.id, { material: e.target.value })
+              }
+              placeholder="Materialidad (ej. MELAMINA BLANCA 18MM, TAPACANTO PVC)"
+              className="flex-1 bg-transparent border-0 p-0 text-gray-600 outline-none"
+            />
+            <button
+              onClick={() => onDeleteDetail(d.id)}
+              className="text-gray-300 hover:text-red-500"
+              title="Eliminar componente"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={onAddDetail}
+          className="text-[11px] text-gray-400 hover:text-gray-700"
+        >
+          + Componente (ej. CUERPO INTERIOR, TRASERA, FRENTE BASE…)
         </button>
       </div>
     </div>

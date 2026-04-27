@@ -9,26 +9,27 @@ export async function PUT(
     const { itemId } = await params;
     const data = await request.json();
 
-    const costDistributor = data.costDistributor || 0;
-    const utilityPct = data.utilityPercentage || 0;
-    const clientPrice = costDistributor * (1 + utilityPct / 100);
-    const clientPriceIva = clientPrice * 1.19;
+    const cost = data.costDistributor ?? 0;
+    const utility = data.utilityPercentage ?? 0;
+    const net = cost * (1 + utility);
+    const iva = net * 1.19;
 
-    const item = await prisma.muebleItem.update({
+    const updated = await prisma.muebleItem.update({
       where: { id: itemId },
       data: {
-        subcategory: data.subcategory,
-        description: data.description,
-        supplier: data.supplier,
-        costDistributor,
-        utilityPercentage: utilityPct,
-        clientPrice,
-        clientPriceIva,
+        itemNumber: data.itemNumber,
+        name: data.name,
+        descriptionGeneral: data.descriptionGeneral ?? null,
+        quantity: data.quantity ?? 1,
+        supplier: data.supplier ?? null,
+        costDistributor: cost,
+        utilityPercentage: utility,
+        clientPriceNet: net,
+        clientPriceIva: iva,
         sortOrder: data.sortOrder,
       },
     });
-
-    return NextResponse.json(item);
+    return NextResponse.json(updated);
   } catch (error) {
     console.error("Error updating mueble item:", error);
     return NextResponse.json(

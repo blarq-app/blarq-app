@@ -17,7 +17,7 @@ const projectMetricsInclude = {
   budgetVersions: {
     include: {
       obraItems: true,
-      muebleItems: true,
+      muebleChapters: { include: { items: true } },
       artefactoItems: true,
     },
   },
@@ -120,7 +120,9 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   const obraTotal = obraNeto * 1.19;
 
   const mueblesTotal = muebles
-    ? muebles.muebleItems.reduce((s, i) => s + i.clientPriceIva, 0)
+    ? muebles.muebleChapters
+        .flatMap((c) => c.items)
+        .reduce((s, i) => s + i.clientPriceIva * i.quantity, 0)
     : 0;
   const artefactosTotal = artefactos
     ? artefactos.artefactoItems.reduce((s, i) => s + i.clientPrice, 0)

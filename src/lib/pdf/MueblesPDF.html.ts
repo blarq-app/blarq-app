@@ -1,8 +1,7 @@
 /**
  * HTML+CSS renderer for the Muebles budget PDF.
- * Consumed by renderPDF() (Puppeteer). Same content shape as the legacy
- * @react-pdf MueblesPDF.tsx but rendered via HTML for visual fidelity and
- * to keep the PDF pipeline unified with Obra/EP.
+ * Match exacto al formato BLARQ Excel: capítulos numerados, items con
+ * descripción general, detalles de componentes con materialidad multi-línea.
  */
 
 import fs from "node:fs";
@@ -12,29 +11,37 @@ const PROFESSIONAL = "MARÍA JOSÉ BLANCO";
 
 const DEFAULT_PAYMENT_TERMS = [
   { stage: "Anticipo", percentage: 60 },
-  { stage: "Inicio instalación", percentage: 30 },
+  { stage: "Inicio Instalación", percentage: 30 },
   { stage: "Saldo", percentage: 10 },
 ];
 
-const SUBCATEGORIES: Record<string, string> = {
-  mueble: "Muebles",
-  cubierta: "Cubiertas",
-  herraje: "Herrajes",
-};
-
 const OBSERVACIONES = [
-  "Plazo de producción: 60 días corridos contados desde la aprobación del diseño y recepción del anticipo. Cubiertas: 10 días hábiles adicionales.",
-  "Condiciones para inicio de instalación: cerámicos secos, agua potable y desagües habilitados, energía eléctrica disponible.",
-  "Garantía sobre el diseño aprobado por el cliente. Modificaciones posteriores podrán afectar plazos y/o costos.",
-  "Esta cotización tiene una validez de 10 días corridos.",
-  "Los valores podrán variar tras rectificación de medidas en terreno.",
+  "Plazos de Entrega: 60 días corridos para muebles al momento de ingreso a producción, excepto en caso de fuerza mayor. Las cubiertas Cuarzo y Granito tiene un plazo de 10 días hábiles para instalar, después de su rectificación.",
+  "Condiciones de entrega: Los muebles ingresarán una vez puestos los cerámicos de muros con el frague seco, instalación de agua y desagüe. En caso de haber pintura, debe estar seca. Las cubiertas solo se podrán rectificar una vez instalados los muebles base.",
+  "Garantías: Durante la etapa de diseño se podrá revisar minuciosamente todos los detalles del proyecto hasta que haya una absoluta satisfacción por parte del cliente. Luego de aprobado el diseño, todos los cambios tendrán un costo adicional. No nos hacemos responsables por alteraciones en los muebles y cubiertas una vez recibidos a entera satisfacción del cliente. Los artefactos tienen su garantía directamente con la empresa. Si los artefactos son intervenidos, pierden su garantía.",
+  "Este presupuesto tiene una validez de 10 días corridos.",
+  "Estos valores podrán sufrir modificaciones si existen variaciones considerables con las medidas rectificadas en terreno.",
 ];
 
 // ─── Types ────────────────────────────────────────────────────────────────
+export interface MuebleDetailInput {
+  name: string;
+  material: string;
+}
+
 export interface MuebleItemInput {
-  subcategory: string;
-  description: string;
+  itemNumber: string;
+  name: string;
+  descriptionGeneral: string | null;
+  quantity: number;
   clientPriceIva: number;
+  details: MuebleDetailInput[];
+}
+
+export interface MuebleChapterInput {
+  chapterNumber: number;
+  name: string;
+  items: MuebleItemInput[];
 }
 
 export interface PaymentTermInput {
@@ -46,14 +53,16 @@ export interface MueblesHTMLInput {
   project: {
     name: string;
     clientName: string;
+    clientPhone?: string | null;
     address: string | null;
+    ufReference?: number | null;
   };
   budget: {
     version: string;
     date: string | Date;
     observations: string | null;
   };
-  items: MuebleItemInput[];
+  chapters: MuebleChapterInput[];
   paymentTerms: PaymentTermInput[];
 }
 
@@ -68,6 +77,10 @@ function esc(s: string): string {
 
 function fmtCLP(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-CL");
+}
+
+function fmtQty(n: number): string {
+  return new Intl.NumberFormat("es-CL", { maximumFractionDigits: 2 }).format(n);
 }
 
 function fmtDate(d: string | Date): string {
@@ -146,7 +159,7 @@ const CSS = `
     line-height: 1.2;
   }
 
-  /* ── Tables ─────────────────────────────────────────────────── */
+  /* ── Tabla principal ────────────────────────────────────────────── */
   .partidas {
     width: 100%;
     margin-top: 14px;
@@ -169,30 +182,59 @@ const CSS = `
     border-bottom: 0.5pt solid #CCCCCC;
     vertical-align: top;
   }
-  .partidas .subcat-row td {
-    background: #F2F2F2;
+
+  /* Capítulo (1 MUEBLES DE COCINA) */
+  .chapter-row td {
+    background: #DBDBDB;
     font-weight: 700;
     text-transform: uppercase;
+    font-size: 7.5pt;
+    padding: 5px 6px;
+    border-top: 0.5pt solid #000;
+    border-bottom: 0.5pt solid #000;
+  }
+  .chapter-row .col-num { width: 28px; }
+
+  /* Item (1.1 MUEBLES) */
+  .item-row td {
+    font-weight: 600;
     font-size: 7pt;
     padding: 4px 6px;
   }
-  .partidas .subtotal-row td {
-    background: #FAFAFA;
-    font-weight: 600;
+  .item-row .col-num { width: 28px; padding-right: 0; tabular-nums: true; }
+  .item-desc-general {
+    font-weight: 400;
+    font-style: italic;
+    color: #555;
     font-size: 6.5pt;
-    border-top: 0.5pt solid #999;
-    border-bottom: 0.5pt solid #999;
+    margin-top: 1px;
   }
-  .col-desc  { width: 78%; }
-  .col-price { width: 22%; text-align: right; font-variant-numeric: tabular-nums; }
 
-  /* ── Totals ─────────────────────────────────────────────────── */
+  /* Detalle (CUERPO INTERIOR / TRASERA / etc) */
+  .detail-row td {
+    background: #FBFBFB;
+    padding: 2px 6px 2px 6px;
+    font-size: 6.5pt;
+    border-bottom: none;
+  }
+  .detail-row .col-detail-name {
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #333;
+    padding-left: 22px;
+  }
+  .detail-row .col-detail-material {
+    color: #555;
+  }
+
+  .col-qty   { width: 60px; text-align: center; font-variant-numeric: tabular-nums; }
+  .col-total { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+  .col-name  { /* default flex */ }
+
+  /* ── Totales ─────────────────────────────────────────────────── */
   .totals-wrap { margin-top: 16px; display: flex; justify-content: flex-end; }
   .totals { font-size: 8pt; border-collapse: collapse; }
-  .totals td {
-    padding: 4px 10px;
-    font-variant-numeric: tabular-nums;
-  }
+  .totals td { padding: 4px 10px; font-variant-numeric: tabular-nums; }
   .totals .t-label {
     font-weight: 700;
     text-transform: uppercase;
@@ -200,7 +242,7 @@ const CSS = `
     letter-spacing: 0.05em;
     text-align: right;
   }
-  .totals .t-val { text-align: right; min-width: 80px; }
+  .totals .t-val { text-align: right; min-width: 90px; }
   .totals .total td {
     border-top: 1pt solid #000;
     background: #DBDBDB;
@@ -220,21 +262,13 @@ const CSS = `
     padding-bottom: 2px;
     border-bottom: 0.5pt solid #999;
   }
-  .payment {
-    width: 50%;
-    border-collapse: collapse;
-    font-size: 7pt;
-  }
-  .payment td {
-    padding: 3px 8px;
-    border-bottom: 0.5pt solid #CCC;
-  }
-  .payment .p-stage { width: 70%; text-transform: capitalize; }
+  .payment { width: 50%; border-collapse: collapse; font-size: 7pt; }
+  .payment td { padding: 3px 8px; border-bottom: 0.5pt solid #CCC; }
+  .payment .p-stage { width: 70%; }
   .payment .p-pct   { width: 30%; text-align: right; font-variant-numeric: tabular-nums; }
 
   /* ── Observaciones ─────────────────────────────────────────── */
   .obs-wrap { margin-top: 18px; page-break-inside: avoid; }
-  .obs-grid { display: block; }
   .obs-item {
     display: flex;
     gap: 8px;
@@ -242,11 +276,7 @@ const CSS = `
     font-size: 7pt;
     line-height: 1.4;
   }
-  .obs-num {
-    flex: 0 0 14px;
-    font-weight: 700;
-    color: #555;
-  }
+  .obs-num { flex: 0 0 14px; font-weight: 700; color: #555; }
   .obs-text { flex: 1; color: #333; }
 
   .extra-obs {
@@ -262,20 +292,11 @@ const CSS = `
 
 // ─── HTML render ──────────────────────────────────────────────────────────
 export function renderMueblesHTML(input: MueblesHTMLInput): string {
-  const { project, budget, items, paymentTerms } = input;
+  const { project, budget, chapters, paymentTerms } = input;
 
-  const grouped = Object.entries(SUBCATEGORIES)
-    .map(([key, label]) => ({
-      key,
-      label,
-      items: items.filter((i) => i.subcategory === key),
-      subtotal: items
-        .filter((i) => i.subcategory === key)
-        .reduce((sum, i) => sum + i.clientPriceIva, 0),
-    }))
-    .filter((g) => g.items.length > 0);
-
-  const totalIva = items.reduce((sum, i) => sum + i.clientPriceIva, 0);
+  const totalIva = chapters
+    .flatMap((c) => c.items)
+    .reduce((sum, i) => sum + i.clientPriceIva * i.quantity, 0);
 
   const terms = paymentTerms.length > 0 ? paymentTerms : DEFAULT_PAYMENT_TERMS;
   const logoUri = getLogoDataUri();
@@ -285,28 +306,52 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
     ? `<img class="logo" src="${logoUri}" alt="BLARQ" />`
     : `<div class="logo" style="line-height:60px;font-size:28pt;font-weight:700;letter-spacing:0.15em;">BLARQ</div>`;
 
-  const tableRows = grouped
-    .map(
-      (g) => `
-        <tr class="subcat-row">
-          <td class="col-desc">${esc(g.label)}</td>
-          <td class="col-price"></td>
+  const tableRows = chapters
+    .map((ch) => {
+      const chapterSubtotal = ch.items.reduce(
+        (s, i) => s + i.clientPriceIva * i.quantity,
+        0
+      );
+      return `
+      <tr class="chapter-row">
+        <td class="col-num">${ch.chapterNumber}</td>
+        <td class="col-name">${esc(ch.name)}</td>
+        <td class="col-qty"></td>
+        <td class="col-total">${fmtCLP(chapterSubtotal)}</td>
+      </tr>
+      ${ch.items
+        .map(
+          (item) => `
+        <tr class="item-row">
+          <td class="col-num">${esc(item.itemNumber)}</td>
+          <td class="col-name">
+            ${esc(item.name)}
+            ${
+              item.descriptionGeneral
+                ? `<div class="item-desc-general">${esc(item.descriptionGeneral)}</div>`
+                : ""
+            }
+          </td>
+          <td class="col-qty">${fmtQty(item.quantity)}</td>
+          <td class="col-total">${fmtCLP(item.clientPriceIva * item.quantity)}</td>
         </tr>
-        ${g.items
+        ${item.details
           .map(
-            (item) => `
-          <tr>
-            <td class="col-desc">${esc(item.description)}</td>
-            <td class="col-price">${fmtCLP(item.clientPriceIva)}</td>
+            (d) => `
+          <tr class="detail-row">
+            <td></td>
+            <td class="col-detail-name" colspan="3">
+              <span style="display:inline-block;min-width:120px;">${esc(d.name)}</span>
+              <span class="col-detail-material">${esc(d.material)}</span>
+            </td>
           </tr>`
           )
           .join("")}
-        <tr class="subtotal-row">
-          <td class="col-desc">Subtotal ${esc(g.label)}</td>
-          <td class="col-price">${fmtCLP(g.subtotal)}</td>
-        </tr>
       `
-    )
+        )
+        .join("")}
+    `;
+    })
     .join("");
 
   return `<!DOCTYPE html>
@@ -343,18 +388,30 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
         <div class="label">Profesional a cargo</div>
         <div class="value">${esc(PROFESSIONAL)}</div>
       </div>
+      ${
+        project.clientPhone
+          ? `<div class="field"><div class="label">Celular</div><div class="value">${esc(project.clientPhone)}</div></div>`
+          : ""
+      }
       <div class="field">
         <div class="label">Fecha</div>
         <div class="value">${dateStr}</div>
       </div>
+      ${
+        project.ufReference != null
+          ? `<div class="field"><div class="label">Valor UF</div><div class="value">${fmtCLP(project.ufReference)}</div></div>`
+          : ""
+      }
     </div>
   </div>
 
   <table class="partidas">
     <thead>
       <tr>
-        <th class="col-desc">DESCRIPCION</th>
-        <th class="col-price">PRECIO IVA INCLUIDO</th>
+        <th class="col-num">ITEM</th>
+        <th class="col-name">PARTIDA / DESCRIPCION</th>
+        <th class="col-qty">CANTIDAD</th>
+        <th class="col-total">TOTAL</th>
       </tr>
     </thead>
     <tbody>
@@ -365,14 +422,14 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
   <div class="totals-wrap">
     <table class="totals">
       <tr class="total">
-        <td class="t-label">TOTAL IVA INCLUIDO</td>
+        <td class="t-label">COSTO TOTAL MUEBLES</td>
         <td class="t-val">${fmtCLP(totalIva)}</td>
       </tr>
     </table>
   </div>
 
   <div class="payment-wrap">
-    <div class="section-title">FORMA DE PAGO</div>
+    <div class="section-title">FORMAS DE PAGO</div>
     <table class="payment">
       ${terms
         .map(
@@ -387,8 +444,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
   </div>
 
   <div class="obs-wrap">
-    <div class="section-title">OBSERVACIONES</div>
-    <div class="obs-grid">
+    <div class="section-title">OBSERVACIONES GENERALES</div>
     ${OBSERVACIONES.map(
       (obs, i) => `
       <div class="obs-item">
@@ -396,7 +452,6 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
         <div class="obs-text">${esc(obs)}</div>
       </div>`
     ).join("")}
-    </div>
     ${
       budget.observations
         ? `<div class="extra-obs">${esc(budget.observations)}</div>`

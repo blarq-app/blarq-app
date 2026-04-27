@@ -20,7 +20,15 @@ export async function GET(
       include: {
         project: true,
         obraItems: { orderBy: { sortOrder: "asc" } },
-        muebleItems: { orderBy: { sortOrder: "asc" } },
+        muebleChapters: {
+          orderBy: { sortOrder: "asc" },
+          include: {
+            items: {
+              orderBy: { sortOrder: "asc" },
+              include: { details: { orderBy: { sortOrder: "asc" } } },
+            },
+          },
+        },
         artefactoItems: { orderBy: { sortOrder: "asc" } },
         paymentTerms: { orderBy: { sortOrder: "asc" } },
       },
@@ -63,7 +71,21 @@ export async function GET(
           date: budget.date,
           observations: budget.observations,
         },
-        items: budget.muebleItems,
+        chapters: budget.muebleChapters.map((ch) => ({
+          chapterNumber: ch.chapterNumber,
+          name: ch.name,
+          items: ch.items.map((i) => ({
+            itemNumber: i.itemNumber,
+            name: i.name,
+            descriptionGeneral: i.descriptionGeneral,
+            quantity: i.quantity,
+            clientPriceIva: i.clientPriceIva,
+            details: i.details.map((d) => ({
+              name: d.name,
+              material: d.material,
+            })),
+          })),
+        })),
         paymentTerms: budget.paymentTerms.map((t) => ({
           stage: t.stage,
           percentage: t.percentage,

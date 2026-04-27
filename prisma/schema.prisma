@@ -139,6 +139,7 @@ model BudgetVersion {
   parentVersion BudgetVersion? @relation("VersionLineage", fields: [parentVersionId], references: [id], onDelete: SetNull)
   childVersions BudgetVersion[] @relation("VersionLineage")
   obraItems   ObraItem[]
+  muebleChapters MuebleChapter[]
   muebleItems MuebleItem[]
   artefactoItems ArtefactoItem[]
   paymentTerms PaymentTerm[]
@@ -180,22 +181,60 @@ model ObraItem {
   @@index([lineageId])
 }
 
-// Items de muebles
-model MuebleItem {
-  id                String  @id @default(cuid())
-  budgetVersionId   String
-  subcategory       String  // mueble | cubierta | herraje
-  description       String
-  supplier          String?
-  costDistributor   Float   // Costo distribuidor (interno)
-  utilityPercentage Float   // % utilidad (interno)
-  clientPrice       Float   // Precio neto al cliente (calculado)
-  clientPriceIva    Float   // Precio con IVA al cliente (calculado)
-  sortOrder         Int     @default(0)
+// Capítulos de muebles. Un proyecto puede tener varios:
+// "MUEBLES DE COCINA", "CLOSET DORMITORIO", "WALK-IN", etc.
+model MuebleChapter {
+  id              String  @id @default(cuid())
+  budgetVersionId String
+  chapterNumber   Int     // 1, 2, 3 — para numeración (1 MUEBLES DE COCINA → items 1.1, 1.2)
+  name            String  // "MUEBLES DE COCINA"
+  sortOrder       Int     @default(0)
 
-  budgetVersion     BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)
+  budgetVersion   BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)
+  items           MuebleItem[]
 
   @@index([budgetVersionId])
+}
+
+// Items dentro de un capítulo. Ej: 1.1 MUEBLES, 1.2 HERRAJES, 1.3 CUBIERTAS.
+// Cada item tiene su propio cálculo de costo (proveedor, distribuidor, utilidad).
+model MuebleItem {
+  id                 String  @id @default(cuid())
+  budgetVersionId    String  // Denormalizado para queries rápidas (mismo de chapter.budgetVersionId)
+  chapterId          String
+  itemNumber         String  // "1.1", "1.2", "1.3"
+  name               String  // "MUEBLES", "HERRAJES", "CUBIERTAS"
+  descriptionGeneral String? // "SEGÚN PLANOS ARQUITECTURA" — texto general bajo el nombre
+  quantity           Float   @default(1)
+  // Cálculo interno
+  supplier           String?
+  costDistributor    Float   @default(0) // Lo que paga BLARQ al proveedor
+  utilityPercentage  Float   @default(0) // Margen como decimal: 0.36 = 36%
+  clientPriceNet     Float   @default(0) // Neto al cliente = costDistributor × (1 + utility)
+  clientPriceIva     Float   @default(0) // C/IVA al cliente = clientPriceNet × 1.19
+  sortOrder          Int     @default(0)
+
+  budgetVersion      BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)
+  chapter            MuebleChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  details            MuebleDetail[]
+
+  @@index([budgetVersionId])
+  @@index([chapterId])
+}
+
+// Detalle de componentes bajo un MuebleItem.
+// Ej. para 1.1 MUEBLES: CUERPO INTERIOR / TRASERA / FRENTE BASE / FRENTE MURAL / ZOCALO,
+// cada uno con su materialidad ("MELAMINA BLANCA 18MM, TAPACANTO PVC 0,4MM").
+model MuebleDetail {
+  id        String  @id @default(cuid())
+  itemId    String
+  name      String  // "CUERPO INTERIOR", "TRASERA"
+  material  String  // "MELAMINA BLANCA 18MM, TAPACANTO PVC 0,4MM"
+  sortOrder Int     @default(0)
+
+  item      MuebleItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
 }
 
 // Items de artefactos

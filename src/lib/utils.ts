@@ -1,10 +1,15 @@
+const clpFormatter = new Intl.NumberFormat("es-CL", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
 export function formatCLP(amount: number): string {
-  return new Intl.NumberFormat("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  // Build manually to guarantee "$" is always adjacent (no NBSP/thin-space from Intl)
+  return "$" + clpFormatter.format(Math.round(amount));
+}
+
+export function formatNumber(amount: number): string {
+  return clpFormatter.format(Math.round(amount));
 }
 
 export function formatUF(amount: number): string {

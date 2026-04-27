@@ -15,11 +15,14 @@ export default async function ProjectDetailPage({
     include: {
       budgetVersions: {
         orderBy: { createdAt: "desc" },
+        include: { obraItems: true },
       },
       invoices: {
         orderBy: { issueDate: "desc" },
       },
-      estadosPago: true,
+      estadosPago: {
+        include: { items: true },
+      },
       maestro: true,
     },
   });
@@ -41,6 +44,51 @@ export default async function ProjectDetailPage({
   const porCobrar = project.invoices
     .filter((i) => i.type === "emitida" && i.status === "pendiente")
     .reduce((sum, i) => sum + i.totalAmount, 0);
+
+  // Presupuesto aprobado (usa versión aprobada o la más reciente de obra)
+  const approvedBudget =
+    project.budgetVersions.find((b) => b.type === "obra" && b.status === "aprobado") ||
+    project.budgetVersions.find((b) => b.type === "obra");
+
+  function calcObraTotalWithIVA(budget: NonNullable<typeof project>["budgetVersions"][0]) {
+    const costoDirecto = budget.obraItems.reduce((sum, it) => sum + it.total, 0);
+    const gg = costoDirecto * ((budget.ggPercentage || 0) / 100);
+    const utilidad = costoDirecto * ((budget.utilityPercentage || 0) / 100);
+    const neto = costoDirecto + gg + utilidad;
+    return neto * 1.19;
+  }
+
+  const presupuestoTotal = approvedBudget ? calcObraTotalWithIVA(approvedBudget) : 0;
+  const pctCobrado = presupuestoTotal > 0 ? Math.round((totalEmitidas / presupuestoTotal) * 100) : 0;
+
+  // % avance obra desde el último EP (mayor acumulado)
+  const sortedEPs = [...project.estadosPago].sort((a, b) => a.number - b.number);
+  const lastEP = sortedEPs[sortedEPs.length - 1];
+  let pctObraAvanzada = 0;
+  if (lastEP && lastEP.items.length > 0) {
+    const totalLaborBudget = lastEP.items.reduce((sum, it) => sum + it.laborTotal, 0);
+    const totalAcum = lastEP.items.reduce(
+      (sum, it) => sum + (it.laborTotal * it.pctAccumulated) / 100,
+      0
+    );
+    pctObraAvanzada = totalLaborBudget > 0 ? Math.round((totalAcum / totalLaborBudget) * 100) : 0;
+  }
+
+  // Utilidad real = facturado - costos
+  const utilidadReal = totalEmitidas - totalRecibidas;
+  const utilidadPct = totalEmitidas > 0 ? Math.round((utilidadReal / totalEmitidas) * 100) : 0;
+
+  // Alerta de desviación: costos reales vs presupuesto de costos directos
+  const presupuestoCostosDirectos = approvedBudget
+    ? approvedBudget.obraItems.reduce((sum, it) => sum + it.total, 0)
+    : 0;
+  const desviacionPct =
+    presupuestoCostosDirectos > 0
+      ? Math.round(((totalRecibidas - presupuestoCostosDirectos) / presupuestoCostosDirectos) * 100)
+      : 0;
+  // Semáforo: verde <5%, amarillo 5-15%, rojo >15%
+  const alertLevel =
+    desviacionPct > 15 ? "rojo" : desviacionPct > 5 ? "amarillo" : "verde";
 
   return (
     <div>
@@ -77,33 +125,95 @@ export default async function ProjectDetailPage({
         </div>
       </div>
 
-      {/* Info cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        {/* Presupuesto aprobado */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-sm text-gray-500">Version Actual</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">
-            {project.currentVersion}
+          <p className="text-sm text-gray-500">
+            Presupuesto
+            {approvedBudget?.status === "aprobado" && (
+              <span className="ml-1 text-xs text-green-600 font-medium">aprobado</span>
+            )}
           </p>
+          <p className="text-xl font-bold text-gray-900 mt-1">
+            {presupuestoTotal > 0 ? formatCLP(presupuestoTotal) : "—"}
+          </p>
+          {approvedBudget && (
+            <p className="text-xs text-gray-400 mt-0.5">{approvedBudget.version}</p>
+          )}
         </div>
+
+        {/* % cobrado */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-sm text-gray-500">Facturado al Cliente</p>
-          <p className="text-2xl font-bold text-blue-600 mt-1">
-            {formatCLP(totalEmitidas)}
+          <p className="text-sm text-gray-500">Cobrado</p>
+          <p className="text-xl font-bold text-blue-600 mt-1">
+            {pctCobrado}%
           </p>
+          <p className="text-xs text-gray-400 mt-0.5">{formatCLP(totalEmitidas)}</p>
+          {presupuestoTotal > 0 && (
+            <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full"
+                style={{ width: `${Math.min(pctCobrado, 100)}%` }}
+              />
+            </div>
+          )}
         </div>
+
+        {/* % obra avanzada */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-sm text-gray-500">Costos Registrados</p>
-          <p className="text-2xl font-bold text-red-600 mt-1">
-            {formatCLP(totalRecibidas)}
+          <p className="text-sm text-gray-500">Avance Obra</p>
+          <p className="text-xl font-bold text-indigo-600 mt-1">
+            {sortedEPs.length > 0 ? `${pctObraAvanzada}%` : "—"}
           </p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {sortedEPs.length > 0 ? `EP #${lastEP!.number} (último)` : "Sin estados de pago"}
+          </p>
+          {sortedEPs.length > 0 && (
+            <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-indigo-500 rounded-full"
+                style={{ width: `${Math.min(pctObraAvanzada, 100)}%` }}
+              />
+            </div>
+          )}
         </div>
+
+        {/* Utilidad real */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-sm text-gray-500">Por Cobrar</p>
-          <p className="text-2xl font-bold text-yellow-600 mt-1">
-            {formatCLP(porCobrar)}
+          <p className="text-sm text-gray-500">Utilidad Real</p>
+          <p className={`text-xl font-bold mt-1 ${utilidadReal >= 0 ? "text-green-600" : "text-red-600"}`}>
+            {totalEmitidas > 0 ? formatCLP(utilidadReal) : "—"}
           </p>
+          {totalEmitidas > 0 && (
+            <p className="text-xs text-gray-400 mt-0.5">{utilidadPct}% del facturado</p>
+          )}
         </div>
       </div>
+
+      {/* Alerta de desviación de costos */}
+      {presupuestoCostosDirectos > 0 && totalRecibidas > 0 && alertLevel !== "verde" && (
+        <div
+          className={`rounded-lg p-4 mb-4 flex items-start gap-3 ${
+            alertLevel === "rojo"
+              ? "bg-red-50 border border-red-200"
+              : "bg-yellow-50 border border-yellow-200"
+          }`}
+        >
+          <span className="text-xl leading-none">
+            {alertLevel === "rojo" ? "🔴" : "🟡"}
+          </span>
+          <div>
+            <p className={`text-sm font-medium ${alertLevel === "rojo" ? "text-red-800" : "text-yellow-800"}`}>
+              {alertLevel === "rojo" ? "Alerta de costos" : "Advertencia de costos"}
+            </p>
+            <p className={`text-sm mt-0.5 ${alertLevel === "rojo" ? "text-red-700" : "text-yellow-700"}`}>
+              Los costos registrados ({formatCLP(totalRecibidas)}) superan el presupuesto de costos
+              directos en un <strong>{desviacionPct}%</strong> ({formatCLP(totalRecibidas - presupuestoCostosDirectos)} sobre lo presupuestado).
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Quick links */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">

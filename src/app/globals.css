@@ -54,3 +54,22 @@ h1 { font-size: 1.125rem !important; }   /* 18pt */
 h2 { font-size: 0.875rem !important; }   /* 14pt */
 h3 { font-size: 0.875rem !important; }   /* 14pt */
 h4 { font-size: 0.75rem !important; }    /* 12pt */
+
+/* Hide native spinner buttons on number inputs (they eat ~17px of width on hover) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Force-size utilities that beat the global `input { font-size: … !important }` rule */
+input.text-force-11,
+textarea.text-force-11,
+select.text-force-11 { font-size: 11px !important; line-height: 1.3 !important; }
+input.text-force-10,
+textarea.text-force-10,
+select.text-force-10 { font-size: 10px !important; line-height: 1.3 !important; }

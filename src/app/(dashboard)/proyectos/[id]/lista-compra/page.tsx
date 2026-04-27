@@ -52,10 +52,15 @@ export default async function ListaCompraPage({
     itemsWithoutCatalog =
       full?.obraItems.filter((i) => !i.catalogPartidaId).length || 0;
 
-    const components = await prisma.partidaComponent.findMany({
-      where: { partidaId: { in: catalogIds }, type: "material" },
+    const componentsRaw = await prisma.partidaComponent.findMany({
+      where: {
+        partidaId: { in: catalogIds },
+        type: "material",
+      },
       include: { material: true },
     });
+    // Excluir provisiones — no son materiales que se compran
+    const components = componentsRaw.filter((c) => !c.material?.isProvision);
 
     const compsByPartida = new Map<string, typeof components>();
     for (const c of components) {
@@ -70,7 +75,9 @@ export default async function ListaCompraPage({
       unit: string;
       materialId: string | null;
       qtyNeeded: number;
+      totalBudgeted: number;
       partidas: Set<string>;
+      referenceLink: string | null;
     };
     const agg = new Map<string, Agg>();
 
@@ -80,6 +87,7 @@ export default async function ListaCompraPage({
       for (const c of comps) {
         const qty = (c.quantity || 0) * (obraItem.quantity || 0);
         if (qty <= 0) continue;
+        const budgeted = (c.unitCost || 0) * qty;
         const name = c.material?.name || c.description;
         const unit = c.material?.unit || c.unit;
         const key = c.materialId
@@ -88,6 +96,7 @@ export default async function ListaCompraPage({
         const prev = agg.get(key);
         if (prev) {
           prev.qtyNeeded += qty;
+          prev.totalBudgeted += budgeted;
           prev.partidas.add(obraItem.name);
         } else {
           agg.set(key, {
@@ -96,7 +105,9 @@ export default async function ListaCompraPage({
             unit,
             materialId: c.materialId || null,
             qtyNeeded: qty,
+            totalBudgeted: budgeted,
             partidas: new Set([obraItem.name]),
+            referenceLink: c.material?.referenceLink || null,
           });
         }
       }
@@ -114,9 +125,14 @@ export default async function ListaCompraPage({
       trackingByKey.set(k, t);
     }
 
-    // Merge: filas desde presupuesto
+    // Merge: filas desde presupuesto — precio viene del presupuesto, no del catálogo actual
     for (const a of agg.values()) {
       const t = trackingByKey.get(a.key);
+      // Precio unitario efectivo = lo presupuestado / cantidad total necesaria
+      const unitPrice =
+        a.qtyNeeded > 0 && a.totalBudgeted > 0
+          ? Math.round(a.totalBudgeted / a.qtyNeeded)
+          : null;
       computed.push({
         key: a.key,
         shoppingItemId: t?.id || null,
@@ -128,6 +144,9 @@ export default async function ListaCompraPage({
         notes: t?.notes || null,
         source: "budget",
         partidas: Array.from(a.partidas).slice(0, 3),
+        unitPrice,
+        priceSource: unitPrice ? "presupuesto" : null,
+        referenceLink: a.referenceLink,
       });
       trackingByKey.delete(a.key);
     }
@@ -147,6 +166,9 @@ export default async function ListaCompraPage({
         notes: t.notes,
         source: t.manualAdd ? "manual" : "excess",
         partidas: [],
+        unitPrice: null,
+        priceSource: null,
+        referenceLink: null,
       });
     }
 

@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect, useRef, Fragment } from "react";
+import { useState, useEffect, useRef, Fragment, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { OBRA_CHAPTERS, ObraChapter, formatCLP } from "@/lib/utils";
+import MoneyInput from "@/components/ui/MoneyInput";
 
 interface ObraItem {
   id: string;
   chapter: string;
   itemNumber: string;
   name: string;
-  description: string | null;
+  descriptionCliente: string | null;
+  descriptionMaestro: string | null;
   unit: string;
   quantity: number;
   unitPrice: number;
@@ -21,6 +23,7 @@ interface ObraItem {
   costTools: number | null;
   costLoss: number | null;
   sortOrder: number;
+  catalogPartidaId: string | null;
 }
 
 interface PaymentTerm {
@@ -43,10 +46,19 @@ interface Budget {
   paymentTerms: PaymentTerm[];
 }
 
+interface CatalogProvision {
+  componentId: string;
+  name: string;
+  unitCost: number;   // neto de referencia del catálogo
+  quantity: number;   // qty por unidad de partida (ej: 1.05 m2 porcelanato / m2 piso)
+}
+
 interface CatalogPartida {
   id: string;
   category: string;
   name: string;
+  descriptionCliente: string | null;
+  descriptionMaestro: string | null;
   unit: string;
   unitPrice: number;
   costMaterial: number;
@@ -55,6 +67,7 @@ interface CatalogPartida {
   costMargin: number;
   costLoss: number;
   costSubcontract: number;
+  provisions: CatalogProvision[];
 }
 
 const UNITS = ["M2", "ML", "UN", "GL", "M3", "KG", "DIA"];
@@ -69,9 +82,11 @@ const DEFAULT_PAYMENT_TERMS = [
 export default function ObraEditor({
   budget: initialBudget,
   projectId,
+  provisionsByObraItem = {},
 }: {
   budget: Budget;
   projectId: string;
+  provisionsByObraItem?: Record<string, { name: string; unitCost: number }[]>;
 }) {
   const router = useRouter();
   const [items, setItems] = useState<ObraItem[]>(initialBudget.obraItems);
@@ -93,8 +108,13 @@ export default function ObraEditor({
       : DEFAULT_PAYMENT_TERMS
   );
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSaveRef = useRef<{ itemId: string; item: ObraItem } | null>(null);
   const [addingChapter, setAddingChapter] = useState<string | null>(null);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+  // Provision price overrides: componentId → precio c/IVA ingresado por usuario
+  const [provisionPrices, setProvisionPrices] = useState<Record<string, number>>({});
 
   // Catalog search state
   const [catalogQuery, setCatalogQuery] = useState("");
@@ -107,7 +127,8 @@ export default function ObraEditor({
   // New item state (for both catalog-selected and manual)
   const [newItem, setNewItem] = useState({
     name: "",
-    description: "",
+    descriptionCliente: "",
+    descriptionMaestro: "",
     unit: "GL",
     quantity: 0,
     unitPrice: 0,
@@ -150,9 +171,8 @@ export default function ObraEditor({
   // Calculos
   const costoDirecto = items.reduce((sum, item) => sum + item.total, 0);
   const gastosGenerales = costoDirecto * (ggPercent / 100);
-  const subtotal = costoDirecto + gastosGenerales;
-  const utilidad = subtotal * (utilPercent / 100);
-  const neto = subtotal + utilidad;
+  const utilidad = costoDirecto * (utilPercent / 100);
+  const neto = costoDirecto + gastosGenerales + utilidad;
   const iva = neto * 0.19;
   const totalConIva = neto + iva;
 
@@ -176,11 +196,20 @@ export default function ObraEditor({
     setSelectedCatalog(partida);
     setNewItem({
       name: partida.name,
-      description: "",
+      descriptionCliente: partida.descriptionCliente ?? "",
+      descriptionMaestro: partida.descriptionMaestro ?? "",
       unit: partida.unit,
       quantity: 0,
       unitPrice: Math.round(partida.unitPrice),
     });
+    // Inicializar precios de provisión con referencia del catálogo (neto → c/IVA)
+    const initPrices: Record<string, number> = {};
+    if (partida.provisions?.length) {
+      for (const prov of partida.provisions) {
+        initPrices[prov.componentId] = Math.round(prov.unitCost * 1.19);
+      }
+    }
+    setProvisionPrices(initPrices);
     setCatalogQuery("");
     setCatalogResults([]);
     setShowManualForm(false);
@@ -190,7 +219,7 @@ export default function ObraEditor({
     setSelectedCatalog(null);
     setShowManualForm(true);
     setCatalogResults([]);
-    setNewItem({ name: catalogQuery, description: "", unit: "GL", quantity: 0, unitPrice: 0 });
+    setNewItem({ name: catalogQuery, descriptionCliente: "", descriptionMaestro: "", unit: "GL", quantity: 0, unitPrice: 0 });
   }
 
   function resetAddForm() {
@@ -198,8 +227,26 @@ export default function ObraEditor({
     setCatalogResults([]);
     setSelectedCatalog(null);
     setShowManualForm(false);
-    setNewItem({ name: "", description: "", unit: "GL", quantity: 0, unitPrice: 0 });
+    setNewItem({ name: "", descriptionCliente: "", descriptionMaestro: "", unit: "GL", quantity: 0, unitPrice: 0 });
+    setProvisionPrices({});
     setAddingChapter(null);
+  }
+
+  // Calcula el P. Unitario neto ajustado cuando hay provisiones con precio personalizado
+  function calcAdjustedUnitPrice(): number {
+    if (!selectedCatalog?.provisions?.length) return newItem.unitPrice;
+    let provCostNeto = 0;
+    for (const prov of selectedCatalog.provisions) {
+      const priceNeto = Math.round((provisionPrices[prov.componentId] ?? 0) / 1.19);
+      provCostNeto += priceNeto * prov.quantity;
+    }
+    const nonMaterial =
+      (selectedCatalog.costLabor || 0) +
+      (selectedCatalog.costSubcontract || 0) +
+      (selectedCatalog.costMargin || 0) +
+      (selectedCatalog.costTools || 0) +
+      (selectedCatalog.costLoss || 0);
+    return Math.round(provCostNeto + nonMaterial);
   }
 
   async function handleAddItem(chapter: string) {
@@ -209,12 +256,24 @@ export default function ObraEditor({
       const body: any = { ...newItem, chapter };
       if (selectedCatalog) {
         body.catalogPartidaId = selectedCatalog.id;
-        body.costMaterial = selectedCatalog.costMaterial;
         body.costLabor = selectedCatalog.costLabor;
         body.costSubcontract = selectedCatalog.costSubcontract;
         body.costMargin = selectedCatalog.costMargin;
         body.costTools = selectedCatalog.costTools;
         body.costLoss = selectedCatalog.costLoss;
+        // Si hay provisiones, costMaterial se deriva del precio de provisión ingresado
+        if (selectedCatalog.provisions?.length) {
+          let provCostNeto = 0;
+          for (const prov of selectedCatalog.provisions) {
+            const priceNeto = Math.round((provisionPrices[prov.componentId] ?? 0) / 1.19);
+            provCostNeto += priceNeto * prov.quantity;
+          }
+          body.costMaterial = Math.round(provCostNeto);
+          body.unitPrice = calcAdjustedUnitPrice();
+          body.total = body.unitPrice * body.quantity;
+        } else {
+          body.costMaterial = selectedCatalog.costMaterial;
+        }
       }
 
       const res = await fetch(
@@ -279,7 +338,91 @@ export default function ObraEditor({
     }
   }
 
-  async function handleUpdateItem(
+  async function handleUpdateCatalog(item: ObraItem) {
+    if (!item.catalogPartidaId) return;
+    if (
+      !confirm(
+        `¿Actualizar los PRECIOS de la partida "${item.name}" en el catálogo?\n\n` +
+          `Material: $${item.costMaterial ?? 0}\n` +
+          `Mano de obra: $${item.costLabor ?? 0}\n` +
+          `Herramientas: $${item.costTools ?? 0}\n` +
+          `Margen: $${item.costMargin ?? 0}\n` +
+          `Pérdida: $${item.costLoss ?? 0}\n` +
+          `Subcontrato: $${item.costSubcontract ?? 0}\n` +
+          `P. Unitario: $${item.unitPrice}\n\n` +
+          `Esto afectará la plantilla base para todos los proyectos futuros.`
+      )
+    )
+      return;
+    try {
+      const res = await fetch(`/api/catalogo/partidas/${item.catalogPartidaId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          unitPrice: item.unitPrice,
+          costMaterial: item.costMaterial ?? 0,
+          costLabor: item.costLabor ?? 0,
+          costTools: item.costTools ?? 0,
+          costMargin: item.costMargin ?? 0,
+          costLoss: item.costLoss ?? 0,
+          costSubcontract: item.costSubcontract ?? 0,
+        }),
+      });
+      if (!res.ok) throw new Error("Error");
+      alert(`✓ Precios del catálogo actualizados para "${item.name}"`);
+    } catch {
+      alert("Error al actualizar catálogo");
+    }
+  }
+
+  async function handleUpdateCatalogDescription(item: ObraItem) {
+    if (!item.catalogPartidaId) return;
+    const descCli = (item.descriptionCliente ?? "").trim();
+    const descMae = (item.descriptionMaestro ?? "").trim();
+    if (
+      !confirm(
+        `¿Actualizar las DESCRIPCIONES de "${item.name}" en el catálogo?\n\n` +
+          `Cliente: "${descCli || "(vacía)"}"\n` +
+          `Maestro: "${descMae || "(vacía)"}"\n\n` +
+          `Esto afectará las descripciones base para todos los proyectos futuros.`
+      )
+    )
+      return;
+    try {
+      const res = await fetch(`/api/catalogo/partidas/${item.catalogPartidaId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          descriptionCliente: descCli || null,
+          descriptionMaestro: descMae || null,
+        }),
+      });
+      if (!res.ok) throw new Error("Error");
+      alert(`✓ Descripción del catálogo actualizada para "${item.name}"`);
+    } catch {
+      alert("Error al actualizar descripción del catálogo");
+    }
+  }
+
+  const flushSave = useCallback(async (itemId: string, item: ObraItem) => {
+    setSaveStatus("saving");
+    try {
+      await fetch(
+        `/api/presupuestos/${initialBudget.id}/partidas/${itemId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(item),
+        }
+      );
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 1500);
+    } catch {
+      setSaveStatus("idle");
+    }
+  }, [initialBudget.id]);
+
+  function handleUpdateItem(
     itemId: string,
     field: string,
     value: string | number
@@ -319,18 +462,16 @@ export default function ObraEditor({
     const item = updatedItems.find((i) => i.id === itemId);
     if (!item) return;
 
-    try {
-      await fetch(
-        `/api/presupuestos/${initialBudget.id}/partidas/${itemId}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(item),
-        }
-      );
-    } catch {
-      // silently fail, item is updated locally
-    }
+    // Debounce: cancel pending save, schedule new one in 600ms
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    pendingSaveRef.current = { itemId, item };
+    setSaveStatus("saving");
+    saveTimerRef.current = setTimeout(() => {
+      if (pendingSaveRef.current) {
+        flushSave(pendingSaveRef.current.itemId, pendingSaveRef.current.item);
+        pendingSaveRef.current = null;
+      }
+    }, 600);
   }
 
   async function handleSaveConfig() {
@@ -416,20 +557,22 @@ export default function ObraEditor({
           key={chapter.key}
           className="bg-white rounded-xl border border-gray-200 overflow-visible"
         >
-          <div className="flex items-center justify-between p-4 bg-gray-50 border-b border-gray-200">
-            <h3 className="font-semibold text-gray-900">
-              {chapter.index}. {chapter.label}
+          {/* Chapter bar — matches PDF's #DBDBDB chapter row */}
+          <div className="flex items-center justify-between px-4 py-2 bg-[#DBDBDB]">
+            <h3 className="font-bold text-gray-900 text-sm uppercase tracking-wide">
+              <span className="inline-block w-6">{chapter.index}</span>
+              {chapter.label}
             </h3>
-            <div className="flex items-center gap-4">
-              <span className="text-sm font-medium text-gray-600">
-                Subtotal: {formatCLP(chapter.subtotal)}
+            <div className="flex items-center gap-5">
+              <span className="text-xs font-medium text-gray-700 tabular-nums">
+                Subtotal {formatCLP(chapter.subtotal)}
               </span>
               <button
                 onClick={() => {
                   resetAddForm();
                   setAddingChapter(chapter.key);
                 }}
-                className="text-sm text-gray-600 hover:text-gray-900 font-medium"
+                className="text-xs font-semibold text-gray-700 hover:text-black uppercase tracking-wide"
               >
                 + Agregar
               </button>
@@ -440,33 +583,36 @@ export default function ObraEditor({
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="text-left px-4 py-2 text-xs text-gray-500 w-16">
-                      N°
+                  <tr className="border-y-2 border-gray-900 bg-white">
+                    <th className="text-center px-3 py-2 text-[11px] font-bold text-gray-900 uppercase tracking-wider w-12">
+                      Item
                     </th>
-                    <th className="text-left px-4 py-2 text-xs text-gray-500">
+                    <th className="text-left px-3 py-2 text-[11px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "24%" }}>
                       Partida
                     </th>
-                    <th className="text-left px-4 py-2 text-xs text-gray-500 w-20">
-                      Unidad
+                    <th className="text-left px-3 py-2 text-[11px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "40%" }}>
+                      Descripcion
                     </th>
-                    <th className="text-right px-4 py-2 text-xs text-gray-500 w-24">
-                      Cantidad
+                    <th className="text-center px-2 py-2 text-[11px] font-bold text-gray-900 uppercase tracking-wider w-14">
+                      Un.
                     </th>
-                    <th className="text-right px-4 py-2 text-xs text-gray-500 w-32">
-                      P. Unitario
+                    <th className="text-right px-2 py-2 text-[11px] font-bold text-gray-900 uppercase tracking-wider w-20">
+                      Cant.
                     </th>
-                    <th className="text-right px-4 py-2 text-xs text-gray-500 w-32">
+                    <th className="text-right px-3 py-2 text-[11px] font-bold text-gray-900 uppercase tracking-wider w-28">
+                      P.U.
+                    </th>
+                    <th className="text-right px-3 py-2 text-[11px] font-bold text-gray-900 uppercase tracking-wider w-28">
                       Total
                     </th>
-                    <th className="w-10"></th>
+                    <th className="w-8"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {chapter.items.map((item) => (
                     <Fragment key={item.id}>
-                    <tr className="hover:bg-gray-50">
-                      <td className="px-4 py-2 text-gray-500">
+                    <tr className="border-b border-gray-100 hover:bg-gray-50/60 group">
+                      <td className="px-3 py-1 text-gray-700 text-xs tabular-nums align-top whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => {
@@ -483,41 +629,58 @@ export default function ObraEditor({
                               (item.costTools ?? 0) +
                               (item.costLoss ?? 0);
                             if (willOpen && sum === 0 && item.unitPrice > 0) {
-                              // Desglose vacío → seed Material = P.U
-                              handleUpdateItem(
-                                item.id,
-                                "costMaterial",
-                                item.unitPrice
-                              );
-                            } else if (willOpen && sum > 0 && sum !== item.unitPrice) {
-                              // Desglose no cuadra con P.U → sincronizar P.U = suma
+                              handleUpdateItem(item.id, "costMaterial", item.unitPrice);
+                            } else if (willOpen && sum > 0 && sum < item.unitPrice) {
+                              const gap = Math.round(item.unitPrice - sum);
+                              handleUpdateItem(item.id, "costMaterial", (item.costMaterial ?? 0) + gap);
+                            } else if (willOpen && sum > item.unitPrice) {
                               handleUpdateItem(item.id, "unitPrice", sum);
                             }
                           }}
-                          className="mr-1 text-gray-400 hover:text-gray-700"
+                          className="mr-1 text-gray-300 hover:text-gray-700"
                           title="Ver desglose"
                         >
                           {expandedItems[item.id] ? "▾" : "▸"}
                         </button>
                         {item.itemNumber}
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-3 py-1 align-top">
                         <input
                           type="text"
                           value={item.name}
                           onChange={(e) =>
                             handleUpdateItem(item.id, "name", e.target.value)
                           }
-                          className="w-full bg-transparent border-0 p-0 text-gray-900 focus:ring-0 outline-none"
+                          className="text-force-11 w-full bg-transparent border-0 p-0 text-gray-900 focus:ring-0 outline-none uppercase"
                         />
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-3 py-1 align-top">
+                        <textarea
+                          ref={(el) => {
+                            if (el) {
+                              el.style.height = "auto";
+                              el.style.height = `${el.scrollHeight}px`;
+                            }
+                          }}
+                          value={item.descriptionCliente ?? ""}
+                          onChange={(e) => {
+                            handleUpdateItem(item.id, "descriptionCliente", e.target.value);
+                            e.currentTarget.style.height = "auto";
+                            e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                          }}
+                          placeholder="Descripción para el cliente (PDF)…"
+                          rows={1}
+                          className="text-force-10 w-full resize-none bg-transparent border-0 p-0 text-gray-600 placeholder:text-gray-300 focus:ring-0 outline-none leading-snug"
+                          style={{ minHeight: "1rem" }}
+                        />
+                      </td>
+                      <td className="px-2 py-1 align-top text-center">
                         <select
                           value={item.unit}
                           onChange={(e) =>
                             handleUpdateItem(item.id, "unit", e.target.value)
                           }
-                          className="bg-transparent border-0 p-0 text-gray-600 focus:ring-0 outline-none text-sm"
+                          className="text-force-11 bg-transparent border-0 p-0 text-gray-700 focus:ring-0 outline-none text-center"
                         >
                           {UNITS.map((u) => (
                             <option key={u} value={u}>
@@ -526,7 +689,7 @@ export default function ObraEditor({
                           ))}
                         </select>
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-2 py-1 align-top">
                         <input
                           type="number"
                           step="0.01"
@@ -538,76 +701,94 @@ export default function ObraEditor({
                               parseFloat(e.target.value) || 0
                             )
                           }
-                          className="w-full bg-transparent border-0 p-0 text-right text-gray-900 focus:ring-0 outline-none"
+                          className="text-force-11 w-full min-w-0 bg-transparent border-0 p-0 text-right text-gray-900 tabular-nums focus:ring-0 outline-none"
                         />
                       </td>
-                      <td className="px-4 py-2">
-                        <div className="flex items-center justify-end">
-                          <span className="text-gray-900">$</span>
-                          <input
-                            type="number"
-                            step="1"
+                      <td className="px-3 py-1 align-top">
+                        <div className="flex items-center justify-end gap-0.5 tabular-nums">
+                          <span className="text-gray-400 text-sm">$</span>
+                          <MoneyInput
                             value={item.unitPrice}
-                            onChange={(e) =>
-                              handleUpdateItem(
-                                item.id,
-                                "unitPrice",
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            className="w-20 bg-transparent border-0 p-0 text-right text-gray-900 focus:ring-0 outline-none"
+                            onChange={(v) => handleUpdateItem(item.id, "unitPrice", v)}
+                            className="w-20 bg-transparent border-0 p-0 text-right text-sm text-gray-900 tabular-nums focus:ring-0 outline-none"
                           />
                         </div>
                       </td>
-                      <td className="px-4 py-2 text-right font-medium text-gray-900">
-                        {formatCLP(item.total)}
+                      <td className="px-3 py-1 align-top text-right text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-2">
+                          {saveStatus === "saving" && (
+                            <span className="text-[10px] text-gray-400 animate-pulse hidden group-hover:inline">guardando…</span>
+                          )}
+                          {saveStatus === "saved" && (
+                            <span className="text-[10px] text-green-600 hidden group-hover:inline">✓</span>
+                          )}
+                          {formatCLP(item.total)}
+                        </div>
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-2 py-1 align-top">
                         <button
                           onClick={() => handleDeleteItem(item.id)}
-                          className="text-gray-400 hover:text-red-500 transition-colors"
+                          className="text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all text-xs"
                           title="Eliminar"
                         >
-                          x
+                          ✕
                         </button>
                       </td>
                     </tr>
                     {expandedItems[item.id] && (
                       <tr className="bg-gray-50">
-                        <td colSpan={7} className="px-4 py-3">
+                        <td colSpan={8} className="px-4 py-3 space-y-3">
+                          {/* Descripción para el maestro (no aparece en PDF cliente) */}
+                          <div>
+                            <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
+                              Descripción para el maestro
+                              <span className="ml-2 text-gray-400 normal-case font-normal italic">
+                                — aparece en el estado de pago
+                              </span>
+                            </label>
+                            <textarea
+                              value={item.descriptionMaestro ?? ""}
+                              onChange={(e) =>
+                                handleUpdateItem(item.id, "descriptionMaestro", e.target.value)
+                              }
+                              rows={2}
+                              placeholder="Alcance específico del trabajo para el maestro…"
+                              className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs resize-y focus:ring-1 focus:ring-gray-900 outline-none"
+                            />
+                          </div>
                           <div className="grid grid-cols-2 md:grid-cols-7 gap-3 text-xs">
-                            {([
+                            {(([
                               ["Material", "costMaterial"],
                               ["Mano de obra", "costLabor"],
                               ["Herramientas", "costTools"],
                               ["Subcontrato", "costSubcontract"],
                               ["Pérdida", "costLoss"],
                               ["Margen", "costMargin"],
-                            ] as const).map(([label, field]) => (
+                            ]) as [string, keyof ObraItem][]).map(([label, field]) => (
                               <label key={field} className="flex flex-col">
-                                <span className="text-gray-500 mb-1">{label}</span>
+                                <span className="mb-1 text-gray-500">{label}</span>
                                 <div className="relative">
-                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none text-xs">
                                     $
                                   </span>
-                                  <input
-                                    type="number"
-                                    step="1"
+                                  <MoneyInput
                                     value={(item[field] as number | null) ?? 0}
-                                    onChange={(e) =>
-                                      handleUpdateItem(
-                                        item.id,
-                                        field,
-                                        parseFloat(e.target.value) || 0
-                                      )
-                                    }
-                                    className="w-full border border-gray-300 rounded pl-6 pr-2 py-1 text-right"
+                                    onChange={(v) => handleUpdateItem(item.id, field, v)}
+                                    className="w-full border border-gray-300 rounded pl-5 pr-2 py-1 text-right text-sm"
                                   />
                                 </div>
                               </label>
                             ))}
                             <div className="flex flex-col justify-end">
-                              <span className="text-gray-500 mb-1">Suma desglose</span>
+                              <span className="text-gray-500 mb-1 flex items-center gap-2">
+                                Suma desglose
+                                {saveStatus === "saving" && (
+                                  <span className="text-xs text-gray-400 animate-pulse">guardando…</span>
+                                )}
+                                {saveStatus === "saved" && (
+                                  <span className="text-xs text-green-600">✓ guardado</span>
+                                )}
+                              </span>
                               <span className="text-gray-900 font-medium px-2 py-1 text-right">
                                 {formatCLP(
                                   (item.costMaterial ?? 0) +
@@ -620,6 +801,24 @@ export default function ObraEditor({
                               </span>
                             </div>
                           </div>
+                          {item.catalogPartidaId && (
+                            <div className="mt-2 flex justify-end gap-2">
+                              <button
+                                onClick={() => handleUpdateCatalogDescription(item)}
+                                className="text-xs text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-3 py-1 rounded-lg transition-colors"
+                                title="Guardar esta descripción como descripción estándar del catálogo (afecta todos los proyectos futuros)"
+                              >
+                                ↑ Actualizar descripción en catálogo
+                              </button>
+                              <button
+                                onClick={() => handleUpdateCatalog(item)}
+                                className="text-xs text-orange-600 hover:text-orange-800 border border-orange-200 hover:border-orange-400 px-3 py-1 rounded-lg transition-colors"
+                                title="Propagar estos precios al catálogo base (afecta todos los proyectos futuros)"
+                              >
+                                ↑ Actualizar precios en catálogo
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     )}
@@ -799,7 +998,7 @@ export default function ObraEditor({
                             unitPrice: parseFloat(e.target.value) || 0,
                           })
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none text-right"
                       />
                     </div>
                     <div className="col-span-2 flex gap-2">
@@ -817,12 +1016,66 @@ export default function ObraEditor({
                       </button>
                     </div>
                   </div>
+                  {/* Provision price fields */}
+                  {selectedCatalog.provisions?.length > 0 && (
+                    <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                      <p className="text-xs font-medium text-purple-700 mb-2">
+                        Valor provisión al cliente (precio c/IVA que se le cotiza al cliente)
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {selectedCatalog.provisions.map((prov) => (
+                          <label key={prov.componentId} className="flex flex-col">
+                            <span className="text-xs text-purple-600 mb-1">
+                              {prov.name}
+                              {prov.quantity !== 1 && (
+                                <span className="text-purple-400 ml-1">
+                                  (×{prov.quantity} por {selectedCatalog.unit})
+                                </span>
+                              )}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <div className="relative flex-1">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-purple-400 pointer-events-none text-sm">$</span>
+                                <input
+                                  type="number"
+                                  step="1"
+                                  value={provisionPrices[prov.componentId] ?? ""}
+                                  onChange={(e) =>
+                                    setProvisionPrices({
+                                      ...provisionPrices,
+                                      [prov.componentId]: parseFloat(e.target.value) || 0,
+                                    })
+                                  }
+                                  placeholder="Precio c/IVA"
+                                  className="w-full border border-purple-300 rounded pl-6 pr-2 py-1.5 text-sm text-right bg-white focus:ring-2 focus:ring-purple-400 focus:border-transparent outline-none"
+                                />
+                              </div>
+                              <span className="text-xs text-purple-500 whitespace-nowrap">
+                                c/IVA por {prov.quantity !== 1 ? "unidad" : selectedCatalog.unit}
+                              </span>
+                            </div>
+                            {(provisionPrices[prov.componentId] ?? 0) > 0 && (
+                              <span className="text-xs text-purple-400 mt-0.5 text-right">
+                                neto: {formatCLP(Math.round((provisionPrices[prov.componentId] ?? 0) / 1.19))} / unidad
+                              </span>
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {newItem.quantity > 0 && (
                     <div className="mt-2 text-xs text-gray-500">
                       Total estimado:{" "}
                       <span className="font-medium text-gray-700">
-                        {formatCLP(newItem.quantity * newItem.unitPrice)}
+                        {formatCLP(newItem.quantity * (selectedCatalog.provisions?.length ? calcAdjustedUnitPrice() : newItem.unitPrice))}
                       </span>
+                      {selectedCatalog.provisions?.length > 0 && (
+                        <span className="ml-2 text-purple-500">
+                          (P.U neto ajustado: {formatCLP(calcAdjustedUnitPrice())})
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -913,7 +1166,7 @@ export default function ObraEditor({
                             unitPrice: parseFloat(e.target.value) || 0,
                           })
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none text-right"
                       />
                     </div>
                     <div className="col-span-2 flex gap-2">
@@ -961,10 +1214,6 @@ export default function ObraEditor({
               Gastos Generales ({ggPercent}%)
             </span>
             <span className="font-medium">{formatCLP(gastosGenerales)}</span>
-          </div>
-          <div className="flex justify-between text-sm border-t border-gray-100 pt-2">
-            <span className="text-gray-600">Subtotal</span>
-            <span className="font-medium">{formatCLP(subtotal)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-600">Utilidad ({utilPercent}%)</span>

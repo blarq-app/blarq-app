@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { BUDGET_STATUSES, BudgetStatus, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import NuevaVersionButton from "@/components/presupuesto/NuevaVersionButton";
+import AprobarBudgetButton from "@/components/presupuesto/AprobarBudgetButton";
 
 export default async function PresupuestoPage({
   params,
@@ -42,9 +43,8 @@ export default async function PresupuestoPage({
       0
     );
     const gg = costoDirecto * ((budget.ggPercentage || 0) / 100);
-    const subtotal = costoDirecto + gg;
-    const utilidad = subtotal * ((budget.utilityPercentage || 0) / 100);
-    const neto = subtotal + utilidad;
+    const utilidad = costoDirecto * ((budget.utilityPercentage || 0) / 100);
+    const neto = costoDirecto + gg + utilidad;
     const iva = neto * 0.19;
     return neto + iva;
   }
@@ -95,6 +95,7 @@ export default async function PresupuestoPage({
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Estado
                   </th>
+                  <th className="px-6 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -134,6 +135,22 @@ export default async function PresupuestoPage({
                         >
                           {status?.label || budget.status}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <NuevaVersionButton
+                            projectId={project.id}
+                            type="obra"
+                            baseVersionId={budget.id}
+                            label="Duplicar"
+                            variant="secondary"
+                          />
+                          <AprobarBudgetButton
+                            budgetId={budget.id}
+                            currentStatus={budget.status}
+                            version={budget.version}
+                          />
+                        </div>
                       </td>
                     </tr>
                   );

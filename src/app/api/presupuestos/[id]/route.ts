@@ -20,6 +20,17 @@ export async function PUT(
       },
     });
 
+    // Cuando se aprueba un presupuesto de obra, marcar como versión actual del proyecto
+    if (data.status === "aprobado" && budget.type === "obra") {
+      await prisma.project.update({
+        where: { id: budget.projectId },
+        data: {
+          currentVersion: budget.version,
+          status: "en_ejecucion",
+        },
+      });
+    }
+
     return NextResponse.json(budget);
   } catch (error) {
     console.error("Error updating budget:", error);

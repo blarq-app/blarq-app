@@ -28,6 +28,41 @@ export default async function PresupuestoDetailPage({
     },
   });
 
+  // Para cada ObraItem con catalogPartidaId, detectar si tiene componentes de provisión
+  let provisionsByObraItem: Record<string, { name: string; unitCost: number }[]> = {};
+  if (budget?.type === "obra") {
+    const catalogIds = budget.obraItems
+      .map((i) => i.catalogPartidaId)
+      .filter((x): x is string => !!x);
+    if (catalogIds.length > 0) {
+      const provComponentsRaw = await prisma.partidaComponent.findMany({
+        where: {
+          partidaId: { in: catalogIds },
+          type: "material",
+        },
+        include: { material: true },
+      });
+      const provComponents = provComponentsRaw.filter((c) => c.material?.isProvision);
+      // Agrupar por partidaId
+      const byPartida = new Map<string, typeof provComponents>();
+      for (const c of provComponents) {
+        if (!byPartida.has(c.partidaId)) byPartida.set(c.partidaId, []);
+        byPartida.get(c.partidaId)!.push(c);
+      }
+      // Mapear a obraItemId
+      for (const item of budget.obraItems) {
+        if (!item.catalogPartidaId) continue;
+        const comps = byPartida.get(item.catalogPartidaId);
+        if (comps?.length) {
+          provisionsByObraItem[item.id] = comps.map((c) => ({
+            name: c.material?.name ?? c.description,
+            unitCost: c.unitCost,
+          }));
+        }
+      }
+    }
+  }
+
   if (!budget) notFound();
 
   return (
@@ -61,7 +96,7 @@ export default async function PresupuestoDetailPage({
       </div>
 
       {budget.type === "obra" && (
-        <ObraEditor budget={budget} projectId={project.id} />
+        <ObraEditor budget={budget} projectId={project.id} provisionsByObraItem={provisionsByObraItem} />
       )}
       {budget.type === "muebles" && (
         <MueblesEditor budget={budget} projectId={project.id} />

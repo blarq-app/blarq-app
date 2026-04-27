@@ -15,7 +15,8 @@ export async function PUT(
       where: { id: itemId },
       data: {
         name: data.name,
-        description: data.description,
+        descriptionCliente: data.descriptionCliente ?? data.description,
+        descriptionMaestro: data.descriptionMaestro,
         unit: data.unit,
         quantity: data.quantity,
         unitPrice: data.unitPrice,

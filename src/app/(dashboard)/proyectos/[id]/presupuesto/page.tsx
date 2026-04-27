@@ -51,17 +51,6 @@ export default async function PresupuestoPage({
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-8">
-        <Link
-          href={`/proyectos/${project.id}`}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          {project.name}
-        </Link>
-        <span className="text-gray-300">/</span>
-        <h1 className="text-2xl font-bold text-gray-900">Presupuestos</h1>
-      </div>
-
       {/* Obra */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">

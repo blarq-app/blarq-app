@@ -67,22 +67,15 @@ export default async function EPDetailPage({
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
-        <Link
-          href={`/proyectos/${projectId}`}
-          className="text-gray-400 hover:text-gray-600 text-sm"
-        >
-          {ep.project.name}
-        </Link>
-        <span className="text-gray-300">/</span>
+      <div className="flex items-center gap-2 mb-4 text-sm">
         <Link
           href={`/proyectos/${projectId}/estados-pago`}
-          className="text-gray-400 hover:text-gray-600 text-sm"
+          className="text-gray-500 hover:text-gray-900"
         >
-          Estados de Pago
+          ← Estados de Pago
         </Link>
         <span className="text-gray-300">/</span>
-        <h1 className="text-xl font-bold text-gray-900">EP #{ep.number}</h1>
+        <span className="font-medium text-gray-900">EP #{ep.number}</span>
       </div>
 
       <EditorEP

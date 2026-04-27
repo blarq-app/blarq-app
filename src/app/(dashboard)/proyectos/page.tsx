@@ -62,7 +62,7 @@ export default async function ProyectosPage() {
                   >
                     <td className="px-6 py-4">
                       <Link
-                        href={`/proyectos/${project.id}`}
+                        href={`/proyectos/${project.id}/resumen`}
                         className="font-medium text-gray-900 hover:underline"
                       >
                         {project.name}

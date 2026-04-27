@@ -78,29 +78,24 @@ export default async function PresupuestoDetailPage({
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-8">
-        <Link
-          href={`/proyectos/${project.id}`}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          {project.name}
-        </Link>
-        <span className="text-gray-300">/</span>
-        <Link
-          href={`/proyectos/${project.id}/presupuesto`}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          Presupuestos
-        </Link>
-        <span className="text-gray-300">/</span>
-        <h1 className="text-2xl font-bold text-gray-900">
-          {budget.type === "obra" ? "Obra" : budget.type === "muebles" ? "Muebles" : "Artefactos"}{" "}
-          {budget.version}
-        </h1>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2 text-sm">
+          <Link
+            href={`/proyectos/${project.id}/presupuesto`}
+            className="text-gray-500 hover:text-gray-900"
+          >
+            ← Presupuestos
+          </Link>
+          <span className="text-gray-300">/</span>
+          <span className="font-medium text-gray-900">
+            {budget.type === "obra" ? "Obra" : budget.type === "muebles" ? "Muebles" : "Artefactos"}{" "}
+            {budget.version}
+          </span>
+        </div>
         <a
           href={`/api/presupuestos/${budget.id}/pdf`}
           target="_blank"
-          className="ml-auto bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+          className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-700"
         >
           Descargar PDF
         </a>

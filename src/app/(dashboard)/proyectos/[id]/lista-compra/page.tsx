@@ -183,25 +183,9 @@ export default async function ListaCompraPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <Link
-              href={`/proyectos/${project.id}`}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              {project.name}
-            </Link>
-            <span className="text-gray-300">/</span>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Lista de Compra
-            </h1>
-          </div>
-          <p className="text-gray-500">
-            Calculada en vivo desde el presupuesto de obra.
-          </p>
-        </div>
-      </div>
+      <p className="text-sm text-gray-500 mb-4">
+        Materiales calculados en vivo desde el presupuesto de obra.
+      </p>
 
       <ListaCompraClient
         projectId={project.id}

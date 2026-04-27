@@ -62,17 +62,7 @@ export default async function EstadosPagoPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <Link
-            href={`/proyectos/${project.id}`}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            {project.name}
-          </Link>
-          <span className="text-gray-300">/</span>
-          <h1 className="text-2xl font-bold text-gray-900">Estados de Pago</h1>
-        </div>
+      <div className="flex items-center justify-end mb-4">
         <NuevoEPButton projectId={project.id} disabled={!hasObra} />
       </div>
 

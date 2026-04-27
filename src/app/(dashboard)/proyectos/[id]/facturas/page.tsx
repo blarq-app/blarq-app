@@ -71,17 +71,6 @@ export default async function ProyectoFacturasPage({
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
-        <Link
-          href={`/proyectos/${project.id}`}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          {project.name}
-        </Link>
-        <span className="text-gray-300">/</span>
-        <h1 className="text-2xl font-bold text-gray-900">Facturas</h1>
-      </div>
-
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <Stat label="Emitido" value={formatCLP(totalEmitido)} sub="cobros al cliente" />

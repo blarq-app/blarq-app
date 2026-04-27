@@ -3,7 +3,6 @@ import { formatCLP, PROJECT_STATUSES, ProjectStatus } from "@/lib/utils";
 import {
   computeProjectMetrics,
   PROJECT_METRICS_INCLUDE,
-  type ProjectAlert,
 } from "@/lib/projects/metrics";
 import Link from "next/link";
 
@@ -201,144 +200,78 @@ function ProjectCard({
   const dangerAlerts = metrics.alerts.filter((a) => a.severity === "danger");
   const warningAlerts = metrics.alerts.filter((a) => a.severity === "warning");
 
+  // Pedido por MJ: la card debe mostrar a simple vista cuánto se vendió
+  // y cuánto se gastó, con una alerta si hay algo crítico. Click → Resumen
+  // del proyecto donde están todos los detalles.
+  const hasDanger = dangerAlerts.length > 0;
+  const hasWarning = warningAlerts.length > 0 && !hasDanger;
+
   return (
     <Link
-      href={`/proyectos/${project.id}/resultados`}
+      href={`/proyectos/${project.id}/resumen`}
       className="block bg-white rounded-xl border border-gray-200 hover:border-gray-400 p-5 transition-colors"
     >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between mb-3">
         <div className="min-w-0">
-          <h3 className="font-semibold text-gray-900 truncate">{project.name}</h3>
+          <h3 className="font-semibold text-gray-900 truncate">
+            {project.name}
+          </h3>
           <p className="text-xs text-gray-500 mt-0.5 truncate">
             {project.clientName}
           </p>
         </div>
         <span
-          className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded ${status.color}`}
+          className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded flex-shrink-0 ${status.color}`}
         >
           {status.label}
         </span>
       </div>
 
-      {/* Métricas: 4 cifras */}
-      <div className="grid grid-cols-4 gap-2 mb-3 text-center">
-        <Metric label="Acordado" value={formatCLP(metrics.totalAcordado)} />
-        <Metric
-          label="Cobrado"
-          value={`${metrics.pctCobrado.toFixed(0)}%`}
-          tone="text-blue-600"
-        />
-        <Metric label="Gastado" value={formatCLP(metrics.totalGastado)} tone="text-red-600" />
-        <Metric
-          label="Avance"
-          value={`${metrics.avanceObraPct.toFixed(0)}%`}
-        />
-      </div>
-
-      {/* Barra de progreso de cobro */}
-      <div className="mb-3">
-        <div className="w-full bg-gray-100 rounded-full h-1.5">
-          <div
-            className="bg-blue-500 h-1.5 rounded-full"
-            style={{ width: `${Math.min(metrics.pctCobrado, 100)}%` }}
-          />
+      {/* Lo central: vendido vs gastado */}
+      <div className="grid grid-cols-2 gap-4 py-2">
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-gray-500">
+            Vendido
+          </p>
+          <p className="text-lg font-bold tabular-nums text-gray-900 mt-0.5">
+            {formatCLP(metrics.totalAcordado)}
+          </p>
+          <p className="text-[10px] text-gray-400 mt-0.5">
+            cobrado {metrics.pctCobrado.toFixed(0)}%
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-gray-500">
+            Gastado
+          </p>
+          <p className="text-lg font-bold tabular-nums text-gray-900 mt-0.5">
+            {formatCLP(metrics.totalGastado)}
+          </p>
+          <p className="text-[10px] text-gray-400 mt-0.5">
+            avance obra {metrics.avanceObraPct.toFixed(0)}%
+          </p>
         </div>
       </div>
 
-      {/* Worst deviation */}
-      {metrics.worstDeviation && metrics.worstDeviation.pct > 50 && (
-        <div className="text-[11px] text-gray-600 mb-2 flex items-center justify-between">
-          <span>Categoría más cargada: {metrics.worstDeviation.name}</span>
-          <span
-            className={`tabular-nums font-medium ${
-              metrics.worstDeviation.pct >= 100
-                ? "text-red-600"
-                : metrics.worstDeviation.pct >= 80
-                ? "text-amber-700"
-                : "text-gray-700"
-            }`}
-          >
-            {metrics.worstDeviation.pct.toFixed(0)}%
-          </span>
-        </div>
-      )}
-
-      {/* Alertas */}
-      {(dangerAlerts.length > 0 || warningAlerts.length > 0) && (
-        <div className="border-t border-gray-100 pt-2 mt-2 space-y-1">
-          {dangerAlerts.slice(0, 2).map((a, i) => (
-            <AlertLine key={`d${i}`} alert={a} />
-          ))}
-          {warningAlerts.slice(0, 1).map((a, i) => (
-            <AlertLine key={`w${i}`} alert={a} />
-          ))}
-          {metrics.alerts.length > 3 && (
-            <p className="text-[10px] text-gray-400 italic">
-              + {metrics.alerts.length - 3} más
-            </p>
+      {/* Alerta crítica solo si la hay */}
+      {hasDanger && (
+        <div className="border-t border-gray-100 pt-2 mt-2 flex items-start gap-1.5 text-[11px] text-red-700">
+          <span>⚠</span>
+          <span className="flex-1">{dangerAlerts[0].message}</span>
+          {metrics.alerts.length > 1 && (
+            <span className="text-gray-400">
+              +{metrics.alerts.length - 1}
+            </span>
           )}
         </div>
       )}
-
-      {/* Compromisos */}
-      {(metrics.invoicesPendingCount > 0 || metrics.draftEPsCount > 0) && (
-        <div className="border-t border-gray-100 pt-2 mt-2 flex items-center gap-3 text-[11px] text-gray-500">
-          {metrics.invoicesPendingCount > 0 && (
-            <span>
-              <span className="font-medium text-gray-700">
-                {metrics.invoicesPendingCount}
-              </span>{" "}
-              factura{metrics.invoicesPendingCount > 1 ? "s" : ""} por pagar
-            </span>
-          )}
-          {metrics.draftEPsCount > 0 && (
-            <span>
-              <span className="font-medium text-gray-700">
-                {metrics.draftEPsCount}
-              </span>{" "}
-              EP{metrics.draftEPsCount > 1 ? "s" : ""} en borrador
-            </span>
-          )}
+      {hasWarning && (
+        <div className="border-t border-gray-100 pt-2 mt-2 flex items-start gap-1.5 text-[11px] text-amber-700">
+          <span>•</span>
+          <span className="flex-1">{warningAlerts[0].message}</span>
         </div>
       )}
     </Link>
   );
 }
 
-function Metric({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: string;
-}) {
-  return (
-    <div>
-      <p className="text-[10px] uppercase tracking-wider text-gray-500">
-        {label}
-      </p>
-      <p className={`text-sm font-semibold tabular-nums mt-0.5 ${tone ?? "text-gray-900"}`}>
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function AlertLine({ alert }: { alert: ProjectAlert }) {
-  const tone =
-    alert.severity === "danger"
-      ? "text-red-700"
-      : alert.severity === "warning"
-      ? "text-amber-700"
-      : "text-gray-600";
-  const icon = alert.severity === "danger" ? "⚠" : "•";
-  return (
-    <p className={`text-[11px] leading-tight ${tone}`}>
-      <span className="mr-1">{icon}</span>
-      {alert.message}
-    </p>
-  );
-}

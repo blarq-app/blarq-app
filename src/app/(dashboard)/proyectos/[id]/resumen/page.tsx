@@ -278,19 +278,6 @@ export default async function ResultadosPage({
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-8">
-        <Link
-          href={`/proyectos/${project.id}`}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          {project.name}
-        </Link>
-        <span className="text-gray-300">/</span>
-        <h1 className="text-2xl font-bold text-gray-900">
-          Estado de Resultados
-        </h1>
-      </div>
-
       {/* Badge de versión base */}
       {lastObra && (
         <div className="flex items-center gap-2 mb-5 text-xs text-gray-500">

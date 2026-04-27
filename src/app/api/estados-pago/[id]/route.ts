@@ -35,13 +35,40 @@ export async function PUT(
       },
     });
 
+    // Bloquear edición si el EP está cerrado
+    const current = await prisma.estadoPago.findUnique({
+      where: { id },
+      select: { status: true },
+    });
+    if (current?.status === "cerrado" && (data.items || data.notes !== undefined || data.date !== undefined)) {
+      return NextResponse.json(
+        { error: "El EP está cerrado y no puede editarse." },
+        { status: 409 }
+      );
+    }
+
     if (Array.isArray(data.items)) {
       await Promise.all(
-        data.items.map((it: { id: string; pctAccumulated: number }) =>
-          prisma.estadoPagoItem.update({
-            where: { id: it.id },
-            data: { pctAccumulated: it.pctAccumulated },
-          })
+        data.items.map(
+          (it: {
+            id: string;
+            quantityExecuted?: number;
+            pctAccumulated?: number;
+            descriptionMaestro?: string | null;
+          }) => {
+            const patch: {
+              quantityExecuted?: number;
+              pctAccumulated?: number;
+              descriptionMaestro?: string | null;
+            } = {};
+            if (it.quantityExecuted !== undefined) patch.quantityExecuted = it.quantityExecuted;
+            if (it.pctAccumulated !== undefined) patch.pctAccumulated = it.pctAccumulated;
+            if (it.descriptionMaestro !== undefined) patch.descriptionMaestro = it.descriptionMaestro;
+            return prisma.estadoPagoItem.update({
+              where: { id: it.id },
+              data: patch,
+            });
+          }
         )
       );
     }
@@ -59,6 +86,20 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+
+    // Bloquear eliminación de EP pagados para evitar doble-pago
+    const ep = await prisma.estadoPago.findUnique({
+      where: { id },
+      select: { status: true, number: true },
+    });
+    if (!ep) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+    if (ep.status === "pagado") {
+      return NextResponse.json(
+        { error: `No se puede eliminar el EP #${ep.number} porque ya está pagado. Cambia su estado primero.` },
+        { status: 400 }
+      );
+    }
+
     await prisma.estadoPago.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {

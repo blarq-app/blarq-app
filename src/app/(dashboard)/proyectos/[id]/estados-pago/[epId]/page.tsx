@@ -15,47 +15,87 @@ export default async function EPDetailPage({
     include: {
       project: { include: { maestro: true } },
       items: { orderBy: { sortOrder: "asc" } },
+      budgetVersion: { select: { id: true, version: true, status: true } },
     },
   });
 
   if (!ep || ep.projectId !== projectId) notFound();
 
-  // EPs previos del proyecto para calcular acumulado ya pagado por partida
+  // EPs previos para calcular acumulado por partida + histórico
   const prevEps = await prisma.estadoPago.findMany({
     where: { projectId, number: { lt: ep.number } },
+    orderBy: { number: "asc" },
     include: { items: true },
   });
-  const prevPaidAccum: Record<string, number> = {};
-  prevEps.forEach((p) =>
-    p.items.forEach((i) => {
-      prevPaidAccum[i.obraItemId] =
-        Math.max(prevPaidAccum[i.obraItemId] || 0, i.pctAccumulated);
-    })
-  );
+  // Solo los CERRADOS cuentan para "previo"; los borradores anteriores no.
+  const prevClosedEps = prevEps.filter((p) => p.status === "cerrado");
+
+  // Indexamos por lineageId (no por obraItemId) para que la herencia entre
+  // EPs sobreviva un cambio de versión del presupuesto.
+  const prevExecutedByLineage: Record<string, number> = {};
+  const prevAmountPaidByLineage: Record<string, number> = {};
+  for (const p of prevClosedEps) {
+    for (const i of p.items) {
+      prevExecutedByLineage[i.lineageId] = Math.max(
+        prevExecutedByLineage[i.lineageId] ?? 0,
+        i.quantityExecuted
+      );
+      prevAmountPaidByLineage[i.lineageId] =
+        (prevAmountPaidByLineage[i.lineageId] ?? 0) + (i.amountPaid ?? 0);
+    }
+  }
+
+  // Resumen de EPs previos para el bloque "Histórico"
+  const previousEpsSummary = prevClosedEps.map((p) => ({
+    id: p.id,
+    number: p.number,
+    date: p.date.toISOString(),
+    closedAt: p.closedAt?.toISOString() ?? null,
+    totalPaid: p.items.reduce((s, i) => s + (i.amountPaid ?? 0), 0),
+  }));
+
+  // ¿Hay versión más nueva del presupuesto que la usada por este EP?
+  const latestBudgetVersion = await prisma.budgetVersion.findFirst({
+    where: { projectId, type: "obra" },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, version: true },
+  });
+  const hasNewerVersion =
+    latestBudgetVersion != null &&
+    ep.budgetVersionId != null &&
+    latestBudgetVersion.id !== ep.budgetVersionId;
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-8">
+      <div className="flex items-center gap-3 mb-6">
         <Link
           href={`/proyectos/${projectId}`}
-          className="text-gray-400 hover:text-gray-600"
+          className="text-gray-400 hover:text-gray-600 text-sm"
         >
           {ep.project.name}
         </Link>
         <span className="text-gray-300">/</span>
         <Link
           href={`/proyectos/${projectId}/estados-pago`}
-          className="text-gray-400 hover:text-gray-600"
+          className="text-gray-400 hover:text-gray-600 text-sm"
         >
           Estados de Pago
         </Link>
         <span className="text-gray-300">/</span>
-        <h1 className="text-2xl font-bold text-gray-900">EP #{ep.number}</h1>
+        <h1 className="text-xl font-bold text-gray-900">EP #{ep.number}</h1>
       </div>
 
       <EditorEP
         ep={JSON.parse(JSON.stringify(ep))}
-        prevPaidAccum={prevPaidAccum}
+        prevExecutedByLineage={prevExecutedByLineage}
+        prevAmountPaidByLineage={prevAmountPaidByLineage}
+        previousEps={previousEpsSummary}
+        latestBudgetVersion={
+          latestBudgetVersion
+            ? { id: latestBudgetVersion.id, version: latestBudgetVersion.version }
+            : null
+        }
+        hasNewerVersion={hasNewerVersion}
       />
     </div>
   );

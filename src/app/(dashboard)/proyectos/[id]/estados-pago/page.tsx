@@ -42,6 +42,24 @@ export default async function EstadosPagoPage({
 
   const hasObra = project.budgetVersions.some((b) => b.obraItems.length > 0);
 
+  // Resumen cuenta maestro
+  // MO presupuestada = viene del presupuesto aprobado (o el más reciente de obra)
+  const obraBudget =
+    project.budgetVersions.find((b) => b.status === "aprobado") ||
+    project.budgetVersions[project.budgetVersions.length - 1];
+  const moPresupuestada = obraBudget
+    ? obraBudget.obraItems.reduce(
+        (sum, it) => sum + (it.costLabor ?? 0) * it.quantity,
+        0
+      )
+    : 0;
+  // Total pagado = suma de montos de EPs con status "pagado"
+  const totalPagado = sorted
+    .filter((ep) => ep.status === "pagado")
+    .reduce((sum, ep) => sum + (amountById.get(ep.id) || 0), 0);
+  const saldoPendiente = moPresupuestada - totalPagado;
+  const epsPagados = sorted.filter((ep) => ep.status === "pagado").length;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
@@ -58,7 +76,7 @@ export default async function EstadosPagoPage({
         <NuevoEPButton projectId={project.id} disabled={!hasObra} />
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-gray-500">Maestro asignado</p>
@@ -80,6 +98,64 @@ export default async function EstadosPagoPage({
           </Link>
         </div>
       </div>
+
+      {/* Resumen cuenta maestro */}
+      {moPresupuestada > 0 && (
+        <div className="bg-gray-50 rounded-xl border border-gray-200 p-5 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-gray-700">Cuenta del Maestro</h3>
+            {obraBudget && (
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                obraBudget.status === "aprobado"
+                  ? "bg-green-100 text-green-700"
+                  : "bg-yellow-100 text-yellow-700"
+              }`}>
+                {obraBudget.status === "aprobado" ? "✓" : "⚠"} {obraBudget.version}
+                {obraBudget.status !== "aprobado" && " · no aprobado"}
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <p className="text-xs text-gray-500">MO Presupuestada</p>
+              <p className="text-lg font-bold text-gray-900 mt-0.5">
+                {formatCLP(moPresupuestada)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">
+                Total Pagado
+                {epsPagados > 0 && (
+                  <span className="ml-1 text-gray-400">({epsPagados} EP{epsPagados !== 1 ? "s" : ""})</span>
+                )}
+              </p>
+              <p className="text-lg font-bold text-green-700 mt-0.5">
+                {formatCLP(totalPagado)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Saldo por Pagar</p>
+              <p className={`text-lg font-bold mt-0.5 ${saldoPendiente > 0 ? "text-orange-600" : "text-gray-400"}`}>
+                {formatCLP(Math.max(0, saldoPendiente))}
+              </p>
+            </div>
+          </div>
+          {moPresupuestada > 0 && (
+            <div className="mt-3">
+              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                <span>Avance de pago</span>
+                <span>{Math.round((totalPagado / moPresupuestada) * 100)}%</span>
+              </div>
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-green-500 rounded-full transition-all"
+                  style={{ width: `${Math.min(100, Math.round((totalPagado / moPresupuestada) * 100))}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {!hasObra && (
         <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-4 text-sm">

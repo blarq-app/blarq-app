@@ -33,6 +33,7 @@ export default async function ResultadosPage({
           obraItems: true,
           muebleItems: true,
           artefactoItems: true,
+          paymentTerms: { orderBy: { sortOrder: "asc" } },
         },
       },
       estadosPago: {
@@ -43,16 +44,14 @@ export default async function ResultadosPage({
 
   if (!project) notFound();
 
-  // Último presupuesto de cada tipo
-  const lastObra = project.budgetVersions
-    .filter((b) => b.type === "obra")
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-  const lastMuebles = project.budgetVersions
-    .filter((b) => b.type === "muebles")
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-  const lastArtefactos = project.budgetVersions
-    .filter((b) => b.type === "artefactos")
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+  // Presupuesto base: preferir el aprobado, si no el más reciente
+  function bestVersion<T extends { status: string; createdAt: Date }>(arr: T[]) {
+    const aprobado = arr.filter((b) => b.status === "aprobado").sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+    return aprobado ?? arr.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+  }
+  const lastObra = bestVersion(project.budgetVersions.filter((b) => b.type === "obra"));
+  const lastMuebles = bestVersion(project.budgetVersions.filter((b) => b.type === "muebles"));
+  const lastArtefactos = bestVersion(project.budgetVersions.filter((b) => b.type === "artefactos"));
 
   // Presupuestado — OBRA
   const obraCostoDirecto = lastObra
@@ -137,12 +136,12 @@ export default async function ResultadosPage({
       const prevMap = new Map<string, number>();
       prev.forEach((i) =>
         prevMap.set(
-          i.obraItemId,
-          Math.max(prevMap.get(i.obraItemId) || 0, i.pctAccumulated)
+          i.lineageId,
+          Math.max(prevMap.get(i.lineageId) || 0, i.pctAccumulated)
         )
       );
       const thisAmount = ep.items.reduce((s, i) => {
-        const prevPct = prevMap.get(i.obraItemId) || 0;
+        const prevPct = prevMap.get(i.lineageId) || 0;
         return s + i.laborTotal * ((i.pctAccumulated - prevPct) / 100);
       }, 0);
       return sum + thisAmount;
@@ -167,13 +166,13 @@ export default async function ResultadosPage({
   });
 
   // ==================== Avance por Capítulo (desde EPs) ====================
-  // Último % por obraItemId de cualquier EP
-  const latestPctByItem = new Map<string, number>();
+  // Último % por lineageId de cualquier EP (estable a través de versiones)
+  const latestPctByLineage = new Map<string, number>();
   for (const ep of project.estadosPago) {
     for (const item of ep.items) {
-      const prev = latestPctByItem.get(item.obraItemId) || 0;
+      const prev = latestPctByLineage.get(item.lineageId) || 0;
       if (item.pctAccumulated > prev)
-        latestPctByItem.set(item.obraItemId, item.pctAccumulated);
+        latestPctByLineage.set(item.lineageId, item.pctAccumulated);
     }
   }
 
@@ -189,7 +188,7 @@ export default async function ResultadosPage({
       // % avance ponderado por MO (lo que se paga al maestro)
       let moAcumulado = 0;
       for (const item of items) {
-        const pct = latestPctByItem.get(item.id) || 0;
+        const pct = latestPctByLineage.get(item.lineageId) || 0;
         moAcumulado += (item.costLabor ?? 0) * item.quantity * (pct / 100);
       }
       const avance =
@@ -227,6 +226,16 @@ export default async function ResultadosPage({
     })
     .filter((c) => c.total > 0);
 
+  // ==================== Estado de Cobros al cliente ====================
+  // Forma de pago del presupuesto aprobado de obra
+  const paymentTerms = lastObra?.paymentTerms || [];
+  // Total acordado con cliente (obra + muebles + artefactos, c/IVA)
+  const totalAcordado = totalVendido;
+  // Cuánto falta cobrar
+  const porCobrar = Math.max(0, totalAcordado - totalCobrado);
+  // % cobrado del total
+  const pctCobrado = totalAcordado > 0 ? (totalCobrado / totalAcordado) * 100 : 0;
+
   const barColor = (pct: number) =>
     pct <= 80
       ? "bg-green-500"
@@ -249,44 +258,115 @@ export default async function ResultadosPage({
         </h1>
       </div>
 
-      {/* Cards resumen */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-sm text-gray-500">Presupuestado</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">
-            {formatCLP(totalVendido)}
-          </p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-sm text-gray-500">Cobrado</p>
-          <p className="text-2xl font-bold text-blue-600 mt-1">
-            {formatCLP(totalCobrado)}
-          </p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-sm text-gray-500">Gastado (costos + EPs)</p>
-          <p className="text-2xl font-bold text-red-600 mt-1">
-            {formatCLP(totalGastado + totalPagadoMaestros)}
-          </p>
-          {totalPagadoMaestros > 0 && (
-            <p className="text-xs text-gray-500 mt-0.5">
-              Incluye {formatCLP(totalPagadoMaestros)} de EPs pagados
-            </p>
+      {/* Badge de versión base */}
+      {lastObra && (
+        <div className="flex items-center gap-2 mb-5 text-xs text-gray-500">
+          <span>Comparando contra:</span>
+          <span className={`px-2 py-0.5 rounded font-medium ${lastObra.status === "aprobado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+            Obra {lastObra.version} · {lastObra.status}
+          </span>
+          {lastMuebles && (
+            <span className={`px-2 py-0.5 rounded font-medium ${lastMuebles.status === "aprobado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+              Muebles {lastMuebles.version} · {lastMuebles.status}
+            </span>
+          )}
+          {lastArtefactos && (
+            <span className={`px-2 py-0.5 rounded font-medium ${lastArtefactos.status === "aprobado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+              Artefactos {lastArtefactos.version} · {lastArtefactos.status}
+            </span>
           )}
         </div>
+      )}
+
+      {/* Cards resumen */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-sm text-gray-500">Utilidad Real</p>
-          <p
-            className={`text-2xl font-bold mt-1 ${
-              utilidadReal >= 0 ? "text-green-600" : "text-red-600"
-            }`}
-          >
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Total acordado</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{formatCLP(totalVendido)}</p>
+          <p className="text-xs text-gray-400 mt-0.5">c/IVA al cliente</p>
+        </div>
+        <div className="bg-white rounded-xl border border-blue-100 p-5">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Cobrado</p>
+          <p className="text-2xl font-bold text-blue-600 mt-1">{formatCLP(totalCobrado)}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{pctCobrado.toFixed(0)}% del total</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Gastado</p>
+          <p className="text-2xl font-bold text-red-600 mt-1">{formatCLP(totalGastado + totalPagadoMaestros)}</p>
+          {totalPagadoMaestros > 0 && (
+            <p className="text-xs text-gray-400 mt-0.5">incl. {formatCLP(totalPagadoMaestros)} EPs</p>
+          )}
+        </div>
+        <div className={`bg-white rounded-xl border p-5 ${utilidadReal >= 0 ? "border-green-100" : "border-red-100"}`}>
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Utilidad real</p>
+          <p className={`text-2xl font-bold mt-1 ${utilidadReal >= 0 ? "text-green-600" : "text-red-600"}`}>
             {formatCLP(utilidadReal)}
           </p>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Margen: {margenReal.toFixed(1)}%
-          </p>
+          <p className="text-xs text-gray-400 mt-0.5">margen {margenReal.toFixed(1)}%</p>
         </div>
+      </div>
+
+      {/* Estado de cobros */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Estado de Cobros al Cliente</h2>
+
+        {/* Barra de progreso cobro */}
+        <div className="mb-5">
+          <div className="flex justify-between text-sm mb-1">
+            <span className="text-gray-600">Cobrado: <span className="font-medium text-gray-900">{formatCLP(totalCobrado)}</span></span>
+            <span className="text-gray-400">Por cobrar: <span className="font-medium text-orange-600">{formatCLP(porCobrar)}</span></span>
+          </div>
+          <div className="w-full bg-gray-100 rounded-full h-3">
+            <div
+              className="bg-blue-500 h-3 rounded-full transition-all"
+              style={{ width: `${Math.min(pctCobrado, 100)}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-gray-400 mt-1">
+            <span>0%</span>
+            <span>{pctCobrado.toFixed(0)}% cobrado</span>
+            <span>100%</span>
+          </div>
+        </div>
+
+        {/* Forma de pago */}
+        {paymentTerms.length > 0 ? (
+          <div>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Forma de pago acordada</p>
+            <div className="space-y-2">
+              {paymentTerms.map((term, i) => {
+                const amount = term.amount ?? (totalAcordado * term.percentage) / 100;
+                // Estimamos si ya fue cobrado basándonos en cuánto se ha cobrado acumulado
+                const cobradoAcumulado = paymentTerms.slice(0, i + 1).reduce((s, t) => {
+                  return s + (t.amount ?? (totalAcordado * t.percentage) / 100);
+                }, 0);
+                const pagado = totalCobrado >= cobradoAcumulado;
+                const parcial = !pagado && totalCobrado > (cobradoAcumulado - amount);
+                return (
+                  <div key={term.id} className="flex items-center gap-3">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs flex-shrink-0 ${pagado ? "bg-green-500 text-white" : parcial ? "bg-yellow-400 text-white" : "bg-gray-200 text-gray-400"}`}>
+                      {pagado ? "✓" : i + 1}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-900">{term.stage}</span>
+                        <span className="text-sm font-medium text-gray-900">{formatCLP(amount)}</span>
+                      </div>
+                      <div className="text-xs text-gray-400">{term.percentage}% del total</div>
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${pagado ? "bg-green-100 text-green-700" : parcial ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-500"}`}>
+                      {pagado ? "cobrado" : parcial ? "parcial" : "pendiente"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">
+            No hay forma de pago definida en el presupuesto aprobado.
+          </p>
+        )}
       </div>
 
       {/* Presupuesto vs Real por Tipo de Concepto */}
@@ -329,12 +409,8 @@ export default async function ResultadosPage({
                   <td className="py-2 pl-4">
                     <div className="w-full bg-gray-100 rounded-full h-2">
                       <div
-                        className={`h-2 rounded-full ${barColor(
-                          r.desviacion
-                        )}`}
-                        style={{
-                          width: `${Math.min(r.desviacion, 150)}%`,
-                        }}
+                        className={`h-2 rounded-full ${barColor(r.desviacion)}`}
+                        style={{ width: `${Math.min(r.desviacion, 100)}%` }}
                       />
                     </div>
                   </td>

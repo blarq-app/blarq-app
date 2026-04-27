@@ -66,42 +66,57 @@ model Maestro {
 // ==================== ESTADOS DE PAGO ====================
 
 model EstadoPago {
-  id          String   @id @default(cuid())
-  projectId   String
-  number      Int      // correlativo por proyecto: 1, 2, 3...
-  date        DateTime @default(now())
-  status      String   @default("borrador") // borrador | enviado | pagado
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  projectId       String
+  budgetVersionId String?  // versión del presupuesto base de este EP (null si es legacy o todavía no asociado)
+  number          Int      // correlativo por proyecto: 1, 2, 3...
+  date            DateTime @default(now())
+  status          String   @default("borrador") // borrador | cerrado
+  closedAt        DateTime? // se setea cuando status pasa a cerrado
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  items       EstadoPagoItem[]
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  budgetVersion   BudgetVersion?   @relation(fields: [budgetVersionId], references: [id])
+  items           EstadoPagoItem[]
 
   @@unique([projectId, number])
   @@index([projectId])
+  @@index([budgetVersionId])
 }
 
 model EstadoPagoItem {
   id                  String   @id @default(cuid())
   estadoPagoId        String
-  obraItemId          String
-  // Snapshot al momento del EP
+  obraItemId          String   // Apunta al ObraItem de la versión actual del presupuesto. Se refresca al sync.
+  lineageId           String   @default(cuid()) // Identidad estable de la partida a través de versiones del presupuesto.
+  // Snapshot al momento del EP (se actualiza al sync)
   chapter             String
   itemNumber          String
   name                String
+  descriptionMaestro  String?  @map("description") // Snapshot de ObraItem.descriptionMaestro
   unit                String
-  quantity            Float
-  laborUnitPrice      Float    // MO unitaria de esta partida
-  laborTotal          Float    // laborUnitPrice * quantity
-  pctAccumulated      Float    @default(0) // % avance acumulado (0-100)
+  quantity            Float    // cantidad_total presupuestada (snapshot, refrescable al sync)
+  laborUnitPrice      Float    // MO unitaria (snapshot, refrescable al sync)
+  laborTotal          Float    // referencial = quantity × laborUnitPrice
+  // Avance — la verdad financiera ahora vive aquí
+  quantityExecuted    Float    @default(0) // cantidad ejecutada acumulada al final de ESTE EP
+  // Snapshot inmutable que se setea al cerrar el EP
+  amountPaid          Float?   // (quantityExecuted - prevExecuted) × laborUnitPrice al momento de cierre
+  // Marcado por sync: partida que existía en la versión vieja del presupuesto pero no en la nueva
+  outOfScope          Boolean  @default(false)
+  // Legacy / derivado: lo dejamos por backward-compat pero ahora se calcula desde quantityExecuted
+  pctAccumulated      Float    @default(0)
   sortOrder           Int      @default(0)
 
   estadoPago          EstadoPago @relation(fields: [estadoPagoId], references: [id], onDelete: Cascade)
 
   @@unique([estadoPagoId, obraItemId])
+  @@unique([estadoPagoId, lineageId])
   @@index([estadoPagoId])
   @@index([obraItemId])
+  @@index([lineageId])
 }
 
 // ==================== PRESUPUESTOS ====================
@@ -124,6 +139,7 @@ model BudgetVersion {
   muebleItems MuebleItem[]
   artefactoItems ArtefactoItem[]
   paymentTerms PaymentTerm[]
+  estadosPago EstadoPago[]
 
   @@index([projectId])
 }
@@ -132,10 +148,12 @@ model BudgetVersion {
 model ObraItem {
   id                String  @id @default(cuid())
   budgetVersionId   String
+  lineageId         String  @default(cuid()) // Identidad estable de la partida a través de versiones del presupuesto. Se preserva al duplicar la versión.
   chapter           String  // demoliciones, reparaciones, electricas, sanitarias, terminaciones, limpieza
   itemNumber        String  // 1.1, 1.2, etc
   name              String
-  description       String?
+  descriptionCliente String? @map("description") // Va en el PDF del presupuesto
+  descriptionMaestro String? // Va al estado de pago del maestro
   unit              String  // M2, ML, UN, GL
   quantity          Float
   unitPrice         Float
@@ -154,6 +172,7 @@ model ObraItem {
 
   @@index([budgetVersionId])
   @@index([catalogPartidaId])
+  @@index([lineageId])
 }
 
 // Items de muebles
@@ -215,11 +234,14 @@ model PaymentTerm {
 
 // Partida del catálogo global (reutilizable entre proyectos)
 model PartidaCatalog {
-  id            String   @id @default(cuid())
-  category      String   // OBRAS PRELIMINARES, DEMOLICIONES, etc
-  name          String   // CIERRE OSB, DEMOLICION TABIQUE, etc
-  unit          String   // M2, ML, UN, GL
-  unitPrice     Float    @default(0) // Precio unitario de referencia
+  id                 String   @id @default(cuid())
+  category           String   // OBRAS PRELIMINARES, DEMOLICIONES, etc
+  name               String   // CIERRE OSB, DEMOLICION TABIQUE, etc
+  descriptionCliente String?  @map("description") // Va en el PDF del cliente (se propaga a ObraItem)
+  descriptionMaestro String?  // Va en el estado de pago del maestro (se propaga a ObraItem y EstadoPagoItem)
+  sortOrder          Int      @default(0) // Orden manual dentro de la categoría
+  unit               String   // M2, ML, UN, GL
+  unitPrice          Float    @default(0) // Precio unitario de referencia
   // Desglose de costos
   costMaterial  Float    @default(0)
   costLabor     Float    @default(0)
@@ -265,6 +287,7 @@ model MaterialCatalog {
   name          String   @unique // SACO YESO 25KG, etc
   unit          String   @default("UN")
   netPrice      Float    @default(0) // Precio neto actualizado
+  isProvision   Boolean  @default(false) // Provisión al cliente (no es producto Sodimac)
   referenceLink String?  // Link Sodimac, etc
   lastUpdated   DateTime @default(now())
   lastResearchAt DateTime? // última vez que buscamos precios online

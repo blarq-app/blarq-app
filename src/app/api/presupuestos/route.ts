@@ -19,8 +19,12 @@ export async function POST(request: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
 
-    const versionNumber = existing.length + 1;
-    const version = `V${versionNumber}`;
+    // Calcular versión correcta: max(V existentes) + 1
+    const maxV = existing.reduce((max, b) => {
+      const m = b.version.match(/^V(\d+)$/i);
+      return m ? Math.max(max, parseInt(m[1])) : max;
+    }, 0);
+    const version = `V${maxV + 1}`;
 
     const budget = await prisma.budgetVersion.create({
       data: {
@@ -35,8 +39,11 @@ export async function POST(request: NextRequest) {
     });
 
     // Si hay una versión anterior, copiar las partidas
-    if (existing.length > 0) {
-      const previousVersion = existing[0];
+    // Usa baseVersionId si se especifica, si no usa la más reciente
+    const baseId = data.baseVersionId || (existing.length > 0 ? existing[0].id : null);
+    if (baseId) {
+      const previousVersion = await prisma.budgetVersion.findUnique({ where: { id: baseId } });
+      if (!previousVersion) return NextResponse.json({ error: "Versión base no encontrada" }, { status: 404 });
 
       if (data.type === "obra") {
         const items = await prisma.obraItem.findMany({
@@ -47,10 +54,12 @@ export async function POST(request: NextRequest) {
           await prisma.obraItem.create({
             data: {
               budgetVersionId: budget.id,
+              lineageId: item.lineageId, // preservar identidad estable a través de versiones
               chapter: item.chapter,
               itemNumber: item.itemNumber,
               name: item.name,
-              description: item.description,
+              descriptionCliente: item.descriptionCliente,
+              descriptionMaestro: item.descriptionMaestro,
               unit: item.unit,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
@@ -59,6 +68,9 @@ export async function POST(request: NextRequest) {
               costLabor: item.costLabor,
               costSubcontract: item.costSubcontract,
               costMargin: item.costMargin,
+              costTools: item.costTools,
+              costLoss: item.costLoss,
+              catalogPartidaId: item.catalogPartidaId,
               sortOrder: item.sortOrder,
             },
           });

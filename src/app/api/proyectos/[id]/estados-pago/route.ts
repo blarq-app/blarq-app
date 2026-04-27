@@ -51,34 +51,45 @@ export async function POST(
     });
     const nextNumber = (last?.number || 0) + 1;
 
-    // EP anterior para copiar %
-    const prevEp = last
-      ? await prisma.estadoPago.findUnique({
-          where: { id: last.id },
-          include: { items: true },
-        })
-      : null;
-    const prevPctMap = new Map<string, number>(
-      (prevEp?.items || []).map((i) => [i.obraItemId, i.pctAccumulated])
-    );
+    // Acumulado quantityExecuted previo por lineageId — solo de EPs CERRADOS anteriores.
+    // Usamos lineageId (no obraItemId) para que el avance se herede aunque el
+    // presupuesto haya cambiado de versión y los obraItemId hayan rotado.
+    const prevClosedEps = await prisma.estadoPago.findMany({
+      where: { projectId, status: "cerrado" },
+      include: { items: true },
+    });
+    const prevExecutedMap = new Map<string, number>();
+    for (const prev of prevClosedEps) {
+      for (const it of prev.items) {
+        const cur = prevExecutedMap.get(it.lineageId) ?? 0;
+        prevExecutedMap.set(it.lineageId, Math.max(cur, it.quantityExecuted));
+      }
+    }
 
     const ep = await prisma.estadoPago.create({
       data: {
         projectId,
+        budgetVersionId: obraBudget.id,
         number: nextNumber,
         items: {
           create: obraBudget.obraItems.map((item, idx) => {
             const laborUnitPrice = item.costLabor ?? 0;
+            const prevQty = prevExecutedMap.get(item.lineageId) ?? 0;
             return {
               obraItemId: item.id,
+              lineageId: item.lineageId,
               chapter: item.chapter,
               itemNumber: item.itemNumber,
               name: item.name,
+              descriptionMaestro: item.descriptionMaestro,
               unit: item.unit,
               quantity: item.quantity,
               laborUnitPrice,
               laborTotal: laborUnitPrice * item.quantity,
-              pctAccumulated: prevPctMap.get(item.id) ?? 0,
+              // Arranca con el avance heredado del último EP cerrado
+              quantityExecuted: prevQty,
+              pctAccumulated:
+                item.quantity > 0 ? (prevQty / item.quantity) * 100 : 0,
               sortOrder: item.sortOrder ?? idx,
             };
           }),

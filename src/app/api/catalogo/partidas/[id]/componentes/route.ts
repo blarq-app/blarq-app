@@ -1,0 +1,34 @@
+import { prisma } from "@/lib/prisma";
+import { NextRequest, NextResponse } from "next/server";
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: partidaId } = await params;
+    const data = await request.json();
+
+    // Contar componentes existentes para sortOrder
+    const count = await prisma.partidaComponent.count({ where: { partidaId } });
+
+    const component = await prisma.partidaComponent.create({
+      data: {
+        partidaId,
+        type: data.type || "material",
+        description: data.description || "",
+        unit: data.unit || "UN",
+        quantity: data.quantity ?? 1,
+        unitCost: data.unitCost ?? 0,
+        totalCost: (data.quantity ?? 1) * (data.unitCost ?? 0),
+        sortOrder: count,
+      },
+      include: { material: true },
+    });
+
+    return NextResponse.json(component);
+  } catch (error) {
+    console.error("Error creating component:", error);
+    return NextResponse.json({ error: "Error al crear componente" }, { status: 500 });
+  }
+}

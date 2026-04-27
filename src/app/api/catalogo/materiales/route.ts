@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
         category: data.category.toUpperCase().trim(),
         unit: data.unit || "UN",
         netPrice: data.netPrice || 0,
+        isProvision: data.isProvision ?? false,
         referenceLink: data.referenceLink || null,
       },
     });

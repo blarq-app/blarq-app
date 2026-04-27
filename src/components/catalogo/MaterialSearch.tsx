@@ -10,6 +10,7 @@ interface Material {
   name: string;
   unit: string;
   netPrice: number;
+  isProvision: boolean;
   referenceLink: string | null;
 }
 
@@ -270,6 +271,9 @@ export default function MaterialSearch({
                   <th className="text-right px-4 py-2 text-xs text-gray-500 w-32">
                     Precio Neto
                   </th>
+                  <th className="text-right px-4 py-2 text-xs text-gray-500 w-32">
+                    c/IVA
+                  </th>
                   <th className="text-left px-4 py-2 text-xs text-gray-500 w-24">
                     Link
                   </th>
@@ -319,6 +323,9 @@ export default function MaterialSearch({
                           className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
                         />
                       </td>
+                      <td className="px-4 py-2 text-right text-gray-400 text-sm">
+                        {editMat.netPrice ? formatCLP(Math.round(editMat.netPrice * 1.19)) : "—"}
+                      </td>
                       <td className="px-4 py-2">
                         <input
                           type="url"
@@ -353,10 +360,20 @@ export default function MaterialSearch({
                     </tr>
                   ) : (
                     <tr key={mat.id} className="hover:bg-gray-50 group">
-                      <td className="px-4 py-2 text-gray-900">{mat.name}</td>
+                      <td className="px-4 py-2 text-gray-900">
+                        <span>{mat.name}</span>
+                        {mat.isProvision && (
+                          <span className="ml-2 text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">
+                            provisión
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-2 text-gray-500">{mat.unit}</td>
                       <td className="px-4 py-2 text-right font-medium">
-                        {formatCLP(mat.netPrice)}
+                        {mat.netPrice > 0 ? formatCLP(mat.netPrice) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-2 text-right text-gray-400">
+                        {mat.netPrice > 0 ? formatCLP(Math.round(mat.netPrice * 1.19)) : <span className="text-gray-200">—</span>}
                       </td>
                       <td className="px-4 py-2">
                         {mat.referenceLink && (
@@ -372,13 +389,15 @@ export default function MaterialSearch({
                       </td>
                       <td className="px-4 py-2">
                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => setOffersMaterial(mat)}
-                            className="text-blue-600 hover:text-blue-800 text-xs"
-                            title="Ver ofertas en tiendas"
-                          >
-                            🔍 Precios
-                          </button>
+                          {!mat.isProvision && (
+                            <button
+                              onClick={() => setOffersMaterial(mat)}
+                              className="text-blue-600 hover:text-blue-800 text-xs"
+                              title="Actualizar precio"
+                            >
+                              🔍 Precios
+                            </button>
+                          )}
                           <button
                             onClick={() => startEdit(mat)}
                             className="text-gray-400 hover:text-gray-600 text-xs"

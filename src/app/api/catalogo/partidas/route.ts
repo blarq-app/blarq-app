@@ -20,16 +20,30 @@ export async function GET(request: NextRequest) {
 
     const partidas = await prisma.partidaCatalog.findMany({
       where,
-      orderBy: [{ category: "asc" }, { name: "asc" }],
+      orderBy: [{ category: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
       take: limit,
       include: {
         components: {
           orderBy: { sortOrder: "asc" },
+          include: { material: true },
         },
       },
     });
 
-    return NextResponse.json(partidas);
+    // Agregar campo derivado: provisiones de esta partida
+    const result = partidas.map((p) => {
+      const provisions = p.components
+        .filter((c) => c.type === "material" && c.material?.isProvision)
+        .map((c) => ({
+          componentId: c.id,
+          name: c.material?.name ?? c.description,
+          unitCost: c.unitCost,   // precio neto de referencia del catálogo
+          quantity: c.quantity,   // qty por unidad de partida
+        }));
+      return { ...p, provisions };
+    });
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Error searching partidas:", error);
     return NextResponse.json(
@@ -44,10 +58,21 @@ export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
 
+    // Calcular siguiente sortOrder en la categoría
+    const last = await prisma.partidaCatalog.findFirst({
+      where: { category: data.category },
+      orderBy: { sortOrder: "desc" },
+      select: { sortOrder: true },
+    });
+    const nextSortOrder = (last?.sortOrder ?? -1) + 1;
+
     const partida = await prisma.partidaCatalog.create({
       data: {
         category: data.category,
         name: data.name,
+        descriptionCliente: data.descriptionCliente ?? data.description ?? null,
+        descriptionMaestro: data.descriptionMaestro ?? null,
+        sortOrder: nextSortOrder,
         unit: data.unit || "GL",
         unitPrice: data.unitPrice || 0,
         costMaterial: data.costMaterial || 0,

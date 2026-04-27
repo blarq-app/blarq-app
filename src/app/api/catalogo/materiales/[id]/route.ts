@@ -15,6 +15,7 @@ export async function PUT(
         name: data.name?.toUpperCase()?.trim(),
         unit: data.unit,
         netPrice: data.netPrice,
+        isProvision: data.isProvision ?? undefined,
         referenceLink: data.referenceLink || null,
       },
     });

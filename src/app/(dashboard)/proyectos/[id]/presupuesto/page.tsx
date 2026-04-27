@@ -190,6 +190,9 @@ export default async function PresupuestoPage({
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Estado
                   </th>
+                  <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Acciones
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -201,8 +204,13 @@ export default async function PresupuestoPage({
                       key={budget.id}
                       className="hover:bg-gray-50 transition-colors"
                     >
-                      <td className="px-6 py-4 font-medium text-gray-900">
-                        {budget.version}
+                      <td className="px-6 py-4">
+                        <Link
+                          href={`/proyectos/${project.id}/presupuesto/${budget.id}`}
+                          className="font-medium text-gray-900 hover:underline"
+                        >
+                          {budget.version}
+                        </Link>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {formatDate(budget.date)}
@@ -216,6 +224,22 @@ export default async function PresupuestoPage({
                         >
                           {status?.label || budget.status}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <NuevaVersionButton
+                            projectId={project.id}
+                            type="muebles"
+                            baseVersionId={budget.id}
+                            label="Duplicar"
+                            variant="secondary"
+                          />
+                          <AprobarBudgetButton
+                            budgetId={budget.id}
+                            currentStatus={budget.status}
+                            version={budget.version}
+                          />
+                        </div>
                       </td>
                     </tr>
                   );
@@ -255,6 +279,9 @@ export default async function PresupuestoPage({
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Estado
                   </th>
+                  <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Acciones
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -266,8 +293,13 @@ export default async function PresupuestoPage({
                       key={budget.id}
                       className="hover:bg-gray-50 transition-colors"
                     >
-                      <td className="px-6 py-4 font-medium text-gray-900">
-                        {budget.version}
+                      <td className="px-6 py-4">
+                        <Link
+                          href={`/proyectos/${project.id}/presupuesto/${budget.id}`}
+                          className="font-medium text-gray-900 hover:underline"
+                        >
+                          {budget.version}
+                        </Link>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {formatDate(budget.date)}
@@ -281,6 +313,22 @@ export default async function PresupuestoPage({
                         >
                           {status?.label || budget.status}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <NuevaVersionButton
+                            projectId={project.id}
+                            type="artefactos"
+                            baseVersionId={budget.id}
+                            label="Duplicar"
+                            variant="secondary"
+                          />
+                          <AprobarBudgetButton
+                            budgetId={budget.id}
+                            currentStatus={budget.status}
+                            version={budget.version}
+                          />
+                        </div>
                       </td>
                     </tr>
                   );

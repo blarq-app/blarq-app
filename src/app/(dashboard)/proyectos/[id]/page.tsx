@@ -216,7 +216,7 @@ export default async function ProjectDetailPage({
       )}
 
       {/* Quick links */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <Link
           href={`/proyectos/${project.id}/presupuesto`}
           className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-400 transition-colors group"
@@ -229,27 +229,16 @@ export default async function ProjectDetailPage({
           </p>
         </Link>
         <Link
-          href={`/proyectos/${project.id}/costos`}
+          href={`/proyectos/${project.id}/facturas`}
           className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-400 transition-colors group"
         >
           <h3 className="font-medium text-gray-900 group-hover:underline">
-            Control de Costos
+            Facturas
           </h3>
           <p className="text-sm text-gray-500 mt-1">
-            {project.invoices.filter((i) => i.type === "recibida").length}{" "}
-            facturas recibidas
-          </p>
-        </Link>
-        <Link
-          href={`/proyectos/${project.id}/facturacion`}
-          className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-400 transition-colors group"
-        >
-          <h3 className="font-medium text-gray-900 group-hover:underline">
-            Facturacion
-          </h3>
-          <p className="text-sm text-gray-500 mt-1">
-            {project.invoices.filter((i) => i.type === "emitida").length}{" "}
-            facturas emitidas
+            {project.invoices.length} totales ·{" "}
+            {project.invoices.filter((i) => i.type === "emitida").length} emitidas
+            · {project.invoices.filter((i) => i.type === "recibida").length} recibidas
           </p>
         </Link>
         <Link

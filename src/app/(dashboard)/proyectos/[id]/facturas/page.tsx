@@ -1,0 +1,283 @@
+import { prisma } from "@/lib/prisma";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { formatCLP, formatDate } from "@/lib/utils";
+
+type SearchParams = {
+  type?: "emitida" | "recibida";
+  status?: "pendiente" | "pagada" | "anulada";
+  q?: string;
+};
+
+const STATUS_TONE: Record<string, string> = {
+  pendiente: "bg-yellow-100 text-yellow-800",
+  pagada: "bg-green-100 text-green-800",
+  anulada: "bg-gray-100 text-gray-500",
+};
+
+export default async function ProyectoFacturasPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<SearchParams>;
+}) {
+  const { id } = await params;
+  const sp = await searchParams;
+
+  const project = await prisma.project.findUnique({
+    where: { id },
+    select: { id: true, name: true },
+  });
+  if (!project) notFound();
+
+  const where: Record<string, unknown> = { projectId: id };
+  if (sp.type) where.type = sp.type;
+  if (sp.status) where.status = sp.status;
+  if (sp.q) {
+    where.OR = [
+      { folioNumber: { contains: sp.q } },
+      { businessName: { contains: sp.q } },
+      { rutIssuer: { contains: sp.q } },
+      { notes: { contains: sp.q } },
+    ];
+  }
+
+  const invoices = await prisma.invoice.findMany({
+    where,
+    orderBy: { issueDate: "desc" },
+    include: {
+      category: { select: { id: true, name: true } },
+    },
+  });
+
+  // Stats globales del proyecto (sin importar filtro)
+  const allInvoices = await prisma.invoice.findMany({
+    where: { projectId: id },
+    select: { type: true, status: true, totalAmount: true },
+  });
+  const totalEmitido = allInvoices
+    .filter((i) => i.type === "emitida")
+    .reduce((s, i) => s + i.totalAmount, 0);
+  const totalRecibido = allInvoices
+    .filter((i) => i.type === "recibida")
+    .reduce((s, i) => s + i.totalAmount, 0);
+  const porCobrar = allInvoices
+    .filter((i) => i.type === "emitida" && i.status === "pendiente")
+    .reduce((s, i) => s + i.totalAmount, 0);
+  const porPagar = allInvoices
+    .filter((i) => i.type === "recibida" && i.status === "pendiente")
+    .reduce((s, i) => s + i.totalAmount, 0);
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-6">
+        <Link
+          href={`/proyectos/${project.id}`}
+          className="text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          {project.name}
+        </Link>
+        <span className="text-gray-300">/</span>
+        <h1 className="text-2xl font-bold text-gray-900">Facturas</h1>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <Stat label="Emitido" value={formatCLP(totalEmitido)} sub="cobros al cliente" />
+        <Stat label="Recibido" value={formatCLP(totalRecibido)} sub="gastos a proveedores" />
+        <Stat
+          label="Por cobrar"
+          value={formatCLP(porCobrar)}
+          sub="pendiente del cliente"
+          tone="text-blue-600"
+        />
+        <Stat
+          label="Por pagar"
+          value={formatCLP(porPagar)}
+          sub="pendiente a proveedores"
+          tone="text-red-600"
+        />
+      </div>
+
+      {/* Filter bar simplificada (tabs por tipo + busqueda) */}
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
+          <TabLink projectId={project.id} sp={sp} type={undefined} label="Todas" count={allInvoices.length} />
+          <TabLink
+            projectId={project.id}
+            sp={sp}
+            type="emitida"
+            label="Emitidas"
+            count={allInvoices.filter((i) => i.type === "emitida").length}
+          />
+          <TabLink
+            projectId={project.id}
+            sp={sp}
+            type="recibida"
+            label="Recibidas"
+            count={allInvoices.filter((i) => i.type === "recibida").length}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/facturas?projectId=${project.id}`}
+            className="text-xs text-gray-500 hover:text-gray-900 underline"
+          >
+            Vista global
+          </Link>
+          <Link
+            href={`/facturas/nueva?projectId=${project.id}`}
+            className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800"
+          >
+            + Nueva factura
+          </Link>
+        </div>
+      </div>
+
+      {/* Tabla */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        {invoices.length === 0 ? (
+          <div className="p-12 text-center text-gray-500">
+            <p className="text-sm">No hay facturas para este proyecto.</p>
+            <Link
+              href={`/facturas/nueva?projectId=${project.id}`}
+              className="inline-block mt-3 text-sm text-gray-900 underline"
+            >
+              Cargar la primera factura
+            </Link>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="text-[10px] uppercase tracking-wider text-gray-500 bg-gray-50">
+              <tr>
+                <th className="text-left px-4 py-2">Tipo</th>
+                <th className="text-left px-4 py-2">Folio</th>
+                <th className="text-left px-4 py-2">Fecha</th>
+                <th className="text-left px-4 py-2">Emisor / Cliente</th>
+                <th className="text-left px-4 py-2">Categoría</th>
+                <th className="text-right px-4 py-2">Total</th>
+                <th className="text-left px-4 py-2">Estado</th>
+                <th className="text-left px-4 py-2">Origen</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {invoices.map((inv) => (
+                <tr key={inv.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-2">
+                    <span
+                      className={`text-[10px] uppercase px-1.5 py-0.5 rounded tracking-wider ${
+                        inv.type === "emitida"
+                          ? "bg-blue-100 text-blue-800"
+                          : "bg-orange-100 text-orange-800"
+                      }`}
+                    >
+                      {inv.type}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 tabular-nums text-gray-700">
+                    <Link
+                      href={`/facturas/${inv.id}`}
+                      className="hover:text-gray-900 hover:underline"
+                    >
+                      {inv.folioNumber || "—"}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-2 text-gray-600 whitespace-nowrap">
+                    {formatDate(inv.issueDate)}
+                  </td>
+                  <td className="px-4 py-2 text-gray-700 truncate max-w-[240px]">
+                    {inv.businessName || inv.rutIssuer || "—"}
+                  </td>
+                  <td className="px-4 py-2 text-gray-600">
+                    {inv.category?.name ?? (
+                      <span className="text-gray-400 italic">sin categoría</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-right tabular-nums font-medium text-gray-900">
+                    {formatCLP(inv.totalAmount)}
+                  </td>
+                  <td className="px-4 py-2">
+                    <span
+                      className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                        STATUS_TONE[inv.status] || "bg-gray-100"
+                      }`}
+                    >
+                      {inv.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2">
+                    <span
+                      className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                        inv.origin === "sii_automatica"
+                          ? "bg-purple-100 text-purple-800"
+                          : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {inv.origin === "sii_automatica" ? "SII" : "manual"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TabLink({
+  projectId,
+  sp,
+  type,
+  label,
+  count,
+}: {
+  projectId: string;
+  sp: SearchParams;
+  type?: "emitida" | "recibida";
+  label: string;
+  count: number;
+}) {
+  const params = new URLSearchParams();
+  if (type) params.set("type", type);
+  if (sp.status) params.set("status", sp.status);
+  if (sp.q) params.set("q", sp.q);
+  const href = `/proyectos/${projectId}/facturas${params.toString() ? "?" + params.toString() : ""}`;
+  const isActive = sp.type === type;
+  return (
+    <Link
+      href={href}
+      className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+        isActive
+          ? "bg-gray-900 text-white"
+          : "text-gray-600 hover:bg-gray-100"
+      }`}
+    >
+      {label} <span className="opacity-60">({count})</span>
+    </Link>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  tone?: string;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <p className="text-[10px] uppercase tracking-wider text-gray-500">{label}</p>
+      <p className={`text-xl font-bold mt-1 tabular-nums ${tone ?? "text-gray-900"}`}>
+        {value}
+      </p>
+      <p className="text-[11px] text-gray-400 mt-0.5">{sub}</p>
+    </div>
+  );
+}

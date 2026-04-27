@@ -61,8 +61,41 @@ async function main() {
     });
   }
 
+  // Quote activa de ROBERTO (la que va al PDF)
+  await prisma.muebleQuote.create({
+    data: {
+      itemId: muebles11.id,
+      supplier: "ROBERTO",
+      costDistributor: 5488460,
+      utilityPercentage: 0.36,
+      clientPriceNet: 5488460 * 1.36,
+      clientPriceIva: 5488460 * 1.36 * 1.19,
+      isSelected: true,
+      sortOrder: 0,
+    },
+  });
+  // Cotizaciones alternativas (sacadas del Excel V5 hoja MUEBLES filas 31-32)
+  const alternatives = [
+    { supplier: "GEO", costDistributor: 6960000, utilityPercentage: 0.45, sortOrder: 1 },
+    { supplier: "CARLOS", costDistributor: 6150000, utilityPercentage: 0.45, sortOrder: 2 },
+  ];
+  for (const a of alternatives) {
+    await prisma.muebleQuote.create({
+      data: {
+        itemId: muebles11.id,
+        supplier: a.supplier,
+        costDistributor: a.costDistributor,
+        utilityPercentage: a.utilityPercentage,
+        clientPriceNet: a.costDistributor * (1 + a.utilityPercentage),
+        clientPriceIva: a.costDistributor * (1 + a.utilityPercentage) * 1.19,
+        isSelected: false,
+        sortOrder: a.sortOrder,
+      },
+    });
+  }
+
   // 1.2 HERRAJES — qty 1, $272.186 (= 182.982 × 1.25 × 1.19)
-  await prisma.muebleItem.create({
+  const herrajes12 = await prisma.muebleItem.create({
     data: {
       budgetVersionId: budget.id,
       chapterId: cap1.id,
@@ -79,9 +112,21 @@ async function main() {
       sortOrder: 1,
     },
   });
+  await prisma.muebleQuote.create({
+    data: {
+      itemId: herrajes12.id,
+      supplier: "PROVELCAR",
+      costDistributor: 182982,
+      utilityPercentage: 0.25,
+      clientPriceNet: 182982 * 1.25,
+      clientPriceIva: 182982 * 1.25 * 1.19,
+      isSelected: true,
+      sortOrder: 0,
+    },
+  });
 
   // 1.3 CUBIERTAS — qty 1, $1.801.610 (= 1.211.166 × 1.25 × 1.19)
-  await prisma.muebleItem.create({
+  const cubiertas13 = await prisma.muebleItem.create({
     data: {
       budgetVersionId: budget.id,
       chapterId: cap1.id,
@@ -94,6 +139,43 @@ async function main() {
       utilityPercentage: 0.25,
       clientPriceNet: 1211166.4 * 1.25,
       clientPriceIva: 1211166.4 * 1.25 * 1.19,
+      sortOrder: 2,
+    },
+  });
+  await prisma.muebleQuote.create({
+    data: {
+      itemId: cubiertas13.id,
+      supplier: "GIACOMO",
+      costDistributor: 1211166.4,
+      utilityPercentage: 0.25,
+      clientPriceNet: 1211166.4 * 1.25,
+      clientPriceIva: 1211166.4 * 1.25 * 1.19,
+      isSelected: true,
+      sortOrder: 0,
+    },
+  });
+  // Cubiertas: alternativas reales del Excel (filas 26-28)
+  await prisma.muebleQuote.create({
+    data: {
+      itemId: cubiertas13.id,
+      supplier: "GIACOMO (ULTRACOMPACTO LISO)",
+      costDistributor: 1353000.36,
+      utilityPercentage: 0.20,
+      clientPriceNet: 1353000.36 * 1.20,
+      clientPriceIva: 1353000.36 * 1.20 * 1.19,
+      isSelected: false,
+      sortOrder: 1,
+    },
+  });
+  await prisma.muebleQuote.create({
+    data: {
+      itemId: cubiertas13.id,
+      supplier: "GIACOMO (ULTRACOMPACTO VETA)",
+      costDistributor: 1635871.46,
+      utilityPercentage: 0.20,
+      clientPriceNet: 1635871.46 * 1.20,
+      clientPriceIva: 1635871.46 * 1.20 * 1.19,
+      isSelected: false,
       sortOrder: 2,
     },
   });

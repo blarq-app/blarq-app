@@ -414,6 +414,12 @@ export default function MueblesEditor({
     itemId: string,
     quoteId: string
   ) {
+    if (
+      !confirm(
+        "¿Eliminar esta cotización? Si era la activa, se promueve la siguiente alternativa automáticamente."
+      )
+    )
+      return;
     const res = await fetch(
       `/api/presupuestos/${budgetId}/muebles/quotes/${quoteId}`,
       { method: "DELETE" }
@@ -423,8 +429,38 @@ export default function MueblesEditor({
       alert(j.error || "Error al eliminar cotización");
       return;
     }
-    // Refrescar desde el server para reflejar promoción automática si era activa
-    router.refresh();
+    // Update local state: drop the quote; if it was active, promote the first sibling
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) => {
+                if (i.id !== itemId) return i;
+                const removed = i.quotes.find((q) => q.id === quoteId);
+                const remaining = i.quotes.filter((q) => q.id !== quoteId);
+                if (removed?.isSelected && remaining.length > 0) {
+                  // Promote the first sibling
+                  const newActive = { ...remaining[0], isSelected: true };
+                  return {
+                    ...i,
+                    supplier: newActive.supplier,
+                    costDistributor: newActive.costDistributor,
+                    utilityPercentage: newActive.utilityPercentage,
+                    clientPriceNet: newActive.clientPriceNet,
+                    clientPriceIva: newActive.clientPriceIva,
+                    quotes: [
+                      newActive,
+                      ...remaining.slice(1).map((q) => ({ ...q, isSelected: false })),
+                    ],
+                  };
+                }
+                return { ...i, quotes: remaining };
+              }),
+            }
+      )
+    );
   }
 
   async function activateQuote(
@@ -437,8 +473,34 @@ export default function MueblesEditor({
       { method: "POST" }
     );
     if (!res.ok) return alert("Error al activar cotización");
-    // Refrescar para que el item denormalizado se muestre con los nuevos valores
-    router.refresh();
+    // Update local state: this quote becomes active; copy values to item denormalization
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) => {
+                if (i.id !== itemId) return i;
+                const updatedQuotes = i.quotes.map((q) => ({
+                  ...q,
+                  isSelected: q.id === quoteId,
+                }));
+                const newActive = updatedQuotes.find((q) => q.isSelected);
+                if (!newActive) return i;
+                return {
+                  ...i,
+                  supplier: newActive.supplier,
+                  costDistributor: newActive.costDistributor,
+                  utilityPercentage: newActive.utilityPercentage,
+                  clientPriceNet: newActive.clientPriceNet,
+                  clientPriceIva: newActive.clientPriceIva,
+                  quotes: updatedQuotes,
+                };
+              }),
+            }
+      )
+    );
   }
 
   // ── Guardar formas de pago + observaciones ──
@@ -796,25 +858,25 @@ function ItemBlock({
       {/* Cálculo costo (interno, no va al PDF) */}
       <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-xs bg-gray-50 rounded px-2.5 py-1.5">
         <label className="flex items-center gap-1.5">
-          <span className="font-bold text-gray-700">Proveedor</span>
+          <span className="text-gray-500">Proveedor</span>
           <input
             type="text"
             value={item.supplier ?? ""}
             onChange={(e) => onUpdate({ supplier: e.target.value })}
-            className="w-28 bg-white border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-gray-900"
+            className="w-28 bg-white border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-gray-900 font-bold text-gray-900"
           />
         </label>
         <label className="flex items-center gap-1.5">
-          <span className="font-bold text-gray-700">Costo dist.</span>
+          <span className="text-gray-500">Costo dist.</span>
           <ThousandsInput
             value={item.costDistributor}
             onChange={(v) => onUpdate({ costDistributor: v })}
             placeholder="0"
-            className="w-28 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900"
+            className="w-28 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900 font-bold text-gray-900"
           />
         </label>
         <label className="flex items-center gap-1.5">
-          <span className="font-bold text-gray-700">% util.</span>
+          <span className="text-gray-500">% util.</span>
           <input
             type="number"
             step="1"
@@ -829,26 +891,26 @@ function ItemBlock({
               })
             }
             placeholder="30"
-            className="w-14 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900"
+            className="w-14 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900 font-bold text-gray-900"
           />
           <span className="text-gray-500">%</span>
         </label>
         <span className="text-gray-300">→</span>
-        <span className="text-gray-600">
+        <span className="text-gray-500">
           Neto{" "}
-          <span className="text-gray-900 tabular-nums">
+          <span className="text-gray-900 font-bold tabular-nums">
             {formatCLP(item.clientPriceNet)}
           </span>
         </span>
         <span className="text-gray-300">·</span>
-        <span className="text-gray-600">
+        <span className="text-gray-500">
           C/IVA{" "}
-          <span className="text-gray-900 font-medium tabular-nums">
+          <span className="text-gray-900 font-bold tabular-nums">
             {formatCLP(item.clientPriceIva)}
           </span>
         </span>
         <span className="text-gray-300">·</span>
-        <span className="text-green-700 tabular-nums">
+        <span className="text-green-700 font-bold tabular-nums">
           util {formatCLP(item.clientPriceNet - item.costDistributor)}
         </span>
       </div>
@@ -884,6 +946,9 @@ function ItemBlock({
               <tbody className="divide-y divide-gray-100">
                 {item.quotes.map((q) => {
                   const isActive = q.isSelected;
+                  // En la fila activa los valores van en negrita; en las
+                  // alternativas en peso normal para que se distingan.
+                  const valueWeight = isActive ? "font-bold text-gray-900" : "text-gray-700";
                   return (
                     <tr
                       key={q.id}
@@ -907,7 +972,7 @@ function ItemBlock({
                               onUpdateQuote(q.id, { supplier: e.target.value })
                             }
                             placeholder="proveedor"
-                            className="flex-1 bg-transparent border-0 p-0 outline-none text-gray-900"
+                            className={`flex-1 bg-transparent border-0 p-0 outline-none ${valueWeight}`}
                           />
                         </div>
                       </td>
@@ -918,7 +983,7 @@ function ItemBlock({
                             onUpdateQuote(q.id, { costDistributor: v })
                           }
                           placeholder="0"
-                          className="w-full bg-transparent border-0 p-0 text-right tabular-nums outline-none"
+                          className={`w-full bg-transparent border-0 p-0 text-right tabular-nums outline-none ${valueWeight}`}
                         />
                       </td>
                       <td className="px-2 py-1 text-right">
@@ -937,33 +1002,33 @@ function ItemBlock({
                             })
                           }
                           placeholder="30"
-                          className="w-full bg-transparent border-0 p-0 text-right tabular-nums outline-none"
+                          className={`w-full bg-transparent border-0 p-0 text-right tabular-nums outline-none ${valueWeight}`}
                         />
                       </td>
-                      <td className="px-2 py-1 text-right tabular-nums text-gray-700">
+                      <td className={`px-2 py-1 text-right tabular-nums ${valueWeight}`}>
                         {formatCLP(q.clientPriceNet)}
                       </td>
-                      <td className="px-2 py-1 text-right tabular-nums text-gray-900 font-medium">
+                      <td className={`px-2 py-1 text-right tabular-nums ${valueWeight}`}>
                         {formatCLP(q.clientPriceIva)}
                       </td>
-                      <td className="px-2 py-1 text-right tabular-nums text-green-700">
+                      <td className={`px-2 py-1 text-right tabular-nums text-green-700 ${isActive ? "font-bold" : ""}`}>
                         {formatCLP(q.clientPriceNet - q.costDistributor)}
                       </td>
                       <td className="px-2 py-1 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-2">
                           {!isActive && (
                             <button
                               onClick={() => onActivateQuote(q.id)}
-                              className="text-[10px] uppercase tracking-wider text-green-700 hover:text-green-900 font-bold"
-                              title="Hacer esta la cotización activa (usa esta en el PDF)"
+                              className="text-[10px] uppercase tracking-wider text-green-700 hover:text-green-900 font-bold border border-green-300 hover:border-green-500 rounded px-1.5 py-0.5"
+                              title="Hacer esta cotización la activa (usa esta en el PDF y en totales)"
                             >
                               Activar
                             </button>
                           )}
                           <button
                             onClick={() => onDeleteQuote(q.id)}
-                            className="text-gray-300 hover:text-red-500"
-                            title="Eliminar cotización"
+                            className="text-gray-400 hover:text-red-600 text-sm leading-none"
+                            title="Eliminar esta cotización"
                           >
                             ✕
                           </button>
@@ -1000,7 +1065,7 @@ function ItemBlock({
                 onUpdateDetail(d.id, { name: e.target.value.toUpperCase() })
               }
               placeholder="COMPONENTE"
-              className="w-40 bg-transparent border-0 p-0 font-bold uppercase text-gray-700 outline-none tracking-tight"
+              className="w-40 bg-transparent border-0 p-0 uppercase text-gray-700 outline-none tracking-tight"
             />
             <input
               type="text"

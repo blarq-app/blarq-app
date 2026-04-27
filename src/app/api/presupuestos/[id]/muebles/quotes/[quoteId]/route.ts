@@ -9,21 +9,45 @@ export async function PUT(
     const { quoteId } = await params;
     const data = await request.json();
 
-    const cost = data.costDistributor ?? 0;
-    const utility = data.utilityPercentage ?? 0;
-    const net = cost * (1 + utility);
-    const iva = net * 1.19;
+    // Patch parcial: solo actualiza los campos que vienen en el body.
+    // Si cambia costo o utilidad, recalcula los precios derivados.
+    const current = await prisma.muebleQuote.findUnique({
+      where: { id: quoteId },
+    });
+    if (!current) {
+      return NextResponse.json(
+        { error: "Cotización no encontrada" },
+        { status: 404 }
+      );
+    }
+
+    const cost =
+      data.costDistributor !== undefined
+        ? data.costDistributor
+        : current.costDistributor;
+    const utility =
+      data.utilityPercentage !== undefined
+        ? data.utilityPercentage
+        : current.utilityPercentage;
+    const recalcNeeded =
+      data.costDistributor !== undefined ||
+      data.utilityPercentage !== undefined;
+    const net = recalcNeeded ? cost * (1 + utility) : current.clientPriceNet;
+    const iva = recalcNeeded ? net * 1.19 : current.clientPriceIva;
 
     const quote = await prisma.muebleQuote.update({
       where: { id: quoteId },
       data: {
-        supplier: data.supplier ?? null,
-        costDistributor: cost,
-        utilityPercentage: utility,
-        clientPriceNet: net,
-        clientPriceIva: iva,
-        notes: data.notes ?? null,
-        sortOrder: data.sortOrder,
+        ...(data.supplier !== undefined ? { supplier: data.supplier } : {}),
+        ...(data.costDistributor !== undefined ? { costDistributor: cost } : {}),
+        ...(data.utilityPercentage !== undefined
+          ? { utilityPercentage: utility }
+          : {}),
+        ...(recalcNeeded
+          ? { clientPriceNet: net, clientPriceIva: iva }
+          : {}),
+        ...(data.notes !== undefined ? { notes: data.notes } : {}),
+        ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
       },
     });
 

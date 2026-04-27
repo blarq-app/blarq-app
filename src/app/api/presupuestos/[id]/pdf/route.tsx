@@ -2,9 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { renderToBuffer } from "@react-pdf/renderer";
 import React from "react";
-import ObraPDF from "@/lib/pdf/ObraPDF";
 import MueblesPDF from "@/lib/pdf/MueblesPDF";
 import ArtefactosPDF from "@/lib/pdf/ArtefactosPDF";
+import { renderObraHTML, buildObraFooter } from "@/lib/pdf/ObraPDF.html";
+import { renderPDF } from "@/lib/pdf/renderPDF";
 
 export async function GET(
   _request: NextRequest,
@@ -31,27 +32,38 @@ export async function GET(
       );
     }
 
-    let pdfDocument: React.ReactElement;
+    let pdfBuffer: Uint8Array;
     let filename: string;
 
     if (budget.type === "obra") {
-      pdfDocument = (
-        <ObraPDF
-          project={budget.project}
-          budget={{
-            version: budget.version,
-            date: budget.date,
-            ggPercentage: budget.ggPercentage,
-            utilityPercentage: budget.utilityPercentage,
-            observations: budget.observations,
-          }}
-          items={budget.obraItems}
-          paymentTerms={budget.paymentTerms}
-        />
-      );
+      // ── Puppeteer + HTML/CSS path (matches Excel reference) ──
+      const html = renderObraHTML({
+        project: budget.project,
+        budget: {
+          version: budget.version,
+          date: budget.date,
+          ggPercentage: budget.ggPercentage,
+          utilityPercentage: budget.utilityPercentage,
+        },
+        items: budget.obraItems,
+        paymentTerms: budget.paymentTerms.map((t) => ({
+          stage: t.stage,
+          percentage: t.percentage,
+        })),
+      });
+
+      pdfBuffer = await renderPDF(html, {
+        format: "A4",
+        displayHeaderFooter: true,
+        headerTemplate: "<div></div>",
+        footerTemplate: buildObraFooter(budget.version, budget.date),
+        margin: { top: "14mm", bottom: "16mm", left: "15mm", right: "15mm" },
+      });
+
       filename = `BLARQ_Obra_${budget.project.name.replace(/\s+/g, "_")}_${budget.version}.pdf`;
     } else if (budget.type === "muebles") {
-      pdfDocument = (
+      // ── Legacy @react-pdf flow (not yet migrated) ──
+      const pdfDocument: React.ReactElement = (
         <MueblesPDF
           project={budget.project}
           budget={{
@@ -63,9 +75,11 @@ export async function GET(
           paymentTerms={budget.paymentTerms}
         />
       );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      pdfBuffer = new Uint8Array(await renderToBuffer(pdfDocument as any));
       filename = `BLARQ_Muebles_${budget.project.name.replace(/\s+/g, "_")}_${budget.version}.pdf`;
     } else {
-      pdfDocument = (
+      const pdfDocument: React.ReactElement = (
         <ArtefactosPDF
           project={budget.project}
           budget={{
@@ -77,13 +91,15 @@ export async function GET(
           paymentTerms={budget.paymentTerms}
         />
       );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      pdfBuffer = new Uint8Array(await renderToBuffer(pdfDocument as any));
       filename = `BLARQ_Artefactos_${budget.project.name.replace(/\s+/g, "_")}_${budget.version}.pdf`;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pdfBuffer = await renderToBuffer(pdfDocument as any);
-
-    return new NextResponse(new Uint8Array(pdfBuffer), {
+    // Copy into a fresh ArrayBuffer-backed Uint8Array for NextResponse's BodyInit
+    const body = new Uint8Array(pdfBuffer.byteLength);
+    body.set(pdfBuffer);
+    return new NextResponse(body, {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${filename}"`,

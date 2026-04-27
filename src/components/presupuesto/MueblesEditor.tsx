@@ -2,7 +2,45 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatCLP } from "@/lib/utils";
+import { formatCLP, formatNumber } from "@/lib/utils";
+
+// Input numérico con separadores de miles. Sin foco muestra "5.488.460",
+// con foco muestra "5488460" para edición. onChange devuelve el número crudo.
+function ThousandsInput({
+  value,
+  onChange,
+  className = "",
+  placeholder,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  className?: string;
+  placeholder?: string;
+}) {
+  const [focused, setFocused] = useState(false);
+  const display = focused
+    ? value === 0
+      ? ""
+      : String(value)
+    : value === 0
+    ? ""
+    : formatNumber(value);
+  return (
+    <input
+      type={focused ? "number" : "text"}
+      inputMode="numeric"
+      value={display}
+      placeholder={placeholder}
+      onFocus={(e) => {
+        setFocused(true);
+        setTimeout(() => e.target.select(), 0);
+      }}
+      onBlur={() => setFocused(false)}
+      onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+      className={className}
+    />
+  );
+}
 
 type MuebleDetail = {
   id: string;
@@ -595,53 +633,73 @@ function ItemBlock({
         className="w-full text-xs text-gray-600 bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-gray-400 p-0 py-1 outline-none"
       />
 
-      {/* Cálculo costo */}
-      <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 rounded p-2">
-        <span>Proveedor:</span>
-        <input
-          type="text"
-          value={item.supplier ?? ""}
-          onChange={(e) => onUpdate({ supplier: e.target.value })}
-          className="w-24 bg-white border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-gray-900"
-        />
-        <span className="ml-2">Costo dist:</span>
-        <input
-          type="number"
-          value={item.costDistributor || ""}
-          onChange={(e) =>
-            onUpdate({ costDistributor: parseFloat(e.target.value) || 0 })
-          }
-          placeholder="0"
-          className="w-24 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900"
-        />
-        <span className="ml-2">% util:</span>
-        <input
-          type="number"
-          step="0.01"
-          value={item.utilityPercentage || ""}
-          onChange={(e) =>
-            onUpdate({ utilityPercentage: parseFloat(e.target.value) || 0 })
-          }
-          placeholder="0.30"
-          className="w-16 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900"
-        />
-        <span className="ml-3 text-gray-400">→ Neto</span>
-        <span className="text-gray-700 tabular-nums">
-          {formatCLP(item.clientPriceNet)}
+      {/* Cálculo costo (interno, no va al PDF) */}
+      <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-xs bg-gray-50 rounded px-2.5 py-1.5">
+        <label className="flex items-center gap-1.5">
+          <span className="font-bold text-gray-700">Proveedor</span>
+          <input
+            type="text"
+            value={item.supplier ?? ""}
+            onChange={(e) => onUpdate({ supplier: e.target.value })}
+            className="w-28 bg-white border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-gray-900"
+          />
+        </label>
+        <label className="flex items-center gap-1.5">
+          <span className="font-bold text-gray-700">Costo dist.</span>
+          <ThousandsInput
+            value={item.costDistributor}
+            onChange={(v) => onUpdate({ costDistributor: v })}
+            placeholder="0"
+            className="w-28 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900"
+          />
+        </label>
+        <label className="flex items-center gap-1.5">
+          <span className="font-bold text-gray-700">% util.</span>
+          <input
+            type="number"
+            step="1"
+            value={
+              item.utilityPercentage
+                ? Math.round(item.utilityPercentage * 100)
+                : ""
+            }
+            onChange={(e) =>
+              onUpdate({
+                utilityPercentage: (parseFloat(e.target.value) || 0) / 100,
+              })
+            }
+            placeholder="30"
+            className="w-14 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900"
+          />
+          <span className="text-gray-500">%</span>
+        </label>
+        <span className="text-gray-300">→</span>
+        <span className="text-gray-600">
+          Neto{" "}
+          <span className="text-gray-900 tabular-nums">
+            {formatCLP(item.clientPriceNet)}
+          </span>
         </span>
-        <span className="ml-1 text-gray-400">· C/IVA</span>
-        <span className="text-gray-900 font-medium tabular-nums">
-          {formatCLP(item.clientPriceIva)}
+        <span className="text-gray-300">·</span>
+        <span className="text-gray-600">
+          C/IVA{" "}
+          <span className="text-gray-900 font-medium tabular-nums">
+            {formatCLP(item.clientPriceIva)}
+          </span>
         </span>
-        <span className="ml-2 text-green-700 tabular-nums">
-          util: {formatCLP(item.clientPriceNet - item.costDistributor)}
+        <span className="text-gray-300">·</span>
+        <span className="text-green-700 tabular-nums">
+          util {formatCLP(item.clientPriceNet - item.costDistributor)}
         </span>
       </div>
 
-      {/* Detalles */}
-      <div className="pl-4 border-l-2 border-gray-100 space-y-1">
+      {/* Detalles (componentes con materialidad) — emula la lista del PDF */}
+      <div className="pl-6 border-l border-gray-100 space-y-0.5">
         {item.details.map((d) => (
-          <div key={d.id} className="flex items-center gap-2 text-xs">
+          <div
+            key={d.id}
+            className="flex items-baseline gap-2 text-[11px] leading-tight"
+          >
             <input
               type="text"
               value={d.name}
@@ -649,7 +707,7 @@ function ItemBlock({
                 onUpdateDetail(d.id, { name: e.target.value.toUpperCase() })
               }
               placeholder="COMPONENTE"
-              className="w-44 bg-transparent border-0 p-0 font-medium uppercase text-gray-700 outline-none"
+              className="w-40 bg-transparent border-0 p-0 font-bold uppercase text-gray-700 outline-none tracking-tight"
             />
             <input
               type="text"
@@ -657,12 +715,12 @@ function ItemBlock({
               onChange={(e) =>
                 onUpdateDetail(d.id, { material: e.target.value })
               }
-              placeholder="Materialidad (ej. MELAMINA BLANCA 18MM, TAPACANTO PVC)"
+              placeholder="materialidad…"
               className="flex-1 bg-transparent border-0 p-0 text-gray-600 outline-none"
             />
             <button
               onClick={() => onDeleteDetail(d.id)}
-              className="text-gray-300 hover:text-red-500"
+              className="text-gray-300 hover:text-red-500 text-[10px]"
               title="Eliminar componente"
             >
               ✕
@@ -671,9 +729,9 @@ function ItemBlock({
         ))}
         <button
           onClick={onAddDetail}
-          className="text-[11px] text-gray-400 hover:text-gray-700"
+          className="text-[10px] text-gray-400 hover:text-gray-700 mt-0.5"
         >
-          + Componente (ej. CUERPO INTERIOR, TRASERA, FRENTE BASE…)
+          + Componente
         </button>
       </div>
     </div>

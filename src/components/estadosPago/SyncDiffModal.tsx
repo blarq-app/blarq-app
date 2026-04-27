@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatCLP, OBRA_CHAPTERS, ObraChapter } from "@/lib/utils";
+import { Button, Modal, ModalHeader, ModalBody, ModalFooter } from "@/components/ui";
 
 type DiffField =
   | "name"
@@ -198,39 +199,24 @@ export default function SyncDiffModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-4xl max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between">
-          <div>
-            <h2 className="text-base font-bold text-gray-900">
-              Sincronizar con presupuesto
-            </h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {preview ? (
-                <>
-                  {preview.currentVersion?.version ?? "—"} → {" "}
-                  <span className="font-medium text-gray-700">
-                    {preview.targetVersion.version}
-                  </span>
-                </>
-              ) : (
-                "Cargando..."
-              )}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            disabled={applying}
-            className="text-gray-400 hover:text-gray-700 text-xl leading-none"
-            aria-label="Cerrar"
-          >
-            ×
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+    <Modal open onClose={applying ? () => {} : onClose} size="lg">
+      <ModalHeader
+        title="Sincronizar con presupuesto"
+        subtitle={
+          preview ? (
+            <>
+              {preview.currentVersion?.version ?? "—"} → {" "}
+              <span className="font-medium text-gray-700">
+                {preview.targetVersion.version}
+              </span>
+            </>
+          ) : (
+            "Cargando..."
+          )
+        }
+        onClose={applying ? undefined : onClose}
+      />
+      <ModalBody>
           {loading && (
             <div className="text-sm text-gray-500 text-center py-12">
               Calculando diferencias...
@@ -435,27 +421,21 @@ export default function SyncDiffModal({
                 )}
             </>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-3 border-t border-gray-200 flex items-center justify-end gap-2">
-          <button
-            onClick={onClose}
-            disabled={applying}
-            className="text-xs px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={apply}
-            disabled={applying || loading || !preview || !!error}
-            className="text-xs px-4 py-1.5 rounded bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-50"
-          >
-            {applying ? "Aplicando…" : "Aplicar cambios seleccionados"}
-          </button>
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+      <ModalFooter>
+        <Button onClick={onClose} disabled={applying} variant="secondary" size="sm">
+          Cancelar
+        </Button>
+        <Button
+          onClick={apply}
+          disabled={applying || loading || !preview || !!error}
+          variant="primary"
+          size="sm"
+        >
+          {applying ? "Aplicando…" : "Aplicar cambios seleccionados"}
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 

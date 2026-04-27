@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { buildPrevAccumulators, findLatestObraBudget } from "@/lib/ep/snapshot";
 
 // Listar EPs del proyecto
 export async function GET(
@@ -24,19 +25,7 @@ export async function POST(
   try {
     const { id: projectId } = await params;
 
-    // Buscar presupuesto de obra más reciente (aprobado si existe, si no el último)
-    const obraBudget =
-      (await prisma.budgetVersion.findFirst({
-        where: { projectId, type: "obra", status: "aprobado" },
-        orderBy: { createdAt: "desc" },
-        include: { obraItems: { orderBy: { sortOrder: "asc" } } },
-      })) ||
-      (await prisma.budgetVersion.findFirst({
-        where: { projectId, type: "obra" },
-        orderBy: { createdAt: "desc" },
-        include: { obraItems: { orderBy: { sortOrder: "asc" } } },
-      }));
-
+    const obraBudget = await findLatestObraBudget(prisma, projectId);
     if (!obraBudget || obraBudget.obraItems.length === 0) {
       return NextResponse.json(
         { error: "No hay presupuesto de obra con partidas para este proyecto" },
@@ -51,20 +40,9 @@ export async function POST(
     });
     const nextNumber = (last?.number || 0) + 1;
 
-    // Acumulado quantityExecuted previo por lineageId — solo de EPs CERRADOS anteriores.
-    // Usamos lineageId (no obraItemId) para que el avance se herede aunque el
-    // presupuesto haya cambiado de versión y los obraItemId hayan rotado.
-    const prevClosedEps = await prisma.estadoPago.findMany({
-      where: { projectId, status: "cerrado" },
-      include: { items: true },
+    const { prevExecutedByLineage } = await buildPrevAccumulators(prisma, {
+      projectId,
     });
-    const prevExecutedMap = new Map<string, number>();
-    for (const prev of prevClosedEps) {
-      for (const it of prev.items) {
-        const cur = prevExecutedMap.get(it.lineageId) ?? 0;
-        prevExecutedMap.set(it.lineageId, Math.max(cur, it.quantityExecuted));
-      }
-    }
 
     const ep = await prisma.estadoPago.create({
       data: {
@@ -74,7 +52,7 @@ export async function POST(
         items: {
           create: obraBudget.obraItems.map((item, idx) => {
             const laborUnitPrice = item.costLabor ?? 0;
-            const prevQty = prevExecutedMap.get(item.lineageId) ?? 0;
+            const prevQty = prevExecutedByLineage.get(item.lineageId) ?? 0;
             return {
               obraItemId: item.id,
               lineageId: item.lineageId,

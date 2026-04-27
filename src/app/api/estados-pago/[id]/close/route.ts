@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { buildPrevAccumulators } from "@/lib/ep/snapshot";
 
 // Cierra un EP en borrador. Genera snapshot inmutable de amountPaid por partida.
 //   amountPaid = (quantityExecuted - prevExecutedQuantity) × laborUnitPrice
@@ -25,30 +26,15 @@ export async function POST(
       );
     }
 
-    // Acumulado previo de quantityExecuted por lineageId (sumando EPs cerrados
-    // anteriores). Usamos lineageId para que la herencia funcione aunque cambie
-    // la versión del presupuesto entre EPs.
-    const prevClosedEps = await prisma.estadoPago.findMany({
-      where: {
-        projectId: ep.projectId,
-        status: "cerrado",
-        number: { lt: ep.number },
-      },
-      include: { items: true },
+    const { prevExecutedByLineage } = await buildPrevAccumulators(prisma, {
+      projectId: ep.projectId,
+      beforeNumber: ep.number,
     });
-    const prevQtyByLineage = new Map<string, number>();
-    for (const prev of prevClosedEps) {
-      for (const it of prev.items) {
-        const cur = prevQtyByLineage.get(it.lineageId) ?? 0;
-        // El más alto, no el último (defensivo)
-        prevQtyByLineage.set(it.lineageId, Math.max(cur, it.quantityExecuted));
-      }
-    }
 
     // Cerrar en transacción
     await prisma.$transaction([
       ...ep.items.map((it) => {
-        const prevQty = prevQtyByLineage.get(it.lineageId) ?? 0;
+        const prevQty = prevExecutedByLineage.get(it.lineageId) ?? 0;
         const newQty = Math.max(0, it.quantityExecuted - prevQty);
         const amountPaid = newQty * it.laborUnitPrice;
         return prisma.estadoPagoItem.update({

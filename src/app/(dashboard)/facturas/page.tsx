@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import FacturasFilterBar from "@/components/facturas/FacturasFilterBar";
+import SyncSiiButton from "@/components/facturas/SyncSiiButton";
 import { formatCLP, formatDate } from "@/lib/utils";
 
 type SearchParams = {
@@ -62,17 +63,50 @@ export default async function FacturasPage({
     .filter((i) => i.type === "recibida")
     .reduce((s, i) => s + i.totalAmount, 0);
 
+  // Default desde el cual sincronizar SII (1 abril, fecha de corte de MJ)
+  const SII_SYNC_FROM = "2026-04-01";
+
+  // Cuántas facturas SII están sin asignar a proyecto — para destacar el
+  // filtro y atraer la atención del usuario.
+  const siiUnassignedCount = await prisma.invoice.count({
+    where: { origin: "sii_automatica", projectId: null },
+  });
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Facturas</h1>
-        <Link
-          href="/facturas/nueva"
-          className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800"
-        >
-          + Nueva factura
-        </Link>
+        <div className="flex items-center gap-3">
+          <SyncSiiButton from={SII_SYNC_FROM} />
+          <Link
+            href="/facturas/nueva"
+            className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800"
+          >
+            + Nueva factura
+          </Link>
+        </div>
       </div>
+
+      {/* Atajo destacado a "facturas SII sin asignar a proyecto" cuando hay */}
+      {siiUnassignedCount > 0 && sp.projectId !== "sin-asignar" && (
+        <Link
+          href="/facturas?origin=sii_automatica&projectId=sin-asignar"
+          className="block bg-purple-50 border border-purple-200 rounded-lg px-4 py-3 mb-4 hover:border-purple-400 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-purple-700 text-lg">📥</span>
+            <p className="text-sm text-purple-900 flex-1">
+              <span className="font-semibold">
+                {siiUnassignedCount} factura
+                {siiUnassignedCount > 1 ? "s" : ""} del SII
+              </span>{" "}
+              sin asignar a proyecto — asignalas para que cuenten en tu Estado
+              de Resultados.
+            </p>
+            <span className="text-xs text-purple-700 underline">Ver →</span>
+          </div>
+        </Link>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <Stat label="Total" value={invoices.length.toString()} sub="facturas" />

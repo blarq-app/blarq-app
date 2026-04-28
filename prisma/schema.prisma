@@ -445,8 +445,17 @@ model Invoice {
   projectId       String?
   categoryId      String?
   type            String   // emitida | recibida
+  // Identidad SII (DTE):
+  // - tipoDoc: 33=factura electrónica, 34=factura exenta, 39=boleta,
+  //   41=boleta exenta, 56=nota débito, 61=nota crédito.
+  // - folioNumber, rutIssuer son los identificadores del DTE.
+  // - rutReceiver: para facturas recibidas es BLARQ; para emitidas es el cliente.
+  // El triple (tipoDoc, folioNumber, rutIssuer) más type es único — sirve para
+  // el upsert idempotente del cron de sincronización SII.
+  tipoDoc         Int?
   folioNumber     String?
   rutIssuer       String?
+  rutReceiver     String?
   businessName    String?
   issueDate       DateTime
   dueDate         DateTime?
@@ -455,6 +464,11 @@ model Invoice {
   totalAmount     Float
   status          String   @default("pendiente") // pendiente | pagada | anulada
   origin          String   @default("manual") // manual | sii_automatica
+  // Trazabilidad SII (cuando origin = sii_automatica)
+  siiTrackId      String?  // Identificador del DTE en SII (track id que devuelve el proveedor)
+  xmlUrl          String?  // URL al XML del DTE (cuando OpenFactura lo expone)
+  pdfUrl          String?  // URL al PDF del DTE
+  syncedAt        DateTime? // Última vez que se trajo/refrescó del SII
   notes           String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -463,8 +477,11 @@ model Invoice {
   category        CostCategory? @relation(fields: [categoryId], references: [id])
   bankMovements   BankMovement[]
 
+  @@unique([type, tipoDoc, folioNumber, rutIssuer], name: "dte_unique")
   @@index([projectId])
   @@index([categoryId])
+  @@index([origin, projectId]) // para query "SII sin asignar"
+  @@index([siiTrackId])
 }
 
 // ==================== MOVIMIENTOS BANCO ====================

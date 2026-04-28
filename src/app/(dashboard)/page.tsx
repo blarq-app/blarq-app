@@ -55,6 +55,12 @@ export default async function DashboardPage() {
     x.metrics.alerts.some((a) => a.severity === "danger")
   );
 
+  // Facturas que llegaron del SII pero no tienen proyecto asignado.
+  // Son tarea pendiente que MJ tiene que resolver.
+  const siiUnassignedCount = await prisma.invoice.count({
+    where: { origin: "sii_automatica", projectId: null },
+  });
+
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
@@ -68,8 +74,30 @@ export default async function DashboardPage() {
       </div>
 
       {/* Banners globales */}
-      {(totalOverdueInvoices > 0 || projectsWithDanger.length > 0) && (
+      {(totalOverdueInvoices > 0 ||
+        projectsWithDanger.length > 0 ||
+        siiUnassignedCount > 0) && (
         <div className="mb-6 space-y-2">
+          {siiUnassignedCount > 0 && (
+            <Link
+              href="/facturas?origin=sii_automatica&projectId=sin-asignar"
+              className="block bg-purple-50 border border-purple-200 rounded-lg px-4 py-3 hover:border-purple-400 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-purple-700 text-lg">📥</span>
+                <p className="text-sm text-purple-900 flex-1">
+                  <span className="font-semibold">
+                    {siiUnassignedCount} factura
+                    {siiUnassignedCount > 1 ? "s" : ""} del SII
+                  </span>{" "}
+                  sin asignar a proyecto
+                </p>
+                <span className="text-xs text-purple-700 underline">
+                  Asignar →
+                </span>
+              </div>
+            </Link>
+          )}
           {totalOverdueInvoices > 0 && (
             <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-3">

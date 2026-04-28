@@ -100,28 +100,83 @@ async function getToken(): Promise<string> {
   return data.accessToken;
 }
 
+// Dispara el "Conciliar Recibidos" en SimpleFactura para los meses que
+// abarca el rango pedido. Esto fuerza a SimpleFactura a ir al SII a buscar
+// las facturas más recientes recibidas. Sin este paso, el endpoint
+// /documentsReceived devuelve solo lo que SimpleFactura tenía cacheado.
+async function consolidateReceived(
+  fromDate: string,
+  toDate: string | undefined,
+  token: string
+): Promise<void> {
+  const { rut, baseUrl } = getCredentials();
+  if (!rut) return;
+
+  // Lista de (mes, año) que cubre el rango. Conciliar es por mes/año.
+  const start = new Date(fromDate + "T00:00:00Z");
+  const end = new Date((toDate ?? new Date().toISOString().slice(0, 10)) + "T00:00:00Z");
+  const months = new Set<string>();
+  const cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+  while (cur <= end) {
+    months.add(`${String(cur.getUTCMonth() + 1).padStart(2, "0")}/${cur.getUTCFullYear()}`);
+    cur.setUTCMonth(cur.getUTCMonth() + 1);
+  }
+
+  for (const my of months) {
+    try {
+      const res = await fetch(`${baseUrl}/documentsReceived/consolidate/${my}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ rutEmisor: rut }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        console.warn(`[SimpleFactura] consolidate ${my} falló: ${res.status} — ${body.slice(0, 200)}`);
+      }
+    } catch (e) {
+      console.warn(`[SimpleFactura] consolidate ${my} error:`, e);
+    }
+  }
+}
+
 // ─── Implementación real (SimpleFactura HTTP) ────────────────────────────
 async function realFetchDTEs(opts: FetchOptions): Promise<RemoteDTE[]> {
   const { rut, baseUrl } = getCredentials();
   if (!rut) throw new Error("SIMPLEFACTURA_RUT no configurado");
 
   const token = await getToken();
+
+  // Antes de pedir recibidas, "conciliar" con el SII para que SimpleFactura
+  // traiga lo último. Sin este paso, el endpoint devuelve solo registros
+  // ya descargados previamente — puede haber desfase de horas/días contra
+  // lo que efectivamente está en el SII.
+  // Solo lo hacemos para recibidas (donde SimpleFactura es lector pasivo del SII).
+  // Las emitidas se generan dentro de SimpleFactura, no requiere conciliar.
+  if (opts.type === "recibida") {
+    await consolidateReceived(opts.fromDate, opts.toDate, token);
+  }
+
   const path =
     opts.type === "recibida" ? "/documentsReceived" : "/documentsIssued";
 
   const credenciales: Record<string, string> = { rutEmisor: rut };
   if (opts.type === "emitida") credenciales.nombreSucursal = "Casa Matriz";
 
+  // IMPORTANTE: SimpleFactura interpreta los campos opcionales como filtros
+  // explícitos cuando vienen — `cedida: false` filtra solo cesiones==false
+  // y devuelve [], en vez de "todas". La doc Postman lo mostraba pero la
+  // realidad es que hay que omitirlos para ver todo.
   const body: Record<string, unknown> = {
     credenciales,
     ambiente: 1, // 1 = producción, 0 = certificación
-    folio: opts.type === "emitida" ? 0 : null,
-    codigoTipoDte: null, // todos los tipos
     desde: opts.fromDate,
     hasta: opts.toDate ?? new Date().toISOString().slice(0, 10),
   };
-  if (opts.type === "recibida") body.cedida = false;
 
+  console.log(`[SimpleFactura] POST ${path}`, JSON.stringify(body));
   const res = await fetch(`${baseUrl}${path}`, {
     method: "POST",
     headers: {
@@ -132,6 +187,7 @@ async function realFetchDTEs(opts: FetchOptions): Promise<RemoteDTE[]> {
   });
 
   const responseText = await res.text();
+  console.log(`[SimpleFactura] ← ${path} ${res.status} ${responseText.slice(0, 300)}`);
   let json: { status?: number; data?: unknown; errors?: string[] };
   try {
     json = JSON.parse(responseText);

@@ -20,15 +20,21 @@ import { prisma } from "../src/lib/prisma";
 import { readFileSync } from "fs";
 
 const APPLY = process.argv.includes("--apply");
-const FILE = "/Users/mjblanco/Downloads/DetallesCentroCosto.xls";
+// Archivos a procesar: vienen como args (todo lo que no empieza con "--").
+// Si no se pasan, usa el default.
+const ARG_FILES = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const FILES =
+  ARG_FILES.length > 0
+    ? ARG_FILES
+    : ["/Users/mjblanco/Downloads/DetallesCentroCosto.xls"];
 
 // ─── Parseo del HTML "xls" de Maxxa ──────────────────────────────────────
 // Maxxa exporta un .xls que en realidad es HTML plano <table><tr><td>.
 // Con regex simples es suficiente, sin agregar dependencias.
 type Row = Record<string, string>;
 
-function parseHtml(): Row[] {
-  const html = readFileSync(FILE, "utf-8");
+function parseHtml(filePath: string): Row[] {
+  const html = readFileSync(filePath, "utf-8");
   const trMatches = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)];
   const rows: string[][] = trMatches.map((m) => {
     const cells = [...m[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map((c) =>
@@ -128,42 +134,120 @@ function normRut(s: string): string {
 async function main() {
   console.log(APPLY ? "🚀 APPLY mode" : "🔍 DRY RUN mode\n");
 
-  const rows = parseHtml();
-  console.log(`Excel: ${rows.length} filas`);
+  // Junto las filas de todos los archivos. Si dos archivos tuvieran la misma
+  // factura (mismo folio + tipoDoc + rutDoc), la última gana — pero como
+  // cada export de Maxxa es un mes distinto, eso no debería pasar.
+  const rows: Row[] = [];
+  for (const f of FILES) {
+    const r = parseHtml(f);
+    console.log(`  · ${f.split("/").pop()}: ${r.length} filas`);
+    rows.push(...r);
+  }
+  console.log(`Total: ${rows.length} filas\n`);
 
-  // 1) Resolver projectId por centro de costo (crear los faltantes)
+  // 1) Resolver projectId por centro de costo
+  // Estrategia:
+  //   a) Si el centro está en CENTRO_PLAN, aplicar override
+  //   b) Si no: parsear "NN_Algo (Cliente)" para extraer numeroProyecto y name
+  //      - Buscar primero por numeroProyecto en DB (los 9 ya existentes ya
+  //        están con el name limpio "Portofino", "Lefevre", etc — el match
+  //        por numero es más confiable que por name)
+  //      - Si no hay match: crear un proyecto nuevo
   const projectByCentro = new Map<string, string | null>();
+
+  // a) Aplicar CENTRO_PLAN overrides explícitos
   for (const [centro, plan] of Object.entries(CENTRO_PLAN)) {
     if (plan === "NULL") {
       projectByCentro.set(centro, null);
     } else if (plan === "CREATE") {
-      // El nombre del proyecto va sin paréntesis; lo que está dentro va a clientName.
-      // Si no hay paréntesis, clientName queda igual al name (MJ lo edita después).
-      const m = centro.match(/^(.+?)\s*\((.+)\)\s*$/);
-      const name = m ? m[1].trim() : centro;
-      const clientName = m ? m[2].trim() : centro;
-
-      const existing = await prisma.project.findFirst({ where: { name } });
-      if (existing) {
-        projectByCentro.set(centro, existing.id);
-        console.log(`  · proyecto ya existe: ${name}`);
-      } else {
-
-        if (APPLY) {
-          const p = await prisma.project.create({
-            data: { name, clientName, status: "en_ejecucion" },
-          });
-          projectByCentro.set(centro, p.id);
-          console.log(`  ✓ creado proyecto: ${centro}`);
-        } else {
-          projectByCentro.set(centro, "<<NEW>>");
-          console.log(`  + crearía proyecto: ${centro} (cliente: ${clientName})`);
-        }
-      }
+      const resolved = await resolveOrCreateProject(centro);
+      projectByCentro.set(centro, resolved);
     } else {
       projectByCentro.set(centro, plan.existingId);
       const p = await prisma.project.findUnique({ where: { id: plan.existingId } });
       console.log(`  · ${centro} → proyecto existente: ${p?.name ?? "(?)"}`);
+    }
+  }
+
+  // b) Detectar centros que aparecen en los archivos pero NO en CENTRO_PLAN
+  //    y resolverlos dinámicamente
+  const centrosEnArchivo = new Set(rows.map((r) => r.CentroCosto).filter(Boolean));
+  for (const centro of centrosEnArchivo) {
+    if (projectByCentro.has(centro)) continue;
+    const resolved = await resolveOrCreateProject(centro);
+    projectByCentro.set(centro, resolved);
+  }
+
+  // Helper: dado un centro como "60_Portofino (Carola Ovalle)" intenta
+  // matchear el proyecto existente por numeroProyecto; si no existe,
+  // lo crea con name = parte antes del paréntesis (sin NN_) y clientName
+  // = parte dentro del paréntesis.
+  async function resolveOrCreateProject(centro: string): Promise<string | null> {
+    // Parsear "NN_..." y "(...)"
+    const numMatch = centro.match(/^(\d+)_/);
+    let numero = numMatch ? parseInt(numMatch[1], 10) : null;
+    // Overrides manuales para corregir números mal asignados en Maxxa.
+    // (En Maxxa "52_Pauline Dumay" venía con número 52, pero MJ confirmó
+    // que el numeroProyecto correcto es 53.)
+    const NUMERO_OVERRIDES: Record<string, number> = {
+      "52_Pauline Dumay": 53,
+    };
+    if (NUMERO_OVERRIDES[centro] != null) {
+      numero = NUMERO_OVERRIDES[centro];
+    }
+    const parenMatch = centro.match(/^(.+?)\s*\((.+)\)\s*$/);
+    const fullName = parenMatch ? parenMatch[1].trim() : centro;
+    const clientName = parenMatch ? parenMatch[2].trim() : fullName;
+    // Limpiar prefijo "NN_" del name
+    const name = fullName.replace(/^\d+_/, "").trim() || fullName;
+
+    // Centros "00_*" son internos (gastos de empresa, no proyectos)
+    const isInternal = numero === 0;
+
+    // Buscar existente por numeroProyecto (más robusto que por name)
+    let existing = numero != null
+      ? await prisma.project.findUnique({ where: { numeroProyecto: numero } })
+      : null;
+    // Fallback: buscar por name
+    if (!existing) {
+      existing = await prisma.project.findFirst({ where: { name } });
+    }
+    if (existing) {
+      console.log(`  · ${centro} → proyecto existente: ${existing.name} (Nº ${existing.numeroProyecto ?? "—"})`);
+      return existing.id;
+    }
+
+    // Crear nuevo. Si numero está libre, usarlo. Si no, dejarlo null.
+    // Para internos: numero siempre null (no son proyectos numerados).
+    let numeroProyecto: number | null = null;
+    let numeroCotizacionToUse: number | null = null;
+    if (!isInternal) {
+      if (numero != null) {
+        const conflict = await prisma.project.findUnique({ where: { numeroProyecto: numero } });
+        numeroProyecto = conflict ? null : numero;
+      }
+      // Cotización única — siguiente disponible
+      const maxC = await prisma.project.aggregate({ _max: { numeroCotizacion: true } });
+      numeroCotizacionToUse = (maxC._max.numeroCotizacion ?? 0) + 1;
+    }
+    if (APPLY) {
+      const p = await prisma.project.create({
+        data: {
+          name,
+          clientName: isInternal ? "Gastos empresa" : clientName,
+          status: "ejecucion",
+          numeroProyecto,
+          numeroCotizacion: numeroCotizacionToUse,
+          isInternal,
+        },
+      });
+      const tag = isInternal ? "interno" : `Nº ${numeroProyecto ?? "—"}, C-${numeroCotizacionToUse}`;
+      console.log(`  ✓ creado proyecto: ${name} (${tag})`);
+      return p.id;
+    } else {
+      const tag = isInternal ? "interno" : `Nº ${numeroProyecto ?? "—"}, cliente: ${clientName}`;
+      console.log(`  + crearía proyecto: ${name} (${tag})`);
+      return "<<NEW>>";
     }
   }
 
@@ -217,7 +301,7 @@ async function main() {
     const desc = row.DescCatego;
     const sub = row.DescSubCatego;
 
-    if (!CENTRO_PLAN[centro]) {
+    if (!projectByCentro.has(centro)) {
       stats.centroMissing.add(centro);
       continue;
     }

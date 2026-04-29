@@ -63,16 +63,28 @@ export default function ProjectsTable({
             <th className="text-left px-3 py-2">Cliente</th>
             {(variant === "ejecucion" || variant === "terminado") && (
               <>
-                <th className="text-right px-3 py-2">Gastado</th>
-                <th className="text-right px-3 py-2">Vendido</th>
+                <th className="text-right px-3 py-2">
+                  Gastado
+                  <span className="block text-[9px] text-gray-400 normal-case font-normal">neto</span>
+                </th>
+                <th className="text-right px-3 py-2">
+                  Vendido
+                  <span className="block text-[9px] text-gray-400 normal-case font-normal">c/IVA</span>
+                </th>
               </>
             )}
             {(variant === "cotizacion" || variant === "archivado") && (
-              <th className="text-right px-3 py-2">Monto</th>
+              <th className="text-right px-3 py-2">
+                Monto
+                <span className="block text-[9px] text-gray-400 normal-case font-normal">c/IVA</span>
+              </th>
             )}
             {variant === "convertida" && (
               <>
-                <th className="text-right px-3 py-2">Monto</th>
+                <th className="text-right px-3 py-2">
+                  Monto
+                  <span className="block text-[9px] text-gray-400 normal-case font-normal">c/IVA</span>
+                </th>
                 <th className="text-left px-3 py-2 w-32">→ Proyecto</th>
               </>
             )}

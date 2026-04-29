@@ -132,10 +132,12 @@ export default async function DashboardPage() {
         <Stat label="En Ejecución" value={rows.filter((r) => !r.isInternal).length} href="/proyectos" />
         <Stat
           label="Por Cobrar"
+          subLabel="c/IVA"
           value={totalPendienteCobrar > 0 ? formatCLP(totalPendienteCobrar) : null}
         />
         <Stat
           label="Por Pagar"
+          subLabel="c/IVA"
           value={totalPendientePagar > 0 ? formatCLP(totalPendientePagar) : null}
           tone={overdueCount > 0 ? "danger" : "default"}
         />
@@ -177,11 +179,13 @@ async function gastoDelMesActual(): Promise<number> {
 
 function Stat({
   label,
+  subLabel,
   value,
   href,
   tone = "default",
 }: {
   label: string;
+  subLabel?: string;
   value: string | number | null;
   href?: string;
   tone?: "default" | "danger";
@@ -197,6 +201,9 @@ function Stat({
     <>
       <p className="text-[10px] uppercase tracking-wider text-gray-500">
         {label}
+        {subLabel && (
+          <span className="ml-1 normal-case text-gray-400">· {subLabel}</span>
+        )}
       </p>
       <p className={valueClass}>{display}</p>
     </>

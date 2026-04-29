@@ -342,9 +342,10 @@ export default async function ResultadosPage({
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Gastado</p>
           <p className="text-2xl font-bold text-red-600 mt-1">{formatCLP(totalGastado + totalPagadoMaestros)}</p>
-          {totalPagadoMaestros > 0 && (
-            <p className="text-xs text-gray-400 mt-0.5">incl. {formatCLP(totalPagadoMaestros)} EPs</p>
-          )}
+          <p className="text-xs text-gray-400 mt-0.5">
+            neto, sin IVA
+            {totalPagadoMaestros > 0 && ` · incl. ${formatCLP(totalPagadoMaestros)} EPs`}
+          </p>
         </div>
         <div className={`bg-white rounded-xl border p-5 ${utilidadReal >= 0 ? "border-green-100" : "border-red-100"}`}>
           <p className="text-xs text-gray-500 uppercase tracking-wide">Utilidad real</p>
@@ -357,7 +358,8 @@ export default async function ResultadosPage({
 
       {/* Estado de cobros */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Estado de Cobros al Cliente</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">Estado de Cobros al Cliente</h2>
+        <p className="text-xs text-gray-400 mb-4">Montos c/IVA — lo que el cliente paga</p>
 
         {/* Barra de progreso cobro */}
         <div className="mb-5">
@@ -428,8 +430,14 @@ export default async function ResultadosPage({
             <thead className="text-xs uppercase text-gray-500 border-b border-gray-200">
               <tr>
                 <th className="text-left pb-2">Concepto</th>
-                <th className="text-right pb-2">Presupuestado</th>
-                <th className="text-right pb-2">Real</th>
+                <th className="text-right pb-2">
+                  Presupuestado
+                  <span className="block text-[9px] text-gray-400 normal-case font-normal">neto</span>
+                </th>
+                <th className="text-right pb-2">
+                  Real
+                  <span className="block text-[9px] text-gray-400 normal-case font-normal">neto</span>
+                </th>
                 <th className="text-right pb-2">Desviación</th>
                 <th className="text-left pb-2 pl-4 w-64">% Consumido</th>
               </tr>
@@ -519,22 +527,22 @@ export default async function ResultadosPage({
           <h3 className="font-semibold text-gray-900 mb-3">Obra</h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-500">Presupuestado</span>
+              <span className="text-gray-500">Presupuestado <span className="text-[10px] text-gray-400">c/IVA</span></span>
               <span className="font-medium">{formatCLP(obraTotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Costo Directo</span>
+              <span className="text-gray-500">Costo Directo <span className="text-[10px] text-gray-400">neto</span></span>
               <span>{formatCLP(obraCostoDirecto)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">
-                GG ({lastObra?.ggPercentage || 0}%)
+                GG ({lastObra?.ggPercentage || 0}%) <span className="text-[10px] text-gray-400">neto</span>
               </span>
               <span>{formatCLP(obraGG)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">
-                Utilidad ({lastObra?.utilityPercentage || 0}%)
+                Utilidad ({lastObra?.utilityPercentage || 0}%) <span className="text-[10px] text-gray-400">neto</span>
               </span>
               <span>{formatCLP(obraUtilidad)}</span>
             </div>
@@ -545,11 +553,11 @@ export default async function ResultadosPage({
           <h3 className="font-semibold text-gray-900 mb-3">Muebles</h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-500">Vendido al Cliente</span>
+              <span className="text-gray-500">Vendido al Cliente <span className="text-[10px] text-gray-400">c/IVA</span></span>
               <span className="font-medium">{formatCLP(mueblesTotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Costo BLARQ</span>
+              <span className="text-gray-500">Costo BLARQ <span className="text-[10px] text-gray-400">neto</span></span>
               <span>{formatCLP(mueblesCosto)}</span>
             </div>
             <div className="flex justify-between text-green-700 font-medium">
@@ -563,13 +571,13 @@ export default async function ResultadosPage({
           <h3 className="font-semibold text-gray-900 mb-3">Artefactos</h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-500">Vendido al Cliente</span>
+              <span className="text-gray-500">Vendido al Cliente <span className="text-[10px] text-gray-400">c/IVA</span></span>
               <span className="font-medium">
                 {formatCLP(artefactosTotal)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Costo Real BLARQ</span>
+              <span className="text-gray-500">Costo Real BLARQ <span className="text-[10px] text-gray-400">neto</span></span>
               <span>{formatCLP(artefactosCosto)}</span>
             </div>
             <div className="flex justify-between text-green-700 font-medium">

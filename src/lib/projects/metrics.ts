@@ -135,9 +135,14 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   const facturasRecibidas = project.invoices.filter(
     (i) => i.type === "recibida"
   );
+  // Cobrado al cliente: c/IVA (es lo que efectivamente entra a caja).
   const totalCobrado = facturasEmitidas.reduce((s, i) => s + i.totalAmount, 0);
+  // Gastado: NETO. El IVA pagado a proveedores se recupera como crédito
+  // fiscal, así que el costo real de un insumo para BLARQ es el neto.
+  // Comparar contra el presupuesto (que está en neto) requiere usar neto
+  // también — sino el "real" sale inflado ~19% artificialmente.
   const totalRecibidoFacturas = facturasRecibidas.reduce(
-    (s, i) => s + i.totalAmount,
+    (s, i) => s + i.netAmount,
     0
   );
 
@@ -174,7 +179,9 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   for (const inv of facturasRecibidas) {
     const top = inv.category?.parent?.name ?? inv.category?.name;
     if (!top) continue;
-    realByCategory[top] = (realByCategory[top] ?? 0) + inv.totalAmount;
+    // Neto, no total — el presupuesto está en neto, el IVA se recupera
+    // como crédito fiscal. Comparar c/IVA vs neto inflaba el "real" ~19%.
+    realByCategory[top] = (realByCategory[top] ?? 0) + inv.netAmount;
   }
 
   const conceptDeviations: CategoryDeviation[] = Object.entries(

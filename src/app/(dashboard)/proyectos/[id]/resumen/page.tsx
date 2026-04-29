@@ -91,6 +91,7 @@ export default async function ResultadosPage({
   const facturasEmitidas = project.invoices.filter(
     (i) => i.type === "emitida"
   );
+  // Cobrado al cliente: c/IVA (entrada efectiva a caja).
   const totalCobrado = facturasEmitidas.reduce(
     (sum, i) => sum + i.totalAmount,
     0
@@ -98,8 +99,10 @@ export default async function ResultadosPage({
   const facturasRecibidas = project.invoices.filter(
     (i) => i.type === "recibida"
   );
+  // Gastado: NETO (el IVA se recupera como crédito fiscal). Comparar
+  // contra presupuesto (que es neto) requiere usar neto también.
   const totalGastado = facturasRecibidas.reduce(
-    (sum, i) => sum + i.totalAmount,
+    (sum, i) => sum + i.netAmount,
     0
   );
 
@@ -123,13 +126,15 @@ export default async function ResultadosPage({
     budgetByType.costLoss += (item.costLoss ?? 0) * item.quantity;
   }
 
-  // Real: suma de facturas recibidas agrupadas por nombre de categoría padre
+  // Real: suma de facturas recibidas agrupadas por nombre de categoría padre.
+  // Usamos NETO, no totalAmount, porque el presupuesto está en neto y el IVA
+  // se recupera como crédito fiscal — comparar c/IVA inflaba el "real" 19%.
   const realByCategory: Record<string, number> = {};
   for (const inv of facturasRecibidas) {
     const topCatName = inv.category?.parent?.name || inv.category?.name;
     if (!topCatName) continue;
     realByCategory[topCatName] =
-      (realByCategory[topCatName] || 0) + inv.totalAmount;
+      (realByCategory[topCatName] || 0) + inv.netAmount;
   }
   // Sumarle los pagos a maestros (EPs) como MO real
   const totalPagadoMaestros = project.estadosPago

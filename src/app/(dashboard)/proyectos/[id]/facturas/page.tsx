@@ -2,10 +2,15 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { formatCLP, formatDate } from "@/lib/utils";
+import ProjectFacturasFilters from "@/components/facturas/ProjectFacturasFilters";
 
 type SearchParams = {
   type?: "emitida" | "recibida";
   status?: "pendiente" | "pagada" | "anulada";
+  origin?: "manual" | "sii_automatica";
+  category?: string;
+  dateFrom?: string;
+  dateTo?: string;
   q?: string;
 };
 
@@ -31,9 +36,26 @@ export default async function ProyectoFacturasPage({
   });
   if (!project) notFound();
 
+  // Construir el WHERE Prisma desde los searchParams.
   const where: Record<string, unknown> = { projectId: id };
   if (sp.type) where.type = sp.type;
   if (sp.status) where.status = sp.status;
+  if (sp.origin) where.origin = sp.origin;
+  if (sp.category) {
+    // Match contra category.name (incluye top y subs)
+    where.category = { is: { name: sp.category } };
+  }
+  if (sp.dateFrom || sp.dateTo) {
+    const dateFilter: Record<string, Date> = {};
+    if (sp.dateFrom) dateFilter.gte = new Date(sp.dateFrom);
+    if (sp.dateTo) {
+      // Inclusivo: hasta el final del día
+      const end = new Date(sp.dateTo);
+      end.setHours(23, 59, 59, 999);
+      dateFilter.lte = end;
+    }
+    where.issueDate = dateFilter;
+  }
   if (sp.q) {
     where.OR = [
       { folioNumber: { contains: sp.q } },
@@ -43,6 +65,7 @@ export default async function ProyectoFacturasPage({
     ];
   }
 
+  // Facturas filtradas (las que se muestran en la tabla)
   const invoices = await prisma.invoice.findMany({
     where,
     orderBy: { issueDate: "desc" },
@@ -51,28 +74,43 @@ export default async function ProyectoFacturasPage({
     },
   });
 
-  // Stats globales del proyecto (sin importar filtro)
+  // Lista global del proyecto (sin filtros) para tabs y para tener
+  // contexto del "X de Y total" cuando hay filtros activos.
   const allInvoices = await prisma.invoice.findMany({
     where: { projectId: id },
-    select: { type: true, status: true, totalAmount: true },
+    select: { id: true, type: true, category: { select: { name: true } } },
   });
-  const totalEmitido = allInvoices
+  const totalProjectInvoices = allInvoices.length;
+  const totalEmitidasProject = allInvoices.filter((i) => i.type === "emitida").length;
+  const totalRecibidasProject = allInvoices.filter((i) => i.type === "recibida").length;
+
+  // Categorías presentes en facturas de este proyecto, para el dropdown
+  const categoriesInProject = Array.from(
+    new Set(allInvoices.map((i) => i.category?.name).filter(Boolean) as string[])
+  ).sort();
+
+  // Stats arriba: usan las facturas FILTRADAS (sin filtro = todas).
+  // Eso responde al pedido de MJ: ver totales del filtro aplicado.
+  const totalEmitido = invoices
     .filter((i) => i.type === "emitida")
     .reduce((s, i) => s + i.totalAmount, 0);
-  const totalRecibido = allInvoices
+  const totalRecibido = invoices
     .filter((i) => i.type === "recibida")
     .reduce((s, i) => s + i.totalAmount, 0);
-  const porCobrar = allInvoices
+  const porCobrar = invoices
     .filter((i) => i.type === "emitida" && i.status === "pendiente")
     .reduce((s, i) => s + i.totalAmount, 0);
-  const porPagar = allInvoices
+  const porPagar = invoices
     .filter((i) => i.type === "recibida" && i.status === "pendiente")
     .reduce((s, i) => s + i.totalAmount, 0);
 
+  const isFiltered =
+    !!(sp.status || sp.origin || sp.category || sp.dateFrom || sp.dateTo || sp.q);
+
   return (
     <div>
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {/* Stats — reflejan el filtro aplicado */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <Stat label="Emitido" value={formatCLP(totalEmitido)} sub="cobros al cliente" />
         <Stat label="Recibido" value={formatCLP(totalRecibido)} sub="gastos a proveedores" />
         <Stat
@@ -88,24 +126,31 @@ export default async function ProyectoFacturasPage({
           tone="text-red-600"
         />
       </div>
+      {isFiltered && (
+        <p className="text-xs text-gray-500 mb-3 italic">
+          Totales arriba calculados sobre {invoices.length} factura
+          {invoices.length !== 1 ? "s" : ""} filtrada
+          {invoices.length !== 1 ? "s" : ""} (de {totalProjectInvoices} totales).
+        </p>
+      )}
 
-      {/* Filter bar simplificada (tabs por tipo + busqueda) */}
+      {/* Tabs por tipo + acciones */}
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
-          <TabLink projectId={project.id} sp={sp} type={undefined} label="Todas" count={allInvoices.length} />
+          <TabLink projectId={project.id} sp={sp} type={undefined} label="Todas" count={totalProjectInvoices} />
           <TabLink
             projectId={project.id}
             sp={sp}
             type="emitida"
             label="Emitidas"
-            count={allInvoices.filter((i) => i.type === "emitida").length}
+            count={totalEmitidasProject}
           />
           <TabLink
             projectId={project.id}
             sp={sp}
             type="recibida"
             label="Recibidas"
-            count={allInvoices.filter((i) => i.type === "recibida").length}
+            count={totalRecibidasProject}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -124,11 +169,29 @@ export default async function ProyectoFacturasPage({
         </div>
       </div>
 
+      {/* Fila de filtros tipo Excel */}
+      <ProjectFacturasFilters
+        basePath={`/proyectos/${project.id}/facturas`}
+        categories={categoriesInProject}
+        initial={{
+          q: sp.q ?? "",
+          status: sp.status ?? "",
+          origin: sp.origin ?? "",
+          category: sp.category ?? "",
+          dateFrom: sp.dateFrom ?? "",
+          dateTo: sp.dateTo ?? "",
+        }}
+      />
+
       {/* Tabla */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {invoices.length === 0 ? (
           <div className="p-12 text-center text-gray-500">
-            <p className="text-sm">No hay facturas para este proyecto.</p>
+            <p className="text-sm">
+              {isFiltered
+                ? "No hay facturas que coincidan con los filtros."
+                : "No hay facturas para este proyecto."}
+            </p>
             <Link
               href={`/facturas/nueva?projectId=${project.id}`}
               className="inline-block mt-3 text-sm text-gray-900 underline"
@@ -145,7 +208,7 @@ export default async function ProyectoFacturasPage({
                 <th className="text-left px-4 py-2">Fecha</th>
                 <th className="text-left px-4 py-2">Emisor / Cliente</th>
                 <th className="text-left px-4 py-2">Categoría</th>
-                <th className="text-right px-4 py-2">Total</th>
+                <th className="text-right px-4 py-2">Total <span className="block text-[9px] text-gray-400 normal-case font-normal">c/IVA</span></th>
                 <th className="text-left px-4 py-2">Estado</th>
                 <th className="text-left px-4 py-2">Origen</th>
               </tr>
@@ -208,6 +271,16 @@ export default async function ProyectoFacturasPage({
                   </td>
                 </tr>
               ))}
+              {/* Fila de total al pie de la tabla */}
+              <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold">
+                <td colSpan={5} className="px-4 py-2 text-right text-xs uppercase tracking-wider text-gray-700">
+                  Total mostrado · {invoices.length} factura{invoices.length !== 1 ? "s" : ""}
+                </td>
+                <td className="px-4 py-2 text-right tabular-nums text-gray-900">
+                  {formatCLP(invoices.reduce((s, i) => s + i.totalAmount, 0))}
+                </td>
+                <td colSpan={2}></td>
+              </tr>
             </tbody>
           </table>
         )}
@@ -232,6 +305,10 @@ function TabLink({
   const params = new URLSearchParams();
   if (type) params.set("type", type);
   if (sp.status) params.set("status", sp.status);
+  if (sp.origin) params.set("origin", sp.origin);
+  if (sp.category) params.set("category", sp.category);
+  if (sp.dateFrom) params.set("dateFrom", sp.dateFrom);
+  if (sp.dateTo) params.set("dateTo", sp.dateTo);
   if (sp.q) params.set("q", sp.q);
   const href = `/proyectos/${projectId}/facturas${params.toString() ? "?" + params.toString() : ""}`;
   const isActive = sp.type === type;

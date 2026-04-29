@@ -296,25 +296,33 @@ async function main() {
   for (const row of rows) {
     const tipoDoc = parseInt(row.CodTipoDoc || "0", 10);
     const folio = row.FolioDoc;
-    const rutIssuer = normRut(row.RutDoc);
+    const rutTercero = normRut(row.RutDoc);
     const centro = row.CentroCosto;
     const desc = row.DescCatego;
     const sub = row.DescSubCatego;
+    // Maxxa: TipoMov = "out" → factura recibida (compra a proveedor)
+    //        TipoMov = "in"  → factura emitida (venta a cliente)
+    // En DB: para recibidas el RUT del Excel es el rutIssuer (proveedor);
+    //        para emitidas el RUT del Excel es el rutReceiver (cliente).
+    const isEmitida = String(row.TipoMov).toLowerCase() === "in";
+    const dbType = isEmitida ? "emitida" : "recibida";
 
     if (!projectByCentro.has(centro)) {
       stats.centroMissing.add(centro);
       continue;
     }
 
-    // Match: tipoDoc + folio + rutIssuer (con normalización de RUT)
+    // Match: tipoDoc + folio + (rutIssuer | rutReceiver según el tipo)
     const candidates = await prisma.invoice.findMany({
-      where: { tipoDoc, folioNumber: folio, type: "recibida" },
-      select: { id: true, rutIssuer: true, businessName: true, totalAmount: true, projectId: true, categoryId: true },
+      where: { tipoDoc, folioNumber: folio, type: dbType },
+      select: { id: true, rutIssuer: true, rutReceiver: true, businessName: true, totalAmount: true, projectId: true, categoryId: true },
     });
-    const inv = candidates.find((c) => normRut(c.rutIssuer ?? "") === rutIssuer);
+    const inv = candidates.find((c) =>
+      normRut(isEmitida ? (c.rutReceiver ?? "") : (c.rutIssuer ?? "")) === rutTercero
+    );
 
     if (!inv) {
-      stats.notFound.push(`tipoDoc=${tipoDoc} folio=${folio} rut=${rutIssuer} (${row.NomAux})`);
+      stats.notFound.push(`${dbType} tipoDoc=${tipoDoc} folio=${folio} rut=${rutTercero} (${row.NomAux})`);
       continue;
     }
     stats.matched++;

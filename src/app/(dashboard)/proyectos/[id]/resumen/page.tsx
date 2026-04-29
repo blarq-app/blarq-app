@@ -1,3 +1,4 @@
+import * as React from "react";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { formatCLP, OBRA_CHAPTERS, ObraChapter } from "@/lib/utils";
@@ -126,15 +127,25 @@ export default async function ResultadosPage({
     budgetByType.costLoss += (item.costLoss ?? 0) * item.quantity;
   }
 
-  // Real: suma de facturas recibidas agrupadas por nombre de categoría padre.
-  // Usamos NETO, no totalAmount, porque el presupuesto está en neto y el IVA
-  // se recupera como crédito fiscal — comparar c/IVA inflaba el "real" 19%.
-  const realByCategory: Record<string, number> = {};
+  // Real: suma de facturas recibidas. Agrupamos en dos formas porque
+  // necesitamos ambas según el contexto:
+  //  - byTop: por categoría top (Materiales, Muebles, Artefactos, etc).
+  //    Útil para conceptos de obra que viven en el top.
+  //  - bySpecific: por la categoría exacta asignada a la factura.
+  //    Útil para Muebles/Artefactos donde queremos ver subdivisión por
+  //    sub-categoría (Cubiertas, Herrajes, Mueble; Cocina, Baño, Iluminación).
+  // Las facturas categorizadas al top sin sub (ej category.name="Muebles")
+  // van a "Muebles" en bySpecific, las podemos detectar y mostrar como
+  // "(Sin clasificar)" para que MJ las refine.
+  // Usamos NETO, no totalAmount: el IVA se recupera como crédito fiscal.
+  const realByTop: Record<string, number> = {};
+  const realBySpecific: Record<string, number> = {};
   for (const inv of facturasRecibidas) {
-    const topCatName = inv.category?.parent?.name || inv.category?.name;
-    if (!topCatName) continue;
-    realByCategory[topCatName] =
-      (realByCategory[topCatName] || 0) + inv.netAmount;
+    const cat = inv.category;
+    if (!cat) continue;
+    const top = cat.parent?.name || cat.name;
+    realByTop[top] = (realByTop[top] || 0) + inv.netAmount;
+    realBySpecific[cat.name] = (realBySpecific[cat.name] || 0) + inv.netAmount;
   }
   // Sumarle los pagos a maestros (EPs) como MO real
   const totalPagadoMaestros = project.estadosPago
@@ -157,23 +168,87 @@ export default async function ResultadosPage({
       return sum + thisAmount;
     }, 0);
 
-  const conceptRows = [
-    { key: "costMaterial", label: "Materiales", catName: "Materiales" },
-    { key: "costLabor", label: "Mano de obra", catName: "Mano de obra" },
-    { key: "costTools", label: "Herramientas", catName: "Herramientas" },
-    {
-      key: "costSubcontract",
-      label: "Subcontrato",
-      catName: "Subcontrato",
-    },
-    { key: "costLoss", label: "Pérdidas", catName: "Pérdidas" },
-  ].map((row) => {
-    const presupuesto = budgetByType[row.key] || 0;
-    let real = realByCategory[row.catName] || 0;
-    if (row.key === "costLabor") real += totalPagadoMaestros;
-    const desviacion = presupuesto > 0 ? (real / presupuesto) * 100 : 0;
-    return { ...row, presupuesto, real, desviacion };
-  });
+  // ── Construir secciones jerárquicas para tabla "Presupuesto vs Real" ──
+  // Estructura: 3 secciones (Obra, Muebles, Artefactos), cada una con sus
+  // sub-conceptos y un subtotal. Total general al final.
+  type ResumenRow = { label: string; presupuesto: number; real: number };
+  type ResumenSection = { title: string; rows: ResumenRow[] };
+
+  // 1) OBRA — conceptos del costo directo
+  const obraSection: ResumenSection = {
+    title: "1. Obra",
+    rows: [
+      { label: "Materiales", presupuesto: budgetByType.costMaterial, real: realByTop["Materiales"] || 0 },
+      {
+        label: "Mano de obra",
+        presupuesto: budgetByType.costLabor,
+        real: (realByTop["Mano de obra"] || 0) + totalPagadoMaestros,
+      },
+      { label: "Herramientas", presupuesto: budgetByType.costTools, real: realByTop["Herramientas"] || 0 },
+      { label: "Subcontrato", presupuesto: budgetByType.costSubcontract, real: realByTop["Subcontrato"] || 0 },
+      { label: "Pérdidas", presupuesto: budgetByType.costLoss, real: realByTop["Pérdidas"] || 0 },
+    ],
+  };
+
+  // 2) MUEBLES — agrupar items del presupuesto por sub (Mueble / Herrajes / Cubiertas)
+  function muebleNameToSub(name: string): "Mueble" | "Herrajes" | "Cubiertas" {
+    const u = (name || "").toUpperCase();
+    if (u.includes("CUBIERTA")) return "Cubiertas";
+    if (u.includes("HERRAJ")) return "Herrajes";
+    return "Mueble";
+  }
+  const mueblesPresupBySub = { Mueble: 0, Herrajes: 0, Cubiertas: 0 };
+  for (const it of mueblesAllItems) {
+    mueblesPresupBySub[muebleNameToSub(it.name)] += it.costDistributor * it.quantity;
+  }
+  const mueblesSection: ResumenSection = {
+    title: "2. Muebles",
+    rows: [
+      { label: "Mueble", presupuesto: mueblesPresupBySub.Mueble, real: realBySpecific["Mueble"] || 0 },
+      { label: "Herrajes", presupuesto: mueblesPresupBySub.Herrajes, real: realBySpecific["Herrajes"] || 0 },
+      { label: "Cubiertas", presupuesto: mueblesPresupBySub.Cubiertas, real: realBySpecific["Cubiertas"] || 0 },
+    ],
+  };
+  // Si hay facturas categorizadas al top "Muebles" sin sub, agregar fila visible
+  const mueblesSinClasificar = realBySpecific["Muebles"] || 0;
+  if (mueblesSinClasificar > 0) {
+    mueblesSection.rows.push({ label: "(Sin subcategoría)", presupuesto: 0, real: mueblesSinClasificar });
+  }
+
+  // 3) ARTEFACTOS — agrupar por subcategory del item (sanitario→Baño, cocina→Cocina, iluminacion→Iluminación)
+  function artefactoSubToCat(sub: string): "Cocina" | "Baño" | "Iluminación" {
+    if (sub === "iluminacion") return "Iluminación";
+    if (sub === "sanitario") return "Baño";
+    return "Cocina";
+  }
+  const artefactosPresupBySub = { Cocina: 0, Baño: 0, Iluminación: 0 };
+  if (lastArtefactos) {
+    for (const it of lastArtefactos.artefactoItems) {
+      artefactosPresupBySub[artefactoSubToCat(it.subcategory)] += it.realCostBlarq || 0;
+    }
+  }
+  const artefactosSection: ResumenSection = {
+    title: "3. Artefactos",
+    rows: [
+      { label: "Cocina", presupuesto: artefactosPresupBySub.Cocina, real: realBySpecific["Cocina"] || 0 },
+      { label: "Baño", presupuesto: artefactosPresupBySub.Baño, real: realBySpecific["Baño"] || 0 },
+      { label: "Iluminación", presupuesto: artefactosPresupBySub.Iluminación, real: realBySpecific["Iluminación"] || 0 },
+    ],
+  };
+  const artefactosSinClasificar = realBySpecific["Artefactos"] || 0;
+  if (artefactosSinClasificar > 0) {
+    artefactosSection.rows.push({ label: "(Sin subcategoría)", presupuesto: 0, real: artefactosSinClasificar });
+  }
+
+  const resumenSections: ResumenSection[] = [obraSection, mueblesSection, artefactosSection];
+
+  // Subtotales y total general
+  const sectionTotals = resumenSections.map((s) => ({
+    presupuesto: s.rows.reduce((a, r) => a + r.presupuesto, 0),
+    real: s.rows.reduce((a, r) => a + r.real, 0),
+  }));
+  const totalPresupuesto = sectionTotals.reduce((a, t) => a + t.presupuesto, 0);
+  const totalReal = sectionTotals.reduce((a, t) => a + t.real, 0);
 
   // ==================== Avance por Capítulo (desde EPs) ====================
   // Último % por lineageId de cualquier EP (estable a través de versiones)
@@ -226,18 +301,22 @@ export default async function ResultadosPage({
     (i) => i.status === "pendiente" && i.dueDate && i.dueDate < now
   );
   const alertas: Array<{ severity: "danger" | "warning"; message: string }> = [];
-  for (const r of conceptRows) {
-    if (r.presupuesto === 0) continue;
-    if (r.desviacion >= 100) {
-      alertas.push({
-        severity: "danger",
-        message: `${r.label}: ${r.desviacion.toFixed(0)}% del presupuesto consumido (excedido)`,
-      });
-    } else if (r.desviacion >= 80) {
-      alertas.push({
-        severity: "warning",
-        message: `${r.label}: ${r.desviacion.toFixed(0)}% del presupuesto consumido`,
-      });
+  // Alertas sobre los conceptos de cada sección con presupuesto y desviación
+  for (const section of resumenSections) {
+    for (const r of section.rows) {
+      if (r.presupuesto === 0) continue;
+      const pct = (r.real / r.presupuesto) * 100;
+      if (pct >= 100) {
+        alertas.push({
+          severity: "danger",
+          message: `${r.label}: ${pct.toFixed(0)}% del presupuesto consumido (excedido)`,
+        });
+      } else if (pct >= 80) {
+        alertas.push({
+          severity: "warning",
+          message: `${r.label}: ${pct.toFixed(0)}% del presupuesto consumido`,
+        });
+      }
     }
   }
   if (facturasVencidas.length > 0) {
@@ -420,10 +499,10 @@ export default async function ResultadosPage({
         )}
       </div>
 
-      {/* Presupuesto vs Real por Tipo de Concepto */}
+      {/* Presupuesto vs Real — tabla jerárquica con 3 secciones + total */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Presupuesto vs Real — Por Tipo de Concepto
+          Presupuesto vs Real — Por Categoría
         </h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -442,37 +521,85 @@ export default async function ResultadosPage({
                 <th className="text-left pb-2 pl-4 w-64">% Consumido</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {conceptRows.map((r) => (
-                <tr key={r.key}>
-                  <td className="py-2 text-gray-900">{r.label}</td>
-                  <td className="py-2 text-right text-gray-700">
-                    {formatCLP(r.presupuesto)}
-                  </td>
-                  <td className="py-2 text-right text-gray-900 font-medium">
-                    {formatCLP(r.real)}
-                  </td>
-                  <td
-                    className={`py-2 text-right font-medium ${
-                      r.desviacion > 100
-                        ? "text-red-600"
-                        : r.desviacion > 80
-                        ? "text-yellow-600"
-                        : "text-green-600"
-                    }`}
-                  >
-                    {r.presupuesto > 0 ? `${r.desviacion.toFixed(0)}%` : "—"}
-                  </td>
-                  <td className="py-2 pl-4">
-                    <div className="w-full bg-gray-100 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full ${barColor(r.desviacion)}`}
-                        style={{ width: `${Math.min(r.desviacion, 100)}%` }}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))}
+            <tbody>
+              {resumenSections.map((section, idx) => {
+                const subtot = sectionTotals[idx];
+                const subtotPct = subtot.presupuesto > 0
+                  ? (subtot.real / subtot.presupuesto) * 100
+                  : 0;
+                return (
+                  <React.Fragment key={section.title}>
+                    {/* Header de sección */}
+                    <tr className="bg-gray-50 border-t border-gray-200">
+                      <td colSpan={5} className="py-1.5 px-2 text-xs uppercase tracking-wider font-semibold text-gray-700">
+                        {section.title}
+                      </td>
+                    </tr>
+                    {/* Sub-filas */}
+                    {section.rows.map((r) => {
+                      const pct = r.presupuesto > 0 ? (r.real / r.presupuesto) * 100 : 0;
+                      return (
+                        <tr key={r.label} className="border-t border-gray-100">
+                          <td className="py-2 pl-4 text-gray-900">{r.label}</td>
+                          <td className="py-2 text-right text-gray-700">
+                            {r.presupuesto > 0 ? formatCLP(r.presupuesto) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="py-2 text-right text-gray-900 font-medium">
+                            {r.real > 0 ? formatCLP(r.real) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td
+                            className={`py-2 text-right font-medium ${
+                              pct > 100 ? "text-red-600" : pct > 80 ? "text-yellow-600" : pct > 0 ? "text-green-600" : "text-gray-300"
+                            }`}
+                          >
+                            {r.presupuesto > 0 ? `${pct.toFixed(0)}%` : "—"}
+                          </td>
+                          <td className="py-2 pl-4">
+                            {r.presupuesto > 0 && (
+                              <div className="w-full bg-gray-100 rounded-full h-2">
+                                <div
+                                  className={`h-2 rounded-full ${barColor(pct)}`}
+                                  style={{ width: `${Math.min(pct, 100)}%` }}
+                                />
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {/* Subtotal de sección */}
+                    <tr className="border-t border-gray-200 text-gray-700">
+                      <td className="py-1.5 pl-4 text-xs uppercase tracking-wider">Subtotal</td>
+                      <td className="py-1.5 text-right tabular-nums">
+                        {formatCLP(subtot.presupuesto)}
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums font-medium text-gray-900">
+                        {formatCLP(subtot.real)}
+                      </td>
+                      <td className="py-1.5 text-right">
+                        {subtot.presupuesto > 0 ? `${subtotPct.toFixed(0)}%` : "—"}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </React.Fragment>
+                );
+              })}
+              {/* Total general */}
+              <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold text-gray-900">
+                <td className="py-2.5 pl-2 uppercase tracking-wider text-xs">Total general</td>
+                <td className="py-2.5 text-right tabular-nums">
+                  {formatCLP(totalPresupuesto)}
+                </td>
+                <td className="py-2.5 text-right tabular-nums">
+                  {formatCLP(totalReal)}
+                </td>
+                <td className="py-2.5 text-right">
+                  {totalPresupuesto > 0
+                    ? `${((totalReal / totalPresupuesto) * 100).toFixed(0)}%`
+                    : "—"}
+                </td>
+                <td></td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -482,111 +609,45 @@ export default async function ResultadosPage({
         </p>
       </div>
 
-      {/* Avance por Capítulo */}
+      {/* Avance Obra por Capítulo (compacto, al final) */}
       {chapterRows.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Avance Obra por Capítulo
-          </h2>
-          <div className="space-y-3">
+        <details className="bg-white rounded-xl border border-gray-200 p-4 mb-8 group">
+          <summary className="cursor-pointer flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-700">
+              Avance Obra por Capítulo
+            </h2>
+            <span className="text-xs text-gray-400 group-open:hidden">click para expandir</span>
+            <span className="text-xs text-gray-400 hidden group-open:inline">click para colapsar</span>
+          </summary>
+          <div className="space-y-2 mt-4">
             {chapterRows.map((r) => (
-              <div key={r.chapter}>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="text-gray-900 font-medium">
+              <div key={r.chapter} className="text-xs">
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-gray-700">
                     {r.index}. {r.label}
                   </span>
-                  <span className="text-gray-700">
-                    {formatCLP(r.moAcumulado)} /{" "}
-                    <span className="text-gray-500">
-                      {formatCLP(r.presupuestoMO)} MO
-                    </span>{" "}
-                    <span className="ml-2 text-gray-500">
-                      ({r.avance.toFixed(0)}%)
-                    </span>
+                  <span className="text-gray-500 tabular-nums">
+                    {r.avance.toFixed(0)}% — {formatCLP(r.moAcumulado)} / {formatCLP(r.presupuestoMO)} MO
                   </span>
                 </div>
-                <div className="w-full bg-gray-100 rounded-full h-2">
+                <div className="w-full bg-gray-100 rounded-full h-1.5">
                   <div
-                    className="bg-gray-900 h-2 rounded-full"
+                    className="bg-gray-900 h-1.5 rounded-full"
                     style={{ width: `${Math.min(r.avance, 100)}%` }}
                   />
                 </div>
               </div>
             ))}
           </div>
-          <p className="text-xs text-gray-500 mt-3">
+          <p className="text-[11px] text-gray-400 mt-3">
             El % de avance se calcula sobre la MO presupuestada según los %
             acumulados en los Estados de Pago del maestro.
           </p>
-        </div>
+        </details>
       )}
 
-      {/* Desglose por tipo (Obra / Muebles / Artefactos) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-900 mb-3">Obra</h3>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Presupuestado <span className="text-[10px] text-gray-400">c/IVA</span></span>
-              <span className="font-medium">{formatCLP(obraTotal)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Costo Directo <span className="text-[10px] text-gray-400">neto</span></span>
-              <span>{formatCLP(obraCostoDirecto)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">
-                GG ({lastObra?.ggPercentage || 0}%) <span className="text-[10px] text-gray-400">neto</span>
-              </span>
-              <span>{formatCLP(obraGG)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">
-                Utilidad ({lastObra?.utilityPercentage || 0}%) <span className="text-[10px] text-gray-400">neto</span>
-              </span>
-              <span>{formatCLP(obraUtilidad)}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-900 mb-3">Muebles</h3>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Vendido al Cliente <span className="text-[10px] text-gray-400">c/IVA</span></span>
-              <span className="font-medium">{formatCLP(mueblesTotal)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Costo BLARQ <span className="text-[10px] text-gray-400">neto</span></span>
-              <span>{formatCLP(mueblesCosto)}</span>
-            </div>
-            <div className="flex justify-between text-green-700 font-medium">
-              <span>Utilidad</span>
-              <span>{formatCLP(mueblesTotal - mueblesCosto)}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-900 mb-3">Artefactos</h3>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Vendido al Cliente <span className="text-[10px] text-gray-400">c/IVA</span></span>
-              <span className="font-medium">
-                {formatCLP(artefactosTotal)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Costo Real BLARQ <span className="text-[10px] text-gray-400">neto</span></span>
-              <span>{formatCLP(artefactosCosto)}</span>
-            </div>
-            <div className="flex justify-between text-green-700 font-medium">
-              <span>Utilidad</span>
-              <span>{formatCLP(artefactosTotal - artefactosCosto)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* (sección "Desglose por tipo" removida — su info ahora vive en
+          la tabla "Presupuesto vs Real — Por Categoría" más arriba) */}
 
       {/* Desglose de gastos por categoría */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">

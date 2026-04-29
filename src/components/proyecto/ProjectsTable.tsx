@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { formatCLP, relativeDate } from "@/lib/utils";
+import EditableCell from "@/components/proyecto/EditableCell";
 
 // Tabla densa compartida entre Dashboard, /proyectos y /cotizaciones.
 // El "preset" decide qué columnas se muestran; el resto del estilo es
@@ -163,15 +163,27 @@ function Row({
         {numero}
       </td>
       <td className="px-3 py-2 font-medium text-gray-900">
-        <Link
+        {/* Click → navega al detalle. Lápiz al hover o doble-click → editar */}
+        <EditableCell
+          value={row.name}
+          projectId={row.id}
+          field="name"
           href={`${hrefBase}/${row.id}`}
-          className="hover:underline"
-        >
-          {row.name}
-        </Link>
+          textClassName="text-gray-900"
+        />
       </td>
       <td className="px-3 py-2 text-gray-500">
-        {clientText === "—" ? <span className="text-gray-300">{clientText}</span> : clientText}
+        {/* Si clientName === name, mostramos "—" pero el editor arranca con
+            el valor real (clientName=name) para que MJ pueda corregirlo
+            sin tener que escribir desde cero. */}
+        <EditableCell
+          value={row.clientName}
+          displayValue={row.clientName === row.name ? "" : row.clientName}
+          projectId={row.id}
+          field="clientName"
+          placeholder="—"
+          textClassName="text-gray-500"
+        />
       </td>
       {(variant === "ejecucion" || variant === "terminado") && (
         <>

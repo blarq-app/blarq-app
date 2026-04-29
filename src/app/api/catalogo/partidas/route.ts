@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { compareCatalogCategories } from "@/lib/utils";
 import { NextRequest, NextResponse } from "next/server";
 
 // Search partidas catalog
@@ -18,9 +19,12 @@ export async function GET(request: NextRequest) {
       where.category = category;
     }
 
-    const partidas = await prisma.partidaCatalog.findMany({
+    // Trae todo y luego ordena por orden lógico de obra (Prisma no soporta
+    // orderBy con un array fijo). El orden interno de cada categoría sigue
+    // siendo sortOrder + name como antes.
+    const rawPartidas = await prisma.partidaCatalog.findMany({
       where,
-      orderBy: [{ category: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       take: limit,
       include: {
         components: {
@@ -28,6 +32,13 @@ export async function GET(request: NextRequest) {
           include: { material: true },
         },
       },
+    });
+    const partidas = rawPartidas.sort((a, b) => {
+      const c = compareCatalogCategories(a.category, b.category);
+      if (c !== 0) return c;
+      const so = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+      if (so !== 0) return so;
+      return a.name.localeCompare(b.name);
     });
 
     // Agregar campo derivado: provisiones de esta partida

@@ -1,13 +1,15 @@
 import { prisma } from "@/lib/prisma";
-import { formatCLP } from "@/lib/utils";
+import { compareCatalogCategories } from "@/lib/utils";
 import PartidaSearch from "@/components/catalogo/PartidaSearch";
 
 export default async function CatalogoPartidasPage() {
-  const categories = await prisma.partidaCatalog.findMany({
+  const rawCategories = await prisma.partidaCatalog.findMany({
     select: { category: true },
     distinct: ["category"],
-    orderBy: { category: "asc" },
   });
+  const categories = rawCategories
+    .map((c) => c.category)
+    .sort(compareCatalogCategories);
 
   const stats = await prisma.partidaCatalog.count();
   const matStats = await prisma.materialCatalog.count();
@@ -26,7 +28,7 @@ export default async function CatalogoPartidasPage() {
         </div>
       </div>
 
-      <PartidaSearch categories={categories.map((c) => c.category)} />
+      <PartidaSearch categories={categories} />
     </div>
   );
 }

@@ -55,6 +55,37 @@ export function relativeDate(date: Date | string | null | undefined): string {
   return d.toLocaleDateString("es-CL", { day: "2-digit", month: "short" });
 }
 
+// Orden cronológico/lógico de cómo se ejecuta una obra. Sirve para
+// mostrar las categorías del catálogo de partidas en el orden en que
+// realmente se trabajan, no alfabético. Categorías que no figuran en
+// esta lista quedan al final, ordenadas por nombre.
+export const CATALOG_CATEGORY_ORDER = [
+  "OBRAS PRELIMINARES",
+  "DEMOLICIONES",
+  "REPARACIONES",
+  "OBRA GRUESA",
+  "AISLACION E IMPERMEABILIZACION",
+  "INSTALACIONES ELECT.",
+  "INSTALACIONES SANITARIAS",
+  "INSTALACIONES GAS",
+  "CLIMATIZACION",
+  "TERMINACIONES",
+  "MUEBLES",
+  "ASEO Y LIMPIEZA",
+] as const;
+
+// Compara dos categorías según su posición en CATALOG_CATEGORY_ORDER.
+// Las desconocidas van al final, alfabéticas entre sí.
+export function compareCatalogCategories(a: string, b: string): number {
+  const order = CATALOG_CATEGORY_ORDER as readonly string[];
+  const ia = order.indexOf(a);
+  const ib = order.indexOf(b);
+  if (ia === -1 && ib === -1) return a.localeCompare(b);
+  if (ia === -1) return 1;
+  if (ib === -1) return -1;
+  return ia - ib;
+}
+
 export const OBRA_CHAPTERS = {
   demoliciones: { label: "Demoliciones", index: 1 },
   reparaciones: { label: "Reparaciones", index: 2 },

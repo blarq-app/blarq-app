@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { compareCatalogCategories } from "@/lib/utils";
 import { NextResponse } from "next/server";
 
 export async function GET() {
@@ -6,10 +7,13 @@ export async function GET() {
     const categories = await prisma.partidaCatalog.findMany({
       select: { category: true },
       distinct: ["category"],
-      orderBy: { category: "asc" },
     });
 
-    return NextResponse.json(categories.map((c) => c.category));
+    const sorted = categories
+      .map((c) => c.category)
+      .sort(compareCatalogCategories);
+
+    return NextResponse.json(sorted);
   } catch (error) {
     console.error("Error fetching categories:", error);
     return NextResponse.json(

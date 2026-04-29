@@ -23,12 +23,23 @@ model User {
 
 model Project {
   id              String   @id @default(cuid())
+  // Numeración correlativa: cada proyecto vive primero como cotización
+  // (numeroCotizacion asignado al crear) y, si se aprueba, recibe un
+  // numeroProyecto. Ambos son monotónicos y nunca se reusan.
+  // Excepción: registros internos (BLARQ y centros de costo) tienen
+  // ambos en null y se distinguen por isInternal.
+  numeroCotizacion Int?    @unique
+  numeroProyecto   Int?    @unique
+  isInternal       Boolean @default(false)
+
   name            String
   clientName      String
   clientPhone     String?
   clientEmail     String?
   address         String?
-  status          String   @default("cotizacion") // cotizacion | aprobado | en_ejecucion | terminado
+  // cotizacion | ejecucion | terminado | archivado
+  // (legacy "aprobado" → "ejecucion" en migración 2026-04-28)
+  status          String   @default("cotizacion")
   startDate       DateTime?
   estimatedEndDate DateTime?
   actualEndDate   DateTime?
@@ -46,6 +57,7 @@ model Project {
   shoppingItems   ShoppingItem[]
 
   @@index([maestroId])
+  @@index([status])
 }
 
 // ==================== MAESTROS (mano de obra) ====================

@@ -196,10 +196,10 @@ export default function ProjectForm({ project }: { project?: ProjectData }) {
             defaultValue={project?.status || "cotizacion"}
             className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all bg-white"
           >
-            <option value="cotizacion">Cotizacion</option>
-            <option value="aprobado">Aprobado</option>
-            <option value="en_ejecucion">En Ejecucion</option>
+            <option value="cotizacion">Cotización</option>
+            <option value="ejecucion">En Ejecución</option>
             <option value="terminado">Terminado</option>
+            <option value="archivado">Archivada</option>
           </select>
         </div>
 

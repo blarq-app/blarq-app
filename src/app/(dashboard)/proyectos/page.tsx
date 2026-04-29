@@ -1,16 +1,81 @@
 import { prisma } from "@/lib/prisma";
-import { PROJECT_STATUSES, ProjectStatus, formatDate } from "@/lib/utils";
 import Link from "next/link";
+import ProjectsTable, {
+  type ProjectRow,
+} from "@/components/proyecto/ProjectsTable";
+import ListTabs from "@/components/proyecto/ListTabs";
+import {
+  computeProjectMetrics,
+  PROJECT_METRICS_INCLUDE,
+} from "@/lib/projects/metrics";
+import { getLastActivity } from "@/lib/projects/lastActivity";
 
-export default async function ProyectosPage() {
+type SearchParams = { tab?: string };
+
+export default async function ProyectosPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const sp = await searchParams;
+  const activeTab = sp.tab === "terminados" ? "terminados" : "ejecucion";
+
+  // Para los conteos del header: solo proyectos reales (no centros de costo internos).
+  // Para los conteos de los tabs: total (incluye internos) — el usuario los ve en la lista.
+  const [ejecucionRealCount, terminadosRealCount, ejecucionTotalCount, terminadosTotalCount] = await Promise.all([
+    prisma.project.count({ where: { status: "ejecucion", isInternal: false } }),
+    prisma.project.count({ where: { status: "terminado", isInternal: false } }),
+    prisma.project.count({ where: { status: "ejecucion" } }),
+    prisma.project.count({ where: { status: "terminado" } }),
+  ]);
+
   const projects = await prisma.project.findMany({
-    orderBy: { updatedAt: "desc" },
+    where: { status: activeTab === "terminados" ? "terminado" : "ejecucion" },
+    orderBy: [
+      { isInternal: "asc" },
+      { numeroProyecto: "asc" },
+    ],
+    include: PROJECT_METRICS_INCLUDE,
+  });
+
+  // Alertas: facturas vencidas pendientes de pago en cada proyecto
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const overdueInvoices = await prisma.invoice.findMany({
+    where: { type: "recibida", status: "pendiente", dueDate: { lt: today } },
+    select: { projectId: true },
+  });
+  const overdueByProject = new Set(
+    overdueInvoices.map((i) => i.projectId).filter(Boolean) as string[]
+  );
+
+  const rows: ProjectRow[] = projects.map((p) => {
+    const m = computeProjectMetrics(p);
+    return {
+      id: p.id,
+      numeroProyecto: p.numeroProyecto,
+      numeroCotizacion: p.numeroCotizacion,
+      isInternal: p.isInternal,
+      name: p.name,
+      clientName: p.clientName,
+      status: p.status,
+      gastado: m.totalGastado,
+      vendido: m.totalAcordado,
+      lastActivity: getLastActivity(p),
+      hasAlert: overdueByProject.has(p.id),
+    };
   });
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Proyectos</h1>
+      <div className="flex items-end justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Proyectos</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {ejecucionRealCount} en ejecución · {terminadosRealCount} terminado
+            {terminadosRealCount !== 1 ? "s" : ""}
+          </p>
+        </div>
         <Link
           href="/proyectos/nuevo"
           className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"
@@ -19,83 +84,21 @@ export default async function ProyectosPage() {
         </Link>
       </div>
 
-      {projects.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <p className="text-gray-500 text-lg mb-2">No hay proyectos</p>
-          <Link
-            href="/proyectos/nuevo"
-            className="text-gray-900 underline text-sm"
-          >
-            Crear primer proyecto
-          </Link>
-        </div>
-      ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Proyecto
-                </th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Cliente
-                </th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Estado
-                </th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Version
-                </th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actualizado
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {projects.map((project) => {
-                const status =
-                  PROJECT_STATUSES[project.status as ProjectStatus];
-                return (
-                  <tr
-                    key={project.id}
-                    className="hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="px-6 py-4">
-                      <Link
-                        href={`/proyectos/${project.id}/resumen`}
-                        className="font-medium text-gray-900 hover:underline"
-                      >
-                        {project.name}
-                      </Link>
-                      {project.address && (
-                        <p className="text-sm text-gray-500 mt-0.5">
-                          {project.address}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {project.clientName}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium ${status.color}`}
-                      >
-                        {status.label}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {project.currentVersion}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {formatDate(project.updatedAt)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <ListTabs
+        basePath="/proyectos"
+        activeKey={activeTab}
+        tabs={[
+          { key: "ejecucion", label: "En ejecución", count: ejecucionTotalCount },
+          { key: "terminados", label: "Terminados", count: terminadosTotalCount },
+        ]}
+      />
+
+      <ProjectsTable
+        rows={rows}
+        variant={activeTab === "terminados" ? "terminado" : "ejecucion"}
+        hrefBase="/proyectos"
+        groupOtros
+      />
     </div>
   );
 }

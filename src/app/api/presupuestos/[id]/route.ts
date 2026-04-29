@@ -20,13 +20,28 @@ export async function PUT(
       },
     });
 
-    // Cuando se aprueba un presupuesto de obra, marcar como versión actual del proyecto
+    // Cuando se aprueba un presupuesto de obra, el proyecto pasa a "ejecucion"
+    // y se le asigna numeroProyecto si aún no lo tenía (transición cotizacion→ejecucion).
     if (data.status === "aprobado" && budget.type === "obra") {
+      const proj = await prisma.project.findUnique({
+        where: { id: budget.projectId },
+        select: { numeroProyecto: true },
+      });
+
+      let numeroProyecto = proj?.numeroProyecto ?? null;
+      if (numeroProyecto == null) {
+        const max = await prisma.project.aggregate({
+          _max: { numeroProyecto: true },
+        });
+        numeroProyecto = (max._max.numeroProyecto ?? 0) + 1;
+      }
+
       await prisma.project.update({
         where: { id: budget.projectId },
         data: {
           currentVersion: budget.version,
-          status: "en_ejecucion",
+          status: "ejecucion",
+          numeroProyecto,
         },
       });
     }

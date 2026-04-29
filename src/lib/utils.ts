@@ -34,12 +34,26 @@ export function formatPercent(value: number): string {
 
 export const PROJECT_STATUSES = {
   cotizacion: { label: "Cotización", color: "bg-yellow-100 text-yellow-800" },
-  aprobado: { label: "Aprobado", color: "bg-blue-100 text-blue-800" },
-  en_ejecucion: { label: "En Ejecución", color: "bg-green-100 text-green-800" },
+  ejecucion: { label: "En Ejecución", color: "bg-green-100 text-green-800" },
   terminado: { label: "Terminado", color: "bg-gray-100 text-gray-800" },
+  archivado: { label: "Archivada", color: "bg-gray-100 text-gray-500" },
 } as const;
 
 export type ProjectStatus = keyof typeof PROJECT_STATUSES;
+
+// Helpers de fecha relativa para tablas tipo "última actividad"
+export function relativeDate(date: Date | string | null | undefined): string {
+  if (!date) return "—";
+  const d = typeof date === "string" ? new Date(date) : date;
+  const now = Date.now();
+  const diffMs = now - d.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays < 1) return "hoy";
+  if (diffDays === 1) return "ayer";
+  if (diffDays < 30) return `hace ${diffDays}d`;
+  // >30d → fecha absoluta corta
+  return d.toLocaleDateString("es-CL", { day: "2-digit", month: "short" });
+}
 
 export const OBRA_CHAPTERS = {
   demoliciones: { label: "Demoliciones", index: 1 },

@@ -86,13 +86,19 @@ export function compareCatalogCategories(a: string, b: string): number {
   return ia - ib;
 }
 
+// Capítulos de obra ordenados por flujo cronológico real de obra.
+// Algunos proyectos no usan todos los capítulos (ej: una remodelación
+// liviana sin obra gruesa) — eso está bien, no es obligatorio que el
+// presupuesto tenga partidas en todos.
 export const OBRA_CHAPTERS = {
   demoliciones: { label: "Demoliciones", index: 1 },
-  reparaciones: { label: "Reparaciones", index: 2 },
-  electricas: { label: "Eléctricas", index: 3 },
+  obra_gruesa: { label: "Obra gruesa", index: 2 },
+  reparaciones: { label: "Reparaciones", index: 3 },
   sanitarias: { label: "Sanitarias", index: 4 },
-  terminaciones: { label: "Terminaciones", index: 5 },
-  limpieza: { label: "Limpieza", index: 6 },
+  electricas: { label: "Eléctricas", index: 5 },
+  terminaciones: { label: "Terminaciones", index: 6 },
+  limpieza: { label: "Limpieza", index: 7 },
+  adicionales: { label: "Adicionales", index: 8 },
 } as const;
 
 export type ObraChapter = keyof typeof OBRA_CHAPTERS;

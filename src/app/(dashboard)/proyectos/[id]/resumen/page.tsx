@@ -19,10 +19,13 @@ const CATEGORY_TO_BREAKDOWN: Record<
 
 export default async function ResultadosPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ period?: string; from?: string; to?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
 
   const project = await prisma.project.findUnique({
     where: { id },
@@ -50,7 +53,7 @@ export default async function ResultadosPage({
   // una vista distinta — las métricas de proyecto-cliente (Total acordado,
   // Cobrado, Utilidad, Presupuesto vs Real) no aplican.
   if (project.isInternal) {
-    return <CentroCostoView project={project} />;
+    return <CentroCostoView project={project} searchParams={sp} />;
   }
 
   // Presupuesto base: preferir el aprobado, si no el más reciente

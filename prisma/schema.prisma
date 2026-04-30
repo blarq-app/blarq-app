@@ -475,6 +475,17 @@ model Invoice {
   iva             Float
   totalAmount     Float
   status          String   @default("pendiente") // pendiente | pagada | anulada
+  // Fecha en que la factura fue efectivamente pagada (set automáticamente
+  // al conciliar con un movimiento bancario). null si todavía está pendiente.
+  paidAt          DateTime?
+  // conceptoCobro: solo aplica a facturas EMITIDAS. Indica qué tipo de
+  // cobro es para el cálculo del fondo sueldos:
+  //   - "obra"       → suma a "cobrado obra", aporta GG×pct al fondo
+  //   - "muebles"    → suma a "cobrado muebles", aporta utilidad×pct al fondo
+  //   - "artefactos" → suma a "cobrado artefactos", NO aporta al fondo
+  //   - "mixto"      → MJ define el split en porcentajes (campo extra a futuro)
+  // Para facturas recibidas, queda null (no aplica).
+  conceptoCobro   String?
   origin          String   @default("manual") // manual | sii_automatica
   // Trazabilidad SII (cuando origin = sii_automatica)
   siiTrackId      String?  // Identificador del DTE en SII (track id que devuelve el proveedor)
@@ -496,19 +507,73 @@ model Invoice {
   @@index([siiTrackId])
 }
 
-// ==================== MOVIMIENTOS BANCO ====================
+// ==================== CUENTAS BANCARIAS Y MOVIMIENTOS ====================
+
+// Las cuentas bancarias de BLARQ. Hoy son 2 (operativa y sueldos), pero
+// el modelo soporta más (ahorro, dólares, etc).
+model BankAccount {
+  id            String   @id @default(cuid())
+  // Número visible en cartola (ej: "0-000-8913459-5"). Único.
+  accountNumber String   @unique
+  // Nombre interno para mostrar (ej: "Operativa", "Sueldos").
+  alias         String
+  // role: operating (cta operativa) | salary_fund (fondo sueldos) | other.
+  // Permite a la app aplicar reglas distintas — ej: el saldo de salary_fund
+  // se muestra como "fondo disponible para sueldos" en el dashboard.
+  role          String   @default("operating")
+  bank          String   @default("Santander")
+  currency      String   @default("CLP")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  movements     BankMovement[]
+}
 
 model BankMovement {
-  id          String   @id @default(cuid())
-  date        DateTime
-  description String
-  amount      Float
-  type        String   // cargo | abono
-  invoiceId   String?
-  status      String   @default("sin_asignar") // sin_asignar | conciliado | sin_factura
-  createdAt   DateTime @default(now())
+  id              String   @id @default(cuid())
+  bankAccountId   String
+  date            DateTime
+  description     String   // descripción tal como viene en cartola
+  amount          Float    // signed: negativo = cargo, positivo = abono
+  type            String   // cargo | abono
+  // Datos parseados de la descripción (cuando es transferencia)
+  externalRef     String?  // n° documento del banco
+  counterpartyName String? // nombre extraído ("Brune Spa", "Maria Carolina", ...)
+  counterpartyRut  String? // RUT extraído (los primeros 9-10 dígitos)
+  // Categorización del movimiento. Cuando matchea a una factura, queda
+  // null — la factura ya tiene su categoría. Cuando es egreso sin factura
+  // (sueldo, previred, comisión, retiro personal, etc) acá se etiqueta.
+  // Valores típicos: sueldo | previred | comision_bancaria | retiro_personal
+  // | deposito_efectivo | otro_sin_factura | null.
+  category        String?
+  // Conciliación con factura: si el movimiento corresponde a un pago de
+  // factura emitida o recibida, queda linkeado acá. Cuando se setea, la
+  // factura pasa a status="pagada".
+  invoiceId       String?
+  // Transferencia entre dos cuentas BLARQ (cta operativa ↔ cta sueldos).
+  // Cuando se detecta, ambos lados se linkean entre sí. NO cuenta como
+  // gasto ni ingreso real — es solo movimiento de fondos interno.
+  internalTransferToId String? @unique
+  // Status del proceso de conciliación. "sin_asignar" cuando todavía MJ
+  // no decidió qué es. "conciliado" cuando matchea con factura.
+  // "sin_factura" cuando es un egreso/ingreso categorizado pero sin
+  // factura asociada (sueldo, transferencia, etc). "interno" para
+  // transferencias entre cuentas BLARQ.
+  status          String   @default("sin_asignar")
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  invoice     Invoice? @relation(fields: [invoiceId], references: [id])
+  bankAccount     BankAccount  @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  invoice         Invoice?     @relation(fields: [invoiceId], references: [id])
+  internalTransferTo BankMovement? @relation("InternalTransfer", fields: [internalTransferToId], references: [id])
+  internalTransferFrom BankMovement? @relation("InternalTransfer")
 
+  // Idempotencia del import: misma cuenta + fecha + monto + descripción
+  // + ref no se duplica si MJ vuelve a importar la misma cartola.
+  @@unique([bankAccountId, date, amount, description], name: "movement_unique")
+  @@index([bankAccountId])
   @@index([invoiceId])
+  @@index([date])
+  @@index([status])
 }

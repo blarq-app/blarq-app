@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const TABS = [
+// Tabs del detalle de proyecto. Para centros de costo internos
+// (isInternal=true) algunos no aplican: solo "Resumen" y "Facturas"
+// tienen sentido. Los otros (Presupuesto/EPs/Lista de compra) son
+// conceptos de proyecto-cliente.
+const TABS_PROYECTO = [
   { key: "resumen", label: "Resumen" },
   { key: "presupuesto", label: "Presupuesto" },
   { key: "estados-pago", label: "Estados de Pago" },
@@ -11,13 +15,24 @@ const TABS = [
   { key: "lista-compra", label: "Lista de compra" },
 ] as const;
 
-export default function ProjectTabs({ projectId }: { projectId: string }) {
+const TABS_INTERNAL = [
+  { key: "resumen", label: "Resumen" },
+  { key: "facturas", label: "Facturas" },
+] as const;
+
+export default function ProjectTabs({
+  projectId,
+  isInternal = false,
+}: {
+  projectId: string;
+  isInternal?: boolean;
+}) {
   const pathname = usePathname();
-  // Tab activa = primer segmento después de /proyectos/[id]/
-  // Ej: /proyectos/abc/presupuesto/cm123 → "presupuesto"
   const segments = pathname.split("/").filter(Boolean);
   const ix = segments.indexOf("proyectos");
   const currentTab = ix >= 0 && segments[ix + 2] ? segments[ix + 2] : "resumen";
+
+  const TABS = isInternal ? TABS_INTERNAL : TABS_PROYECTO;
 
   return (
     <div className="flex items-center gap-1 -mb-px overflow-x-auto">

@@ -75,7 +75,11 @@ export default async function DashboardPage() {
       gastado: m.totalGastado,
       vendido: m.totalAcordado,
       lastActivity: getLastActivity(p),
-      hasAlert: overdueByProject.has(p.id),
+      // Punto rojo si hay cualquier alerta crítica del proyecto:
+      // factura vencida, categoría excedida >100%, EP atrasado.
+      // (Las warnings — categoría 80-99%, sin EP por 30d — no disparan
+      // el punto rojo; quedan solo en el detalle del proyecto.)
+      hasAlert: m.alerts.some((a) => a.severity === "danger"),
     };
   });
 

@@ -25,6 +25,7 @@ export default async function ProjectLayout({
       clientName: true,
       address: true,
       status: true,
+      isInternal: true,
     },
   });
   if (!project) notFound();
@@ -69,7 +70,7 @@ export default async function ProjectLayout({
           </Link>
         </div>
 
-        <ProjectTabs projectId={project.id} />
+        <ProjectTabs projectId={project.id} isInternal={project.isInternal} />
       </div>
 
       {/* Contenido de la página activa */}

@@ -260,6 +260,29 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
       message: `${invoicesOverdueCount} factura${invoicesOverdueCount > 1 ? "s" : ""} vencida${invoicesOverdueCount > 1 ? "s" : ""} pendiente${invoicesOverdueCount > 1 ? "s" : ""} de pago`,
     });
   }
+  // EP atrasado: proyecto en ejecución >60 días sin EP nuevo en los
+  // últimos 30 días. Solo aplica si el proyecto tiene presupuesto MO
+  // (sino no hay nada que avanzar).
+  const projectStart = (project as { startDate: Date | null }).startDate ?? project.createdAt;
+  const daysSinceStart = (now.getTime() - new Date(projectStart).getTime()) / (1000 * 60 * 60 * 24);
+  if (presupuestoMO > 0 && daysSinceStart > 60) {
+    const lastEPDate = project.estadosPago.length > 0
+      ? new Date(
+          Math.max(...project.estadosPago.map((ep) => new Date(ep.date).getTime()))
+        )
+      : null;
+    const daysSinceLastEP = lastEPDate
+      ? (now.getTime() - lastEPDate.getTime()) / (1000 * 60 * 60 * 24)
+      : Infinity;
+    if (daysSinceLastEP > 30) {
+      alerts.push({
+        severity: "warning",
+        message: lastEPDate
+          ? `Sin EP nuevo hace ${Math.floor(daysSinceLastEP)} días`
+          : `Sin EPs cargados aún (proyecto activo hace ${Math.floor(daysSinceStart)} días)`,
+      });
+    }
+  }
 
   return {
     versionLabels: {

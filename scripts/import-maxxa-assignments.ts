@@ -70,7 +70,9 @@ function parseHtml(filePath: string): Row[] {
 const CENTRO_PLAN: Record<string, "CREATE" | "NULL" | { existingId: string }> = {
   "60_Portofino (Carola Ovalle)": "CREATE",
   "46_Ampliacion Casa Arrau (Pía Garcés)": "CREATE",
-  "00_BLARQ": "CREATE", // TODO: esto debería ser un cost center, no un proyecto
+  // Centros con prefijo 00_* son internos (BLARQ, CASA, etc).
+  // Auto-creación los marca con isInternal=true (ver resolveOrCreateProject).
+  "00_BLARQ": "CREATE",
   "62_Rosas (Cristian Zulueta)": "CREATE",
   "SIN CENTRO DE COSTO": "NULL",
   "59_Cocina Farellones (Pauline Dumay)": "CREATE",

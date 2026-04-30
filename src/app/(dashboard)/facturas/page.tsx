@@ -87,24 +87,22 @@ export default async function FacturasPage({
         </div>
       </div>
 
-      {/* Atajo destacado a "facturas SII sin asignar a proyecto" cuando hay */}
+      {/* Atajo destacado a "facturas SII sin asignar a proyecto" cuando hay.
+          Estilo gris/icono mono — sin morado, consistente con el sistema BLARQ. */}
       {siiUnassignedCount > 0 && sp.projectId !== "sin-asignar" && (
         <Link
           href="/facturas?origin=sii_automatica&projectId=sin-asignar"
-          className="block bg-purple-50 border border-purple-200 rounded-lg px-4 py-3 mb-4 hover:border-purple-400 transition-colors"
+          className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 mb-4 hover:border-gray-400 transition-colors"
         >
-          <div className="flex items-center gap-3">
-            <span className="text-purple-700 text-lg">📥</span>
-            <p className="text-sm text-purple-900 flex-1">
-              <span className="font-semibold">
-                {siiUnassignedCount} factura
-                {siiUnassignedCount > 1 ? "s" : ""} del SII
-              </span>{" "}
-              sin asignar a proyecto — asignalas para que cuenten en tu Estado
-              de Resultados.
-            </p>
-            <span className="text-xs text-purple-700 underline">Ver →</span>
-          </div>
+          <span className="text-gray-500 text-base leading-none">⚐</span>
+          <p className="text-sm text-gray-900 flex-1">
+            <span className="font-semibold">
+              {siiUnassignedCount} factura{siiUnassignedCount > 1 ? "s" : ""} del SII
+            </span>{" "}
+            sin asignar a proyecto — asignalas para que cuenten en su Estado de
+            Resultados.
+          </p>
+          <span className="text-xs text-gray-500 underline">Ver →</span>
         </Link>
       )}
 

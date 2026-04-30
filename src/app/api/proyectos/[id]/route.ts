@@ -37,10 +37,41 @@ export async function PATCH(
       return NextResponse.json({ error: "Ningún campo válido para actualizar" }, { status: 400 });
     }
 
+    // Validar unicidad de numeroProyecto antes de update — si no, Prisma
+    // tira un P2002 con mensaje feo. Mejor un 409 explícito con mensaje
+    // legible para que el inline-edit muestre algo útil.
+    if (typeof data.numeroProyecto === "number") {
+      const conflict = await prisma.project.findFirst({
+        where: { numeroProyecto: data.numeroProyecto, NOT: { id } },
+        select: { id: true, name: true },
+      });
+      if (conflict) {
+        return NextResponse.json(
+          {
+            error: `El número ${data.numeroProyecto} ya lo tiene "${conflict.name}". Elegí otro o liberá ése primero.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     const project = await prisma.project.update({ where: { id }, data: update });
     return NextResponse.json(project);
   } catch (error) {
     console.error("Error patching project:", error);
+    // Manejar específicamente el constraint de unicidad como fallback
+    // (por si la validación previa no agarró el caso por race condition).
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as { code?: string }).code === "P2002"
+    ) {
+      return NextResponse.json(
+        { error: "Ese número ya está en uso por otro proyecto." },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Error al actualizar" },
       { status: 500 }

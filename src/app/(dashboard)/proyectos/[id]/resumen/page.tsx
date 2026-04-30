@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { formatCLP, OBRA_CHAPTERS, ObraChapter } from "@/lib/utils";
 import Link from "next/link";
+import CentroCostoView from "@/components/proyecto/CentroCostoView";
 
 // Mapa: nombre de CostCategory -> campo de desglose en ObraItem
 const CATEGORY_TO_BREAKDOWN: Record<
@@ -44,6 +45,13 @@ export default async function ResultadosPage({
   });
 
   if (!project) notFound();
+
+  // Si el proyecto es un centro de costo interno (BLARQ, etc), mostramos
+  // una vista distinta — las métricas de proyecto-cliente (Total acordado,
+  // Cobrado, Utilidad, Presupuesto vs Real) no aplican.
+  if (project.isInternal) {
+    return <CentroCostoView project={project} />;
+  }
 
   // Presupuesto base: preferir el aprobado, si no el más reciente
   function bestVersion<T extends { status: string; createdAt: Date }>(arr: T[]) {

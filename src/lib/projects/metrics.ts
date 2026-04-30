@@ -65,6 +65,12 @@ export type ProjectMetrics = {
   conceptDeviations: CategoryDeviation[];
   worstDeviation: CategoryDeviation | null;
 
+  // Agregaciones brutas — útiles para construir vistas customizadas
+  // (EERR jerárquico, tablas con drill-down, etc) sin re-recorrer facturas.
+  budgetByType: Record<string, number>; // por costMaterial/costLabor/...
+  realByCategory: Record<string, number>; // por nombre de top category
+  realBySpecific: Record<string, number>; // por nombre exacto de category
+
   // Compromisos / cosas que requieren atención
   invoicesOverdueCount: number;
   invoicesOverdueAmount: number;
@@ -175,13 +181,20 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
     budgetByType.costLoss += (it.costLoss ?? 0) * it.quantity;
   }
 
+  // Agrupamos en dos formas:
+  //   - byTop: categoría top (Materiales, Muebles, etc) — para conceptos de obra
+  //   - bySpecific: categoría exacta asignada — para sub-categorías
+  //     (Cubiertas, Herrajes; Cocina, Baño, Iluminación)
+  // Neto, no totalAmount — el presupuesto está en neto, el IVA se recupera
+  // como crédito fiscal. Comparar c/IVA vs neto inflaba el "real" ~19%.
   const realByCategory: Record<string, number> = {};
+  const realBySpecific: Record<string, number> = {};
   for (const inv of facturasRecibidas) {
-    const top = inv.category?.parent?.name ?? inv.category?.name;
-    if (!top) continue;
-    // Neto, no total — el presupuesto está en neto, el IVA se recupera
-    // como crédito fiscal. Comparar c/IVA vs neto inflaba el "real" ~19%.
+    const cat = inv.category;
+    if (!cat) continue;
+    const top = cat.parent?.name ?? cat.name;
     realByCategory[top] = (realByCategory[top] ?? 0) + inv.netAmount;
+    realBySpecific[cat.name] = (realBySpecific[cat.name] ?? 0) + inv.netAmount;
   }
 
   const conceptDeviations: CategoryDeviation[] = Object.entries(
@@ -299,6 +312,12 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
     avanceObraPct,
     conceptDeviations,
     worstDeviation,
+    // Agregaciones brutas, expuestas para que callers (ej resumen/page.tsx)
+    // construyan vistas más complejas (EERR jerárquico) sin re-recorrer
+    // las facturas.
+    budgetByType,
+    realByCategory,
+    realBySpecific,
     invoicesOverdueCount,
     invoicesOverdueAmount,
     invoicesPendingCount,

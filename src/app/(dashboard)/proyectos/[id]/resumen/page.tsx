@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { formatCLP, OBRA_CHAPTERS, ObraChapter } from "@/lib/utils";
 import Link from "next/link";
 import CentroCostoView from "@/components/proyecto/CentroCostoView";
+import { computeProjectMetrics } from "@/lib/projects/metrics";
 
 // Mapa: nombre de CostCategory -> campo de desglose en ObraItem
 const CATEGORY_TO_BREAKDOWN: Record<
@@ -56,128 +57,47 @@ export default async function ResultadosPage({
     return <CentroCostoView project={project} searchParams={sp} />;
   }
 
-  // Presupuesto base: preferir el aprobado, si no el más reciente
+  // ── Métricas contables (fuente única: metrics.ts) ──────────────────────
+  // Antes esto se calculaba duplicado acá, lo que causó el bug del IVA del
+  // 29-abr (se arregló en metrics y la pantalla seguía mal). Ahora todo
+  // viene de computeProjectMetrics — los tests en scripts/test-metrics.ts
+  // garantizan que estos números no van a divergir en silencio.
+  const m = computeProjectMetrics(project);
+  const {
+    totalAcordado: totalVendido,
+    totalCobrado,
+    totalGastado,
+    totalPagadoMaestros,
+    utilidadReal,
+    pctCobrado,
+    budgetByType,
+    realByCategory: realByTop,
+    realBySpecific,
+  } = m;
+  const margenReal = totalCobrado > 0 ? (utilidadReal / totalCobrado) * 100 : 0;
+
+  // ── Versions (lookups locales — no son cálculo, solo navegación al
+  // nodo del árbol para acceder a obraItems / muebleChapters / etc).
   function bestVersion<T extends { status: string; createdAt: Date }>(arr: T[]) {
-    const aprobado = arr.filter((b) => b.status === "aprobado").sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+    const aprobado = arr
+      .filter((b) => b.status === "aprobado")
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
     return aprobado ?? arr.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
   }
   const lastObra = bestVersion(project.budgetVersions.filter((b) => b.type === "obra"));
   const lastMuebles = bestVersion(project.budgetVersions.filter((b) => b.type === "muebles"));
   const lastArtefactos = bestVersion(project.budgetVersions.filter((b) => b.type === "artefactos"));
 
-  // Presupuestado — OBRA
-  const obraCostoDirecto = lastObra
-    ? lastObra.obraItems.reduce((sum, i) => sum + i.total, 0)
-    : 0;
-  const obraGG = obraCostoDirecto * ((lastObra?.ggPercentage || 0) / 100);
-  const obraSubtotal = obraCostoDirecto + obraGG;
-  const obraUtilidad =
-    obraSubtotal * ((lastObra?.utilityPercentage || 0) / 100);
-  const obraNeto = obraSubtotal + obraUtilidad;
-  const obraTotal = obraNeto * 1.19;
-
+  // Aliases para mantener compatibilidad con el resto del archivo
+  const obraItems = lastObra?.obraItems ?? [];
   const mueblesAllItems = lastMuebles
     ? lastMuebles.muebleChapters.flatMap((c) => c.items)
     : [];
-  const mueblesTotal = mueblesAllItems.reduce(
-    (sum, i) => sum + i.clientPriceIva * i.quantity,
-    0
-  );
-  const mueblesCosto = mueblesAllItems.reduce(
-    (sum, i) => sum + i.costDistributor * i.quantity,
-    0
-  );
+  // (obraTotal/mueblesTotal/artefactosTotal se borraron porque ya no se
+  // usan en el JSX — la sección "Desglose por tipo" se eliminó en commit
+  // c5c6000. totalVendido viene de metrics.totalAcordado.)
 
-  const artefactosTotal = lastArtefactos
-    ? lastArtefactos.artefactoItems.reduce((sum, i) => sum + i.clientPrice, 0)
-    : 0;
-  const artefactosCosto = lastArtefactos
-    ? lastArtefactos.artefactoItems.reduce(
-        (sum, i) => sum + (i.realCostBlarq || 0),
-        0
-      )
-    : 0;
-
-  const totalVendido = obraTotal + mueblesTotal + artefactosTotal;
-
-  const facturasEmitidas = project.invoices.filter(
-    (i) => i.type === "emitida"
-  );
-  // Cobrado al cliente: c/IVA (entrada efectiva a caja).
-  const totalCobrado = facturasEmitidas.reduce(
-    (sum, i) => sum + i.totalAmount,
-    0
-  );
-  const facturasRecibidas = project.invoices.filter(
-    (i) => i.type === "recibida"
-  );
-  // Gastado: NETO (el IVA se recupera como crédito fiscal). Comparar
-  // contra presupuesto (que es neto) requiere usar neto también.
-  const totalGastado = facturasRecibidas.reduce(
-    (sum, i) => sum + i.netAmount,
-    0
-  );
-
-  // ==================== Presupuesto vs Real por Tipo de Concepto ====================
-  // Presupuesto: suma del desglose de ObraItem por cada campo (cantidad × costField)
-  const obraItems = lastObra?.obraItems || [];
-  const budgetByType: Record<string, number> = {
-    costMaterial: 0,
-    costLabor: 0,
-    costTools: 0,
-    costSubcontract: 0,
-    costLoss: 0,
-  };
-  for (const item of obraItems) {
-    budgetByType.costMaterial +=
-      (item.costMaterial ?? 0) * item.quantity;
-    budgetByType.costLabor += (item.costLabor ?? 0) * item.quantity;
-    budgetByType.costTools += (item.costTools ?? 0) * item.quantity;
-    budgetByType.costSubcontract +=
-      (item.costSubcontract ?? 0) * item.quantity;
-    budgetByType.costLoss += (item.costLoss ?? 0) * item.quantity;
-  }
-
-  // Real: suma de facturas recibidas. Agrupamos en dos formas porque
-  // necesitamos ambas según el contexto:
-  //  - byTop: por categoría top (Materiales, Muebles, Artefactos, etc).
-  //    Útil para conceptos de obra que viven en el top.
-  //  - bySpecific: por la categoría exacta asignada a la factura.
-  //    Útil para Muebles/Artefactos donde queremos ver subdivisión por
-  //    sub-categoría (Cubiertas, Herrajes, Mueble; Cocina, Baño, Iluminación).
-  // Las facturas categorizadas al top sin sub (ej category.name="Muebles")
-  // van a "Muebles" en bySpecific, las podemos detectar y mostrar como
-  // "(Sin clasificar)" para que MJ las refine.
-  // Usamos NETO, no totalAmount: el IVA se recupera como crédito fiscal.
-  const realByTop: Record<string, number> = {};
-  const realBySpecific: Record<string, number> = {};
-  for (const inv of facturasRecibidas) {
-    const cat = inv.category;
-    if (!cat) continue;
-    const top = cat.parent?.name || cat.name;
-    realByTop[top] = (realByTop[top] || 0) + inv.netAmount;
-    realBySpecific[cat.name] = (realBySpecific[cat.name] || 0) + inv.netAmount;
-  }
-  // Sumarle los pagos a maestros (EPs) como MO real
-  const totalPagadoMaestros = project.estadosPago
-    .filter((ep) => ep.status === "pagado")
-    .reduce((sum, ep) => {
-      const prev = project.estadosPago
-        .filter((p) => p.number < ep.number && p.status === "pagado")
-        .flatMap((p) => p.items);
-      const prevMap = new Map<string, number>();
-      prev.forEach((i) =>
-        prevMap.set(
-          i.lineageId,
-          Math.max(prevMap.get(i.lineageId) || 0, i.pctAccumulated)
-        )
-      );
-      const thisAmount = ep.items.reduce((s, i) => {
-        const prevPct = prevMap.get(i.lineageId) || 0;
-        return s + i.laborTotal * ((i.pctAccumulated - prevPct) / 100);
-      }, 0);
-      return sum + thisAmount;
-    }, 0);
+  const facturasRecibidas = project.invoices.filter((i) => i.type === "recibida");
 
   // ── Construir secciones jerárquicas para tabla "Presupuesto vs Real" ──
   // Estructura: 3 secciones (Obra, Muebles, Artefactos), cada una con sus
@@ -302,9 +222,7 @@ export default async function ResultadosPage({
     .filter((r): r is NonNullable<typeof r> => r !== null)
     .sort((a, b) => a.index - b.index);
 
-  const utilidadReal = totalCobrado - totalGastado - totalPagadoMaestros;
-  const margenReal =
-    totalCobrado > 0 ? (utilidadReal / totalCobrado) * 100 : 0;
+  // (utilidadReal y margenReal vienen de computeProjectMetrics, declarados arriba)
 
   // ==================== Alertas ====================
   const now = new Date();
@@ -357,12 +275,10 @@ export default async function ResultadosPage({
   // ==================== Estado de Cobros al cliente ====================
   // Forma de pago del presupuesto aprobado de obra
   const paymentTerms = lastObra?.paymentTerms || [];
-  // Total acordado con cliente (obra + muebles + artefactos, c/IVA)
+  // (totalAcordado y pctCobrado vienen de computeProjectMetrics arriba —
+  // expuesto como `totalVendido` en este page para conservar el nombre antiguo.)
   const totalAcordado = totalVendido;
-  // Cuánto falta cobrar
   const porCobrar = Math.max(0, totalAcordado - totalCobrado);
-  // % cobrado del total
-  const pctCobrado = totalAcordado > 0 ? (totalCobrado / totalAcordado) * 100 : 0;
 
   const barColor = (pct: number) =>
     pct <= 80

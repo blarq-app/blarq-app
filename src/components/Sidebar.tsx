@@ -8,6 +8,7 @@ const navigation = [
   { name: "Cotizaciones", href: "/cotizaciones", icon: "📝" },
   { name: "Proyectos", href: "/proyectos", icon: "🏗️" },
   { name: "Facturas", href: "/facturas", icon: "💵" },
+  { name: "Banco", href: "/banco", icon: "🏦" },
   { name: "Partidas", href: "/catalogo/partidas", icon: "📋" },
   { name: "Materiales", href: "/catalogo/materiales", icon: "🧱" },
 ];

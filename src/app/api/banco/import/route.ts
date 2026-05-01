@@ -218,6 +218,25 @@ export async function POST(request: NextRequest) {
       stats.autoMatchedInvoices++;
     }
 
+    // 6. Actualizar saldo conocido de la cuenta. Solo si la cartola es más
+    // reciente que el último saldo guardado — así re-importar una cartola
+    // vieja no pisa el saldo más nuevo.
+    const cartolaFechaHasta = cartola.fechaHasta;
+    if (cartolaFechaHasta && cartola.saldoFinal > 0) {
+      const isNewer =
+        !bankAccount.lastKnownBalanceDate ||
+        cartolaFechaHasta > bankAccount.lastKnownBalanceDate;
+      if (isNewer) {
+        await prisma.bankAccount.update({
+          where: { id: bankAccount.id },
+          data: {
+            lastKnownBalance: cartola.saldoFinal,
+            lastKnownBalanceDate: cartolaFechaHasta,
+          },
+        });
+      }
+    }
+
     return NextResponse.json({ ok: true, stats });
   } catch (error) {
     console.error("Error import cartola:", error);

@@ -523,6 +523,12 @@ model BankAccount {
   role          String   @default("operating")
   bank          String   @default("Santander")
   currency      String   @default("CLP")
+  // Último saldo conocido y la fecha a la que corresponde. Se actualiza
+  // automáticamente al importar una cartola con fechaHasta posterior.
+  // Es el dato oficial del banco — el "neto importado" sumando movimientos
+  // no sirve si hay plata previa al primer import.
+  lastKnownBalance     Float?
+  lastKnownBalanceDate DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

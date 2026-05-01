@@ -5,6 +5,8 @@ import { formatCLP, OBRA_CHAPTERS, ObraChapter } from "@/lib/utils";
 import Link from "next/link";
 import CentroCostoView from "@/components/proyecto/CentroCostoView";
 import { computeProjectMetrics } from "@/lib/projects/metrics";
+import { computeFondoSueldos, type ProjectWithFondo } from "@/lib/banco/fondoSueldos";
+import FondoSueldosCard from "@/components/proyecto/FondoSueldosCard";
 
 // Mapa: nombre de CostCategory -> campo de desglose en ObraItem
 const CATEGORY_TO_BREAKDOWN: Record<
@@ -535,6 +537,9 @@ export default async function ResultadosPage({
           obra&quot; + pagos acumulados en EPs pagados.
         </p>
       </div>
+
+      {/* Fondo Sueldos generado por este proyecto */}
+      <FondoSueldosCard fondo={computeFondoSueldos(project as unknown as ProjectWithFondo)} />
 
       {/* Avance Obra por Capítulo (compacto, al final) */}
       {chapterRows.length > 0 && (

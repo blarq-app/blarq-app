@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { parseCartolaSantander } from "@/lib/banco/santanderParser";
 import { recomputeInvoiceStatus } from "@/lib/banco/invoicePayments";
+import { applyRulesToMovement } from "@/lib/banco/categorizationRules";
 
 // POST /api/banco/import
 //   body: form-data con `file` (Excel cartola Santander)
@@ -165,9 +166,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 5. Auto-matching contra facturas pendientes.
-    // Solo cubre el caso "monto exacto" (±$10 de tolerancia). Cobros
-    // parciales y splits los maneja MJ manualmente desde /banco/conciliacion.
+    // 5. Auto-matching contra facturas pendientes y parciales.
+    // Compara contra el SALDO restante (totalAmount − Σ payments existentes),
+    // no solo contra totalAmount. Eso cubre el caso "factura $15M cobrada en
+    // cuotas de $5M+$10M" — la segunda transferencia ($10M) matchea con el
+    // saldo restante.
     for (const movId of insertedIds) {
       const mov = await prisma.bankMovement.findUnique({
         where: { id: movId },
@@ -177,22 +180,38 @@ export async function POST(request: NextRequest) {
       // Si ya tiene imputación parcial o total, saltar.
       if (mov.payments.length > 0) continue;
 
-      // Cargo → buscar factura recibida pendiente del proveedor
-      // Abono → buscar factura emitida pendiente al cliente
+      // Cargo → buscar factura recibida pendiente/parcial del proveedor
+      // Abono → buscar factura emitida pendiente/parcial al cliente
       const isCargo = mov.amount < 0;
       const targetType = isCargo ? "recibida" : "emitida";
       const absAmount = Math.abs(mov.amount);
 
-      // Tolerancia: ±$10 (para absorber redondeos del banco vs DTE)
-      const candidates = await prisma.invoice.findMany({
+      // Traemos candidatos cuyo totalAmount es ≥ al monto del mov (para que
+      // el saldo restante pueda matchear) y filtramos en JS por saldo.
+      const rawCandidates = await prisma.invoice.findMany({
         where: {
           type: targetType,
-          status: "pendiente",
+          status: { in: ["pendiente", "parcial"] },
           tipoDoc: { not: 61 }, // NCs no se "pagan", revierten otra factura
-          totalAmount: { gte: absAmount - 10, lte: absAmount + 10 },
+          totalAmount: { gte: absAmount - 10 },
         },
-        select: { id: true, rutIssuer: true, rutReceiver: true, businessName: true, totalAmount: true },
+        select: {
+          id: true,
+          rutIssuer: true,
+          rutReceiver: true,
+          businessName: true,
+          totalAmount: true,
+          payments: { select: { amountApplied: true } },
+        },
       });
+
+      // Filtrar por saldo restante dentro de tolerancia.
+      const candidates = rawCandidates
+        .map((c) => {
+          const paid = c.payments.reduce((s, p) => s + p.amountApplied, 0);
+          return { ...c, remaining: c.totalAmount - paid };
+        })
+        .filter((c) => c.remaining >= absAmount - 10 && c.remaining <= absAmount + 10);
 
       if (candidates.length === 0) continue;
 
@@ -228,6 +247,15 @@ export async function POST(request: NextRequest) {
       await recomputeInvoiceStatus(match.id);
       stats.autoMatchedInvoices++;
     }
+
+    // 5b. Reglas de auto-categorización: para cada mov que sigue
+    // sin_asignar después del auto-match, aplicar reglas guardadas.
+    let rulesApplied = 0;
+    for (const movId of insertedIds) {
+      const r = await applyRulesToMovement(movId);
+      if (r.applied) rulesApplied++;
+    }
+    (stats as { rulesApplied?: number }).rulesApplied = rulesApplied;
 
     // 6. Actualizar saldo conocido de la cuenta. Solo si la cartola es más
     // reciente que el último saldo guardado — así re-importar una cartola

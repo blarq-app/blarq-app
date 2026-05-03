@@ -71,7 +71,21 @@ export default async function BancoPage() {
               ` · ${totalSinAsignar} movimiento${totalSinAsignar > 1 ? "s" : ""} pendiente${totalSinAsignar > 1 ? "s" : ""} de asignar`}
           </p>
         </div>
-        <ImportCartolaButton />
+        <div className="flex items-center gap-3">
+          <Link
+            href="/banco/movimientos"
+            className="text-xs text-gray-500 hover:text-gray-900 underline"
+          >
+            Ver movimientos
+          </Link>
+          <Link
+            href="/banco/reglas"
+            className="text-xs text-gray-500 hover:text-gray-900 underline"
+          >
+            Reglas
+          </Link>
+          <ImportCartolaButton />
+        </div>
       </div>
 
       {totalSinAsignar > 0 && (

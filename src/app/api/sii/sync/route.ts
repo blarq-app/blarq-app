@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { tryAutoMatchInvoiceWithExistingMovs } from "@/lib/banco/invoicePayments";
 import {
   fetchDTEs,
   isMockMode,
@@ -102,9 +103,13 @@ async function upsertInvoice(
   };
 
   if (!existing) {
-    await prisma.invoice.create({
+    const created = await prisma.invoice.create({
       data: { ...data, status: "pendiente" },
     });
+    // Auto-conciliar contra movimientos bancarios sin asignar previos
+    // del mismo RUT (caso típico: te pagaron, después llega la factura
+    // sincronizada del SII).
+    await tryAutoMatchInvoiceWithExistingMovs(created.id).catch(() => 0);
     return "created";
   }
 

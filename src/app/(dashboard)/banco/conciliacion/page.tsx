@@ -30,54 +30,8 @@ export default async function ConciliacionPage() {
     },
   });
 
-  // Pre-cargar facturas que TODAVÍA tienen saldo libre (pendiente o parcial).
-  // Las pagadas no son candidatas para imputar más cobros.
-  const pendingInvoices = await prisma.invoice.findMany({
-    where: { status: { in: ["pendiente", "parcial"] }, tipoDoc: { not: 61 } },
-    select: {
-      id: true,
-      type: true,
-      folioNumber: true,
-      businessName: true,
-      totalAmount: true,
-      issueDate: true,
-      rutIssuer: true,
-      rutReceiver: true,
-    },
-  });
-
-  function candidatesFor(mov: { amount: number; counterpartyRut: string | null; type: string }) {
-    const isCargo = mov.amount < 0;
-    const targetType = isCargo ? "recibida" : "emitida";
-    const abs = Math.abs(mov.amount);
-    // Tomamos facturas del mismo tipo, con monto entre 30% y 200% del mov
-    // (cubre pago total, parcial 50%, o un mov único que paga 2 facturas).
-    const filtered = pendingInvoices.filter((inv) => {
-      if (inv.type !== targetType) return false;
-      const ratio = inv.totalAmount / abs;
-      if (ratio < 0.3 || ratio > 3) return false;
-      return true;
-    });
-    // Si tenemos counterpartyRut, priorizamos las que matchean por RUT
-    let withMatch = filtered;
-    if (mov.counterpartyRut) {
-      const movDigits = mov.counterpartyRut.replace(/\D/g, "");
-      const matched = filtered.filter((inv) => {
-        const rut = (isCargo ? inv.rutIssuer : inv.rutReceiver) ?? "";
-        const digits = rut.replace(/\D/g, "");
-        return digits.length > 0 && (movDigits.includes(digits) || digits.includes(movDigits));
-      });
-      if (matched.length > 0) withMatch = matched;
-    }
-    // Top 8, ordenadas por proximidad de monto
-    return withMatch
-      .sort(
-        (a, b) =>
-          Math.abs(a.totalAmount - abs) - Math.abs(b.totalAmount - abs)
-      )
-      .slice(0, 8)
-      .map((c) => ({ ...c, issueDate: c.issueDate.toISOString() }));
-  }
+  // El modal de asignación hace su propia búsqueda dinámica via
+  // /api/facturas/search — no precargamos candidatos en este server component.
 
   return (
     <div>
@@ -100,52 +54,96 @@ export default async function ConciliacionPage() {
           </p>
         </div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
-          {movimientos.map((mov) => (
-            <div key={mov.id}>
-              {/* Encabezado del movimiento */}
-              <div className="px-4 py-3 flex items-center gap-3">
-                <span className="text-xs text-gray-500 w-20 tabular-nums whitespace-nowrap">
-                  {new Date(mov.date).toLocaleDateString("es-CL", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "2-digit",
-                  })}
-                </span>
-                <span className="text-xs text-gray-500 w-20 truncate">
-                  {mov.bankAccount.alias}
-                </span>
-                <span className="text-sm text-gray-900 flex-1 truncate">
-                  {mov.description}
-                  {mov.counterpartyName && (
-                    <span className="text-xs text-gray-400 ml-2">
-                      ({mov.counterpartyName})
-                    </span>
-                  )}
-                </span>
-                <span
-                  className={`text-sm tabular-nums font-medium whitespace-nowrap ${
-                    mov.amount < 0 ? "text-red-700" : "text-green-700"
-                  }`}
-                >
-                  {formatCLP(mov.amount)}
-                </span>
-              </div>
-              {/* Form de asignación */}
-              <AsignarMovimientoForm
-                movimientoId={mov.id}
-                amount={mov.amount}
-                candidates={candidatesFor(mov)}
-                existingPayments={mov.payments.map((p) => ({
-                  id: p.id,
-                  invoiceId: p.invoiceId,
-                  amountApplied: p.amountApplied,
-                  invoice: p.invoice,
-                }))}
-              />
+        (() => {
+          // Agrupamos por día (yyyy-mm-dd) preservando el orden desc.
+          const groups = new Map<string, typeof movimientos>();
+          for (const m of movimientos) {
+            const key = m.date.toISOString().slice(0, 10);
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key)!.push(m);
+          }
+          const dateLabel = (d: Date) =>
+            d.toLocaleDateString("es-CL", {
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+            });
+          return (
+            <div className="space-y-6">
+              {Array.from(groups.entries()).map(([dateKey, movs]) => {
+                const dayDate = new Date(dateKey + "T12:00:00");
+                return (
+                  <section key={dateKey}>
+                    {/* Date header */}
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="text-xs uppercase tracking-wider font-semibold text-gray-700">
+                        {dateLabel(dayDate)}
+                      </span>
+                      <div className="flex-1 border-t border-gray-200" />
+                      <span className="text-[10px] uppercase tracking-wider text-gray-400">
+                        {movs.length} mov{movs.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                      {movs.map((mov, idx) => {
+                        const isCargo = mov.amount < 0;
+                        return (
+                          <div
+                            key={mov.id}
+                            className={`flex border-l-4 ${
+                              isCargo ? "border-rose-300" : "border-emerald-300"
+                            } ${idx > 0 ? "border-t border-t-gray-100" : ""}`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              {/* Línea principal: monto + descripción */}
+                              <div className="px-4 pt-3 pb-2 flex items-baseline gap-4">
+                                <span
+                                  className={`text-base font-semibold tabular-nums whitespace-nowrap min-w-[110px] ${
+                                    isCargo ? "text-rose-700" : "text-emerald-700"
+                                  }`}
+                                >
+                                  {formatCLP(mov.amount)}
+                                </span>
+                                <span className="text-sm text-gray-900 flex-1 truncate">
+                                  {mov.description}
+                                  {mov.counterpartyName && (
+                                    <span className="text-xs text-gray-400 ml-2">
+                                      · {mov.counterpartyName}
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="text-[11px] text-gray-400 whitespace-nowrap">
+                                  {mov.bankAccount.alias}
+                                </span>
+                              </div>
+                              {/* Form de asignación, indentado bajo el monto */}
+                              <AsignarMovimientoForm
+                                movimientoId={mov.id}
+                                amount={mov.amount}
+                                description={mov.description}
+                                counterpartyName={mov.counterpartyName}
+                                counterpartyRut={mov.counterpartyRut}
+                                date={mov.date.toISOString()}
+                                bankAccountAlias={mov.bankAccount.alias}
+                                existingPayments={mov.payments.map((p) => ({
+                                  id: p.id,
+                                  invoiceId: p.invoiceId,
+                                  amountApplied: p.amountApplied,
+                                  invoice: p.invoice,
+                                }))}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
             </div>
-          ))}
-        </div>
+          );
+        })()
       )}
     </div>
   );

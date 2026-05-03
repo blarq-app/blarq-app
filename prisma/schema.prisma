@@ -532,6 +532,31 @@ model Invoice {
 //   - Σ(amountApplied where bankMovementId=Y) ≤ |amount| del mov. El
 //     resto del monto puede estar sin imputar (típico cuando el abono
 //     incluye plata que no es de facturas — ej, pago al maestro JT).
+// Regla de auto-categorización de movimientos bancarios. Cuando MJ
+// categoriza un movimiento manualmente, se guarda una regla que matchea
+// movimientos futuros con descripción similar y les aplica la misma
+// categoría. Eso ahorra clicks repetidos en cada cartola que entra.
+//
+// La regla matchea por substring case-insensitive contra
+// BankMovement.description. El patrón se deriva de las primeras palabras
+// de la descripción al crear la regla; MJ puede editarlo después.
+//
+// Aplicación:
+//   - En el import (después del auto-match contra facturas), se aplican
+//     las reglas a movs que quedan sin_asignar.
+//   - Cuando MJ categoriza manualmente, se actualiza/crea la regla en
+//     paralelo al PATCH del movimiento.
+model BankCategorizationRule {
+  id                 String   @id @default(cuid())
+  descriptionPattern String   // substring a buscar (case-insensitive)
+  category           String   // sueldo | previred | comision_bancaria | etc
+  hits               Int      @default(0) // cuántas veces se aplicó (señal de "regla útil")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([descriptionPattern, category])
+}
+
 model InvoicePayment {
   id              String       @id @default(cuid())
   bankMovementId  String

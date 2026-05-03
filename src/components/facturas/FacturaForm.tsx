@@ -13,6 +13,15 @@ type Category = {
   parent: { id: string; name: string } | null;
 };
 
+type ReferenceCandidate = {
+  id: string;
+  folioNumber: string | null;
+  tipoDoc: number | null;
+  totalAmount: number;
+  businessName: string | null;
+  issueDate: string;
+};
+
 export type FacturaFormValues = {
   id?: string;
   type: "emitida" | "recibida";
@@ -26,6 +35,10 @@ export type FacturaFormValues = {
   projectId: string;
   categoryId: string;
   notes: string;
+  // Solo se setea para NC (61) / ND (56): folio y tipoDoc del DTE original
+  // que esta NC/ND modifica.
+  referenceFolioNumber?: string;
+  referenceTipoDoc?: number | null;
 };
 
 export default function FacturaForm({
@@ -33,11 +46,15 @@ export default function FacturaForm({
   initial,
   projects,
   categories,
+  tipoDoc = null,
+  referenceCandidates = [],
 }: {
   mode: "create" | "edit";
   initial: FacturaFormValues;
   projects: Project[];
   categories: Category[];
+  tipoDoc?: number | null;
+  referenceCandidates?: ReferenceCandidate[];
 }) {
   const router = useRouter();
   const [v, setV] = useState<FacturaFormValues>(initial);
@@ -76,6 +93,8 @@ export default function FacturaForm({
         projectId: v.projectId || null,
         categoryId: v.categoryId || null,
         notes: v.notes || null,
+        referenceFolioNumber: v.referenceFolioNumber || null,
+        referenceTipoDoc: v.referenceTipoDoc ?? null,
       };
       const url = mode === "edit" ? `/api/facturas/${v.id}` : "/api/facturas";
       const method = mode === "edit" ? "PUT" : "POST";
@@ -253,6 +272,50 @@ export default function FacturaForm({
           </div>
         </Field>
       </div>
+
+      {/* Referencia a factura original — solo NC (61) y ND (56) */}
+      {(tipoDoc === 61 || tipoDoc === 56) && (
+        <div className="mt-4 bg-blue-50/50 border border-blue-100 rounded p-3">
+          <Field
+            label={
+              tipoDoc === 61
+                ? "Factura referenciada (esta NC la modifica)"
+                : "Factura referenciada (esta ND la modifica)"
+            }
+          >
+            <select
+              value={v.referenceFolioNumber ?? ""}
+              onChange={(e) => {
+                const folio = e.target.value;
+                if (!folio) {
+                  set("referenceFolioNumber", "");
+                  set("referenceTipoDoc", null);
+                  return;
+                }
+                const c = referenceCandidates.find((c) => c.folioNumber === folio);
+                set("referenceFolioNumber", folio);
+                set("referenceTipoDoc", c?.tipoDoc ?? 33);
+              }}
+              className={inputCls}
+            >
+              <option value="">— Sin referencia / no resuelta —</option>
+              {referenceCandidates.map((c) => (
+                <option key={c.id} value={c.folioNumber ?? ""}>
+                  F-{c.folioNumber} · {formatCLP(c.totalAmount)} ·{" "}
+                  {c.businessName?.slice(0, 30) ?? "—"} · {c.issueDate}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <p className="text-[11px] text-gray-500 mt-1">
+            {referenceCandidates.length} factura{referenceCandidates.length !== 1 ? "s" : ""} candidata
+            {referenceCandidates.length !== 1 ? "s" : ""} (mismo {v.type === "recibida" ? "proveedor" : "cliente"}).
+            {v.referenceFolioNumber && !referenceCandidates.some((c) => c.folioNumber === v.referenceFolioNumber) && (
+              <span className="text-amber-700"> · folio actual {v.referenceFolioNumber} no está en la lista (factura no sincronizada todavía).</span>
+            )}
+          </p>
+        </div>
+      )}
 
       <div className="mt-4">
         <Field label="Notas">

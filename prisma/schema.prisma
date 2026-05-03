@@ -486,6 +486,15 @@ model Invoice {
   //   - "mixto"      → MJ define el split en porcentajes (campo extra a futuro)
   // Para facturas recibidas, queda null (no aplica).
   conceptoCobro   String?
+  // Referencia a otra factura cuando este DTE la modifica.
+  // Solo aplica a NC (tipoDoc=61) y ND (tipoDoc=56), que en Chile siempre
+  // referencian la factura original que cancelan/ajustan.
+  // referenceFolioNumber + referenceTipoDoc (típicamente 33) identifican
+  // ese DTE original. Si la factura original existe en la app, se puede
+  // resolver el id por (type, tipoDoc=referenceTipoDoc, folioNumber=
+  // referenceFolioNumber, rutIssuer del mismo emisor).
+  referenceFolioNumber String?
+  referenceTipoDoc     Int?
   origin          String   @default("manual") // manual | sii_automatica
   // Trazabilidad SII (cuando origin = sii_automatica)
   siiTrackId      String?  // Identificador del DTE en SII (track id que devuelve el proveedor)

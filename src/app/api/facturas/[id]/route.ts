@@ -46,6 +46,13 @@ export async function PUT(
         totalAmount,
         status: data.status,
         notes: data.notes,
+        // Solo aceptamos cuando vienen — undefined = no tocar.
+        ...(data.referenceFolioNumber !== undefined && {
+          referenceFolioNumber: data.referenceFolioNumber || null,
+        }),
+        ...(data.referenceTipoDoc !== undefined && {
+          referenceTipoDoc: data.referenceTipoDoc ?? null,
+        }),
       },
     });
 

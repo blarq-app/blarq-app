@@ -179,6 +179,21 @@ export default async function FacturasPage({
                     >
                       {inv.folioNumber || "—"}
                     </Link>
+                    {inv.tipoDoc === 61 && (
+                      <span className="ml-1.5 text-[9px] uppercase tracking-wider bg-rose-50 text-rose-700 px-1 py-0.5 rounded">
+                        NC
+                      </span>
+                    )}
+                    {inv.tipoDoc === 56 && (
+                      <span className="ml-1.5 text-[9px] uppercase tracking-wider bg-amber-50 text-amber-700 px-1 py-0.5 rounded">
+                        ND
+                      </span>
+                    )}
+                    {inv.referenceFolioNumber && (
+                      <div className="text-[10px] text-gray-500 mt-0.5">
+                        ↩ ref F-{inv.referenceFolioNumber}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-gray-600 whitespace-nowrap">
                     {formatDate(inv.issueDate)}

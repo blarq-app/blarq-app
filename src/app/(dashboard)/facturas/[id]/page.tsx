@@ -3,6 +3,15 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import FacturaForm from "@/components/facturas/FacturaForm";
 
+const DTE_LABEL: Record<number, string> = {
+  33: "Factura",
+  34: "Factura exenta",
+  39: "Boleta",
+  41: "Boleta exenta",
+  56: "Nota de débito",
+  61: "Nota de crédito",
+};
+
 export default async function EditFacturaPage({
   params,
 }: {
@@ -28,6 +37,33 @@ export default async function EditFacturaPage({
 
   if (!invoice) notFound();
 
+  // Para NC (61) / ND (56): facturas candidatas a referenciar.
+  // Mismo type + mismo rutIssuer (SII recibidas) o rutReceiver (emitidas)
+  // que sean factura/exenta (tipoDoc 33 o 34).
+  const isNCorND = invoice.tipoDoc === 61 || invoice.tipoDoc === 56;
+  const referenceCandidates = isNCorND
+    ? await prisma.invoice.findMany({
+        where: {
+          type: invoice.type,
+          tipoDoc: { in: [33, 34] },
+          ...(invoice.type === "recibida"
+            ? { rutIssuer: invoice.rutIssuer ?? undefined }
+            : { rutReceiver: invoice.rutReceiver ?? undefined }),
+          NOT: { id: invoice.id },
+        },
+        orderBy: { issueDate: "desc" },
+        select: {
+          id: true,
+          folioNumber: true,
+          tipoDoc: true,
+          totalAmount: true,
+          businessName: true,
+          issueDate: true,
+        },
+        take: 50,
+      })
+    : [];
+
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
@@ -39,7 +75,8 @@ export default async function EditFacturaPage({
         </Link>
         <span className="text-gray-300">/</span>
         <h1 className="text-2xl font-bold text-gray-900">
-          {invoice.folioNumber ? `Folio ${invoice.folioNumber}` : "Factura"}
+          {DTE_LABEL[invoice.tipoDoc ?? 33] ?? "Factura"}
+          {invoice.folioNumber ? ` ${invoice.folioNumber}` : ""}
         </h1>
         {invoice.origin === "sii_automatica" && (
           <span className="text-[10px] uppercase tracking-wider bg-purple-100 text-purple-800 px-2 py-0.5 rounded">
@@ -52,6 +89,11 @@ export default async function EditFacturaPage({
         mode="edit"
         projects={projects}
         categories={categories}
+        tipoDoc={invoice.tipoDoc ?? null}
+        referenceCandidates={referenceCandidates.map((c) => ({
+          ...c,
+          issueDate: c.issueDate.toISOString().split("T")[0],
+        }))}
         initial={{
           id: invoice.id,
           type: invoice.type as "emitida" | "recibida",
@@ -65,6 +107,8 @@ export default async function EditFacturaPage({
           projectId: invoice.projectId ?? "",
           categoryId: invoice.categoryId ?? "",
           notes: invoice.notes ?? "",
+          referenceFolioNumber: invoice.referenceFolioNumber ?? "",
+          referenceTipoDoc: invoice.referenceTipoDoc ?? null,
         }}
       />
     </div>

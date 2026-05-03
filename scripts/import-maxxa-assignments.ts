@@ -8,9 +8,9 @@
 // Side-effects:
 //   - Crea proyectos faltantes (con el mismo nombre del centro de costo
 //     en Maxxa). 63_JNC se mapea al proyecto Lefevre que ya existe.
-//   - Crea categoría "Pendiente de asignar" para las que en Maxxa salen
-//     como "PROVEEDORES" sin sub.
-//   - UPDATE de Invoice: setea projectId + categoryId.
+//   - UPDATE de Invoice: setea projectId + categoryId. Las que en Maxxa
+//     salen como "PROVEEDORES" sin sub quedan con categoryId=null para
+//     que las reglas RUT→categoría las clasifiquen luego.
 //
 // Uso:  npx tsx scripts/import-maxxa-assignments.ts [--apply]
 //   sin --apply: dry-run, solo reporta lo que haría.
@@ -85,7 +85,7 @@ const CENTRO_PLAN: Record<string, "CREATE" | "NULL" | { existingId: string }> = 
 // (DescCatego, DescSubCatego) Maxxa → nombre de categoría en la app
 // Si la categoría tiene parent, devuelve [parent, child]. Si no, [name].
 type CatPath = [string] | [string, string];
-function mapCategoria(desc: string, sub: string): CatPath {
+function mapCategoria(desc: string, sub: string): CatPath | null {
   const d = desc.trim();
   const s = sub.trim();
 
@@ -116,12 +116,13 @@ function mapCategoria(desc: string, sub: string): CatPath {
   }
 
   // PROVEEDORES = default que pone Maxxa cuando no se asignó.
-  // Lo mandamos al "Pendiente de asignar" para distinguir de las que
-  // realmente están sin categoría asignada en la app.
-  if (d === "PROVEEDORES") return ["Pendiente de asignar"];
+  // En la app las dejamos con categoryId=null (renderiza como "sin
+  // categoría" itálica). Las reglas RUT→categoría las clasifican
+  // automáticamente cuando MJ asigna la primera del proveedor.
+  if (d === "PROVEEDORES") return null;
 
-  // Por defecto, también pendiente.
-  return ["Pendiente de asignar"];
+  // Por defecto, también null.
+  return null;
 }
 
 // Normalización de RUT: Maxxa usa "76237019-0" sin puntos. SII
@@ -253,22 +254,7 @@ async function main() {
     }
   }
 
-  // 2) Asegurar categoría "Pendiente de asignar"
-  let pendingCat = await prisma.costCategory.findFirst({
-    where: { name: "Pendiente de asignar", parentId: null },
-  });
-  if (!pendingCat) {
-    if (APPLY) {
-      pendingCat = await prisma.costCategory.create({
-        data: { name: "Pendiente de asignar", sortOrder: 999 },
-      });
-      console.log(`  ✓ creada categoría "Pendiente de asignar"`);
-    } else {
-      console.log(`  + crearía categoría "Pendiente de asignar"`);
-    }
-  }
-
-  // 3) Pre-cargar todas las categorías para resolver paths
+  // 2) Pre-cargar todas las categorías para resolver paths
   const allCats = await prisma.costCategory.findMany({
     select: { id: true, name: true, parentId: true },
   });
@@ -282,9 +268,6 @@ async function main() {
     const child = allCats.find((c) => c.name === path[1] && c.parentId === parent.id);
     return child?.id ?? null;
   }
-
-  // Re-fetch para incluir la pendiente recién creada (en APPLY)
-  if (APPLY && pendingCat) allCats.push({ ...pendingCat });
 
   // 4) Recorrer filas y hacer match contra Invoice
   const stats = {
@@ -333,13 +316,12 @@ async function main() {
     const projectId = projectByCentro.get(centro);
     const finalProjectId = projectId === "<<NEW>>" ? null : projectId ?? null;
 
-    // Resolver categoryId
+    // Resolver categoryId. catPath=null → factura queda con categoryId=null
+    // (las reglas RUT→categoría la clasifican cuando MJ asigne la primera
+    // del proveedor).
     const catPath = mapCategoria(desc, sub);
-    let categoryId = findCat(catPath);
-    if (!categoryId && catPath[0] === "Pendiente de asignar" && pendingCat) {
-      categoryId = pendingCat.id;
-    }
-    if (!categoryId) {
+    const categoryId = catPath ? findCat(catPath) : null;
+    if (catPath && !categoryId) {
       stats.catMissing.push(`${desc}${sub ? ` > ${sub}` : ""} (folio ${folio})`);
     }
 

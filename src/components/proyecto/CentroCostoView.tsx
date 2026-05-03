@@ -24,6 +24,8 @@ type Invoice = {
 
 // Mapeo: top categoría → sección del EERR.
 // Cualquier categoría no listada cae en "Otros".
+// Las facturas con categoryId=null caen en "Sin categoría" (sección visual
+// distinguida en itálica gris) — coincide con el render del listado.
 const SECTION_BY_TOP: Record<string, string> = {
   "Gastos generales": "Gastos generales",
   "Auto": "Vehículos",
@@ -32,8 +34,9 @@ const SECTION_BY_TOP: Record<string, string> = {
   "Gastos financieros": "Gastos financieros",
   "Mano de obra": "Mano de obra",
   "Subcontrato": "Subcontratos",
-  "Pendiente de asignar": "Pendiente de asignar",
 };
+
+const UNCATEGORIZED_SECTION = "Sin categoría";
 
 const SECTION_ORDER = [
   "Gastos generales",
@@ -44,7 +47,7 @@ const SECTION_ORDER = [
   "Subcontratos",
   "Gastos financieros",
   "Otros",
-  "Pendiente de asignar",
+  UNCATEGORIZED_SECTION,
 ];
 
 export default function CentroCostoView({
@@ -98,16 +101,18 @@ export default function CentroCostoView({
 
   function addToSection(inv: Invoice, periodKey: "current" | "previous") {
     const cat = inv.category;
-    const top = cat?.parent?.name ?? cat?.name ?? "Otros";
+    const top = cat?.parent?.name ?? cat?.name ?? null;
     const sub = cat?.parent ? cat.name : null;
 
-    const sectionName = SECTION_BY_TOP[top] ?? "Otros";
+    const sectionName = top
+      ? (SECTION_BY_TOP[top] ?? "Otros")
+      : UNCATEGORIZED_SECTION;
     const section = sectionsMap.get(sectionName)!;
 
     // Si la categoría tiene parent → la sub se llama como cat.name.
-    // Si no tiene parent → la "sub" es el mismo nombre del top
-    // (evita perderlas en agrupación).
-    const subKey = sub ?? top;
+    // Si no tiene parent → la "sub" es el mismo nombre del top.
+    // Si no hay categoría → cae en "Sin categoría" sin desglose.
+    const subKey = sub ?? top ?? UNCATEGORIZED_SECTION;
 
     let s = section.subs.get(subKey);
     if (!s) {
@@ -282,6 +287,7 @@ export default function CentroCostoView({
                     sectionCurrent={sectionCurrent}
                     sectionPrev={sectionPrev}
                     sectionVar={sectionVar}
+                    dim={section.name === UNCATEGORIZED_SECTION}
                   />
                 );
               })}
@@ -439,18 +445,26 @@ function SectionBlock({
   sectionCurrent,
   sectionPrev,
   sectionVar,
+  dim,
 }: {
   name: string;
   subs: Array<{ name: string; current: number; previous: number }>;
   sectionCurrent: number;
   sectionPrev: number;
   sectionVar: number;
+  dim?: boolean;
 }) {
+  const labelClass = dim
+    ? "pl-2 py-1.5 italic text-gray-400"
+    : "pl-2 py-1.5 font-medium text-gray-900";
+  const amountClass = dim
+    ? "text-right py-1.5 tabular-nums italic text-gray-400"
+    : "text-right py-1.5 tabular-nums font-medium text-gray-900";
   return (
     <>
       <tr className="border-t border-gray-100">
-        <td className="pl-2 py-1.5 font-medium text-gray-900">{name}</td>
-        <td className="text-right py-1.5 tabular-nums font-medium text-gray-900">
+        <td className={labelClass}>{name}</td>
+        <td className={amountClass}>
           {formatCLP(sectionCurrent)}
         </td>
         <td className="text-right py-1.5 tabular-nums text-gray-600">

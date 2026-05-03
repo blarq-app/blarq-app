@@ -34,7 +34,10 @@ export default async function ResultadosPage({
     where: { id },
     include: {
       invoices: {
-        include: { category: { include: { parent: true } } },
+        include: {
+          category: { include: { parent: true } },
+          payments: { select: { amountApplied: true } },
+        },
       },
       budgetVersions: {
         include: {

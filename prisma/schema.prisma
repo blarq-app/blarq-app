@@ -499,12 +499,43 @@ model Invoice {
   project         Project?      @relation(fields: [projectId], references: [id])
   category        CostCategory? @relation(fields: [categoryId], references: [id])
   bankMovements   BankMovement[]
+  payments        InvoicePayment[]
 
   @@unique([type, tipoDoc, folioNumber, rutIssuer], name: "dte_unique")
   @@index([projectId])
   @@index([categoryId])
   @@index([origin, projectId]) // para query "SII sin asignar"
   @@index([siiTrackId])
+}
+
+// Imputación de un movimiento bancario a una factura. Sirve para cobros
+// parciales (varios movimientos contra una factura) y splits (un
+// movimiento contra varias facturas — caso típico: cliente transfiere un
+// monto único que cubre obra + muebles + artefactos en facturas separadas).
+//
+// Reglas:
+//   - amountApplied es siempre positivo (CLP). El "sentido" lo da el tipo
+//     de factura: emitida=cobro, recibida=pago.
+//   - Σ(amountApplied where invoiceId=X) define el status de la factura:
+//       0                    → pendiente
+//       0 < sum < totalAmount → parcial
+//       sum >= totalAmount   → pagada (paidAt = max(date) de los movs)
+//   - Σ(amountApplied where bankMovementId=Y) ≤ |amount| del mov. El
+//     resto del monto puede estar sin imputar (típico cuando el abono
+//     incluye plata que no es de facturas — ej, pago al maestro JT).
+model InvoicePayment {
+  id              String       @id @default(cuid())
+  bankMovementId  String
+  invoiceId       String
+  amountApplied   Float
+  createdAt       DateTime     @default(now())
+
+  bankMovement    BankMovement @relation(fields: [bankMovementId], references: [id], onDelete: Cascade)
+  invoice         Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@unique([bankMovementId, invoiceId], name: "payment_unique")
+  @@index([invoiceId])
+  @@index([bankMovementId])
 }
 
 // ==================== CUENTAS BANCARIAS Y MOVIMIENTOS ====================
@@ -572,6 +603,7 @@ model BankMovement {
 
   bankAccount     BankAccount  @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
   invoice         Invoice?     @relation(fields: [invoiceId], references: [id])
+  payments        InvoicePayment[]
   internalTransferTo BankMovement? @relation("InternalTransfer", fields: [internalTransferToId], references: [id])
   internalTransferFrom BankMovement? @relation("InternalTransfer")
 

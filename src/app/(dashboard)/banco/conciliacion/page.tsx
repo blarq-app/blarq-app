@@ -12,15 +12,28 @@ import AsignarMovimientoForm from "@/components/banco/AsignarMovimientoForm";
 // que pueden ser pago total o parcial. Ordenadas por monto más cercano.
 
 export default async function ConciliacionPage() {
+  // Mostramos sin_asignar Y parcial — los parciales todavía tienen saldo
+  // libre por imputar (típico cuando un abono cubre obra+muebles+artefactos
+  // y MJ ya asignó uno pero le falta los otros).
   const movimientos = await prisma.bankMovement.findMany({
-    where: { status: "sin_asignar" },
+    where: { status: { in: ["sin_asignar", "parcial"] } },
     orderBy: { date: "desc" },
-    include: { bankAccount: { select: { alias: true } } },
+    include: {
+      bankAccount: { select: { alias: true } },
+      payments: {
+        include: {
+          invoice: {
+            select: { folioNumber: true, businessName: true, totalAmount: true },
+          },
+        },
+      },
+    },
   });
 
-  // Pre-cargar facturas pendientes (toda la lista, después filtramos en JS)
+  // Pre-cargar facturas que TODAVÍA tienen saldo libre (pendiente o parcial).
+  // Las pagadas no son candidatas para imputar más cobros.
   const pendingInvoices = await prisma.invoice.findMany({
-    where: { status: "pendiente" },
+    where: { status: { in: ["pendiente", "parcial"] }, tipoDoc: { not: 61 } },
     select: {
       id: true,
       type: true,
@@ -123,6 +136,12 @@ export default async function ConciliacionPage() {
                 movimientoId={mov.id}
                 amount={mov.amount}
                 candidates={candidatesFor(mov)}
+                existingPayments={mov.payments.map((p) => ({
+                  id: p.id,
+                  invoiceId: p.invoiceId,
+                  amountApplied: p.amountApplied,
+                  invoice: p.invoice,
+                }))}
               />
             </div>
           ))}

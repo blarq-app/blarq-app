@@ -21,9 +21,11 @@ const projectFondoInclude = {
     select: {
       id: true,
       type: true,
+      tipoDoc: true,
       totalAmount: true,
       conceptoCobro: true,
       status: true,
+      payments: { select: { amountApplied: true } },
     },
   },
   budgetVersions: {
@@ -97,15 +99,29 @@ export function computeFondoSueldos(p: ProjectWithFondo): FondoSueldosCalculo {
     : 0;
 
   // ── Cobrado por concepto ────────────────────────────────────────────
-  // Suma facturas emitidas pagadas (status="pagada") agrupadas por conceptoCobro.
+  // Sumamos lo efectivamente cobrado (suma de InvoicePayment) agrupado por
+  // conceptoCobro. Esto incluye facturas en estado "parcial" (cobradas por
+  // partes) — el fondo crece proporcional a lo recibido, no espera a que
+  // la factura esté 100% pagada.
+  // Las NCs emitidas (tipoDoc=61) restan, porque revierten el cobro.
   // Si conceptoCobro es null/undefined, default = "obra" (lo más frecuente).
   let obraCobrado = 0;
   let mueblesCobrado = 0;
   for (const inv of p.invoices) {
-    if (inv.status !== "pagada") continue;
+    const sign = inv.tipoDoc === 61 ? -1 : 1;
+    // Si tiene payments, sumarlos. Sino, fallback a totalAmount cuando
+    // status="pagada" (cobros marcados a mano sin movimiento bancario).
+    const payments = inv.payments ?? [];
+    const cobradoDeFactura =
+      payments.length > 0
+        ? payments.reduce((s, p) => s + p.amountApplied, 0)
+        : inv.status === "pagada"
+          ? inv.totalAmount
+          : 0;
+    const signed = sign * cobradoDeFactura;
     const concepto = inv.conceptoCobro ?? "obra";
-    if (concepto === "muebles") mueblesCobrado += inv.totalAmount;
-    else if (concepto === "obra") obraCobrado += inv.totalAmount;
+    if (concepto === "muebles") mueblesCobrado += signed;
+    else if (concepto === "obra") obraCobrado += signed;
     // artefactos y mixto no aportan al fondo
   }
 

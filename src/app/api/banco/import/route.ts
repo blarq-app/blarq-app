@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { parseCartolaSantander } from "@/lib/banco/santanderParser";
+import { recomputeInvoiceStatus } from "@/lib/banco/invoicePayments";
 
 // POST /api/banco/import
 //   body: form-data con `file` (Excel cartola Santander)
@@ -164,10 +165,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 5. Auto-matching contra facturas pendientes
+    // 5. Auto-matching contra facturas pendientes.
+    // Solo cubre el caso "monto exacto" (±$10 de tolerancia). Cobros
+    // parciales y splits los maneja MJ manualmente desde /banco/conciliacion.
     for (const movId of insertedIds) {
-      const mov = await prisma.bankMovement.findUnique({ where: { id: movId } });
-      if (!mov || mov.status === "interno" || mov.invoiceId) continue;
+      const mov = await prisma.bankMovement.findUnique({
+        where: { id: movId },
+        include: { payments: true },
+      });
+      if (!mov || mov.status === "interno") continue;
+      // Si ya tiene imputación parcial o total, saltar.
+      if (mov.payments.length > 0) continue;
 
       // Cargo → buscar factura recibida pendiente del proveedor
       // Abono → buscar factura emitida pendiente al cliente
@@ -180,6 +188,7 @@ export async function POST(request: NextRequest) {
         where: {
           type: targetType,
           status: "pendiente",
+          tipoDoc: { not: 61 }, // NCs no se "pagan", revierten otra factura
           totalAmount: { gte: absAmount - 10, lte: absAmount + 10 },
         },
         select: { id: true, rutIssuer: true, rutReceiver: true, businessName: true, totalAmount: true },
@@ -203,18 +212,20 @@ export async function POST(request: NextRequest) {
         else continue; // ningún match por RUT, dejar sin asignar
       }
 
-      // Conciliar: linkear movimiento + marcar factura como pagada
-      await prisma.bankMovement.update({
-        where: { id: mov.id },
+      // Crear el InvoicePayment con el monto exacto del movimiento.
+      // El status de la factura lo deriva recomputeInvoiceStatus.
+      await prisma.invoicePayment.create({
         data: {
+          bankMovementId: mov.id,
           invoiceId: match.id,
-          status: "conciliado",
+          amountApplied: absAmount,
         },
       });
-      await prisma.invoice.update({
-        where: { id: match.id },
-        data: { status: "pagada", paidAt: mov.date },
+      await prisma.bankMovement.update({
+        where: { id: mov.id },
+        data: { status: "conciliado" },
       });
+      await recomputeInvoiceStatus(match.id);
       stats.autoMatchedInvoices++;
     }
 

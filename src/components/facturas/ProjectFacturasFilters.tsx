@@ -102,6 +102,7 @@ export default function ProjectFacturasFilters({
       >
         <option value="">Cualquier estado</option>
         <option value="pendiente">Pendiente</option>
+        <option value="parcial">Parcial</option>
         <option value="pagada">Pagada</option>
         <option value="anulada">Anulada</option>
       </select>

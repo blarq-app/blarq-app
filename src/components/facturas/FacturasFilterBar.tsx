@@ -68,6 +68,7 @@ export default function FacturasFilterBar({
         options={[
           { label: "Cualquier estado", value: "" },
           { label: "Pendiente", value: "pendiente" },
+          { label: "Parcial", value: "parcial" },
           { label: "Pagada", value: "pagada" },
           { label: "Anulada", value: "anulada" },
         ]}

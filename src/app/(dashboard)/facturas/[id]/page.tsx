@@ -61,7 +61,7 @@ export default async function EditFacturaPage({
           issueDate: invoice.issueDate.toISOString().split("T")[0],
           dueDate: invoice.dueDate?.toISOString().split("T")[0] ?? "",
           netAmount: invoice.netAmount,
-          status: invoice.status as "pendiente" | "pagada" | "anulada",
+          status: invoice.status as "pendiente" | "parcial" | "pagada" | "anulada",
           projectId: invoice.projectId ?? "",
           categoryId: invoice.categoryId ?? "",
           notes: invoice.notes ?? "",

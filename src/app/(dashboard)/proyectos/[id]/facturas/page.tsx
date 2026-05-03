@@ -6,7 +6,7 @@ import ProjectFacturasFilters from "@/components/facturas/ProjectFacturasFilters
 
 type SearchParams = {
   type?: "emitida" | "recibida";
-  status?: "pendiente" | "pagada" | "anulada";
+  status?: "pendiente" | "parcial" | "pagada" | "anulada";
   origin?: "manual" | "sii_automatica";
   category?: string;
   dateFrom?: string;
@@ -16,6 +16,7 @@ type SearchParams = {
 
 const STATUS_TONE: Record<string, string> = {
   pendiente: "bg-yellow-100 text-yellow-800",
+  parcial: "bg-blue-100 text-blue-800",
   pagada: "bg-green-100 text-green-800",
   anulada: "bg-gray-100 text-gray-500",
 };
@@ -71,8 +72,21 @@ export default async function ProyectoFacturasPage({
     orderBy: { issueDate: "desc" },
     include: {
       category: { select: { id: true, name: true } },
+      payments: { select: { amountApplied: true } },
     },
   });
+
+  // Helper: cuánto está cobrado/pagado de una factura. Para facturas
+  // pagadas via "marca manual" sin InvoicePayment, asumimos full.
+  const paidOf = (
+    inv: { status: string; totalAmount: number; payments: { amountApplied: number }[] }
+  ) => {
+    if (inv.payments.length > 0) return inv.payments.reduce((s, p) => s + p.amountApplied, 0);
+    return inv.status === "pagada" ? inv.totalAmount : 0;
+  };
+  const remainingOf = (
+    inv: { status: string; totalAmount: number; payments: { amountApplied: number }[] }
+  ) => Math.max(0, inv.totalAmount - paidOf(inv));
 
   // Lista global del proyecto (sin filtros) para tabs y para tener
   // contexto del "X de Y total" cuando hay filtros activos.
@@ -97,12 +111,14 @@ export default async function ProyectoFacturasPage({
   const totalRecibido = invoices
     .filter((i) => i.type === "recibida")
     .reduce((s, i) => s + i.totalAmount, 0);
+  // "Por cobrar/pagar" = saldo restante (totalAmount − ya imputado). Cubre
+  // tanto status=pendiente (saldo completo) como parcial (saldo residual).
   const porCobrar = invoices
-    .filter((i) => i.type === "emitida" && i.status === "pendiente")
-    .reduce((s, i) => s + i.totalAmount, 0);
+    .filter((i) => i.type === "emitida" && i.status !== "pagada" && i.status !== "anulada")
+    .reduce((s, i) => s + remainingOf(i), 0);
   const porPagar = invoices
-    .filter((i) => i.type === "recibida" && i.status === "pendiente")
-    .reduce((s, i) => s + i.totalAmount, 0);
+    .filter((i) => i.type === "recibida" && i.status !== "pagada" && i.status !== "anulada")
+    .reduce((s, i) => s + remainingOf(i), 0);
 
   const isFiltered =
     !!(sp.status || sp.origin || sp.category || sp.dateFrom || sp.dateTo || sp.q);
@@ -248,6 +264,11 @@ export default async function ProyectoFacturasPage({
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums font-medium text-gray-900">
                     {formatCLP(inv.totalAmount)}
+                    {inv.status === "parcial" && (
+                      <div className="text-[10px] text-blue-700 font-normal mt-0.5">
+                        {formatCLP(paidOf(inv))} cobrado · {formatCLP(remainingOf(inv))} falta
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-2">
                     <span

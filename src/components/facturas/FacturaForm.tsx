@@ -22,7 +22,7 @@ export type FacturaFormValues = {
   issueDate: string;
   dueDate: string;
   netAmount: number;
-  status: "pendiente" | "pagada" | "anulada";
+  status: "pendiente" | "parcial" | "pagada" | "anulada";
   projectId: string;
   categoryId: string;
   notes: string;

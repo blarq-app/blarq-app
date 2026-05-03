@@ -6,7 +6,7 @@ import { formatCLP, formatDate } from "@/lib/utils";
 
 type SearchParams = {
   type?: "emitida" | "recibida";
-  status?: "pendiente" | "pagada" | "anulada";
+  status?: "pendiente" | "parcial" | "pagada" | "anulada";
   origin?: "manual" | "sii_automatica";
   projectId?: string;
   q?: string;
@@ -14,6 +14,7 @@ type SearchParams = {
 
 const STATUS_TONE: Record<string, string> = {
   pendiente: "bg-yellow-100 text-yellow-800",
+  parcial: "bg-blue-100 text-blue-800",
   pagada: "bg-green-100 text-green-800",
   anulada: "bg-gray-100 text-gray-500",
 };

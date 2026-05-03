@@ -186,7 +186,7 @@ export default function FacturasTable({
                   <span
                     className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${
                       inv.origin === "sii_automatica"
-                        ? "bg-purple-100 text-purple-800"
+                        ? "bg-blue-100 text-blue-800"
                         : "bg-gray-100 text-gray-600"
                     }`}
                   >

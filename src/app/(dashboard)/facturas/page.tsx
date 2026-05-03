@@ -110,7 +110,7 @@ export default async function FacturasPage({
           >
             Reglas
           </Link>
-          <SyncSiiButton from={SII_SYNC_FROM} />
+          <SyncSiiButton defaultFrom={SII_SYNC_FROM} />
           <Link
             href="/facturas/nueva"
             className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800"

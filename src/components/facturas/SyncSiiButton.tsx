@@ -7,10 +7,14 @@ import { useRouter } from "next/navigation";
 // Trae las facturas nuevas desde el SII y las guarda en la app.
 // Las que vienen del SII llegan sin proyecto asignado — el usuario las
 // asigna después en la lista filtrada.
-export default function SyncSiiButton({ from }: { from: string }) {
+//
+// El input fecha permite ajustar el `from` en runtime — útil para re-traer
+// un mes específico o ampliar/acotar la ventana sin tocar código.
+export default function SyncSiiButton({ defaultFrom }: { defaultFrom: string }) {
   const router = useRouter();
   const [syncing, setSyncing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [from, setFrom] = useState(defaultFrom);
 
   async function handleSync() {
     setSyncing(true);
@@ -45,10 +49,20 @@ export default function SyncSiiButton({ from }: { from: string }) {
           {result}
         </span>
       )}
+      <label className="flex items-center gap-1.5 text-xs text-gray-500">
+        Desde
+        <input
+          type="date"
+          value={from}
+          onChange={(e) => setFrom(e.target.value)}
+          disabled={syncing}
+          className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:opacity-50"
+        />
+      </label>
       <button
         onClick={handleSync}
         disabled={syncing}
-        className="bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-800 disabled:opacity-50"
+        className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
         title={`Trae las facturas del SII desde ${from}`}
       >
         {syncing ? "Sincronizando…" : "↓ Sincronizar SII"}

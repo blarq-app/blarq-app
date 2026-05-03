@@ -84,7 +84,7 @@ export default async function EditFacturaPage({
           {invoice.folioNumber ? ` ${invoice.folioNumber}` : ""}
         </h1>
         {invoice.origin === "sii_automatica" && (
-          <span className="text-[10px] uppercase tracking-wider bg-purple-100 text-purple-800 px-2 py-0.5 rounded">
+          <span className="text-[10px] uppercase tracking-wider bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
             SII
           </span>
         )}

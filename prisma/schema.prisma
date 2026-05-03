@@ -508,7 +508,6 @@ model Invoice {
 
   project         Project?      @relation(fields: [projectId], references: [id])
   category        CostCategory? @relation(fields: [categoryId], references: [id])
-  bankMovements   BankMovement[]
   payments        InvoicePayment[]
 
   @@unique([type, tipoDoc, folioNumber, rutIssuer], name: "dte_unique")
@@ -641,10 +640,6 @@ model BankMovement {
   // Valores típicos: sueldo | previred | comision_bancaria | retiro_personal
   // | deposito_efectivo | otro_sin_factura | null.
   category        String?
-  // Conciliación con factura: si el movimiento corresponde a un pago de
-  // factura emitida o recibida, queda linkeado acá. Cuando se setea, la
-  // factura pasa a status="pagada".
-  invoiceId       String?
   // Transferencia entre dos cuentas BLARQ (cta operativa ↔ cta sueldos).
   // Cuando se detecta, ambos lados se linkean entre sí. NO cuenta como
   // gasto ni ingreso real — es solo movimiento de fondos interno.
@@ -660,7 +655,6 @@ model BankMovement {
   updatedAt       DateTime @updatedAt
 
   bankAccount     BankAccount  @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
-  invoice         Invoice?     @relation(fields: [invoiceId], references: [id])
   payments        InvoicePayment[]
   internalTransferTo BankMovement? @relation("InternalTransfer", fields: [internalTransferToId], references: [id])
   internalTransferFrom BankMovement? @relation("InternalTransfer")
@@ -669,7 +663,6 @@ model BankMovement {
   // + ref no se duplica si MJ vuelve a importar la misma cartola.
   @@unique([bankAccountId, date, amount, description], name: "movement_unique")
   @@index([bankAccountId])
-  @@index([invoiceId])
   @@index([date])
   @@index([status])
 }

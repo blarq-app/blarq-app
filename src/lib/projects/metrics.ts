@@ -141,14 +141,21 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   const facturasRecibidas = project.invoices.filter(
     (i) => i.type === "recibida"
   );
+  // Una nota de crédito (DTE 61) revierte una factura — debe restar, no sumar.
+  // Aplica para ambos lados: NC recibida = proveedor te devolvió plata; NC
+  // emitida = devolviste plata al cliente.
+  const sign = (i: { tipoDoc: number | null }) => (i.tipoDoc === 61 ? -1 : 1);
   // Cobrado al cliente: c/IVA (es lo que efectivamente entra a caja).
-  const totalCobrado = facturasEmitidas.reduce((s, i) => s + i.totalAmount, 0);
+  const totalCobrado = facturasEmitidas.reduce(
+    (s, i) => s + sign(i) * i.totalAmount,
+    0
+  );
   // Gastado: NETO. El IVA pagado a proveedores se recupera como crédito
   // fiscal, así que el costo real de un insumo para BLARQ es el neto.
   // Comparar contra el presupuesto (que está en neto) requiere usar neto
   // también — sino el "real" sale inflado ~19% artificialmente.
   const totalRecibidoFacturas = facturasRecibidas.reduce(
-    (s, i) => s + i.netAmount,
+    (s, i) => s + sign(i) * i.netAmount,
     0
   );
 
@@ -193,8 +200,9 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
     const cat = inv.category;
     if (!cat) continue;
     const top = cat.parent?.name ?? cat.name;
-    realByCategory[top] = (realByCategory[top] ?? 0) + inv.netAmount;
-    realBySpecific[cat.name] = (realBySpecific[cat.name] ?? 0) + inv.netAmount;
+    const signed = sign(inv) * inv.netAmount;
+    realByCategory[top] = (realByCategory[top] ?? 0) + signed;
+    realBySpecific[cat.name] = (realBySpecific[cat.name] ?? 0) + signed;
   }
 
   const conceptDeviations: CategoryDeviation[] = Object.entries(

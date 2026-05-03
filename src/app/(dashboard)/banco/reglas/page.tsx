@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import DeleteRuleButton from "@/components/banco/DeleteRuleButton";
+import ApplyRulesButton from "@/components/banco/ApplyRulesButton";
 
 const CATEGORY_LABEL: Record<string, string> = {
   sueldo: "Sueldo",
@@ -14,9 +15,12 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 export default async function ReglasPage() {
-  const rules = await prisma.bankCategorizationRule.findMany({
-    orderBy: [{ hits: "desc" }, { createdAt: "desc" }],
-  });
+  const [rules, unassignedCount] = await Promise.all([
+    prisma.bankCategorizationRule.findMany({
+      orderBy: [{ hits: "desc" }, { createdAt: "desc" }],
+    }),
+    prisma.bankMovement.count({ where: { status: "sin_asignar" } }),
+  ]);
 
   return (
     <div>
@@ -31,6 +35,7 @@ export default async function ReglasPage() {
             {rules.length !== 1 ? "s" : ""}
           </p>
         </div>
+        {rules.length > 0 && <ApplyRulesButton unassignedCount={unassignedCount} />}
       </div>
 
       <div className="bg-blue-50/40 border border-blue-100 rounded-lg p-3 mb-4 text-xs text-gray-700">

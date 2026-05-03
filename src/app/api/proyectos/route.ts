@@ -1,6 +1,22 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
+// GET /api/proyectos
+// Listado liviano de proyectos para selectors (modal asignar pagos, etc).
+// Devuelve id + name + numeroProyecto + isInternal, ordenado por número.
+export async function GET() {
+  const projects = await prisma.project.findMany({
+    select: {
+      id: true,
+      name: true,
+      numeroProyecto: true,
+      isInternal: true,
+    },
+    orderBy: [{ isInternal: "asc" }, { numeroProyecto: "asc" }],
+  });
+  return NextResponse.json({ ok: true, projects });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json();

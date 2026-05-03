@@ -56,6 +56,10 @@ export default function MovementReconcileModal({
   const [q, setQ] = useState("");
   const [filterSameClient, setFilterSameClient] = useState(true);
   const [onlyWithBalance, setOnlyWithBalance] = useState(true);
+  const [filterProjectId, setFilterProjectId] = useState<string>("");
+  const [projects, setProjects] = useState<
+    { id: string; name: string; numeroProyecto: number | null; isInternal: boolean }[]
+  >([]);
   const [results, setResults] = useState<Factura[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,9 +91,21 @@ export default function MovementReconcileModal({
       );
       setQ("");
       setFilterSameClient(!!movement.counterpartyRut);
+      setFilterProjectId("");
       setError(null);
     }
   }, [open, existingPayments, movement.counterpartyRut]);
+
+  // Cargar listado de proyectos la primera vez que se abre.
+  useEffect(() => {
+    if (!open || projects.length > 0) return;
+    fetch("/api/proyectos")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.projects) setProjects(data.projects);
+      })
+      .catch(() => {});
+  }, [open, projects.length]);
 
   const sumApplied = drafts.reduce((s, d) => s + d.amountApplied, 0);
   const remaining = Math.max(0, absAmount - sumApplied);
@@ -108,6 +124,7 @@ export default function MovementReconcileModal({
       if (filterSameClient && movement.counterpartyRut) {
         params.set("counterpartyRut", movement.counterpartyRut);
       }
+      if (filterProjectId) params.set("projectId", filterProjectId);
       params.set("onlyWithBalance", onlyWithBalance ? "1" : "0");
       if (absAmount) params.set("amount", String(absAmount));
       const res = await fetch(`/api/facturas/search?${params.toString()}`);
@@ -124,7 +141,7 @@ export default function MovementReconcileModal({
     } finally {
       setLoading(false);
     }
-  }, [open, q, targetType, filterSameClient, onlyWithBalance, absAmount, movement.counterpartyRut, drafts]);
+  }, [open, q, targetType, filterSameClient, onlyWithBalance, filterProjectId, absAmount, movement.counterpartyRut, drafts]);
 
   // Buscar al abrir, y cuando cambian filtros (debounced en q).
   useEffect(() => {
@@ -133,7 +150,7 @@ export default function MovementReconcileModal({
       search();
     }, 200);
     return () => clearTimeout(t);
-  }, [open, q, filterSameClient, onlyWithBalance, search]);
+  }, [open, q, filterSameClient, onlyWithBalance, filterProjectId, search]);
 
   function addDraft(f: Factura) {
     const suggested = Math.min(remaining, f.remaining);
@@ -310,6 +327,21 @@ export default function MovementReconcileModal({
                   />
                   Solo con saldo
                 </label>
+                <select
+                  value={filterProjectId}
+                  onChange={(e) => setFilterProjectId(e.target.value)}
+                  className="text-xs border border-gray-300 rounded px-2 py-1 text-gray-700 bg-white max-w-[180px] truncate"
+                  title="Filtrar por proyecto"
+                >
+                  <option value="">Cualquier proyecto</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.numeroProyecto ? `${p.numeroProyecto} · ` : ""}
+                      {p.name}
+                      {p.isInternal ? " (interno)" : ""}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           )}

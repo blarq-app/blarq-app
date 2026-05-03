@@ -5,7 +5,17 @@ import { useState } from "react";
 import { Button } from "@/components/ui";
 import { formatCLP } from "@/lib/utils";
 
-type Project = { id: string; name: string };
+type Project = {
+  id: string;
+  name: string;
+  numeroProyecto?: number | null;
+  numeroCotizacion?: number | null;
+};
+
+function projectLabel(p: Project): string {
+  const n = p.numeroProyecto ?? p.numeroCotizacion;
+  return n != null ? `${n} · ${p.name}` : p.name;
+}
 
 type Category = {
   id: string;
@@ -206,7 +216,7 @@ export default function FacturaForm({
             <option value="">— Sin asignar —</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name}
+                {projectLabel(p)}
               </option>
             ))}
           </select>

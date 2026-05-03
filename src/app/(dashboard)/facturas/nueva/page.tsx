@@ -11,8 +11,13 @@ export default async function NuevaFacturaPage({
 
   const [projects, categories] = await Promise.all([
     prisma.project.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      orderBy: [{ numeroProyecto: "asc" }, { numeroCotizacion: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        numeroProyecto: true,
+        numeroCotizacion: true,
+      },
     }),
     prisma.costCategory.findMany({
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],

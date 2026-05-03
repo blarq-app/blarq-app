@@ -22,8 +22,13 @@ export default async function EditFacturaPage({
   const [invoice, projects, categories] = await Promise.all([
     prisma.invoice.findUnique({ where: { id } }),
     prisma.project.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      orderBy: [{ numeroProyecto: "asc" }, { numeroCotizacion: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        numeroProyecto: true,
+        numeroCotizacion: true,
+      },
     }),
     prisma.costCategory.findMany({
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],

@@ -9,6 +9,10 @@ type SearchParams = {
   status?: "pendiente" | "parcial" | "pagada" | "anulada";
   origin?: "manual" | "sii_automatica";
   projectId?: string;
+  tipoDoc?: string;
+  categoryId?: string;
+  dateFrom?: string;
+  dateTo?: string;
   q?: string;
 };
 
@@ -32,6 +36,19 @@ export default async function FacturasPage({
   if (sp.origin) where.origin = sp.origin;
   if (sp.projectId === "sin-asignar") where.projectId = null;
   else if (sp.projectId) where.projectId = sp.projectId;
+  if (sp.tipoDoc) where.tipoDoc = Number(sp.tipoDoc);
+  if (sp.categoryId) where.categoryId = sp.categoryId;
+  if (sp.dateFrom || sp.dateTo) {
+    const dateFilter: Record<string, Date> = {};
+    if (sp.dateFrom) dateFilter.gte = new Date(sp.dateFrom);
+    if (sp.dateTo) {
+      // inclusivo: hasta el final del día
+      const end = new Date(sp.dateTo);
+      end.setHours(23, 59, 59, 999);
+      dateFilter.lte = end;
+    }
+    where.issueDate = dateFilter;
+  }
   if (sp.q) {
     where.OR = [
       { folioNumber: { contains: sp.q } },
@@ -41,7 +58,7 @@ export default async function FacturasPage({
     ];
   }
 
-  const [invoices, projects] = await Promise.all([
+  const [invoices, projects, categories] = await Promise.all([
     prisma.invoice.findMany({
       where,
       orderBy: { issueDate: "desc" },
@@ -52,8 +69,21 @@ export default async function FacturasPage({
       take: 500,
     }),
     prisma.project.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      orderBy: [{ numeroProyecto: "asc" }, { numeroCotizacion: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        numeroProyecto: true,
+        numeroCotizacion: true,
+      },
+    }),
+    prisma.costCategory.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        parent: { select: { id: true, name: true } },
+      },
     }),
   ]);
 
@@ -123,11 +153,16 @@ export default async function FacturasPage({
 
       <FacturasFilterBar
         projects={projects}
+        categories={categories}
         initial={{
           type: sp.type ?? "",
           status: sp.status ?? "",
           origin: sp.origin ?? "",
           projectId: sp.projectId ?? "",
+          tipoDoc: sp.tipoDoc ?? "",
+          categoryId: sp.categoryId ?? "",
+          dateFrom: sp.dateFrom ?? "",
+          dateTo: sp.dateTo ?? "",
           q: sp.q ?? "",
         }}
       />

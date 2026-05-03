@@ -446,6 +446,7 @@ model CostCategory {
   parent      CostCategory?  @relation("CategoryParent", fields: [parentId], references: [id])
   children    CostCategory[] @relation("CategoryParent")
   invoices    Invoice[]
+  invoiceRules InvoiceCategorizationRule[]
 
   @@index([parentId])
 }
@@ -546,6 +547,29 @@ model Invoice {
 //     las reglas a movs que quedan sin_asignar.
 //   - Cuando MJ categoriza manualmente, se actualiza/crea la regla en
 //     paralelo al PATCH del movimiento.
+// Regla de auto-categorización de facturas por proveedor.
+// Cuando MJ asigna categoría a una factura recibida (manual o vía bulk),
+// se crea/actualiza una regla "RUT proveedor → categoría". Próximas
+// facturas que llegan con ese RUT (sync SII o creación manual) heredan
+// la categoría automáticamente.
+//
+// El proyecto / centro de costo NUNCA se auto-asigna: depende del
+// contexto temporal y MJ lo decide siempre a mano.
+model InvoiceCategorizationRule {
+  id           String   @id @default(cuid())
+  rutIssuer    String   @unique // RUT del proveedor — único, una regla por proveedor
+  businessName String?  // nombre referencial, se actualiza con la última factura vista
+  categoryId   String
+  hits         Int      @default(0) // cuántas facturas se categorizaron con esta regla
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  category     CostCategory @relation(fields: [categoryId], references: [id])
+
+  @@index([rutIssuer])
+  @@index([categoryId])
+}
+
 model BankCategorizationRule {
   id                 String   @id @default(cuid())
   descriptionPattern String   // substring a buscar (case-insensitive)

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { tryAutoMatchInvoiceWithExistingMovs } from "@/lib/banco/invoicePayments";
+import { applyInvoiceRule } from "@/lib/facturas/categorizationRules";
 
 // Listar facturas con filtros opcionales:
 //   ?type=emitida|recibida
@@ -95,6 +96,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Aplicar regla por RUT si existe (solo recibidas con categoría vacía).
+    const ruleApplied = await applyInvoiceRule(invoice.id).catch(() => ({
+      applied: false,
+    }));
     // Auto-conciliar si hay un movimiento bancario sin asignar del mismo
     // RUT que matchea el monto. Caso típico MJ: te pagaron antes, ahora
     // emitís factura → se vincula sola sin tocar nada.
@@ -102,7 +107,7 @@ export async function POST(request: NextRequest) {
       () => 0
     );
 
-    return NextResponse.json({ ...invoice, autoMatched });
+    return NextResponse.json({ ...invoice, autoMatched, ruleApplied });
   } catch (error) {
     console.error("Error creating invoice:", error);
     return NextResponse.json(

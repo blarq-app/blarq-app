@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { upsertInvoiceRule } from "@/lib/facturas/categorizationRules";
 
 export async function GET(
   _request: NextRequest,
@@ -31,6 +32,12 @@ export async function PUT(
     const iva = netAmount * 0.19;
     const totalAmount = netAmount + iva;
 
+    // Estado previo (para detectar si la categoría cambió).
+    const previous = await prisma.invoice.findUnique({
+      where: { id },
+      select: { type: true, categoryId: true, rutIssuer: true, businessName: true },
+    });
+
     const invoice = await prisma.invoice.update({
       where: { id },
       data: {
@@ -56,7 +63,38 @@ export async function PUT(
       },
     });
 
-    return NextResponse.json(invoice);
+    // Si MJ guardó una factura RECIBIDA con categoría asignada, asegurar
+    // que exista una regla por RUT y aplicarla retroactivamente a las
+    // demás facturas del mismo proveedor sin categoría. No exigimos que
+    // "haya cambiado" — si la categoría coincide con la regla existente,
+    // upsertInvoiceRule solo incrementa hits + dispara la retroactividad
+    // (que es lo que MJ esperaba: "si le enseño a 1, contagia a los otros").
+    let rule:
+      | {
+          ruleId: string;
+          created: boolean;
+          updated: boolean;
+          appliedRetroactively: number;
+          previousCategoryId?: string | null;
+        }
+      | null = null;
+    if (invoice.type === "recibida" && invoice.categoryId && invoice.rutIssuer) {
+      const r = await upsertInvoiceRule(
+        invoice.rutIssuer,
+        invoice.businessName ?? null,
+        invoice.categoryId
+      ).catch(() => null);
+      // Solo emitimos rule en la respuesta si pasó algo digno de toast:
+      // creó la regla, la cambió, o aplicó retroactivamente.
+      if (
+        r &&
+        (r.created || r.updated || r.appliedRetroactively > 0)
+      ) {
+        rule = r;
+      }
+    }
+
+    return NextResponse.json({ ...invoice, rule });
   } catch (error) {
     console.error("Error updating invoice:", error);
     return NextResponse.json(

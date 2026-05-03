@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { tryAutoMatchInvoiceWithExistingMovs } from "@/lib/banco/invoicePayments";
+import { applyInvoiceRule } from "@/lib/facturas/categorizationRules";
 import {
   fetchDTEs,
   isMockMode,
@@ -106,6 +107,8 @@ async function upsertInvoice(
     const created = await prisma.invoice.create({
       data: { ...data, status: "pendiente" },
     });
+    // Aplicar regla de categorización por RUT si existe.
+    await applyInvoiceRule(created.id).catch(() => ({ applied: false }));
     // Auto-conciliar contra movimientos bancarios sin asignar previos
     // del mismo RUT (caso típico: te pagaron, después llega la factura
     // sincronizada del SII).

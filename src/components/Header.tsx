@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 
 export default function Header() {
@@ -11,9 +12,13 @@ export default function Header() {
       <div className="flex items-center gap-4">
         {session?.user && (
           <>
-            <span className="text-sm text-gray-600">
+            <Link
+              href="/cuenta"
+              className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
+              title="Mi cuenta"
+            >
               {session.user.name}
-            </span>
+            </Link>
             <button
               onClick={() => signOut()}
               className="text-sm text-gray-500 hover:text-gray-700 transition-colors"

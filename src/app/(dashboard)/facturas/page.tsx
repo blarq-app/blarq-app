@@ -47,11 +47,14 @@ export default async function FacturasPage({
     where.issueDate = dateFilter;
   }
   if (sp.q) {
+    // mode "insensitive" para que la búsqueda matchee independiente de
+    // mayúsculas/minúsculas. Es necesario en Postgres (en SQLite el LIKE
+    // era case-insensitive por default; tras el cutover a Neon se rompió).
     where.OR = [
-      { folioNumber: { contains: sp.q } },
-      { businessName: { contains: sp.q } },
-      { rutIssuer: { contains: sp.q } },
-      { notes: { contains: sp.q } },
+      { folioNumber: { contains: sp.q, mode: "insensitive" } },
+      { businessName: { contains: sp.q, mode: "insensitive" } },
+      { rutIssuer: { contains: sp.q, mode: "insensitive" } },
+      { notes: { contains: sp.q, mode: "insensitive" } },
     ];
   }
 
@@ -63,6 +66,9 @@ export default async function FacturasPage({
         project: { select: { id: true, name: true } },
         category: { select: { id: true, name: true } },
       },
+      // Excluir el blob del PDF oficial — pesado (~170KB c/u) y solo lo
+      // sirve el endpoint /api/facturas/[id]/pdf cuando se descarga.
+      omit: { pdfContent: true },
       take: 500,
     }),
     prisma.project.findMany({
@@ -206,6 +212,7 @@ export default async function FacturasPage({
               status: inv.status,
               origin: inv.origin,
               referenceFolioNumber: inv.referenceFolioNumber,
+              siiCodigo: inv.siiCodigo,
               project: inv.project ? { id: inv.project.id, name: inv.project.name } : null,
               category: inv.category ? { id: inv.category.id, name: inv.category.name } : null,
             }))}

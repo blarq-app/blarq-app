@@ -20,6 +20,28 @@ export async function GET(
       return NextResponse.json({ error: "No encontrada" }, { status: 404 });
     }
 
+    // Si tenemos el PDF oficial bajado del SII (vía sync local con cert),
+    // lo servimos directo. Es el mismo PDF que muestra Maxxa, con todos los
+    // ítems y formato del emisor. Si no, fallback al PDF interno generado
+    // por nosotros con Puppeteer (resumen pero funcional).
+    if (invoice.pdfContent) {
+      const filename = `BLARQ_oficial_${invoice.tipoDoc ?? "doc"}_${
+        invoice.folioNumber ?? invoice.id
+      }.pdf`;
+      const oficialBuf = Buffer.isBuffer(invoice.pdfContent)
+        ? invoice.pdfContent
+        : Buffer.from(invoice.pdfContent);
+      const body = new Uint8Array(oficialBuf.byteLength);
+      body.set(oficialBuf);
+      return new NextResponse(body, {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `inline; filename="${filename}"`,
+          "X-PDF-Source": "sii-oficial",
+        },
+      });
+    }
+
     const html = renderInvoiceHtml({
       type: invoice.type as "emitida" | "recibida",
       tipoDoc: invoice.tipoDoc,
@@ -56,6 +78,7 @@ export async function GET(
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `inline; filename="${filename}"`,
+        "X-PDF-Source": "interno",
       },
     });
   } catch (error) {

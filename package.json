@@ -10,7 +10,9 @@
     "postinstall": "prisma generate",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:migrate": "npx prisma migrate dev",
-    "db:studio": "npx prisma studio"
+    "db:studio": "npx prisma studio",
+    "db:backup": "npx tsx scripts/db-backup.ts",
+    "sii:sync-pdfs": "npx tsx scripts/sync-sii-pdfs.ts"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
@@ -21,6 +23,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",
+    "cheerio": "^1.2.0",
     "dotenv": "^17.4.2",
     "next": "16.2.3",
     "next-auth": "^5.0.0-beta.30",
@@ -46,6 +49,7 @@
     "@types/xml2js": "^0.4.14",
     "eslint": "^9",
     "eslint-config-next": "16.2.3",
+    "playwright": "^1.59.1",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5"

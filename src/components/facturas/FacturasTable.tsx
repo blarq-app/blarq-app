@@ -29,6 +29,9 @@ type Invoice = {
   status: string;
   origin: string;
   referenceFolioNumber: string | null;
+  // Indica si tenemos el PDF oficial del SII bajado (vía sync local).
+  // Cuando está set, el endpoint /pdf sirve el PDF oficial; sino, el resumen.
+  siiCodigo: string | null;
   project: { id: string; name: string } | null;
   category: { id: string; name: string } | null;
 };
@@ -200,11 +203,19 @@ export default function FacturasTable({
                     href={`/api/facturas/${inv.id}/pdf`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-gray-400 hover:text-gray-900 text-base"
-                    title="Ver PDF"
+                    className={`text-base ${
+                      inv.siiCodigo
+                        ? "text-green-600 hover:text-green-800"
+                        : "text-gray-400 hover:text-gray-900"
+                    }`}
+                    title={
+                      inv.siiCodigo
+                        ? "PDF oficial del SII"
+                        : "PDF resumen interno (los oficiales se bajan vía sync local)"
+                    }
                     onClick={(e) => e.stopPropagation()}
                   >
-                    ↓
+                    {inv.siiCodigo ? "↓✓" : "↓"}
                   </a>
                 </td>
               </tr>

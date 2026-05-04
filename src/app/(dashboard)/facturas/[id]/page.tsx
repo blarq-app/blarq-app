@@ -20,6 +20,9 @@ export default async function EditFacturaPage({
   const { id } = await params;
 
   const [invoice, projects, categories] = await Promise.all([
+    // Carga todos los campos del Invoice — incluye `pdfContent` (Bytes
+    // ~170KB) pero el page no lo pasa al client, solo lo accede el endpoint
+    // /api/facturas/[id]/pdf. El overhead server-only es aceptable.
     prisma.invoice.findUnique({ where: { id } }),
     prisma.project.findMany({
       orderBy: [{ numeroProyecto: "asc" }, { numeroCotizacion: "asc" }, { name: "asc" }],
@@ -92,10 +95,18 @@ export default async function EditFacturaPage({
           href={`/api/facturas/${invoice.id}/pdf`}
           target="_blank"
           rel="noopener noreferrer"
-          className="ml-auto text-sm border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50"
-          title="Genera un PDF interno con los datos de esta factura"
+          className={`ml-auto text-sm border px-3 py-1.5 rounded-lg ${
+            invoice.siiCodigo
+              ? "border-green-300 bg-green-50 text-green-800 hover:bg-green-100"
+              : "border-gray-300 text-gray-700 hover:bg-gray-50"
+          }`}
+          title={
+            invoice.siiCodigo
+              ? "PDF oficial del SII (representación impresa del DTE)"
+              : "PDF resumen interno (los oficiales se bajan vía sync local)"
+          }
         >
-          ↓ PDF
+          ↓ {invoice.siiCodigo ? "PDF oficial" : "PDF"}
         </a>
       </div>
 

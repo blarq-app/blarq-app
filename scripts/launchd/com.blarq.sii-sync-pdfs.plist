@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Identificador del job -->
+    <key>Label</key>
+    <string>com.blarq.sii-sync-pdfs</string>
+
+    <!-- Comando: cd a la carpeta del repo y correr el sync de PDFs.
+         npm + node con paths absolutos porque LaunchAgent no hereda PATH. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-l</string>
+        <string>-c</string>
+        <string>cd /Users/mjblanco/Desktop/blarq-app &amp;&amp; /usr/local/bin/npm run sii:sync-pdfs</string>
+    </array>
+
+    <!-- Schedule: todos los días a las 9:00 AM. Si la mac está dormida a esa
+         hora, LaunchAgent dispara el job apenas despierte (semántica de
+         StartCalendarInterval en macOS). -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- Sin auto-restart en caso de error. Si falla, esperamos al siguiente
+         día a las 9:00 — no queremos retry-loop que mande N requests al SII. -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Logs: stdout y stderr a archivos rotables. -->
+    <key>StandardOutPath</key>
+    <string>/Users/mjblanco/Library/Logs/blarq-sii-sync-pdfs.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/mjblanco/Library/Logs/blarq-sii-sync-pdfs.log</string>
+
+    <!-- Process priority: bajo. No queremos pelear con apps en uso. -->
+    <key>Nice</key>
+    <integer>5</integer>
+</dict>
+</plist>

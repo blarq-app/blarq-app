@@ -502,6 +502,14 @@ model Invoice {
   xmlUrl          String?  // URL al XML del DTE (cuando OpenFactura lo expone)
   pdfUrl          String?  // URL al PDF del DTE
   syncedAt        DateTime? // Última vez que se trajo/refrescó del SII
+  // PDF oficial del SII cacheado en BD. Se baja vía sync local con cert digital
+  // (scripts/sync-sii-pdfs.ts). siiCodigo es el ID interno del SII para el
+  // endpoint mipeShowPdf.cgi (~10 dígitos, único por DTE).
+  // pdfFetchedAt: null = nunca se intentó; con valor = se intentó (con o sin
+  // éxito; si pdfContent es null entonces el DTE no aparece en mipeAdminDocsRcp).
+  siiCodigo       String?
+  pdfContent      Bytes?
+  pdfFetchedAt    DateTime?
   notes           String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

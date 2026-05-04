@@ -3,6 +3,7 @@ import Link from "next/link";
 import FacturasFilterBar from "@/components/facturas/FacturasFilterBar";
 import FacturasTable from "@/components/facturas/FacturasTable";
 import SyncSiiButton from "@/components/facturas/SyncSiiButton";
+import RelinkNcsButton from "@/components/facturas/RelinkNcsButton";
 import { formatCLP } from "@/lib/utils";
 
 type SearchParams = {
@@ -99,6 +100,12 @@ export default async function FacturasPage({
     where: { origin: "sii_automatica", projectId: null },
   });
 
+  // NCs recibidas (tipoDoc 61) sin referencia a su factura — el botón
+  // "Re-linkear NCs" consulta el SII directamente para resolverlas.
+  const ncsSinReferenciaCount = await prisma.invoice.count({
+    where: { type: "recibida", tipoDoc: 61, referenceFolioNumber: null },
+  });
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -110,6 +117,9 @@ export default async function FacturasPage({
           >
             Reglas
           </Link>
+          {ncsSinReferenciaCount > 0 && (
+            <RelinkNcsButton pendingCount={ncsSinReferenciaCount} />
+          )}
           <SyncSiiButton defaultFrom={SII_SYNC_FROM} />
           <Link
             href="/facturas/nueva"

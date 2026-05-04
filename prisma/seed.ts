@@ -5,22 +5,22 @@ const prisma = new PrismaClient();
 
 async function main() {
   const mj = await prisma.user.upsert({
-    where: { email: "mj@blarq.cl" },
+    where: { email: "mjblanco@blarq.cl" },
     update: {},
     create: {
       name: "María José Blanco",
-      email: "mj@blarq.cl",
+      email: "mjblanco@blarq.cl",
       password: hashSync("blarq2026", 10),
       role: "admin",
     },
   });
 
   const jt = await prisma.user.upsert({
-    where: { email: "jt@blarq.cl" },
+    where: { email: "jtlarrain@blarq.cl" },
     update: {},
     create: {
       name: "José Tomás Larraín",
-      email: "jt@blarq.cl",
+      email: "jtlarrain@blarq.cl",
       password: hashSync("blarq2026", 10),
       role: "admin",
     },

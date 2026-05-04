@@ -143,7 +143,7 @@ export function parseCartolaSantander(buffer: Buffer): ParsedCartola {
     const description = String(row[1] ?? "").trim();
     if (!description) continue;
     const docRef = row[4];
-    let dateRaw = row[3];
+    const dateRaw: unknown = row[3];
     let date: Date | null = null;
     if (typeof dateRaw === "string") {
       const m = dateRaw.match(/(\d{2})\/(\d{2})\/(\d{4})/);

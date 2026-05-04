@@ -7,6 +7,7 @@ import {
   isMockMode,
   type RemoteDTE,
 } from "@/lib/sii/simpleFacturaClient";
+import { linkNcReferences } from "@/lib/sii/linkNcReferences";
 
 // Sincroniza facturas del SII (vía OpenFactura) hacia la app.
 // Idempotente: usa el constraint @@unique([type, tipoDoc, folioNumber, rutIssuer])
@@ -53,10 +54,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Auto-link de NCs recibidas con sus facturas referenciadas usando el
+    // SII directo (cert digital). Solo procesa NCs sin reference todavía.
+    // En modo mock se skip — los datos sintéticos no existen en SII real.
+    let ncLinked = 0;
+    if (!stats.mockMode) {
+      try {
+        const r = await linkNcReferences();
+        ncLinked = r.linked;
+      } catch (e) {
+        console.warn("[SII sync] linkNcReferences falló:", e);
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       fromDate,
       toDate: toDate ?? new Date().toISOString().slice(0, 10),
+      ncLinked,
       ...stats,
     });
   } catch (error) {

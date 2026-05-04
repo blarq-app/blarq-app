@@ -166,3 +166,104 @@ export async function getRcvDetalle(
   const json = (await res.json()) as { data?: RcvDetalleItem[] };
   return json.data ?? [];
 }
+
+// ─── getDetalleDTE — referencias del DTE ─────────────────────────────────
+//
+// Esta es la pieza clave para auto-link de NCs. Para una NC dada (folio +
+// rutDoc + dhdrCodigo + detCodigo), el SII devuelve `dataReferencias[]` con
+// los DTEs que esta NC referencia (típicamente la factura original).
+//
+// Bonus: `dataReferenciados[]` lista los DTEs que referencian a este DTE.
+// Para una factura, eso permite saber qué NCs la modificaron.
+
+export interface DteReferencia {
+  dhdrCodigo: number;
+  dhdrRutEmisor: number;
+  dhdrDvEmisor: string;
+  dtdcCodigo: number; // tipoDoc del doc referenciado
+  dhdrFolio: number; // folio del doc referenciado
+  dhdrRutRecep: number;
+  dhdrDvRecep: string;
+  dhdrFchEmis: string; // YYYY-MM-DD
+  dhdrMntTotal: number;
+  dhdrRznSoc: string;
+  dtecMarcaRef: number;
+}
+
+export interface DteDetalle {
+  dataReferencias: DteReferencia[];
+  dataReferenciados: DteReferencia[];
+}
+
+/**
+ * Identificadores de un DTE recibido específico — vienen de getRcvDetalle.
+ */
+export interface DteRecibidoId {
+  rcvPcarga: number; // YYYYMM como número
+  rutDoc: number; // RUT emisor del doc (proveedor)
+  dvDoc: string;
+  dcvNroDoc: number; // folio
+  codTipoDoc: string; // "33", "61", etc
+  dhdrCodigo: number; // ID interno SII del header
+  detCodigo: number; // ID interno SII de la fila del libro
+}
+
+/**
+ * Pide al SII el detalle de un DTE recibido específico, incluyendo sus
+ * referencias (dataReferencias) y los docs que lo referencian
+ * (dataReferenciados).
+ *
+ * Esta es la pieza que reemplaza el plan de XML download — la API ya
+ * devuelve las referencias en formato JSON, sin necesidad de parsear XML.
+ */
+export async function getDteReferencias(
+  contribuyente: RutDv,
+  dte: DteRecibidoId
+): Promise<DteDetalle> {
+  const token = await getSiiToken();
+  const body = {
+    metaData: {
+      namespace: "cl.sii.sdi.lob.diii.consdcv.data.api.interfaces.FacadeService/getDetalleDTE",
+      conversationId: token,
+      transactionId: randomUUID(),
+      page: null,
+    },
+    data: {
+      rcvPcarga: dte.rcvPcarga,
+      rutEmisor: String(contribuyente.rut),
+      dvEmisor: contribuyente.dv,
+      rutDoc: dte.rutDoc,
+      dvDoc: dte.dvDoc,
+      dcvNroDoc: dte.dcvNroDoc,
+      codTipoDoc: dte.codTipoDoc,
+      dhdrCodigo: dte.dhdrCodigo,
+      detCodigo: dte.detCodigo,
+      operacion: "COMPRA",
+      rutAutenticado: String(contribuyente.rut),
+    },
+  };
+
+  const res = await fetch(
+    `${SII_BASE}/consdcvinternetui/services/data/facadeService/getDetalleDTE`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `TOKEN=${token}`,
+        Accept: "application/json, text/plain, */*",
+        "User-Agent": "Mozilla/5.0",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`SII getDetalleDTE falló: ${res.status} — ${txt.slice(0, 300)}`);
+  }
+  const json = (await res.json()) as Partial<DteDetalle>;
+  return {
+    dataReferencias: json.dataReferencias ?? [],
+    dataReferenciados: json.dataReferenciados ?? [],
+  };
+}

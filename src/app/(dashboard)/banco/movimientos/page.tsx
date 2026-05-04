@@ -196,7 +196,7 @@ export default async function MovimientosPage({
       </div>
 
       {/* Stats arriba — conteo + desglose ingresos/egresos por estado */}
-      <div className="grid grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
         <StatCard
           label="Total movimientos"
           count={totalCount}
@@ -256,7 +256,8 @@ export default async function MovimientosPage({
             <p className="text-sm">No hay movimientos.</p>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[800px]">
             <thead className="text-[10px] uppercase tracking-wider text-gray-500 bg-gray-50">
               <tr>
                 <th className="text-left px-4 py-2 w-24">Fecha</th>
@@ -387,6 +388,7 @@ export default async function MovimientosPage({
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

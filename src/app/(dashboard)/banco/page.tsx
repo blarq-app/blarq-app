@@ -122,7 +122,7 @@ export default async function BancoPage() {
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
             <div>
               <p className="text-[11px] uppercase tracking-wider text-gray-500 mb-1">
                 Saldo cta sueldos

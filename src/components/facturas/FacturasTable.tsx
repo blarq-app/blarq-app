@@ -70,7 +70,8 @@ export default function FacturasTable({
 
   return (
     <>
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full text-sm min-w-[800px]">
         <thead className="text-[10px] uppercase tracking-wider text-gray-500 bg-gray-50">
           <tr>
             <th className="px-3 py-2 w-8">
@@ -198,6 +199,7 @@ export default function FacturasTable({
           })}
         </tbody>
       </table>
+      </div>
 
       <BulkAssignBar
         selectedIds={Array.from(selected)}

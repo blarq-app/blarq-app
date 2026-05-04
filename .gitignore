@@ -46,5 +46,11 @@ next-env.d.ts
 *.db
 *.db-journal
 
+# certificados digitales (SII Chile) — NUNCA commitear
+*.pfx
+*.p12
+sii-cert/
+cert/
+
 # claude sessions
 .claude/

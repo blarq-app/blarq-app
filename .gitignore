@@ -54,3 +54,6 @@ cert/
 
 # claude sessions
 .claude/
+
+# backups locales de la BD (script db:backup) — datos sensibles, NO commitear
+/backups/

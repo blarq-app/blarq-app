@@ -95,6 +95,7 @@ export default function FacturasTable({
             <th className="text-right px-4 py-2">Total</th>
             <th className="text-left px-4 py-2">Estado</th>
             <th className="text-left px-4 py-2">Origen</th>
+            <th className="text-right px-3 py-2">PDF</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -193,6 +194,18 @@ export default function FacturasTable({
                   >
                     {inv.origin === "sii_automatica" ? "SII" : "manual"}
                   </span>
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <a
+                    href={`/api/facturas/${inv.id}/pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-gray-400 hover:text-gray-900 text-base"
+                    title="Ver PDF"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    ↓
+                  </a>
                 </td>
               </tr>
             );

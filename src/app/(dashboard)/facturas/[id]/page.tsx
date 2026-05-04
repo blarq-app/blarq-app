@@ -88,6 +88,15 @@ export default async function EditFacturaPage({
             SII
           </span>
         )}
+        <a
+          href={`/api/facturas/${invoice.id}/pdf`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ml-auto text-sm border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50"
+          title="Genera un PDF interno con los datos de esta factura"
+        >
+          ↓ PDF
+        </a>
       </div>
 
       <FacturaForm

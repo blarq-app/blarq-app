@@ -18,6 +18,7 @@ import { upsertRuleFromMovement } from "@/lib/banco/categorizationRules";
 //                                payments=[].
 //   { category: string }       → categorizar como sueldo/previred/etc (sin factura)
 //   { ignore: true }           → marcar como "sin_factura" sin categoría
+//   { markInternal: true }     → marcar como transferencia interna BLARQ↔BLARQ
 //   { notes: string }          → agregar nota
 //
 // Cuando se cambia la imputación, las facturas previa y nueva
@@ -33,6 +34,7 @@ export async function PATCH(
       invoiceId: string | null;
       category: string | null;
       ignore: boolean;
+      markInternal: boolean;
       notes: string;
     }>;
 
@@ -128,6 +130,13 @@ export async function PATCH(
     if (body.ignore) {
       update.status = "sin_factura";
       update.category = "otro_sin_factura";
+    }
+    if (body.markInternal) {
+      // Transfer interna BLARQ↔BLARQ. Limpia categoría — se identifica por
+      // el status. NO crea regla porque la detección por descripción ya la
+      // hace el parser de cartola.
+      update.status = "interno";
+      update.category = null;
     }
     if (body.notes !== undefined) update.notes = body.notes;
 

@@ -1,0 +1,57 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+
+// Input de búsqueda libre para /banco/movimientos. Filtra server-side via
+// query param ?q= (descripción + nombre contraparte + RUT contraparte).
+// Live: debounced a 300ms para no bombardear navegaciones.
+export default function MovementsSearch({
+  defaultQ,
+  sp,
+}: {
+  defaultQ: string;
+  sp: Record<string, string | undefined>;
+}) {
+  const router = useRouter();
+  const [value, setValue] = useState(defaultQ);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const params = new URLSearchParams();
+      for (const [k, v] of Object.entries(sp)) {
+        if (k !== "q" && v) params.set(k, v);
+      }
+      const trimmed = value.trim();
+      if (trimmed) params.set("q", trimmed);
+      const qs = params.toString();
+      router.replace(`/banco/movimientos${qs ? `?${qs}` : ""}`);
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  return (
+    <div className="flex-1 min-w-[240px] max-w-[420px] relative">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="Buscar descripción, nombre o RUT…"
+        className="w-full px-3 py-1.5 pl-8 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300"
+      />
+      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
+        ⌕
+      </span>
+      {value && (
+        <button
+          onClick={() => setValue("")}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 text-sm"
+          aria-label="Limpiar búsqueda"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  );
+}

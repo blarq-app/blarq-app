@@ -256,13 +256,17 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   const pctCobrado = totalAcordado > 0 ? (totalCobrado / totalAcordado) * 100 : 0;
 
   // ── Desviaciones por concepto interno ─────────────────────────────────
-  const obraItems = obra?.obraItems ?? [];
+  // Suma componentes de TODAS las obras aprobadas (incluye anexos como
+  // BAÑO VISITAS). costMargin se incluye explícitamente: el margen por
+  // partida es parte del costo directo y MJ quiere verlo en el resumen.
+  const obraItems = obras.flatMap((o) => o.obraItems);
   const budgetByType: Record<string, number> = {
     costMaterial: 0,
     costLabor: 0,
     costTools: 0,
     costSubcontract: 0,
     costLoss: 0,
+    costMargin: 0,
   };
   for (const it of obraItems) {
     budgetByType.costMaterial += (it.costMaterial ?? 0) * it.quantity;
@@ -270,6 +274,7 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
     budgetByType.costTools += (it.costTools ?? 0) * it.quantity;
     budgetByType.costSubcontract += (it.costSubcontract ?? 0) * it.quantity;
     budgetByType.costLoss += (it.costLoss ?? 0) * it.quantity;
+    budgetByType.costMargin += (it.costMargin ?? 0) * it.quantity;
   }
 
   // Agrupamos en dos formas:

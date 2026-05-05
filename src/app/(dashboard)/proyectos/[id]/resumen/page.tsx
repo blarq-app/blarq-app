@@ -8,7 +8,13 @@ import { computeProjectMetrics } from "@/lib/projects/metrics";
 import { computeFondoSueldos, type ProjectWithFondo } from "@/lib/banco/fondoSueldos";
 import FondoSueldosCard from "@/components/proyecto/FondoSueldosCard";
 
-// Mapa: nombre de CostCategory -> campo de desglose en ObraItem
+// Mapa: nombre de CostCategory -> campo de desglose en ObraItem.
+// Margen NO está acá — es un componente del costo directo presupuestado
+// (lo que MJ se queda como utilidad por partida) pero NO tiene contraparte
+// en CostCategory porque las facturas reales no se categorizan como
+// "Margen". Se renderiza igual en el resumen pero su columna "Real"
+// queda en N/A — el margen real de un proyecto sale de cobrado − costos
+// reales totales, no por partida.
 const CATEGORY_TO_BREAKDOWN: Record<
   string,
   "costMaterial" | "costLabor" | "costTools" | "costSubcontract" | "costLoss"
@@ -114,7 +120,11 @@ export default async function ResultadosPage({
   type ResumenRow = { label: string; presupuesto: number; real: number };
   type ResumenSection = { title: string; rows: ResumenRow[] };
 
-  // 1) OBRA — conceptos del costo directo
+  // 1) OBRA — conceptos del costo directo.
+  // Margen: presupuestado se muestra (es lo que MJ se quedaba por partida
+  // como utilidad). Real queda en "—" porque las facturas no se
+  // categorizan como margen — el "margen real" del proyecto se mide a
+  // nivel agregado (ver card "Utilidad Real"), no por partida.
   const obraSection: ResumenSection = {
     title: "1. Obra",
     rows: [
@@ -127,6 +137,7 @@ export default async function ResultadosPage({
       { label: "Herramientas", presupuesto: budgetByType.costTools, real: realByTop["Herramientas"] || 0 },
       { label: "Subcontrato", presupuesto: budgetByType.costSubcontract, real: realByTop["Subcontrato"] || 0 },
       { label: "Pérdidas", presupuesto: budgetByType.costLoss, real: realByTop["Pérdidas"] || 0 },
+      { label: "Margen", presupuesto: budgetByType.costMargin, real: 0 },
     ],
   };
 

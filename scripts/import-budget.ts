@@ -498,6 +498,10 @@ function parseObra(filePath: string): ParsedObra {
   for (const p of catalog) {
     catalogByName.set(p.name.toUpperCase().trim(), p);
   }
+  // CONVENCIÓN DE LA APP: ObraItem.cost* se guarda POR UNIDAD (igual que
+  // PartidaCatalog). metrics.ts multiplica por quantity para obtener el
+  // monto total agregado. Si guardamos totales acá rompemos esa convención
+  // y metrics.ts saca el doble del costo real.
   const fillCosts = (it: ParsedObraItem) => {
     // Item con qty 0 y total 0: no se usa en el proyecto. Costos en 0.
     // (Caso real Pauline Dumay: "6.6 PUERTA NUEVA PERFIL METALICO NEGRO"
@@ -517,30 +521,27 @@ function parseObra(filePath: string): ParsedObra {
     const cat = catalogByName.get(key);
 
     // Si hay match con catálogo Y el ítem se usa (qty>0, total>0):
-    // usar las PROPORCIONES del catálogo escaladas al total real del Excel.
-    // Esto garantiza que la suma de componentes == it.total exactamente,
-    // incluso cuando el precio del proyecto difiere del catálogo.
+    // las proporciones del catálogo (que son POR UNIDAD) se escalan al
+    // unitPrice real del proyecto. La suma de cost* (por unidad) ==
+    // unitPrice del proyecto, garantizando que sum(cost*×qty) == total.
     if (cat && cat.unitPrice > 0 && it.quantity > 0 && it.total > 0) {
-      const scale = it.total / (cat.unitPrice * it.quantity);
-      const qty = it.quantity;
-      it.costMaterial = cat.costMaterial * qty * scale;
-      it.costLabor = cat.costLabor * qty * scale;
-      it.costMargin = cat.costMargin * qty * scale;
-      it.costTools = cat.costTools * qty * scale;
-      it.costLoss = cat.costLoss * qty * scale;
-      it.costSubcontract = cat.costSubcontract * qty * scale;
-      // Si el precio del proyecto difiere > 2% del catálogo, marcamos como
-      // customizado (informativo) — pero igual usamos las proporciones,
-      // porque dan más información que la regla MJ binaria MO/Mat.
+      const scale = it.unitPrice / cat.unitPrice;
+      it.costMaterial = cat.costMaterial * scale;
+      it.costLabor = cat.costLabor * scale;
+      it.costMargin = cat.costMargin * scale;
+      it.costTools = cat.costTools * scale;
+      it.costLoss = cat.costLoss * scale;
+      it.costSubcontract = cat.costSubcontract * scale;
       it.costFromExcelOnly = Math.abs(scale - 1) > 0.02;
       return;
     }
 
-    // Sin match en catálogo, o item sin uso real (qty=0 con total=0 pero
-    // MO>0): regla MJ — la columna MO del Excel es costLabor; el resto
-    // del total es costMaterial. Sin desglose más fino.
-    it.costLabor = it.laborTotal;
-    it.costMaterial = Math.max(0, it.total - it.laborTotal);
+    // Sin match en catálogo, o item sin uso real con MO>0 (regla MJ):
+    // la columna MO del Excel es costLabor; el resto es costMaterial.
+    // Convertir a POR UNIDAD dividiendo por quantity.
+    const qty = it.quantity > 0 ? it.quantity : 1;
+    it.costLabor = it.laborTotal / qty;
+    it.costMaterial = Math.max(0, (it.total - it.laborTotal) / qty);
     it.costMargin = 0;
     it.costTools = 0;
     it.costLoss = 0;
@@ -553,16 +554,10 @@ function parseObra(filePath: string): ParsedObra {
   // redondeo o caso raro (item con MO en Excel pero total $0 al cliente,
   // ej "14.9 GRANO EXTERIOR" — no entra en el costo directo del cliente
   // aunque haya MO declarada en otra columna).
+  // Reconcilia: la suma de cost* (POR UNIDAD) debe igualar unitPrice del
+  // Excel. Si el item no se usa (total=0), todo a 0.
   const reconcileItemCosts = (it: ParsedObraItem) => {
-    const sum =
-      (it.costMaterial ?? 0) +
-      (it.costLabor ?? 0) +
-      (it.costMargin ?? 0) +
-      (it.costTools ?? 0) +
-      (it.costLoss ?? 0) +
-      (it.costSubcontract ?? 0);
     if (it.total === 0) {
-      // No contribuye al costo directo del cliente: forzar todo a 0.
       it.costMaterial = 0;
       it.costLabor = 0;
       it.costMargin = 0;
@@ -571,8 +566,15 @@ function parseObra(filePath: string): ParsedObra {
       it.costSubcontract = 0;
       return;
     }
-    if (sum > 0 && Math.abs(sum - it.total) > 0.5) {
-      const k = it.total / sum;
+    const sumPerUnit =
+      (it.costMaterial ?? 0) +
+      (it.costLabor ?? 0) +
+      (it.costMargin ?? 0) +
+      (it.costTools ?? 0) +
+      (it.costLoss ?? 0) +
+      (it.costSubcontract ?? 0);
+    if (sumPerUnit > 0 && Math.abs(sumPerUnit - it.unitPrice) > 0.01) {
+      const k = it.unitPrice / sumPerUnit;
       it.costMaterial = (it.costMaterial ?? 0) * k;
       it.costLabor = (it.costLabor ?? 0) * k;
       it.costMargin = (it.costMargin ?? 0) * k;
@@ -1209,34 +1211,11 @@ async function commitObra(
       itemsCreated++;
     }
 
-    // Items "extras" post-cierre — chapter "EXTRAS" para distinguirlos
-    for (const it of parsed.extras) {
-      const { catalogPartidaId, isCustomized } = await ensureCatalogPartida(it);
-      if (isCustomized) itemsCustomized++;
-      await tx.obraItem.create({
-        data: {
-          budgetVersionId: bv.id,
-          chapter: "EXTRAS POST-CIERRE",
-          itemNumber: it.itemNumber,
-          name: it.partidaName,
-          descriptionCliente: it.descriptionCliente,
-          unit: it.unit || "UN",
-          quantity: it.quantity,
-          unitPrice: it.unitPrice,
-          total: it.total,
-          costMaterial: it.costMaterial,
-          costLabor: it.costLabor,
-          costMargin: it.costMargin,
-          costTools: it.costTools,
-          costLoss: it.costLoss,
-          costSubcontract: it.costSubcontract,
-          sortOrder: sortOrder++,
-          catalogPartidaId,
-          isCustomized,
-        },
-      });
-      itemsCreated++;
-    }
+    // Items "extras" post-cierre: NO se cargan. Decisión 2026-05-05 con MJ.
+    // Razón: el Excel a veces tiene filas tipeadas después del TOTAL MANO
+    // DE OBRA que son leftovers de versiones viejas o adicionales tipeados
+    // sueltos. No representan parte del presupuesto V4 oficial. Se reportan
+    // en el dry-run para que MJ los vea, pero no se persisten.
 
     return {
       budgetVersionId: bv.id,
@@ -1272,21 +1251,17 @@ async function commitMuebles(
   }
 
   return prisma.$transaction(async (tx) => {
-    // Si hay descuento global, lo registramos en observations.
     const observationsList = [...parsed.observations];
-    if (parsed.totals.discountPercent > 0) {
-      observationsList.unshift(
-        `Descuento global aplicado: -${(parsed.totals.discountPercent * 100).toFixed(0)}% sobre el subtotal de muebles`
-      );
-    }
-
     const bv = await tx.budgetVersion.create({
       data: {
         projectId,
         version,
         type: "muebles",
         status: "aprobado",
-        observations: observationsList.join("\n"),
+        // Descuento global guardado como decimal (0.02 = 2%) para que
+        // metrics.ts lo aplique al subtotal de muebles.
+        discountPercentage: parsed.totals.discountPercent || 0,
+        observations: observationsList.length > 0 ? observationsList.join("\n") : null,
         paymentTerms: {
           create: parsed.paymentTerms.map((p, idx) => ({
             stage: p.stage,
@@ -1460,16 +1435,17 @@ async function main() {
       console.log(`    (No entran en el costo directo oficial. Se importan como ObraItem con flag de extra.)`);
     }
 
-    // Suma agregada de costos por tipo a través de TODOS los items
-    // (matched + unmatched, sin contar extras).
+    // Suma agregada de costos por tipo (POR UNIDAD × quantity = total
+    // agregado, igual que como lo calcula metrics.ts).
     const aggregated = parsed.items.reduce(
       (acc, it) => {
-        acc.material += it.costMaterial ?? 0;
-        acc.labor += it.costLabor ?? 0;
-        acc.margin += it.costMargin ?? 0;
-        acc.tools += it.costTools ?? 0;
-        acc.loss += it.costLoss ?? 0;
-        acc.subcontract += it.costSubcontract ?? 0;
+        const q = it.quantity || 0;
+        acc.material += (it.costMaterial ?? 0) * q;
+        acc.labor += (it.costLabor ?? 0) * q;
+        acc.margin += (it.costMargin ?? 0) * q;
+        acc.tools += (it.costTools ?? 0) * q;
+        acc.loss += (it.costLoss ?? 0) * q;
+        acc.subcontract += (it.costSubcontract ?? 0) * q;
         return acc;
       },
       { material: 0, labor: 0, margin: 0, tools: 0, loss: 0, subcontract: 0 }

@@ -24,6 +24,7 @@ const projectMetricsInclude = {
   estadosPago: {
     include: { items: true },
   },
+  maestro: true,
 } satisfies Prisma.ProjectInclude;
 
 export type ProjectWithMetrics = Prisma.ProjectGetPayload<{
@@ -131,26 +132,37 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   );
 
   // ── Total acordado ────────────────────────────────────────────────────
+  // Fórmula BLARQ confirmada con MJ 2026-05-05 contra Excel V4 Pauline
+  // Dumay: GG y Utilidad se aplican ADITIVOS sobre el costo directo (no
+  // encadenados). Verificado: costo directo $26.948.285 → costo total
+  // c/IVA $41.047.628 (GG 23% + Util 5% + IVA 19%, todos sobre
+  // costoDirecto excepto IVA que es sobre el neto).
   const obraCostoDirecto = obra
     ? obra.obraItems.reduce((s, i) => s + i.total, 0)
     : 0;
   const obraGG = obraCostoDirecto * ((obra?.ggPercentage ?? 0) / 100);
-  const obraSubtotal = obraCostoDirecto + obraGG;
-  const obraUtilidad = obraSubtotal * ((obra?.utilityPercentage ?? 0) / 100);
-  const obraNeto = obraSubtotal + obraUtilidad;
+  const obraUtilidad = obraCostoDirecto * ((obra?.utilityPercentage ?? 0) / 100);
+  const obraNeto = obraCostoDirecto + obraGG + obraUtilidad;
   const obraTotal = obraNeto * 1.19;
 
+  // Muebles: subtotal (suma items) − descuento global del BudgetVersion.
+  // El descuento se guarda como decimal (0.02 = 2%) en BudgetVersion y
+  // aplica sobre subtotal c/IVA y subtotal neto por igual.
   const mueblesItems = muebles
     ? muebles.muebleChapters.flatMap((c) => c.items)
     : [];
-  const mueblesTotal = mueblesItems.reduce(
+  const mueblesDiscount = (muebles?.discountPercentage ?? 0);
+  const mueblesSubtotalIva = mueblesItems.reduce(
     (s, i) => s + i.clientPriceIva * i.quantity,
     0
   );
-  const mueblesTotalNeto = mueblesItems.reduce(
+  const mueblesSubtotalNeto = mueblesItems.reduce(
     (s, i) => s + i.clientPriceNet * i.quantity,
     0
   );
+  const mueblesTotal = mueblesSubtotalIva * (1 - mueblesDiscount);
+  const mueblesTotalNeto = mueblesSubtotalNeto * (1 - mueblesDiscount);
+
   const artefactosTotal = artefactos
     ? artefactos.artefactoItems.reduce((s, i) => s + i.clientPrice, 0)
     : 0;
@@ -192,13 +204,23 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
     0
   );
 
-  // Pagos a maestros: solo de EPs cerrados
-  const totalPagadoMaestros = project.estadosPago
+  // Pagos a maestros: solo de EPs cerrados.
+  // Confirmado con MJ 2026-05-05: priorizar facturas sobre EPs.
+  // - Si el maestro asignado al proyecto FACTURA (emitsInvoice=true), las
+  //   facturas recibidas ya cubren su pago — sumar EP también sería doble
+  //   conteo. En ese caso `totalPagadoMaestros = 0` y solo cuentan facturas.
+  // - Si NO factura (cuadrilla informal), los EPs son la única huella del
+  //   gasto y SÍ se suman.
+  // Caso no resuelto: maestros que no facturan a futuro — pendiente
+  // diseñar cómo evidenciar el gasto. Ver WIP.md "Tema abierto".
+  const maestroFactura = project.maestro?.emitsInvoice === true;
+  const epsCerradosTotal = project.estadosPago
     .filter((ep) => ep.status === "cerrado")
     .reduce(
       (s, ep) => s + ep.items.reduce((a, i) => a + (i.amountPaid ?? 0), 0),
       0
     );
+  const totalPagadoMaestros = maestroFactura ? 0 : epsCerradosTotal;
 
   const totalGastado = totalRecibidoFacturas + totalPagadoMaestros;
   // Utilidad real: NETO contra NETO (antes mezclaba c/IVA y salía inflada

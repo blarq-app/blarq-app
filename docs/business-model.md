@@ -47,6 +47,23 @@ Toda cotización se entrega al cliente partida en **3 documentos separados**:
 
 El formato de los PDFs replica fielmente el Excel V3 que BLARQ usaba pre-app (referencia: V3 Cristian Lefevre, abril 2026). Detalle de columnas y observaciones por tipo: ver `src/lib/pdf/{Obra,Muebles,Artefactos}PDF.html.ts`.
 
+### Tema abierto — maestros que no facturan
+
+Confirmado con MJ 2026-05-05. **Decisión sin resolver, pendiente de conversación de negocio.**
+
+Hoy BLARQ tiene 3 cuadrillas:
+- **1 que factura** (cuadrilla formal con RUT y emisión electrónica). Su trabajo deja huella en `Invoice` con `type='recibida'`.
+- **2 informales** que no facturan. Su trabajo solo deja huella en EPs cerrados (`EstadoPago` con `amountPaid` por item).
+
+**Regla actual en `metrics.ts`** (Plan B 2026-05-05): si el `Maestro` asignado al proyecto tiene `emitsInvoice=true`, los EPs cerrados se IGNORAN del `totalGastado` (la factura ya cubre el pago, sumar EP daría doble conteo). Si NO factura, los EPs SÍ se suman.
+
+**Lo que falta resolver**:
+- ¿Cómo evidenciar el gasto de los maestros informales para efectos contables / declaración de impuestos? Hoy es solo un EP en la app, sin factura formal — no hay backup tributario.
+- ¿Vale la pena contratar / formalizar a las 2 cuadrillas que faltan? Costo administrativo vs riesgo SII.
+- Si una cuadrilla informal eventualmente factura algunos trabajos pero otros no, ¿cómo se mezcla la lógica?
+
+No urgente, pero conviene definir antes de que crezca el volumen.
+
 ### Los 3 documentos son centros de costo separados
 
 Confirmado por MJ 2026-05-05. Aunque pertenecen a un mismo proyecto, MJ los administra **como mini-proyectos independientes**:

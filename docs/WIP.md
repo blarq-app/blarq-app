@@ -4,18 +4,20 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-05 (cierre · ronda 6)
+- **Última actualización**: 2026-05-05 (cierre · ronda 7)
 - **Última sesión**:
-  1. Anotado el objetivo central de la app en docs (`business-model.md` §1.5): presupuestado vs gastado vs cobrado por proyecto. Cualquier feature nueva tiene que servir a esto. Los 3 documentos (obra/muebles/artefactos) son **centros de costo separados** con facturas separadas (anotado §2).
-  2. Anotada regla: catálogo de partidas — NO duplicar, NO pisar precios (`principles.md`). Si los precios del proyecto difieren del catálogo, viven en `ObraItem` con `isCustomized=true`.
-  3. Script `scripts/import-budget.ts` para traspaso legacy desde Excel V3/V4 (commit `9557478`). Lee los 3 archivos del template BLARQ y crea los BudgetVersion con sus items, respetando la regla de no duplicar partidas. Verificado contra Pauline Dumay V4: costo directo $26.948.285 calza exacto con Excel. Suma de componentes == costo directo, exacto.
-  4. Cargado en BD dev: **Cocina Farellones #59** (Pauline Dumay) V4 — 65 items oficiales + 3 extras de obra, 4 items de muebles, 9 artefactos.
-  5. Bug detectado y flaggeado (no resuelto en esta sesión): `metrics.ts` calcula utilidad sobre (costo+GG), debería ser sobre costo directo. Ver task spawneada.
+  1. Script de import legacy (`scripts/import-budget.ts`) refinado: ahora ignora extras post-cierre del Excel, guarda `cost*` POR UNIDAD (consistente con la convención de la app), y aplica fix de qty=0.
+  2. Bugs de `metrics.ts` arreglados (los 3 que generaban diff de $1.464k en Pauline Dumay):
+     - **Utilidad encadenada → aditiva sobre costo directo**. Fórmula correcta confirmada con MJ 2026-05-05 contra Excel V4.
+     - **Descuento global de muebles** ahora se respeta. Campo nuevo `BudgetVersion.discountPercentage` (decimal). Schema aplicado en dev y **prod** (Neon SQL Editor, 234ms).
+     - **Priorización facturas vs EPs**: si `Maestro.emitsInvoice=true`, los EPs cerrados se descartan del `totalGastado` (la factura ya cubre el pago — sumar EP daría doble conteo).
+  3. Re-importado Pauline Dumay V4 con script corregido. **Total Acordado calza exacto: $78.692.133 (calculado) vs $78.692.132 (Excel) — diff $1 redondeo**.
+  4. **Tema abierto anotado en business-model.md**: maestros que no facturan. Hoy 2 de las 3 cuadrillas son informales — no hay backup tributario. Decisión de negocio sin resolver, no urgente pero conviene definir.
 
 Próximas acciones:
-- Cargar V4 de los otros 3 proyectos (Arrau, Aguirre, Rosas) cuando MJ tenga las rutas de los Excel a mano. Mismo template, mismo script.
-- Fix de `metrics.ts` (separado).
-- Cuando V4 esté en prod: validar visual desde la app que se ven bien los 3 documentos.
+- Cargar V4 de los otros 3 proyectos (Arrau, Aguirre, Rosas) cuando MJ pase los Excel.
+- Importar Pauline Dumay también en BD prod (hoy solo en dev).
+- Conversación de negocio: maestros informales (cuándo formalizar, cómo evidenciar gasto).
 
 ### Sesión 2026-05-05 — backlog módulo financiero
 

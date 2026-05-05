@@ -151,6 +151,10 @@ model BudgetVersion {
   observations String?
   ggPercentage    Float?  @default(20)  // Solo para obra
   utilityPercentage Float? @default(5)  // Solo para obra
+  // Descuento global aplicado al subtotal (decimal: 0.02 = 2%). Usado
+  // típicamente en muebles cuando se cierra el deal. Aplica al subtotal
+  // c/IVA y c/neto antes de mostrarlo como "total acordado".
+  discountPercentage Float? @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

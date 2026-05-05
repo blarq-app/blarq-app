@@ -50,6 +50,7 @@ export default async function ResultadosPage({
       estadosPago: {
         include: { items: true },
       },
+      maestro: true,
     },
   });
 

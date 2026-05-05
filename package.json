@@ -12,7 +12,8 @@
     "db:migrate": "npx prisma migrate dev",
     "db:studio": "npx prisma studio",
     "db:backup": "npx tsx scripts/db-backup.ts",
-    "sii:sync-pdfs": "npx tsx scripts/sync-sii-pdfs.ts"
+    "sii:sync-pdfs": "npx tsx scripts/sync-sii-pdfs.ts",
+    "compare:maxxa": "npx tsx scripts/compare-vs-maxxa.ts"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"

@@ -1,33 +1,91 @@
-// Comparador BLARQ vs Maxxa para el proyecto Portofino.
-// Lee el .xls (HTML) que MJ exporta de Maxxa y compara contra las facturas
-// que tiene la BD de BLARQ asignadas a Portofino. Reporta diferencias para
-// ubicar el origen del descalce.
+// Comparador genérico BLARQ vs Maxxa para cualquier proyecto.
+//
+// Uso:
+//   npx tsx scripts/compare-vs-maxxa.ts <projectName> <maxxaExportPath>
+//
+// Ejemplo:
+//   npx tsx scripts/compare-vs-maxxa.ts Portofino "/Users/mjblanco/Downloads/DetallesCentroCosto (8).xls"
+//
+// Lee el .xls (HTML) que MJ exporta de Maxxa (Reporte → DetallesCentroCosto)
+// y compara contra las facturas de la BD BLARQ asignadas al proyecto.
+//
+// El "projectName" se usa para:
+//   1) matchear el nombre del proyecto en BD (contains, case-insensitive),
+//   2) filtrar las filas Maxxa por CentroCosto (regex, case-insensitive).
+// Si el CentroCosto en Maxxa no coincide con el nombre del proyecto en BLARQ,
+// pasarle un --cc <patrón> para overridear el filtro.
+//
+//   npx tsx scripts/compare-vs-maxxa.ts "Casa MJ" /path/export.xls --cc "MJB"
 
 import "dotenv/config";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import * as cheerio from "cheerio";
 import { prisma } from "../src/lib/prisma";
-
-const MAXXA_FILE = "/Users/mjblanco/Downloads/DetallesCentroCosto (8).xls";
 
 interface MaxxaRow {
   rutDoc: string;
   nomAux: string;
-  tipoDoc: string; // texto humano del Maxxa
+  tipoDoc: string;
   detalleTipo: string;
   folioDoc: string;
   fechaDoc: string;
-  montoTotal: number; // monto base del documento
-  montoNC: number; // monto de la(s) NC asociada(s)
-  montoND: number; // monto de la(s) ND asociada(s)
+  montoTotal: number;
+  montoNC: number;
+  montoND: number;
   centroCosto: string;
   observacion: string;
   origen: string;
   folioDocRef: string;
 }
 
-function parseMaxxa(): MaxxaRow[] {
-  const html = readFileSync(MAXXA_FILE, "utf-8");
+interface CliArgs {
+  projectName: string;
+  maxxaPath: string;
+  ccPattern: string; // patrón regex para filtrar CentroCosto; default = projectName
+}
+
+function parseArgs(): CliArgs {
+  const argv = process.argv.slice(2);
+  const positional: string[] = [];
+  let ccPattern: string | null = null;
+
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--cc") {
+      ccPattern = argv[++i] ?? "";
+    } else if (a.startsWith("--cc=")) {
+      ccPattern = a.slice("--cc=".length);
+    } else if (a === "-h" || a === "--help") {
+      printUsage();
+      process.exit(0);
+    } else {
+      positional.push(a);
+    }
+  }
+
+  if (positional.length < 2) {
+    printUsage();
+    process.exit(1);
+  }
+
+  return {
+    projectName: positional[0],
+    maxxaPath: positional[1],
+    ccPattern: ccPattern ?? positional[0],
+  };
+}
+
+function printUsage() {
+  console.log("Uso: npx tsx scripts/compare-vs-maxxa.ts <projectName> <maxxaExportPath> [--cc <patrón>]");
+  console.log("");
+  console.log("  projectName        Nombre (parcial) del proyecto en BLARQ (contains, case-insensitive)");
+  console.log("  maxxaExportPath    Ruta al .xls (HTML) exportado de Maxxa");
+  console.log("  --cc <patrón>      (opcional) Patrón regex para filtrar Maxxa por CentroCosto.");
+  console.log("                     Default: el mismo projectName.");
+}
+
+function parseMaxxa(filePath: string): MaxxaRow[] {
+  const html = readFileSync(filePath, "utf-8");
   const $ = cheerio.load(html);
   const rows = $("table tr");
   const headers = rows.first().find("td").map((_, td) => $(td).text().trim()).get();
@@ -44,9 +102,12 @@ function parseMaxxa(): MaxxaRow[] {
       detalleTipo: tds[idx("DetalleTipo")] ?? "",
       folioDoc: tds[idx("FolioDoc")] ?? "",
       fechaDoc: tds[idx("FechaDoc")] ?? "",
-      montoTotal: parseNum(tds[idx("MontoTotal")] ?? "0"),
-      montoNC: parseNum(tds[idx("MontoNC")] ?? "0"),
-      montoND: parseNum(tds[idx("MontoND")] ?? "0"),
+      // Maxxa exporta NCs con signo negativo en MontoTotal; BLARQ guarda
+      // todos los Invoice.totalAmount en positivo y resta NCs al computar
+      // el neto. Normalizamos a |x| acá para que ambos lados coincidan.
+      montoTotal: Math.abs(parseNum(tds[idx("MontoTotal")] ?? "0")),
+      montoNC: Math.abs(parseNum(tds[idx("MontoNC")] ?? "0")),
+      montoND: Math.abs(parseNum(tds[idx("MontoND")] ?? "0")),
       centroCosto: tds[idx("CentroCosto")] ?? "",
       observacion: tds[idx("Observacion")] ?? "",
       origen: tds[idx("Origen")] ?? "",
@@ -72,22 +133,27 @@ function tipoDocHumano(t: number | null): string {
 }
 
 async function main() {
-  console.log("=== Comparando BLARQ vs Maxxa para proyecto Portofino ===\n");
+  const args = parseArgs();
 
-  // 1. Buscar el proyecto Portofino en BD.
-  const portofino = await prisma.project.findFirst({
-    where: { name: { contains: "Portofino", mode: "insensitive" } },
-    select: { id: true, name: true, numeroProyecto: true },
-  });
-  if (!portofino) {
-    console.error("❌ No se encontró proyecto 'Portofino' en BD");
+  if (!existsSync(args.maxxaPath)) {
+    console.error(`❌ No existe el archivo Maxxa: ${args.maxxaPath}`);
     process.exit(1);
   }
-  console.log(`Proyecto BLARQ: "${portofino.name}" (${portofino.numeroProyecto ?? "—"}, id=${portofino.id})\n`);
 
-  // 2. Cargar facturas BLARQ del proyecto.
+  console.log(`=== Comparando BLARQ vs Maxxa para "${args.projectName}" ===\n`);
+
+  const project = await prisma.project.findFirst({
+    where: { name: { contains: args.projectName, mode: "insensitive" } },
+    select: { id: true, name: true, numeroProyecto: true },
+  });
+  if (!project) {
+    console.error(`❌ No se encontró ningún proyecto que matchee "${args.projectName}" en BD`);
+    process.exit(1);
+  }
+  console.log(`Proyecto BLARQ: "${project.name}" (${project.numeroProyecto ?? "—"}, id=${project.id})\n`);
+
   const blarqInvoices = await prisma.invoice.findMany({
-    where: { projectId: portofino.id, type: "recibida" },
+    where: { projectId: project.id, type: "recibida" },
     orderBy: [{ tipoDoc: "asc" }, { folioNumber: "asc" }],
     select: {
       id: true,
@@ -104,21 +170,31 @@ async function main() {
     },
   });
 
-  // 3. Cargar Maxxa del proyecto.
-  const maxxaAll = parseMaxxa();
-  // Filtramos por CentroCosto que matchee Portofino. Inspecciono qué
-  // CentroCosto vienen primero.
+  const maxxaAll = parseMaxxa(args.maxxaPath);
   const cc = Array.from(new Set(maxxaAll.map((r) => r.centroCosto))).sort();
   console.log(`CentroCosto encontrados en Maxxa export: ${cc.length}`);
   cc.forEach((c) => console.log(`  - ${c}`));
 
-  // Filtrar a Portofino. Heurística: por nombre.
-  const maxxaRows = maxxaAll.filter((r) => /portofino/i.test(r.centroCosto));
-  console.log(`\nFilas Maxxa Portofino: ${maxxaRows.length}`);
-  console.log(`Filas BLARQ Portofino (recibidas): ${blarqInvoices.length}\n`);
+  // Validamos el patrón antes de filtrar para dar mensaje útil.
+  let ccRegex: RegExp;
+  try {
+    ccRegex = new RegExp(args.ccPattern, "i");
+  } catch (e) {
+    console.error(`❌ Patrón --cc inválido como regex: ${args.ccPattern}`);
+    process.exit(1);
+  }
 
-  // 4. Comparar por (rutDoc, folioDoc) — la clave natural.
-  // Construir índices en ambos lados.
+  const maxxaRows = maxxaAll.filter((r) => ccRegex.test(r.centroCosto));
+  console.log(`\nFilas Maxxa con CentroCosto ~ /${args.ccPattern}/i: ${maxxaRows.length}`);
+  console.log(`Filas BLARQ (recibidas) en proyecto: ${blarqInvoices.length}\n`);
+
+  if (maxxaRows.length === 0) {
+    console.error(
+      `⚠️  No hay filas Maxxa que matcheen el patrón /${args.ccPattern}/i.\n` +
+        `   Si el CentroCosto en Maxxa difiere del nombre BLARQ, pasale --cc "<patrón>".`,
+    );
+  }
+
   const blarqByKey = new Map<string, typeof blarqInvoices[0]>();
   for (const inv of blarqInvoices) {
     const rut = String(inv.rutIssuer ?? "").split("-")[0];
@@ -128,12 +204,10 @@ async function main() {
 
   const maxxaByKey = new Map<string, MaxxaRow>();
   for (const r of maxxaRows) {
-    // tipoDoc en Maxxa viene como string "33", "61", etc.
     const key = `${r.rutDoc.split("-")[0]}|${r.folioDoc}|${r.tipoDoc}`;
     maxxaByKey.set(key, r);
   }
 
-  // 5. Reportar discrepancias.
   const onlyInMaxxa: MaxxaRow[] = [];
   const onlyInBlarq: typeof blarqInvoices = [];
   const both: Array<{ blarq: typeof blarqInvoices[0]; maxxa: MaxxaRow }> = [];
@@ -147,7 +221,6 @@ async function main() {
     if (!maxxaByKey.has(k)) onlyInBlarq.push(b);
   }
 
-  // Totales.
   const totBlarqFE = blarqInvoices.filter((i) => i.tipoDoc === 33 || i.tipoDoc === 34).reduce((s, i) => s + i.totalAmount, 0);
   const totBlarqNC = blarqInvoices.filter((i) => i.tipoDoc === 61).reduce((s, i) => s + i.totalAmount, 0);
   const totBlarqND = blarqInvoices.filter((i) => i.tipoDoc === 56).reduce((s, i) => s + i.totalAmount, 0);

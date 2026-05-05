@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BLARQ — App de gestión de obras
 
-## Getting Started
+App interna de **BLARQ**, constructora chilena de remodelaciones (María José Blanco + José Tomás Larraín). Gestiona el ciclo completo de un proyecto: cotización → presupuesto (obra / muebles / artefactos) → ejecución con facturas SII y conciliación bancaria → estados de pago a maestros → cierre. Reemplaza el flujo Excel + Maxxa que el estudio usó hasta 2026.
 
-First, run the development server:
+## Stack
+
+Next.js 16 · React 19 · TypeScript · Prisma 6 · Postgres (Neon) · NextAuth 5 · Tailwind 4 · Playwright (sync local SII).
+
+## Levantar dev local
+
+Requisitos: Node 20+, una BD Postgres accesible (típico: Neon dev branch).
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Variables de entorno (`.env`)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Var | Para qué |
+|---|---|
+| `DATABASE_URL` | Conexión a Postgres (dev branch en Neon). |
+| `NEXTAUTH_SECRET` | Sesiones NextAuth. |
+| `NEXTAUTH_URL` | Solo en prod con dominio custom. En Vercel se detecta auto. |
+| `SIMPLEFACTURA_EMAIL`, `SIMPLEFACTURA_PASSWORD` | Login SimpleFactura para sync de DTEs. |
+| `SII_CERT_PATH` | Path local al `.pfx` (solo necesario para sync de PDFs oficiales). |
+| `SII_CERT_PASSWORD` | Password del `.pfx`. |
+| `SII_BLARQ_RUT`, `SII_BLARQ_DV` | Opcional. Default: `77270733` / `9`. |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+`.env`, `*.pfx`, `*.db` y `/backups/` están en `.gitignore`. **No commitear nunca.**
 
-## Learn More
+### Scripts útiles
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run dev               # dev server
+npm run db:studio         # Prisma Studio
+npm run db:backup         # backup de la BD a backups/*.json.gz
+npm run sii:sync-pdfs     # baja PDFs oficiales del SII (solo en mac de MJ)
+npm run compare:maxxa -- <proyecto> <ruta-export.xls>
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Documentación
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Toda la documentación viva está en [`/docs/`](docs/). Empezar por:
 
-## Deploy on Vercel
+- [`CLAUDE.md`](CLAUDE.md) — instrucciones permanentes para asistentes IA. **Leer si vas a usar Claude Code u otro LLM agente sobre este repo.**
+- [`docs/WIP.md`](docs/WIP.md) — estado actual del trabajo y próximos pasos.
+- [`docs/architecture.md`](docs/architecture.md) — stack, estructura, modelo de datos.
+- [`docs/business-model.md`](docs/business-model.md) — qué modela la app.
+- [`docs/glossary.md`](docs/glossary.md) — vocabulario del negocio.
+- [`docs/principles.md`](docs/principles.md) — decisiones de diseño no negociables.
+- [`docs/decisions/`](docs/decisions/) — ADRs.
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — log cronológico de cambios estructurales.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Producción
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+App desplegada en **https://blarq-app.vercel.app**. Deploy automático on-push a `main`. Detalles en [`docs/architecture.md`](docs/architecture.md).

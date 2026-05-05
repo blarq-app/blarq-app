@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { parseRut } from "@/lib/clients/rut";
 import { NextRequest, NextResponse } from "next/server";
 
 // PATCH para edición parcial de un proyecto. Útil para inline-edit en
@@ -13,6 +14,7 @@ export async function PATCH(
     const data = (await request.json()) as Partial<{
       name: string;
       clientName: string;
+      clientRut: string | null;
       clientPhone: string;
       clientEmail: string;
       address: string;
@@ -26,6 +28,21 @@ export async function PATCH(
     if (typeof data.name === "string" && data.name.trim()) update.name = data.name.trim();
     if (typeof data.clientName === "string" && data.clientName.trim())
       update.clientName = data.clientName.trim();
+    if (data.clientRut !== undefined) {
+      // null o "" → blanquea. String con valor → valida y normaliza.
+      if (!data.clientRut) {
+        update.clientRut = null;
+      } else {
+        const r = parseRut(data.clientRut);
+        if (!r.ok) {
+          return NextResponse.json(
+            { error: `RUT del cliente inválido: ${r.reason}` },
+            { status: 400 }
+          );
+        }
+        update.clientRut = r.canonical;
+      }
+    }
     if (data.clientPhone !== undefined) update.clientPhone = data.clientPhone || null;
     if (data.clientEmail !== undefined) update.clientEmail = data.clientEmail || null;
     if (data.address !== undefined) update.address = data.address || null;
@@ -94,11 +111,25 @@ export async function PUT(
       );
     }
 
+    // Misma validación de RUT que en POST: si vino, normalizar; si no, null.
+    let clientRut: string | null = null;
+    if (data.clientRut) {
+      const r = parseRut(data.clientRut);
+      if (!r.ok) {
+        return NextResponse.json(
+          { error: `RUT del cliente inválido: ${r.reason}` },
+          { status: 400 }
+        );
+      }
+      clientRut = r.canonical;
+    }
+
     const project = await prisma.project.update({
       where: { id },
       data: {
         name: data.name,
         clientName: data.clientName,
+        clientRut,
         clientPhone: data.clientPhone || null,
         clientEmail: data.clientEmail || null,
         address: data.address || null,

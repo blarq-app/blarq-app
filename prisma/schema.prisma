@@ -34,6 +34,13 @@ model Project {
 
   name            String
   clientName      String
+  // RUT del cliente final (receptor del DTE cuando emitamos factura).
+  // Se guarda normalizado sin puntos pero CON guión y DV mayúscula:
+  // "12345678-9", "76123456-K". Validación de formato + DV chileno
+  // (módulo 11) en `src/lib/clients/rut.ts`. Opcional por ahora porque
+  // los proyectos existentes no tienen este dato — se completa cuando
+  // MJ los va tocando, o como pre-requisito al emitir factura.
+  clientRut       String?
   clientPhone     String?
   clientEmail     String?
   address         String?

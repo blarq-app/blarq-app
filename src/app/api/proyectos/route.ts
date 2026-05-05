@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { parseRut } from "@/lib/clients/rut";
 import { NextRequest, NextResponse } from "next/server";
 
 // GET /api/proyectos
@@ -28,10 +29,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Si vino RUT, validar DV y normalizar a forma canónica antes de
+    // guardar. Si vino vacío, queda null. Validación duplicada acá
+    // (también está en el form) para que la API sea segura aunque la
+    // llamen desde otro cliente o por curl.
+    let clientRut: string | null = null;
+    if (data.clientRut) {
+      const r = parseRut(data.clientRut);
+      if (!r.ok) {
+        return NextResponse.json(
+          { error: `RUT del cliente inválido: ${r.reason}` },
+          { status: 400 }
+        );
+      }
+      clientRut = r.canonical;
+    }
+
     const project = await prisma.project.create({
       data: {
         name: data.name,
         clientName: data.clientName,
+        clientRut,
         clientPhone: data.clientPhone || null,
         clientEmail: data.clientEmail || null,
         address: data.address || null,

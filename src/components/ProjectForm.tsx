@@ -2,11 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { formatRutForDisplay, parseRut } from "@/lib/clients/rut";
 
 interface ProjectData {
   id?: string;
   name: string;
   clientName: string;
+  clientRut: string | null;
   clientPhone: string | null;
   clientEmail: string | null;
   address: string | null;
@@ -39,6 +41,28 @@ export default function ProjectForm({ project }: { project?: ProjectData }) {
     project?.maestroId || ""
   );
 
+  // RUT del cliente: estado local + error de validación. La validación
+  // corre en blur, no en cada tecla — molesta menos mientras MJ tipea.
+  const [clientRut, setClientRut] = useState<string>(
+    formatRutForDisplay(project?.clientRut)
+  );
+  const [rutError, setRutError] = useState<string>("");
+
+  function validateRutOnBlur() {
+    if (!clientRut.trim()) {
+      setRutError("");
+      return;
+    }
+    const r = parseRut(clientRut);
+    if (!r.ok) {
+      setRutError(r.reason);
+    } else {
+      setRutError("");
+      // Re-formato en pantalla a la forma canónica con puntos
+      setClientRut(formatRutForDisplay(r.canonical));
+    }
+  }
+
   const isEditing = !!project?.id;
 
   useEffect(() => {
@@ -69,10 +93,25 @@ export default function ProjectForm({ project }: { project?: ProjectData }) {
     setLoading(true);
     setError("");
 
+    // Si tipearon RUT pero está mal formado, no permitimos guardar.
+    // Si el campo está vacío, se guarda null (permitido por schema).
+    let clientRutToSave: string | null = null;
+    if (clientRut.trim()) {
+      const r = parseRut(clientRut);
+      if (!r.ok) {
+        setRutError(r.reason);
+        setError("Hay un error en el RUT del cliente. Corregilo antes de guardar.");
+        setLoading(false);
+        return;
+      }
+      clientRutToSave = r.canonical;
+    }
+
     const formData = new FormData(e.currentTarget);
     const data = {
       name: formData.get("name") as string,
       clientName: formData.get("clientName") as string,
+      clientRut: clientRutToSave,
       clientPhone: (formData.get("clientPhone") as string) || null,
       clientEmail: (formData.get("clientEmail") as string) || null,
       address: (formData.get("address") as string) || null,
@@ -148,6 +187,35 @@ export default function ProjectForm({ project }: { project?: ProjectData }) {
             className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
             placeholder="Ej: Cristian Lefevre"
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            RUT del Cliente
+          </label>
+          <input
+            name="clientRut"
+            value={clientRut}
+            onChange={(e) => {
+              setClientRut(e.target.value);
+              if (rutError) setRutError("");
+            }}
+            onBlur={validateRutOnBlur}
+            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent outline-none transition-all tabular-nums ${
+              rutError
+                ? "border-red-400 focus:ring-red-400"
+                : "border-gray-300 focus:ring-gray-900"
+            }`}
+            placeholder="Ej: 12.345.678-9"
+            autoComplete="off"
+          />
+          {rutError ? (
+            <p className="mt-1 text-xs text-red-600">{rutError}</p>
+          ) : (
+            <p className="mt-1 text-xs text-gray-500">
+              Necesario para emitir factura. Puede completarse después.
+            </p>
+          )}
         </div>
 
         <div>

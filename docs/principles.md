@@ -91,6 +91,18 @@ Todos los cálculos por proyecto (cobrado, gastado, utilidad real, % avance, ale
 
 (Ya cubierto arriba en "Lenguaje visual", pero reforzado acá: aplica a UI, PDFs, emails, todo).
 
+## Catálogo de partidas — no duplicar, no pisar
+
+Confirmado por MJ 2026-05-05 en contexto del traspaso legacy de presupuestos Excel.
+
+`PartidaCatalog` es la **fuente maestra estable** de partidas. Cuando se importa un presupuesto (legacy desde Excel, o futuro desde otro lado):
+
+- Si la partida (categoría + nombre) **ya existe** en el catálogo: NO crear duplicado. NO modificar precios ni componentes del catálogo.
+- Si la partida **no existe**: crearla en el catálogo con sus componentes.
+- Si los precios del presupuesto difieren del catálogo: los precios del proyecto van en el `ObraItem` (campos `unitPrice`, `costMaterial`, `costLabor`, etc, denormalizados desde el Excel). Se marca `isCustomized=true` para indicar que la instancia del proyecto se desvió del catálogo.
+
+Razón: el catálogo evoluciona lento y representa la "receta" estable. Cada proyecto puede tener variaciones (negociación con maestro, época, proveedor) que no deben contaminar el maestro. La trazabilidad queda en `ObraItem.catalogPartidaId` + `isCustomized`.
+
 ## El proyecto NUNCA se auto-asigna
 
 Las facturas que llegan por sync SII automático tienen `projectId = null`. **Nunca** se infiere el proyecto desde el RUT del proveedor o desde otra heurística. MJ las cataloga manualmente.

@@ -15,6 +15,26 @@ Equipo cercano:
 
 Volumen: **~4 proyectos activos en paralelo**. Proyectos en fases distintas (algunos cotizando, otros en terminaciones).
 
+## 1.5 Objetivo central de la app — presupuestado vs real
+
+Confirmado por MJ 2026-05-05. **Cualquier feature nueva tiene que servir, directa o indirectamente, a este objetivo.** No es una decoración:
+
+> Ver, por proyecto, qué tan bien me fue: **comparar lo que presupuesté con lo que efectivamente gasté y cobré.**
+
+Eso significa:
+
+- Cada proyecto tiene un **presupuesto** cargado en la app (versionado: V1, V2, V3...). Al cliente se le entrega el aprobado. El presupuesto desglosa costo material, mano de obra, leyes sociales, margen, pérdidas, subcontrato, herramientas, GG, utilidad por partida.
+- Cada proyecto tiene **gasto real** capturado vía facturas recibidas (`Invoice` con `origin='sii_automatica'`) y EPs pagados a maestros. Esa data ya entra hoy.
+- Cada proyecto tiene **cobros reales** vía facturas emitidas y movimientos bancarios.
+- La app cruza los tres lados y muestra: por partida (cuando hay cómo asignar), por capítulo, por categoría de costo (Materiales, MO, etc), por proyecto entero. Banner con desviaciones si excede X%.
+
+Hoy esa vista **no está construida en su forma final**. `metrics.ts` ya da `totalCobrado`, `totalGastado`, `utilidadReal` por proyecto, pero a nivel proyecto entero, no por partida.
+
+Para llegar al ideal hace falta:
+- Que el presupuesto esté efectivamente cargado en cada proyecto (legacy: traspaso desde Excel V3/V4 de los proyectos pre-app).
+- Asignación de facturas a partidas (hoy se asignan a categorías y a proyecto, no a partidas individuales). Trabajo manual o motor de reglas — pendiente de diseñar.
+- Vista de comparativo en `/proyectos/[id]` que muestre los tres lados en paralelo.
+
 ## 2. Estructura de presupuesto: 3 documentos por proyecto
 
 Toda cotización se entrega al cliente partida en **3 documentos separados**:
@@ -26,6 +46,18 @@ Toda cotización se entrega al cliente partida en **3 documentos separados**:
 | **Artefactos** (Cocina + Sanitarios) | MJ | Precios mercado − descuentos proveedor. Cocina y Sanitarios en docs separados. | Cuotas variables |
 
 El formato de los PDFs replica fielmente el Excel V3 que BLARQ usaba pre-app (referencia: V3 Cristian Lefevre, abril 2026). Detalle de columnas y observaciones por tipo: ver `src/lib/pdf/{Obra,Muebles,Artefactos}PDF.html.ts`.
+
+### Los 3 documentos son centros de costo separados
+
+Confirmado por MJ 2026-05-05. Aunque pertenecen a un mismo proyecto, MJ los administra **como mini-proyectos independientes**:
+
+- Cada uno tiene su propio cobro, su propia facturación, sus propios cuotas.
+- **Las facturas emitidas se separan deliberadamente por tipo**: una factura para la obra (ej. folio 148), otra para muebles (149), otra para artefactos (161). MJ no junta cobros de distinta naturaleza en una sola factura porque lo que le interesa es ver "cómo nos fue en cada uno", sin que se confundan las platas.
+- El "Cuadro Resumen" del Excel V3/V4 refleja exactamente esa separación: 3 columnas paralelas (OBRA / ART. SANITARIOS / MUEBLES) con sus totales c/IVA, sus pagos y sus saldos pendientes independientes.
+
+Implicaciones:
+- El comparativo "presupuestado vs real" (objetivo central, §1.5) tiene que cortarse **por mini-proyecto**, no solo a nivel proyecto entero. Saber que "la obra dejó 8% de margen real pero los muebles dejaron 21%" es más útil que saber el promedio.
+- Si una factura emitida cubre obra + muebles, eso es un caso de excepción, no la regla.
 
 ## 3. Flujo comercial — "vida de un proyecto"
 

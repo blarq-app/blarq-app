@@ -21,6 +21,11 @@ export async function PUT(
         quantity: qty,
         unitCost: cost,
         totalCost: qty * cost,
+        // sortOrder y materialId solo se persisten si vienen explícitos —
+        // así el front puede mandar PUT parcial sin pisarlos accidentalmente.
+        ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
+        ...(data.materialId !== undefined && { materialId: data.materialId }),
+        ...(data.referenceLink !== undefined && { referenceLink: data.referenceLink }),
       },
       include: { material: true },
     });

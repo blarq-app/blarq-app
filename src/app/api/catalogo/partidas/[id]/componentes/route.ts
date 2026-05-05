@@ -21,7 +21,9 @@ export async function POST(
         quantity: data.quantity ?? 1,
         unitCost: data.unitCost ?? 0,
         totalCost: (data.quantity ?? 1) * (data.unitCost ?? 0),
-        sortOrder: count,
+        sortOrder: data.sortOrder ?? count,
+        materialId: data.materialId ?? null,
+        referenceLink: data.referenceLink ?? null,
       },
       include: { material: true },
     });

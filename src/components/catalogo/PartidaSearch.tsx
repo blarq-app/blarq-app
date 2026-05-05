@@ -19,6 +19,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import MaterialAutocomplete from "./MaterialAutocomplete";
 
 interface Component {
   id: string;
@@ -29,8 +30,20 @@ interface Component {
   unitCost: number;
   totalCost: number;
   referenceLink: string | null;
+  materialId?: string | null;
+  sortOrder?: number;
   _deleted?: boolean;
   _new?: boolean;
+}
+
+// Orden visual: respeta sortOrder pero ancla los componentes tipo "margen"
+// al final, sin importar dónde estén en sortOrder. (item 5a)
+function sortForDisplay(comps: Component[]): Component[] {
+  const regular = comps
+    .filter((c) => c.type !== "margen")
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const margen = comps.filter((c) => c.type === "margen");
+  return [...regular, ...margen];
 }
 
 interface Partida {
@@ -128,6 +141,43 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
     });
   }
 
+  // Reordena los componentes regulares (margen va al final, no entra acá).
+  // Recibe los IDs en el orden nuevo y reasigna sortOrder consecutivo. (5d)
+  function reorderComps(orderedIds: string[]) {
+    if (!draft) return;
+    const orderMap = new Map(orderedIds.map((id, i) => [id, i]));
+    setDraft({
+      ...draft,
+      components: draft.components.map((c) => {
+        const newOrder = orderMap.get(c.id);
+        return newOrder !== undefined ? { ...c, sortOrder: newOrder } : c;
+      }),
+    });
+  }
+
+  // Al elegir un material del catálogo: autocompleta description, unit y
+  // unitCost (= netPrice del material), y guarda materialId. (5b)
+  function selectMaterial(
+    compId: string,
+    material: { id: string; name: string; unit: string; netPrice: number }
+  ) {
+    if (!draft) return;
+    setDraft({
+      ...draft,
+      components: draft.components.map((c) =>
+        c.id === compId
+          ? {
+              ...c,
+              description: material.name,
+              unit: material.unit,
+              unitCost: material.netPrice,
+              materialId: material.id,
+            }
+          : c
+      ),
+    });
+  }
+
   function addComponent() {
     if (!draft) return;
     const tempId = `_new_${Date.now()}`;
@@ -215,7 +265,16 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
         await fetch(`/api/catalogo/partidas/${draft.id}/componentes`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(c),
+          body: JSON.stringify({
+            type: c.type,
+            description: c.description,
+            unit: c.unit,
+            quantity: c.quantity,
+            unitCost: c.unitCost,
+            sortOrder: c.sortOrder,
+            materialId: c.materialId ?? null,
+            referenceLink: c.referenceLink ?? null,
+          }),
         });
       }
       const toUpdate = draft.components.filter((c) => !c._new && !c._deleted);
@@ -225,7 +284,16 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(c),
+            body: JSON.stringify({
+              type: c.type,
+              description: c.description,
+              unit: c.unit,
+              quantity: c.quantity,
+              unitCost: c.unitCost,
+              sortOrder: c.sortOrder,
+              materialId: c.materialId ?? null,
+              referenceLink: c.referenceLink ?? null,
+            }),
           }
         );
       }
@@ -408,6 +476,8 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
                     onUpdateDraftComp={updateDraftComp}
                     onAddComponent={addComponent}
                     onRemoveComponent={removeComponent}
+                    onReorderComps={reorderComps}
+                    onSelectMaterial={selectMaterial}
                     onDuplicate={() => duplicatePartida(partida.id)}
                     onDelete={() => deletePartida(partida.id, partida.name)}
                     recalcCosts={recalcCosts}
@@ -448,6 +518,8 @@ function PartidaRow({
   onUpdateDraftComp,
   onAddComponent,
   onRemoveComponent,
+  onReorderComps,
+  onSelectMaterial,
   onDuplicate,
   onDelete,
   recalcCosts,
@@ -472,6 +544,11 @@ function PartidaRow({
   ) => void;
   onAddComponent: () => void;
   onRemoveComponent: (compId: string) => void;
+  onReorderComps: (orderedIds: string[]) => void;
+  onSelectMaterial: (
+    compId: string,
+    material: { id: string; name: string; unit: string; netPrice: number }
+  ) => void;
   onDuplicate: () => void;
   onDelete: () => void;
   recalcCosts: (components: Component[]) => {
@@ -560,6 +637,8 @@ function PartidaRow({
               onUpdateDraftComp={onUpdateDraftComp}
               onAddComponent={onAddComponent}
               onRemoveComponent={onRemoveComponent}
+              onReorderComps={onReorderComps}
+              onSelectMaterial={onSelectMaterial}
               onCancel={onCancelEdit}
               onSave={onSaveEdit}
               recalcCosts={recalcCosts}
@@ -664,7 +743,7 @@ function ViewPanel({
                 </tr>
               </thead>
               <tbody>
-                {partida.components.map((c) => (
+                {sortForDisplay(partida.components).map((c) => (
                   <tr key={c.id} className="border-b border-gray-100">
                     <td className="py-1 px-2">
                       <span
@@ -751,6 +830,8 @@ function EditPanel({
   onUpdateDraftComp,
   onAddComponent,
   onRemoveComponent,
+  onReorderComps,
+  onSelectMaterial,
   onCancel,
   onSave,
   recalcCosts,
@@ -765,6 +846,11 @@ function EditPanel({
   ) => void;
   onAddComponent: () => void;
   onRemoveComponent: (compId: string) => void;
+  onReorderComps: (orderedIds: string[]) => void;
+  onSelectMaterial: (
+    compId: string,
+    material: { id: string; name: string; unit: string; netPrice: number }
+  ) => void;
   onCancel: () => void;
   onSave: () => void;
   recalcCosts: (components: Component[]) => {
@@ -866,100 +952,14 @@ function EditPanel({
             + Agregar componente
           </button>
         </div>
-        <table className="w-full text-[11px]">
-          <thead>
-            <tr className="border-y border-gray-300 text-gray-500 uppercase tracking-wider">
-              <th className="text-left py-1 px-1 w-28 font-semibold">Tipo</th>
-              <th className="text-left py-1 px-1 font-semibold">Descripción</th>
-              <th className="text-center py-1 px-1 w-14 font-semibold">Un.</th>
-              <th className="text-right py-1 px-1 w-20 font-semibold">Cant.</th>
-              <th className="text-right py-1 px-1 w-24 font-semibold">Costo</th>
-              <th className="text-right py-1 px-1 w-24 font-semibold">Total</th>
-              <th className="w-6"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {draft.components
-              .filter((c) => !c._deleted)
-              .map((comp) => (
-                <tr key={comp.id} className="border-b border-gray-100">
-                  <td className="py-1 px-1">
-                    <select
-                      value={comp.type}
-                      onChange={(e) => onUpdateDraftComp(comp.id, "type", e.target.value)}
-                      className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] bg-white"
-                    >
-                      {COMP_TYPES.map((t) => (
-                        <option key={t.value} value={t.value}>
-                          {t.label}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="py-1 px-1">
-                    <input
-                      value={comp.description}
-                      onChange={(e) =>
-                        onUpdateDraftComp(comp.id, "description", e.target.value)
-                      }
-                      className="w-full border border-gray-300 rounded px-2 py-1 text-[11px]"
-                      placeholder="Descripción"
-                    />
-                  </td>
-                  <td className="py-1 px-1">
-                    <input
-                      value={comp.unit}
-                      onChange={(e) => onUpdateDraftComp(comp.id, "unit", e.target.value)}
-                      className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-center"
-                    />
-                  </td>
-                  <td className="py-1 px-1">
-                    <input
-                      type="number"
-                      step="0.001"
-                      value={comp.quantity}
-                      onChange={(e) =>
-                        onUpdateDraftComp(comp.id, "quantity", parseFloat(e.target.value) || 0)
-                      }
-                      className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-right tabular-nums"
-                    />
-                  </td>
-                  <td className="py-1 px-1">
-                    <input
-                      type="number"
-                      step="1"
-                      value={comp.unitCost}
-                      onChange={(e) =>
-                        onUpdateDraftComp(comp.id, "unitCost", parseFloat(e.target.value) || 0)
-                      }
-                      className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-right tabular-nums"
-                    />
-                  </td>
-                  <td className="py-1 px-1 text-right font-medium text-gray-700 tabular-nums">
-                    {formatCLP((comp.quantity || 0) * (comp.unitCost || 0))}
-                  </td>
-                  <td className="py-1 px-1 text-center">
-                    <button
-                      onClick={() => onRemoveComponent(comp.id)}
-                      className="text-gray-300 hover:text-red-500"
-                      title="Eliminar"
-                    >
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            <tr className="border-t-2 border-gray-900">
-              <td colSpan={5} className="py-1.5 px-1 text-right uppercase text-[10px] font-bold tracking-wider text-gray-900">
-                P.U. calculado
-              </td>
-              <td className="py-1.5 px-1 text-right font-bold text-gray-900 tabular-nums">
-                {formatCLP(costs.unitPrice)}
-              </td>
-              <td></td>
-            </tr>
-          </tbody>
-        </table>
+        <ComponentsEditTable
+          draft={draft}
+          totalUnitPrice={costs.unitPrice}
+          onUpdateDraftComp={onUpdateDraftComp}
+          onRemoveComponent={onRemoveComponent}
+          onReorderComps={onReorderComps}
+          onSelectMaterial={onSelectMaterial}
+        />
       </div>
 
       {/* Acciones */}
@@ -982,5 +982,236 @@ function EditPanel({
         </div>
       </Fragment>
     </div>
+  );
+}
+
+// ============================================================================
+// ComponentsEditTable — tabla de componentes editable, drag & drop sobre
+// los componentes regulares (5d) y autocomplete de materiales (5b).
+// Los componentes tipo "margen" se anclan al final, no son draggables (5a).
+// ============================================================================
+function ComponentsEditTable({
+  draft,
+  totalUnitPrice,
+  onUpdateDraftComp,
+  onRemoveComponent,
+  onReorderComps,
+  onSelectMaterial,
+}: {
+  draft: Partida;
+  totalUnitPrice: number;
+  onUpdateDraftComp: (
+    compId: string,
+    field: keyof Component,
+    value: string | number
+  ) => void;
+  onRemoveComponent: (compId: string) => void;
+  onReorderComps: (orderedIds: string[]) => void;
+  onSelectMaterial: (
+    compId: string,
+    material: { id: string; name: string; unit: string; netPrice: number }
+  ) => void;
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const visible = draft.components.filter((c) => !c._deleted);
+  const sorted = sortForDisplay(visible);
+  const regulares = sorted.filter((c) => c.type !== "margen");
+  const margen = sorted.filter((c) => c.type === "margen");
+
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIdx = regulares.findIndex((c) => c.id === active.id);
+    const newIdx = regulares.findIndex((c) => c.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(regulares, oldIdx, newIdx);
+    onReorderComps(reordered.map((c) => c.id));
+  }
+
+  return (
+    <table className="w-full text-[11px]">
+      <thead>
+        <tr className="border-y border-gray-300 text-gray-500 uppercase tracking-wider">
+          <th className="w-6"></th>
+          <th className="text-left py-1 px-1 w-28 font-semibold">Tipo</th>
+          <th className="text-left py-1 px-1 font-semibold">Descripción</th>
+          <th className="text-center py-1 px-1 w-14 font-semibold">Un.</th>
+          <th className="text-right py-1 px-1 w-20 font-semibold">Cant.</th>
+          <th className="text-right py-1 px-1 w-24 font-semibold">Costo</th>
+          <th className="text-right py-1 px-1 w-24 font-semibold">Total</th>
+          <th className="w-6"></th>
+        </tr>
+      </thead>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={regulares.map((c) => c.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <tbody>
+            {regulares.map((comp) => (
+              <ComponentEditRow
+                key={comp.id}
+                comp={comp}
+                draggable
+                onUpdate={onUpdateDraftComp}
+                onRemove={onRemoveComponent}
+                onSelectMaterial={onSelectMaterial}
+              />
+            ))}
+            {margen.map((comp) => (
+              <ComponentEditRow
+                key={comp.id}
+                comp={comp}
+                draggable={false}
+                onUpdate={onUpdateDraftComp}
+                onRemove={onRemoveComponent}
+                onSelectMaterial={onSelectMaterial}
+              />
+            ))}
+            <tr className="border-t-2 border-gray-900">
+              <td colSpan={6} className="py-1.5 px-1 text-right uppercase text-[10px] font-bold tracking-wider text-gray-900">
+                P.U. calculado
+              </td>
+              <td className="py-1.5 px-1 text-right font-bold text-gray-900 tabular-nums">
+                {formatCLP(totalUnitPrice)}
+              </td>
+              <td></td>
+            </tr>
+          </tbody>
+        </SortableContext>
+      </DndContext>
+    </table>
+  );
+}
+
+function ComponentEditRow({
+  comp,
+  draggable,
+  onUpdate,
+  onRemove,
+  onSelectMaterial,
+}: {
+  comp: Component;
+  draggable: boolean;
+  onUpdate: (
+    compId: string,
+    field: keyof Component,
+    value: string | number
+  ) => void;
+  onRemove: (compId: string) => void;
+  onSelectMaterial: (
+    compId: string,
+    material: { id: string; name: string; unit: string; netPrice: number }
+  ) => void;
+}) {
+  // Solo los regulares son sortables — los margen se renderizan sin hooks
+  // de dnd-kit (no están dentro del SortableContext anyway).
+  const sortable = useSortable({ id: comp.id, disabled: !draggable });
+  const style = draggable
+    ? {
+        transform: CSS.Transform.toString(sortable.transform),
+        transition: sortable.transition,
+        opacity: sortable.isDragging ? 0.5 : 1,
+      }
+    : undefined;
+
+  return (
+    <tr
+      ref={draggable ? sortable.setNodeRef : undefined}
+      style={style}
+      className="border-b border-gray-100"
+    >
+      <td className="py-1 px-1 text-center text-gray-300">
+        {draggable ? (
+          <span
+            {...sortable.attributes}
+            {...sortable.listeners}
+            className="cursor-grab hover:text-gray-700 inline-block"
+            title="Arrastrar para reordenar"
+          >
+            ⋮⋮
+          </span>
+        ) : (
+          <span className="text-gray-200" title="El margen siempre va al final">
+            ·
+          </span>
+        )}
+      </td>
+      <td className="py-1 px-1">
+        <select
+          value={comp.type}
+          onChange={(e) => onUpdate(comp.id, "type", e.target.value)}
+          className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] bg-white"
+        >
+          {COMP_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="py-1 px-1">
+        {comp.type === "material" ? (
+          <MaterialAutocomplete
+            value={comp.description}
+            onChange={(v) => onUpdate(comp.id, "description", v)}
+            onSelect={(m) => onSelectMaterial(comp.id, m)}
+            placeholder="Buscar material…"
+          />
+        ) : (
+          <input
+            value={comp.description}
+            onChange={(e) => onUpdate(comp.id, "description", e.target.value)}
+            className="w-full border border-gray-300 rounded px-2 py-1 text-[11px]"
+            placeholder="Descripción"
+          />
+        )}
+      </td>
+      <td className="py-1 px-1">
+        <input
+          value={comp.unit}
+          onChange={(e) => onUpdate(comp.id, "unit", e.target.value)}
+          className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-center"
+        />
+      </td>
+      <td className="py-1 px-1">
+        <input
+          type="number"
+          step="0.001"
+          value={comp.quantity}
+          onChange={(e) => onUpdate(comp.id, "quantity", parseFloat(e.target.value) || 0)}
+          className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-right tabular-nums"
+        />
+      </td>
+      <td className="py-1 px-1">
+        <input
+          type="number"
+          step="1"
+          value={comp.unitCost}
+          onChange={(e) => onUpdate(comp.id, "unitCost", parseFloat(e.target.value) || 0)}
+          className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-right tabular-nums"
+        />
+      </td>
+      <td className="py-1 px-1 text-right font-medium text-gray-700 tabular-nums">
+        {formatCLP((comp.quantity || 0) * (comp.unitCost || 0))}
+      </td>
+      <td className="py-1 px-1 text-center">
+        <button
+          onClick={() => onRemove(comp.id)}
+          className="text-gray-300 hover:text-red-500"
+          title="Eliminar"
+        >
+          ✕
+        </button>
+      </td>
+    </tr>
   );
 }

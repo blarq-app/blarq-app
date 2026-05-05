@@ -47,6 +47,27 @@ Toda cotización se entrega al cliente partida en **3 documentos separados**:
 
 El formato de los PDFs replica fielmente el Excel V3 que BLARQ usaba pre-app (referencia: V3 Cristian Lefevre, abril 2026). Detalle de columnas y observaciones por tipo: ver `src/lib/pdf/{Obra,Muebles,Artefactos}PDF.html.ts`.
 
+### Tema abierto — múltiples obras / anexos en un proyecto
+
+Confirmado con Francisco de Aguirre 2026-05-05. El proyecto tiene un Excel "BAÑO VISITAS" V4 que es un **anexo de obra adicional** al ppto principal V7. En el Cuadro Resumen aparece como columna separada con su propio cobro y saldo.
+
+Schema actual de la app no soporta múltiples `BudgetVersion` de obra activos para un mismo proyecto: `metrics.ts > bestVersion()` toma solo la aprobada más reciente y descarta el resto. Solución temporal en el import legacy: cargar el anexo como `status='borrador'` para que NO entre al `totalAcordado`. Queda en BD como referencia.
+
+**Lo que falta resolver**:
+- ¿Modelar varios BudgetVersion type='obra' como subtotales sumables? Ej: bandera `BudgetVersion.isAnex: boolean` → si true, suma además del principal.
+- ¿O mover esto a un nivel distinto (sub-proyecto)?
+- ¿Cómo se relacionan los cobros de un anexo con los del proyecto principal en el banco?
+
+No urgente. El import legacy preserva la información en BD aunque no se vea en el dashboard.
+
+### Tema abierto — alternativas no elegidas en archivos de artefactos
+
+Caso real: Aguirre V7 tenía 3 hojas de artefactos sanitarios (HANSGROHE, URBAN, SANITARIOS HG) — solo URBAN era la elegida. El resto eran cotizaciones alternativas que MJ comparaba antes de decidir. El script `import-budget.ts` tiene flag `--ignore-sheets="HANSGROHE,SANITARIOS HG"` para excluirlas, pero requiere que MJ identifique cuáles son alternativas al correr el script.
+
+**Lo que falta resolver**:
+- ¿Modelo de cotizaciones alternativas para artefactos (similar a `MuebleQuote` que ya existe para muebles)?
+- ¿Convención de nombres de hoja para distinguir "elegida" vs "alternativa"?
+
 ### Tema abierto — maestros que no facturan
 
 Confirmado con MJ 2026-05-05. **Decisión sin resolver, pendiente de conversación de negocio.**

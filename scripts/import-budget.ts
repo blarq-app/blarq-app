@@ -40,6 +40,14 @@ interface CliArgs {
   obra?: string;
   muebles?: string;
   artefactos?: string;
+  /** Lista de nombres de hojas (case-insensitive) a ignorar en artefactos.
+   *  Útil cuando el archivo tiene alternativas no elegidas (ej. HANSGROHE
+   *  cuando se eligió URBAN). Caso real: Aguirre V7. */
+  ignoreSheets: string[];
+  /** Status del BudgetVersion creado. Default "aprobado". Útil para
+   *  cargar anexos/alternativas como "borrador" para que no entren al
+   *  bestVersion de metrics.ts. */
+  status: string;
   dryRun: boolean;
 }
 
@@ -57,12 +65,19 @@ function parseArgs(): CliArgs {
     );
     process.exit(1);
   }
+  const ignoreSheetsRaw = get("ignore-sheets") ?? "";
+  const ignoreSheets = ignoreSheetsRaw
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean);
   return {
     project,
     version,
     obra: get("obra"),
     muebles: get("muebles"),
     artefactos: get("artefactos"),
+    ignoreSheets,
+    status: get("status") ?? "aprobado",
     dryRun: !args.includes("--commit"),
   };
 }
@@ -147,6 +162,13 @@ interface ParsedObra {
   /** Items adicionales tipeados después del "TOTAL MANO DE OBRA" del Excel.
    *  No entran en el costo directo oficial del V4; son extras post-cierre. */
   extras: ParsedObraItem[];
+  /** Porcentajes leídos del Excel (filas COSTO DIRECTO / GG / UTILIDAD).
+   *  Si el Excel los declara, se usan esos. Si no, defaults BLARQ
+   *  (GG 23%, Util 5%) que aplican al template Pauline Dumay V4. */
+  percentages: {
+    gg: number; // porcentaje 0-100
+    utility: number; // porcentaje 0-100
+  };
   totals: {
     materiales: number;
     manoObra: number;
@@ -591,10 +613,31 @@ function parseObra(filePath: string): ParsedObra {
   const presupuestoTotal = items.reduce((s, i) => s + i.total, 0);
   const extrasTotal = extras.reduce((s, i) => s + i.total, 0);
 
+  // Leer porcentajes GG y Utilidad del Excel. Buscar filas que tengan
+  // "GASTOS GENERALES" o "UTILIDAD" en alguna celda y leer el % de la
+  // columna E (col 4 índice 0) — formato: la celda dice 0.05, 0.23, etc.
+  let ggPct = 23; // default Pauline V4
+  let utilPct = 5;
+  for (let r = 0; r < pr.length; r++) {
+    const row = pr[r];
+    const flat = row.map((v) => clean(v).toUpperCase()).join("|");
+    if (flat.includes("GASTO") && flat.includes("GENERAL")) {
+      const pct = num(row[4]);
+      if (pct > 0 && pct < 1) ggPct = pct * 100;
+      else if (pct >= 1 && pct < 100) ggPct = pct;
+    }
+    if (flat.includes("UTILIDAD")) {
+      const pct = num(row[4]);
+      if (pct > 0 && pct < 1) utilPct = pct * 100;
+      else if (pct >= 1 && pct < 100) utilPct = pct;
+    }
+  }
+
   return {
     catalog,
     items,
     extras,
+    percentages: { gg: ggPct, utility: utilPct },
     totals: {
       ...totalsFromMaestra,
       presupuestoTotal,
@@ -633,27 +676,11 @@ function parseMuebles(filePath: string): ParsedMuebles {
     raw: true,
   }) as unknown[][];
 
-  // Buscar cabecera "ITEM | PROVEEDOR | MATERIAL | PRECIO DISTRIBUIDOR | % UTILIDAD | NETO CLIENTE | VALOR C/IVA"
-  // Las cabeceras de capítulos ("COCINA Y LOGIA") aparecen en filas previas.
-  let mHeaderRow = -1;
-  for (let r = 0; r < m.length; r++) {
-    const flat = m[r].map((v) => clean(v).toUpperCase()).join("|");
-    if (
-      flat.includes("ITEM") &&
-      flat.includes("PROVEEDOR") &&
-      flat.includes("PRECIO DISTRIBUIDOR")
-    ) {
-      mHeaderRow = r;
-      break;
-    }
-  }
-  if (mHeaderRow === -1) {
-    throw new Error(`No se encontró cabecera de cálculo en hoja MUEBLES`);
-  }
-
-  // Recolectamos rows con datos por nombre de item para luego cruzarlas.
-  // Estructura típica: cols B=ITEM, C=PROVEEDOR, D=MATERIAL,
-  // E=PRECIO DISTRIBUIDOR, F=% UTILIDAD, G=NETO CLIENTE, H=VALOR C/IVA
+  // La hoja MUEBLES puede tener UN bloque (caso simple — Pauline Dumay) o
+  // VARIOS bloques (caso Aguirre: COCINA / BAÑO PRINCIPAL / BANQUETA). Cada
+  // bloque tiene su propia cabecera "ITEM | PROVEEDOR | ...". Detectamos
+  // todos los bloques recorriendo la hoja y agrupamos las filas de datos
+  // bajo el chapter declarado justo antes de cada cabecera.
   type MueblesRowData = {
     name: string;
     supplier: string;
@@ -662,40 +689,88 @@ function parseMuebles(filePath: string): ParsedMuebles {
     utilityPercentage: number;
     clientPriceNet: number;
     clientPriceIva: number;
+    blockChapter: string; // "COCINA", "BAÑO PRINCIPAL", "BANQUETA", o "" si bloque único
   };
   const dataRows: MueblesRowData[] = [];
-  for (let r = mHeaderRow + 1; r < m.length; r++) {
-    const row = m[r];
-    const item = clean(row[1]);
-    const supplier = clean(row[2]);
-    const material = clean(row[3]);
-    const costDistributor = num(row[4]);
-    const utilityPct = num(row[5]); // ya viene como decimal (0.20)
-    const clientPriceNet = num(row[6]);
-    const clientPriceIva = num(row[7]);
 
-    // Filas de "TOTAL", "IVA", "UTILIDAD NETA" se descartan
-    const itemUpper = item.toUpperCase();
+  // Encontrar todas las filas que son cabeceras "ITEM | PROVEEDOR | ..."
+  const headerRows: number[] = [];
+  for (let r = 0; r < m.length; r++) {
+    const flat = m[r].map((v) => clean(v).toUpperCase()).join("|");
     if (
-      !item ||
-      itemUpper === "TOTAL" ||
-      itemUpper.startsWith("TOTAL ") ||
-      itemUpper === "IVA" ||
-      itemUpper.startsWith("UTILIDAD")
+      flat.includes("ITEM") &&
+      flat.includes("PROVEEDOR") &&
+      flat.includes("PRECIO DISTRIBUIDOR")
     ) {
-      continue;
+      headerRows.push(r);
     }
-    if (clientPriceIva === 0 && clientPriceNet === 0) continue;
+  }
+  if (headerRows.length === 0) {
+    throw new Error(`No se encontró cabecera de cálculo en hoja MUEBLES`);
+  }
 
-    dataRows.push({
-      name: itemUpper.trim(),
-      supplier,
-      material,
-      costDistributor,
-      utilityPercentage: utilityPct,
-      clientPriceNet,
-      clientPriceIva,
-    });
+  // Para cada bloque, leer filas hasta encontrar "TOTAL NETO" o el inicio
+  // del próximo bloque.
+  for (let bi = 0; bi < headerRows.length; bi++) {
+    const headerRow = headerRows[bi];
+    const nextHeaderRow =
+      bi + 1 < headerRows.length ? headerRows[bi + 1] : m.length;
+
+    // Detectar el chapter del bloque: buscar ARRIBA del header una fila
+    // con UNA sola celda no vacía con texto (típicamente cabecera tipo
+    // "COCINA", "BAÑO PRINCIPAL"). Si no se encuentra, blockChapter="".
+    let blockChapter = "";
+    for (let r = headerRow - 1; r >= Math.max(0, headerRow - 8); r--) {
+      const row = m[r];
+      const nonEmpty = row.filter((v) => clean(v) !== "");
+      // Una sola celda con texto, no un total
+      if (nonEmpty.length === 1) {
+        const txt = clean(nonEmpty[0]).toUpperCase();
+        if (
+          !txt.startsWith("TOTAL") &&
+          !txt.startsWith("IVA") &&
+          !txt.startsWith("UTILIDAD") &&
+          txt.length > 2
+        ) {
+          blockChapter = txt;
+          break;
+        }
+      }
+    }
+
+    for (let r = headerRow + 1; r < nextHeaderRow; r++) {
+      const row = m[r];
+      const item = clean(row[1]);
+      const supplier = clean(row[2]);
+      const material = clean(row[3]);
+      const costDistributor = num(row[4]);
+      const utilityPct = num(row[5]);
+      const clientPriceNet = num(row[6]);
+      const clientPriceIva = num(row[7]);
+
+      const itemUpper = item.toUpperCase();
+      if (
+        !item ||
+        itemUpper === "TOTAL" ||
+        itemUpper.startsWith("TOTAL ") ||
+        itemUpper === "IVA" ||
+        itemUpper.startsWith("UTILIDAD")
+      ) {
+        continue;
+      }
+      if (clientPriceIva === 0 && clientPriceNet === 0) continue;
+
+      dataRows.push({
+        name: itemUpper.trim(),
+        supplier,
+        material,
+        costDistributor,
+        utilityPercentage: utilityPct,
+        clientPriceNet,
+        clientPriceIva,
+        blockChapter,
+      });
+    }
   }
 
   // ── Hoja PRESUPUESTO MUEBLES (estructura) ──
@@ -727,29 +802,43 @@ function parseMuebles(filePath: string): ParsedMuebles {
   const observations: string[] = [];
   const paymentTerms: { stage: string; percentage: number }[] = [];
 
-  // Match flexible: comparar palabras significativas (≥4 chars). Si la
-  // primera palabra del item coincide con la primera palabra de algún
-  // data.name, es match. Cubre casos como "MUEBLES" ↔ "MUEBLE COCINA",
-  // "COMEDOR" ↔ "MESA COMEDOR".
-  function flexMatch(itemName: string): MueblesRowData | undefined {
+  // Match flexible: si el PRESUPUESTO tiene capítulo, intentar match dentro
+  // del bloque de la hoja MUEBLES con chapter compatible. Esto evita que
+  // "1.1 MUEBLES" del cap "BANQUETA" matchee con el "MUEBLE COCINA" del
+  // bloque "COCINA" cuando hay múltiples bloques.
+  const stemOf = (s: string) =>
+    s
+      .split(/\s+/)
+      .filter((w) => w.length >= 4)
+      .map((w) => w.slice(0, 5));
+
+  function chapterCompatible(blockCh: string, ppCh: string): boolean {
+    if (!blockCh || !ppCh) return true; // si alguno es vacío, no restringe
+    const a = stemOf(blockCh);
+    const b = stemOf(ppCh);
+    return a.some((sa) => b.includes(sa));
+  }
+
+  function flexMatch(itemName: string, ppChapter: string): MueblesRowData | undefined {
     const target = itemName.toUpperCase().trim();
-    // Match exacto primero
-    const exact = dataRows.find((d) => d.name === target);
+    const targetStems = new Set(stemOf(target));
+
+    // Filtrar candidatos por bloque compatible cuando hay capítulo
+    const candidates = ppChapter
+      ? dataRows.filter((d) => chapterCompatible(d.blockChapter, ppChapter))
+      : dataRows;
+    const pool = candidates.length > 0 ? candidates : dataRows;
+
+    // Match exacto
+    const exact = pool.find((d) => d.name === target);
     if (exact) return exact;
-    // Si target es "X COMEDOR" o "X" intenta substring loose
-    const loose = dataRows.find(
+    // Substring
+    const loose = pool.find(
       (d) => d.name.startsWith(target) || target.startsWith(d.name)
     );
     if (loose) return loose;
-    // Match por stem (primeros 5 caracteres de cada palabra ≥4 chars).
-    // Cubre "MUEBLES" ↔ "MUEBLE COCINA" (stem "MUEBL"), "HERRAJES" ↔
-    // "HERRAJES VARIOS" (stem "HERRA"), etc.
-    const stemOf = (s: string) =>
-      s.split(/\s+/)
-        .filter((w) => w.length >= 4)
-        .map((w) => w.slice(0, 5));
-    const targetStems = new Set(stemOf(target));
-    for (const d of dataRows) {
+    // Match por stem
+    for (const d of pool) {
       for (const stem of stemOf(d.name)) {
         if (targetStems.has(stem)) return d;
       }
@@ -795,8 +884,12 @@ function parseMuebles(filePath: string): ParsedMuebles {
     const isSubDetail = !itemNumber && currentItem && (partidaName || descCol);
 
     if (isChapter) {
+      // Numeramos chapters secuencialmente por orden de aparición. El
+      // Excel a veces repite "2.0" para múltiples capítulos (caso Aguirre:
+      // "2.0 BANQUETA" y "2.0 MUEBLE BAÑO PRINCIPAL"). Ignoramos el número
+      // del Excel para evitar colisiones.
       currentChapter = {
-        chapterNumber: parseInt(itemNumber.split(".")[0], 10),
+        chapterNumber: chapters.length + 1,
         name: partidaName.toUpperCase(),
         items: [],
       };
@@ -806,7 +899,7 @@ function parseMuebles(filePath: string): ParsedMuebles {
     }
 
     if (isItem && currentChapter) {
-      const data = flexMatch(partidaName);
+      const data = flexMatch(partidaName, currentChapter.name);
       currentItem = {
         itemNumber,
         name: partidaName.toUpperCase(),
@@ -865,14 +958,33 @@ function parseMuebles(filePath: string): ParsedMuebles {
 // (la versión que coincide con --version en su cabecera). Las otras son
 // alternativas no elegidas y se reportan como "ignoradas".
 
-function parseArtefactos(filePath: string, targetVersion: string): ParsedArtefactos {
+function parseArtefactos(
+  filePath: string,
+  _targetVersion: string,
+  ignoreSheets: string[] = []
+): ParsedArtefactos {
   const wb = XLSX.readFile(filePath, { cellDates: true });
   const items: ParsedArtefactoItem[] = [];
   const ignored: string[] = [];
   let total = 0;
 
+  const ignoreSet = new Set(ignoreSheets.map((s) => s.toUpperCase().trim()));
+
   for (const sheetName of wb.SheetNames) {
     if (sheetName.toUpperCase() === "MAESTRA") continue;
+    if (ignoreSet.has(sheetName.toUpperCase().trim())) {
+      ignored.push(`${sheetName} (excluida por --ignore-sheets)`);
+      continue;
+    }
+    // Match parcial también: ej --ignore-sheets="HANSGROHE" matchea "HANSGROHE" pero
+    // también "ARTEFACTOS SANITARIOS HG" si pongo "HG"
+    const matchedIgnore = ignoreSheets.find((kw) =>
+      sheetName.toUpperCase().includes(kw.toUpperCase())
+    );
+    if (matchedIgnore) {
+      ignored.push(`${sheetName} (excluida por keyword "${matchedIgnore}")`);
+      continue;
+    }
     const ws = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, {
       header: 1,
@@ -880,8 +992,11 @@ function parseArtefactos(filePath: string, targetVersion: string): ParsedArtefac
       raw: true,
     }) as unknown[][];
 
-    // Detectar versión declarada en la hoja (busca "V4 COTIZACION" etc en
-    // las primeras 10 filas)
+    // Detectar versión declarada en la hoja (info para reporte; NO se usa
+    // para filtrar — los proyectos típicos de BLARQ tienen hojas de
+    // distintas versiones que igual están vigentes en la "versión final"
+    // del proyecto). Caso real Aguirre: hojas son V5/V4/V1 pero todas
+    // siguen siendo el ppto V7 oficial según el cuadro resumen.
     let sheetVersion = "";
     for (let r = 0; r < Math.min(rows.length, 10); r++) {
       for (const cell of rows[r]) {
@@ -893,11 +1008,6 @@ function parseArtefactos(filePath: string, targetVersion: string): ParsedArtefac
         }
       }
       if (sheetVersion) break;
-    }
-
-    if (sheetVersion && sheetVersion !== targetVersion) {
-      ignored.push(`${sheetName} (${sheetVersion})`);
-      continue;
     }
 
     // Encontrar cabecera "ITEM | DETALLE/MODELO | MARCA | CANTIDAD |
@@ -955,14 +1065,21 @@ function parseArtefactos(filePath: string, targetVersion: string): ParsedArtefac
       const row = rows[r];
       const itemName = clean(row[2]);
       const itemUpper = itemName.toUpperCase();
+      const rowQty = num(row[5]);
+      const rowTotal = num(row[8]);
 
-      // Si encontramos otro encabezado de room, actualizar
-      if (
-        itemUpper.startsWith("BAÑO") ||
-        itemUpper.startsWith("BANO") ||
-        itemUpper === "COCINA" ||
-        itemUpper === "LOGIA"
-      ) {
+      // Si encontramos otro encabezado de room, actualizar. Solo es header
+      // si la fila NO tiene cantidad ni precio (de lo contrario es item
+      // con ese nombre — caso real Aguirre: "COCINA" como nombre de
+      // lámpara con qty=4 y precio).
+      const looksLikeRoomHeader =
+        rowQty === 0 &&
+        rowTotal === 0 &&
+        (itemUpper.startsWith("BAÑO") ||
+          itemUpper.startsWith("BANO") ||
+          itemUpper === "COCINA" ||
+          itemUpper === "LOGIA");
+      if (looksLikeRoomHeader) {
         if (itemUpper.includes("VISITA")) currentRoom = "bano_visita";
         else if (itemUpper.includes("SECUNDARIO")) currentRoom = "bano_secundario";
         else if (itemUpper.startsWith("BAÑO") || itemUpper.startsWith("BANO")) currentRoom = "bano_principal";
@@ -1041,7 +1158,8 @@ interface CommitResult {
 async function commitObra(
   projectId: string,
   version: string,
-  parsed: ParsedObra
+  parsed: ParsedObra,
+  status: string = "aprobado"
 ): Promise<CommitResult> {
   // Pre-check: ¿ya hay un BudgetVersion con (projectId, version, type=obra)?
   const existing = await prisma.budgetVersion.findFirst({
@@ -1174,9 +1292,9 @@ async function commitObra(
         projectId,
         version,
         type: "obra",
-        ggPercentage: 23,
-        utilityPercentage: 5,
-        status: "aprobado", // import legacy: el ppto V4 ya está aprobado y ejecutado
+        ggPercentage: parsed.percentages.gg,
+        utilityPercentage: parsed.percentages.utility,
+        status,
       },
     });
 
@@ -1239,7 +1357,8 @@ async function commitObra(
 async function commitMuebles(
   projectId: string,
   version: string,
-  parsed: ParsedMuebles
+  parsed: ParsedMuebles,
+  status: string = "aprobado"
 ): Promise<{ budgetVersionId: string; chaptersCreated: number; itemsCreated: number }> {
   const existing = await prisma.budgetVersion.findFirst({
     where: { projectId, version, type: "muebles" },
@@ -1257,7 +1376,7 @@ async function commitMuebles(
         projectId,
         version,
         type: "muebles",
-        status: "aprobado",
+        status,
         // Descuento global guardado como decimal (0.02 = 2%) para que
         // metrics.ts lo aplique al subtotal de muebles.
         discountPercentage: parsed.totals.discountPercent || 0,
@@ -1316,7 +1435,7 @@ async function commitMuebles(
     }
 
     return { budgetVersionId: bv.id, chaptersCreated, itemsCreated };
-  });
+  }, { timeout: 60000, maxWait: 10000 });
 }
 
 // ─── Commit ARTEFACTOS a BD ─────────────────────────────────────────────
@@ -1324,7 +1443,8 @@ async function commitMuebles(
 async function commitArtefactos(
   projectId: string,
   version: string,
-  parsed: ParsedArtefactos
+  parsed: ParsedArtefactos,
+  status: string = "aprobado"
 ): Promise<{ budgetVersionId: string; itemsCreated: number }> {
   const existing = await prisma.budgetVersion.findFirst({
     where: { projectId, version, type: "artefactos" },
@@ -1341,7 +1461,7 @@ async function commitArtefactos(
         projectId,
         version,
         type: "artefactos",
-        status: "aprobado",
+        status,
       },
     });
 
@@ -1368,7 +1488,7 @@ async function commitArtefactos(
     }
 
     return { budgetVersionId: bv.id, itemsCreated };
-  });
+  }, { timeout: 60000, maxWait: 10000 });
 }
 
 // ─── MAIN ────────────────────────────────────────────────────────────────
@@ -1466,11 +1586,10 @@ async function main() {
       aggregated.subcontract;
     console.log(`  Suma:          ${fmt(sumAgg)}  (vs PRESUPUESTO ${fmt(parsed.totals.presupuestoTotal)})`);
 
-    // Cálculo final a c/IVA según fórmula BLARQ:
-    //   GG y Utilidad se aplican ADITIVOS sobre costo directo (no encadenados).
-    //   IVA aplica sobre el costo neto (directo + GG + utilidad).
-    const gg = 0.23;
-    const util = 0.05;
+    // Cálculo final a c/IVA según fórmula BLARQ. Porcentajes leídos del
+    // Excel (cada proyecto puede tener su propia combinación).
+    const gg = parsed.percentages.gg / 100;
+    const util = parsed.percentages.utility / 100;
     const iva = 0.19;
     const costoDirecto = parsed.totals.presupuestoTotal;
     const ggMonto = costoDirecto * gg;
@@ -1478,7 +1597,9 @@ async function main() {
     const costoNeto = costoDirecto + ggMonto + utilMonto;
     const ivaMonto = costoNeto * iva;
     const costoTotal = costoNeto + ivaMonto;
-    console.log(`\nProyección a Costo Total (GG 23% · Util 5% sobre costo directo · IVA 19%):`);
+    console.log(
+      `\nProyección a Costo Total (GG ${parsed.percentages.gg}% · Util ${parsed.percentages.utility}% sobre costo directo · IVA 19%):`
+    );
     console.log(`  Costo directo:     ${fmt(costoDirecto)}`);
     console.log(`  + GG (23%):        ${fmt(ggMonto)}`);
     console.log(`  + Utilidad (5%):   ${fmt(utilMonto)}`);
@@ -1576,7 +1697,7 @@ async function main() {
   if (args.artefactos) {
     console.log(`\n── ARTEFACTOS ──`);
     console.log(`Archivo: ${path.basename(args.artefactos)}`);
-    const a = parseArtefactos(args.artefactos, args.version);
+    const a = parseArtefactos(args.artefactos, args.version, args.ignoreSheets);
     console.log(`Items importados: ${a.items.length}  ·  Total: ${fmt(a.total)}`);
     if (a.ignoredSheets.length > 0) {
       console.log(`\nHojas ignoradas (versión distinta de ${args.version}):`);
@@ -1614,7 +1735,7 @@ async function main() {
 
   if (args.obra) {
     const parsed = parseObra(args.obra);
-    const r = await commitObra(project.id, args.version, parsed);
+    const r = await commitObra(project.id, args.version, parsed, args.status);
     console.log(
       `\nOBRA → BudgetVersion ${r.budgetVersionId}\n` +
         `  Items creados:        ${r.itemsCreated}\n` +
@@ -1626,7 +1747,7 @@ async function main() {
 
   if (args.muebles) {
     const parsed = parseMuebles(args.muebles);
-    const r = await commitMuebles(project.id, args.version, parsed);
+    const r = await commitMuebles(project.id, args.version, parsed, args.status);
     console.log(
       `\nMUEBLES → BudgetVersion ${r.budgetVersionId}\n` +
         `  Capítulos creados:  ${r.chaptersCreated}\n` +
@@ -1635,8 +1756,8 @@ async function main() {
   }
 
   if (args.artefactos) {
-    const parsed = parseArtefactos(args.artefactos, args.version);
-    const r = await commitArtefactos(project.id, args.version, parsed);
+    const parsed = parseArtefactos(args.artefactos, args.version, args.ignoreSheets);
+    const r = await commitArtefactos(project.id, args.version, parsed, args.status);
     console.log(
       `\nARTEFACTOS → BudgetVersion ${r.budgetVersionId}\n` +
         `  Items creados: ${r.itemsCreated}`

@@ -349,6 +349,14 @@ model PartidaComponent {
   referenceLink String?  // Link Sodimac, etc
   materialId    String?  // Referencia al catálogo de materiales
   sortOrder     Int      @default(0)
+  // Para componentes con unit="%" — sobre qué se aplica el porcentaje:
+  //   - margen: applied* todos null, total = % × suma del resto excepto pérdida.
+  //   - perdida: appliedToComponentId apunta a un componente concreto (típica-
+  //     mente un material) de la misma partida. total = % × totalCost de ese.
+  //   - leyes (mano_obra con unit="%"): appliedToType = "mano_obra".
+  //     total = % × suma de mano_obra (no-%) de la partida.
+  appliedToComponentId String?
+  appliedToType        String? // "mano_obra" | "material" | etc.
 
   partida       PartidaCatalog @relation(fields: [partidaId], references: [id], onDelete: Cascade)
   material      MaterialCatalog? @relation(fields: [materialId], references: [id])

@@ -32,8 +32,55 @@ interface Component {
   referenceLink: string | null;
   materialId?: string | null;
   sortOrder?: number;
+  // Para componentes con unit="%":
+  //   - perdida + appliedToComponentId → % de un material concreto.
+  //   - mano_obra + appliedToType="mano_obra" → leyes sociales (% de MO).
+  appliedToComponentId?: string | null;
+  appliedToType?: string | null;
   _deleted?: boolean;
   _new?: boolean;
+}
+
+// Calcula el total efectivo de un componente, aplicando la lógica de %
+// (pérdida sobre material, leyes sobre MO, margen sobre todo el resto).
+// Recursivo pero seguro: el caso base son componentes con unit ≠ "%".
+function effectiveTotal(comp: Component, all: Component[]): number {
+  const active = all.filter((c) => !c._deleted);
+  const pct = comp.quantity || 0;
+
+  if (comp.unit !== "%") {
+    return (comp.quantity || 0) * (comp.unitCost || 0);
+  }
+
+  if (comp.type === "perdida" && comp.appliedToComponentId) {
+    const target = active.find((c) => c.id === comp.appliedToComponentId);
+    if (!target) return 0;
+    return effectiveTotal(target, all) * (pct / 100);
+  }
+
+  if (comp.type === "mano_obra" && comp.appliedToType === "mano_obra") {
+    // Leyes sociales: % sobre la suma de mano_obra (excluyéndose a sí misma
+    // y a otras filas mano_obra con unit="%" para evitar circulares).
+    const moBase = active
+      .filter(
+        (c) =>
+          c.type === "mano_obra" && c.unit !== "%" && c.id !== comp.id
+      )
+      .reduce((s, c) => s + effectiveTotal(c, all), 0);
+    return moBase * (pct / 100);
+  }
+
+  if (comp.type === "margen") {
+    // Margen: % sobre todo el resto excepto pérdida y otros márgenes.
+    const base = active
+      .filter((c) => c.id !== comp.id && c.type !== "margen" && c.type !== "perdida")
+      .reduce((s, c) => s + effectiveTotal(c, all), 0);
+    return base * (pct / 100);
+  }
+
+  // Default fallback para unit=% sin contexto explícito (componente legacy
+  // o configuración incompleta).
+  return (comp.quantity || 0) * (comp.unitCost || 0);
 }
 
 // Orden visual: respeta sortOrder pero ancla los componentes tipo "margen"
@@ -178,6 +225,60 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
     });
   }
 
+  // Al cambiar el TIPO de un componente, limpiar los campos appliedTo*
+  // (eran válidos sólo bajo la combinación type/unit anterior).
+  function changeCompType(compId: string, newType: string) {
+    if (!draft) return;
+    setDraft({
+      ...draft,
+      components: draft.components.map((c) =>
+        c.id === compId
+          ? {
+              ...c,
+              type: newType,
+              appliedToComponentId: null,
+              appliedToType: null,
+            }
+          : c
+      ),
+    });
+  }
+
+  // Al cambiar la UNIDAD: si pasa a "%" en mano_obra → leyes sociales auto.
+  // Si sale de "%" → limpiar appliedTo*.
+  function changeCompUnit(compId: string, newUnit: string) {
+    if (!draft) return;
+    setDraft({
+      ...draft,
+      components: draft.components.map((c) => {
+        if (c.id !== compId) return c;
+        const next = { ...c, unit: newUnit };
+        if (newUnit === "%" && c.type === "mano_obra") {
+          next.appliedToType = "mano_obra";
+          next.appliedToComponentId = null;
+        } else if (newUnit !== "%") {
+          next.appliedToComponentId = null;
+          next.appliedToType = null;
+        }
+        return next;
+      }),
+    });
+  }
+
+  // Para pérdida con unit="%": setear el material concreto sobre el que
+  // se aplica (por ID del componente de la misma partida).
+  function pickAppliedTo(compId: string, targetCompId: string | null) {
+    if (!draft) return;
+    setDraft({
+      ...draft,
+      components: draft.components.map((c) =>
+        c.id === compId
+          ? { ...c, appliedToComponentId: targetCompId }
+          : c
+      ),
+    });
+  }
+
   function addComponent() {
     if (!draft) return;
     const tempId = `_new_${Date.now()}`;
@@ -221,16 +322,18 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
 
   function recalcCosts(components: Component[]) {
     const active = components.filter((c) => !c._deleted);
-    const sum = (type: string) =>
+    // Usa effectiveTotal — respeta la lógica de % (pérdida sobre material,
+    // leyes sobre MO, margen sobre todo el resto).
+    const sumByType = (type: string) =>
       active
         .filter((c) => c.type === type)
-        .reduce((s, c) => s + (c.quantity || 0) * (c.unitCost || 0), 0);
-    const costMaterial = sum("material");
-    const costLabor = sum("mano_obra");
-    const costTools = sum("herramientas");
-    const costSubcontract = sum("subcontrato");
-    const costLoss = sum("perdida");
-    const costMargin = sum("margen");
+        .reduce((s, c) => s + effectiveTotal(c, active), 0);
+    const costMaterial = sumByType("material");
+    const costLabor = sumByType("mano_obra");
+    const costTools = sumByType("herramientas");
+    const costSubcontract = sumByType("subcontrato");
+    const costLoss = sumByType("perdida");
+    const costMargin = sumByType("margen");
     const unitPrice =
       costMaterial + costLabor + costTools + costSubcontract + costLoss + costMargin;
     return { costMaterial, costLabor, costTools, costSubcontract, costLoss, costMargin, unitPrice };
@@ -260,8 +363,18 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
           method: "DELETE",
         });
       }
-      const toCreate = draft.components.filter((c) => c._new && !c._deleted);
+      // Para guardar bien los totalCost de componentes con unit="%"
+      // (pérdida sobre material, leyes sobre MO, margen), hay que crear
+      // primero los nuevos y luego actualizar todos con el totalCost
+      // calculado (porque los % pueden depender de IDs reales en BD).
+      // Para simplificar: persistimos el snapshot de totales según los
+      // ids actuales (los _new cuando se persisten generan ID nuevo, así
+      // que appliedToComponentId apuntando a un _new no funciona en el
+      // primer save — MJ tiene que guardar y después configurar la pérdida).
+      const allActive = draft.components.filter((c) => !c._deleted);
+      const toCreate = allActive.filter((c) => c._new);
       for (const c of toCreate) {
+        const total = effectiveTotal(c, allActive);
         await fetch(`/api/catalogo/partidas/${draft.id}/componentes`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -271,14 +384,18 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
             unit: c.unit,
             quantity: c.quantity,
             unitCost: c.unitCost,
+            totalCost: total,
             sortOrder: c.sortOrder,
             materialId: c.materialId ?? null,
             referenceLink: c.referenceLink ?? null,
+            appliedToComponentId: c.appliedToComponentId ?? null,
+            appliedToType: c.appliedToType ?? null,
           }),
         });
       }
-      const toUpdate = draft.components.filter((c) => !c._new && !c._deleted);
+      const toUpdate = allActive.filter((c) => !c._new);
       for (const c of toUpdate) {
+        const total = effectiveTotal(c, allActive);
         await fetch(
           `/api/catalogo/partidas/${draft.id}/componentes/${c.id}`,
           {
@@ -290,9 +407,12 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
               unit: c.unit,
               quantity: c.quantity,
               unitCost: c.unitCost,
+              totalCost: total,
               sortOrder: c.sortOrder,
               materialId: c.materialId ?? null,
               referenceLink: c.referenceLink ?? null,
+              appliedToComponentId: c.appliedToComponentId ?? null,
+              appliedToType: c.appliedToType ?? null,
             }),
           }
         );
@@ -478,6 +598,9 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
                     onRemoveComponent={removeComponent}
                     onReorderComps={reorderComps}
                     onSelectMaterial={selectMaterial}
+                    onChangeCompType={changeCompType}
+                    onChangeCompUnit={changeCompUnit}
+                    onPickAppliedTo={pickAppliedTo}
                     onDuplicate={() => duplicatePartida(partida.id)}
                     onDelete={() => deletePartida(partida.id, partida.name)}
                     recalcCosts={recalcCosts}
@@ -520,6 +643,9 @@ function PartidaRow({
   onRemoveComponent,
   onReorderComps,
   onSelectMaterial,
+  onChangeCompType,
+  onChangeCompUnit,
+  onPickAppliedTo,
   onDuplicate,
   onDelete,
   recalcCosts,
@@ -549,6 +675,9 @@ function PartidaRow({
     compId: string,
     material: { id: string; name: string; unit: string; netPrice: number }
   ) => void;
+  onChangeCompType: (compId: string, newType: string) => void;
+  onChangeCompUnit: (compId: string, newUnit: string) => void;
+  onPickAppliedTo: (compId: string, targetCompId: string | null) => void;
   onDuplicate: () => void;
   onDelete: () => void;
   recalcCosts: (components: Component[]) => {
@@ -639,6 +768,9 @@ function PartidaRow({
               onRemoveComponent={onRemoveComponent}
               onReorderComps={onReorderComps}
               onSelectMaterial={onSelectMaterial}
+              onChangeCompType={onChangeCompType}
+              onChangeCompUnit={onChangeCompUnit}
+              onPickAppliedTo={onPickAppliedTo}
               onCancel={onCancelEdit}
               onSave={onSaveEdit}
               recalcCosts={recalcCosts}
@@ -743,7 +875,9 @@ function ViewPanel({
                 </tr>
               </thead>
               <tbody>
-                {sortForDisplay(partida.components).map((c) => (
+                {sortForDisplay(partida.components).map((c) => {
+                  const allActive = partida.components.filter((x) => !x._deleted);
+                  return (
                   <tr key={c.id} className="border-b border-gray-100">
                     <td className="py-1 px-2">
                       <span
@@ -772,13 +906,26 @@ function ViewPanel({
                       {c.quantity}
                     </td>
                     <td className="py-1 px-2 text-right text-gray-700 tabular-nums">
-                      {formatCLP(c.unitCost)}
+                      {c.unit === "%" ? (
+                        <span className="text-[10px] text-gray-400 italic">
+                          {c.type === "perdida"
+                            ? "sobre material"
+                            : c.type === "mano_obra"
+                              ? "sobre M.O."
+                              : c.type === "margen"
+                                ? "sobre resto"
+                                : "—"}
+                        </span>
+                      ) : (
+                        formatCLP(c.unitCost)
+                      )}
                     </td>
                     <td className="py-1 px-2 text-right font-medium text-gray-900 tabular-nums">
-                      {formatCLP(c.totalCost)}
+                      {formatCLP(effectiveTotal(c, allActive))}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 <tr className="border-t-2 border-gray-900">
                   <td colSpan={5} className="py-1.5 px-2 text-right uppercase text-[10px] font-bold tracking-wider text-gray-900">
                     Total
@@ -832,6 +979,9 @@ function EditPanel({
   onRemoveComponent,
   onReorderComps,
   onSelectMaterial,
+  onChangeCompType,
+  onChangeCompUnit,
+  onPickAppliedTo,
   onCancel,
   onSave,
   recalcCosts,
@@ -851,6 +1001,9 @@ function EditPanel({
     compId: string,
     material: { id: string; name: string; unit: string; netPrice: number }
   ) => void;
+  onChangeCompType: (compId: string, newType: string) => void;
+  onChangeCompUnit: (compId: string, newUnit: string) => void;
+  onPickAppliedTo: (compId: string, targetCompId: string | null) => void;
   onCancel: () => void;
   onSave: () => void;
   recalcCosts: (components: Component[]) => {
@@ -959,6 +1112,9 @@ function EditPanel({
           onRemoveComponent={onRemoveComponent}
           onReorderComps={onReorderComps}
           onSelectMaterial={onSelectMaterial}
+          onChangeCompType={onChangeCompType}
+          onChangeCompUnit={onChangeCompUnit}
+          onPickAppliedTo={onPickAppliedTo}
         />
       </div>
 
@@ -997,6 +1153,9 @@ function ComponentsEditTable({
   onRemoveComponent,
   onReorderComps,
   onSelectMaterial,
+  onChangeCompType,
+  onChangeCompUnit,
+  onPickAppliedTo,
 }: {
   draft: Partida;
   totalUnitPrice: number;
@@ -1011,6 +1170,9 @@ function ComponentsEditTable({
     compId: string,
     material: { id: string; name: string; unit: string; netPrice: number }
   ) => void;
+  onChangeCompType: (compId: string, newType: string) => void;
+  onChangeCompUnit: (compId: string, newUnit: string) => void;
+  onPickAppliedTo: (compId: string, targetCompId: string | null) => void;
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -1061,9 +1223,13 @@ function ComponentsEditTable({
                 key={comp.id}
                 comp={comp}
                 draggable
+                allActive={visible}
                 onUpdate={onUpdateDraftComp}
                 onRemove={onRemoveComponent}
                 onSelectMaterial={onSelectMaterial}
+                onChangeType={onChangeCompType}
+                onChangeUnit={onChangeCompUnit}
+                onPickAppliedTo={onPickAppliedTo}
               />
             ))}
             {margen.map((comp) => (
@@ -1071,9 +1237,13 @@ function ComponentsEditTable({
                 key={comp.id}
                 comp={comp}
                 draggable={false}
+                allActive={visible}
                 onUpdate={onUpdateDraftComp}
                 onRemove={onRemoveComponent}
                 onSelectMaterial={onSelectMaterial}
+                onChangeType={onChangeCompType}
+                onChangeUnit={onChangeCompUnit}
+                onPickAppliedTo={onPickAppliedTo}
               />
             ))}
             <tr className="border-t-2 border-gray-900">
@@ -1095,12 +1265,17 @@ function ComponentsEditTable({
 function ComponentEditRow({
   comp,
   draggable,
+  allActive,
   onUpdate,
   onRemove,
   onSelectMaterial,
+  onChangeType,
+  onChangeUnit,
+  onPickAppliedTo,
 }: {
   comp: Component;
   draggable: boolean;
+  allActive: Component[];
   onUpdate: (
     compId: string,
     field: keyof Component,
@@ -1111,6 +1286,9 @@ function ComponentEditRow({
     compId: string,
     material: { id: string; name: string; unit: string; netPrice: number }
   ) => void;
+  onChangeType: (compId: string, newType: string) => void;
+  onChangeUnit: (compId: string, newUnit: string) => void;
+  onPickAppliedTo: (compId: string, targetCompId: string | null) => void;
 }) {
   // Solo los regulares son sortables — los margen se renderizan sin hooks
   // de dnd-kit (no están dentro del SortableContext anyway).
@@ -1148,7 +1326,7 @@ function ComponentEditRow({
       <td className="py-1 px-1">
         <select
           value={comp.type}
-          onChange={(e) => onUpdate(comp.id, "type", e.target.value)}
+          onChange={(e) => onChangeType(comp.id, e.target.value)}
           className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] bg-white"
         >
           {COMP_TYPES.map((t) => (
@@ -1171,37 +1349,77 @@ function ComponentEditRow({
             value={comp.description}
             onChange={(e) => onUpdate(comp.id, "description", e.target.value)}
             className="w-full border border-gray-300 rounded px-2 py-1 text-[11px]"
-            placeholder="Descripción"
+            placeholder={
+              comp.type === "mano_obra" && comp.unit === "%"
+                ? "Leyes sociales"
+                : "Descripción"
+            }
           />
         )}
       </td>
       <td className="py-1 px-1">
-        <input
+        <select
           value={comp.unit}
-          onChange={(e) => onUpdate(comp.id, "unit", e.target.value)}
-          className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-center"
-        />
+          onChange={(e) => onChangeUnit(comp.id, e.target.value)}
+          className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-center bg-white"
+        >
+          {["UN", "M2", "ML", "M3", "KG", "GL", "DIA", "HR", "%"].map((u) => (
+            <option key={u} value={u}>{u}</option>
+          ))}
+        </select>
       </td>
       <td className="py-1 px-1">
         <input
           type="number"
-          step="0.001"
+          step={comp.unit === "%" ? "0.1" : "0.001"}
           value={comp.quantity}
           onChange={(e) => onUpdate(comp.id, "quantity", parseFloat(e.target.value) || 0)}
           className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-right tabular-nums"
+          title={comp.unit === "%" ? "Porcentaje" : "Cantidad"}
         />
       </td>
       <td className="py-1 px-1">
-        <input
-          type="number"
-          step="1"
-          value={comp.unitCost}
-          onChange={(e) => onUpdate(comp.id, "unitCost", parseFloat(e.target.value) || 0)}
-          className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-right tabular-nums"
-        />
+        {comp.unit === "%" && comp.type === "perdida" ? (
+          // Pérdida sobre un material concreto (5c)
+          <select
+            value={comp.appliedToComponentId ?? ""}
+            onChange={(e) =>
+              onPickAppliedTo(comp.id, e.target.value || null)
+            }
+            className="w-full border border-gray-300 rounded px-1 py-1 text-[10px] bg-white"
+            title="Sobre cuál material aplicar la pérdida"
+          >
+            <option value="">— elegir material —</option>
+            {allActive
+              .filter((c) => c.type === "material" && c.id !== comp.id)
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.description.slice(0, 30) || "(sin descripción)"}
+                </option>
+              ))}
+          </select>
+        ) : comp.unit === "%" && comp.type === "mano_obra" ? (
+          // Leyes sociales: read-only, aplicado a la suma de MO (5e)
+          <span className="block w-full text-[10px] text-gray-500 italic px-1 py-1 text-center">
+            sobre Mano de Obra
+          </span>
+        ) : comp.unit === "%" && comp.type === "margen" ? (
+          // Margen: read-only, aplicado a todo el resto excepto pérdida
+          <span className="block w-full text-[10px] text-gray-500 italic px-1 py-1 text-center">
+            sobre el resto
+          </span>
+        ) : (
+          <input
+            type="number"
+            step="1"
+            value={comp.unitCost}
+            onChange={(e) => onUpdate(comp.id, "unitCost", parseFloat(e.target.value) || 0)}
+            className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-right tabular-nums"
+          />
+        )}
       </td>
       <td className="py-1 px-1 text-right font-medium text-gray-700 tabular-nums">
-        {formatCLP((comp.quantity || 0) * (comp.unitCost || 0))}
+        {formatCLP(effectiveTotal(comp, allActive))}
       </td>
       <td className="py-1 px-1 text-center">
         <button

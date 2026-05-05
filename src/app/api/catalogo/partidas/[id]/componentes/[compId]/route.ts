@@ -20,12 +20,18 @@ export async function PUT(
         unit: data.unit,
         quantity: qty,
         unitCost: cost,
-        totalCost: qty * cost,
+        // El front calcula totalCost (con % sobre material/MO/etc.) y lo
+        // manda explícito. Si no viene, fallback al cálculo simple.
+        totalCost: data.totalCost ?? qty * cost,
         // sortOrder y materialId solo se persisten si vienen explícitos —
         // así el front puede mandar PUT parcial sin pisarlos accidentalmente.
         ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
         ...(data.materialId !== undefined && { materialId: data.materialId }),
         ...(data.referenceLink !== undefined && { referenceLink: data.referenceLink }),
+        ...(data.appliedToComponentId !== undefined && {
+          appliedToComponentId: data.appliedToComponentId,
+        }),
+        ...(data.appliedToType !== undefined && { appliedToType: data.appliedToType }),
       },
       include: { material: true },
     });

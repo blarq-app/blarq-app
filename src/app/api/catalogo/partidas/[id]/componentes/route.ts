@@ -20,10 +20,14 @@ export async function POST(
         unit: data.unit || "UN",
         quantity: data.quantity ?? 1,
         unitCost: data.unitCost ?? 0,
-        totalCost: (data.quantity ?? 1) * (data.unitCost ?? 0),
+        // El front calcula totalCost (con la lógica de %, pérdida sobre
+        // material, leyes sobre MO, etc.) y lo manda explícito.
+        totalCost: data.totalCost ?? (data.quantity ?? 1) * (data.unitCost ?? 0),
         sortOrder: data.sortOrder ?? count,
         materialId: data.materialId ?? null,
         referenceLink: data.referenceLink ?? null,
+        appliedToComponentId: data.appliedToComponentId ?? null,
+        appliedToType: data.appliedToType ?? null,
       },
       include: { material: true },
     });

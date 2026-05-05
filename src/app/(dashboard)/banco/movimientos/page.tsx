@@ -5,12 +5,23 @@ import MovementActionButton from "@/components/banco/MovementActionButton";
 import MovementsSearch from "@/components/banco/MovementsSearch";
 import MatchHintButton from "@/components/banco/MatchHintButton";
 import MarkInternalButton from "@/components/banco/MarkInternalButton";
+import MovementsAdvancedFilters from "@/components/banco/MovementsAdvancedFilters";
 
 type SearchParams = {
   accountId?: string;
   status?: string;
   q?: string;
   showInternal?: string;
+  // Filtros avanzados (panel expandible) — todos opcionales.
+  rut?: string;
+  name?: string;
+  monto?: string;
+  desc?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  estado?: string; // mismo dominio que status, pero del panel avanzado
+  tipo?: string; // ingreso | egreso | interno
+  limit?: string; // "100" | "200" | "500" | "all"
 };
 
 // Labels alineados con los de facturas — "pendiente / parcial / conciliado".
@@ -43,39 +54,95 @@ export default async function MovimientosPage({
   const sp = await searchParams;
   const showInternal = sp.showInternal === "1";
   const q = (sp.q ?? "").trim();
+  // Si el panel avanzado fija "tipo=interno", queremos ver internas aunque
+  // el toggle no esté activado.
+  const tipoIsInterno = sp.tipo === "interno";
 
   // Filtro principal del listado.
   const where: Record<string, unknown> = {};
+  const andFilters: Record<string, unknown>[] = [];
   if (sp.accountId) where.bankAccountId = sp.accountId;
-  if (sp.status) {
-    where.status = sp.status;
-  } else if (!showInternal) {
+  // Estado de asignación: el filtro avanzado (sp.estado) pisa al de las tabs.
+  const effectiveStatus = sp.estado || sp.status;
+  if (effectiveStatus) {
+    where.status = effectiveStatus;
+  } else if (!showInternal && !tipoIsInterno) {
     // Default: ocultar transfers internas — son ruido para conciliar.
-    // Si MJ filtra explícitamente por status="interno" o activa el toggle,
-    // entran al listado.
     where.status = { not: "interno" };
   }
   if (q) {
     // Búsqueda libre: descripción + nombre contraparte + RUT contraparte.
-    const orFilters: Record<string, unknown>[] = [
+    where.OR = [
       { description: { contains: q, mode: "insensitive" } },
       { counterpartyName: { contains: q, mode: "insensitive" } },
       { counterpartyRut: { contains: q.replace(/\D/g, "") } },
     ];
-    where.OR = orFilters;
   }
 
-  // Filtro para los aggregates de stats: respeta cuenta + búsqueda, pero NO
-  // el filtro de status (los stats SON el desglose por status).
+  // ── Filtros avanzados ──────────────────────────────────────────────────
+  if (sp.rut) {
+    const digits = sp.rut.replace(/\D/g, "");
+    if (digits) andFilters.push({ counterpartyRut: { contains: digits } });
+  }
+  if (sp.name) {
+    andFilters.push({ counterpartyName: { contains: sp.name, mode: "insensitive" } });
+  }
+  if (sp.desc) {
+    andFilters.push({ description: { contains: sp.desc, mode: "insensitive" } });
+  }
+  if (sp.monto) {
+    const n = Number(sp.monto.replace(/\D/g, ""));
+    if (n > 0) {
+      // Match exacto contra el monto absoluto (signo positivo o negativo).
+      andFilters.push({ OR: [{ amount: n }, { amount: -n }] });
+    }
+  }
+  if (sp.dateFrom || sp.dateTo) {
+    const dateFilter: Record<string, Date> = {};
+    if (sp.dateFrom) dateFilter.gte = new Date(sp.dateFrom);
+    if (sp.dateTo) {
+      const end = new Date(sp.dateTo);
+      end.setHours(23, 59, 59, 999);
+      dateFilter.lte = end;
+    }
+    andFilters.push({ date: dateFilter });
+  }
+  if (sp.tipo === "ingreso") {
+    andFilters.push({ amount: { gt: 0 } });
+  } else if (sp.tipo === "egreso") {
+    andFilters.push({ amount: { lt: 0 } });
+  } else if (sp.tipo === "interno") {
+    // pisa el status default; igual lo dejamos explícito por claridad
+    where.status = "interno";
+  }
+  if (andFilters.length > 0) where.AND = andFilters;
+
+  // Cantidad de registros (default 500). "all" = sin límite efectivo (usamos
+  // 5000 como tope de seguridad para no traer toda la BD si MJ por error
+  // saca todos los filtros).
+  const limitParam = sp.limit;
+  const take =
+    limitParam === "100"
+      ? 100
+      : limitParam === "200"
+        ? 200
+        : limitParam === "all"
+          ? 5000
+          : 500;
+
+  // Filtro para los aggregates de stats: respeta cuenta + búsqueda + filtros
+  // avanzados (rut/nombre/monto/desc/fechas/tipo), pero NO el filtro de
+  // status (los stats SON el desglose por status).
   const statsWhere: Record<string, unknown> = {};
   if (sp.accountId) statsWhere.bankAccountId = sp.accountId;
   if (q) statsWhere.OR = where.OR;
+  if (andFilters.length > 0) statsWhere.AND = andFilters;
 
   const [movements, accounts, statusCounts, ingresos, egresos] = await Promise.all([
     prisma.bankMovement.findMany({
       where,
       orderBy: { date: "desc" },
-      take: 500,
+      take,
       include: {
         bankAccount: { select: { alias: true } },
         payments: {
@@ -249,6 +316,26 @@ export default async function MovimientosPage({
         <MovementsSearch defaultQ={q} sp={sp} />
         <ShowInternalToggle sp={sp} active={showInternal} />
       </div>
+
+      <MovementsAdvancedFilters
+        initial={{
+          rut: sp.rut ?? "",
+          name: sp.name ?? "",
+          monto: sp.monto ?? "",
+          desc: sp.desc ?? "",
+          dateFrom: sp.dateFrom ?? "",
+          dateTo: sp.dateTo ?? "",
+          estado: sp.estado ?? "",
+          tipo: sp.tipo ?? "",
+          limit: sp.limit ?? "",
+        }}
+        preserveParams={{
+          accountId: sp.accountId,
+          status: sp.status,
+          q: sp.q,
+          showInternal: sp.showInternal,
+        }}
+      />
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {movements.length === 0 ? (

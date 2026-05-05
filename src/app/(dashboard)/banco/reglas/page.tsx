@@ -50,8 +50,8 @@ export default async function ReglasPage() {
             <p className="text-sm">Aún no hay reglas guardadas.</p>
             <p className="text-xs text-gray-400 mt-1">
               Categorizá movimientos en{" "}
-              <Link href="/banco/conciliacion" className="underline">
-                /banco/conciliacion
+              <Link href="/banco/movimientos?status=sin_asignar" className="underline">
+                /banco/movimientos
               </Link>{" "}
               y se irán creando solas.
             </p>

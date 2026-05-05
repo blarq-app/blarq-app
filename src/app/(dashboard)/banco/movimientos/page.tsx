@@ -63,12 +63,21 @@ export default async function MovimientosPage({
   const andFilters: Record<string, unknown>[] = [];
   if (sp.accountId) where.bankAccountId = sp.accountId;
   // Estado de asignación: el filtro avanzado (sp.estado) pisa al de las tabs.
+  // "all" = elección explícita de "Todos" → sin filtro de status (lo que MJ
+  // ve cuando hace click en la tab "Todos"). Sin filtro = vista por defecto:
+  // pendientes (sin_asignar + parcial), porque MJ entra a /banco/movimientos
+  // típicamente para conciliar.
   const effectiveStatus = sp.estado || sp.status;
-  if (effectiveStatus) {
+  const isDefaultPendientes = !effectiveStatus;
+  if (effectiveStatus === "all") {
+    if (!showInternal && !tipoIsInterno) {
+      where.status = { not: "interno" };
+    }
+  } else if (effectiveStatus) {
     where.status = effectiveStatus;
-  } else if (!showInternal && !tipoIsInterno) {
-    // Default: ocultar transfers internas — son ruido para conciliar.
-    where.status = { not: "interno" };
+  } else {
+    // Default: solo pendientes (sin_asignar + parcial).
+    where.status = { in: ["sin_asignar", "parcial"] };
   }
   if (q) {
     // Búsqueda libre: descripción + nombre contraparte + RUT contraparte.
@@ -258,6 +267,9 @@ export default async function MovimientosPage({
           <h1 className="text-2xl font-bold text-gray-900 mt-1">Movimientos</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {movements.length} mostrados de {totalCount} total{totalCount !== 1 ? "es" : ""}
+            {isDefaultPendientes && (
+              <span className="ml-1 text-amber-700">· solo pendientes</span>
+            )}
           </p>
         </div>
       </div>
@@ -302,7 +314,9 @@ export default async function MovimientosPage({
           ))}
         </div>
         <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
-          <FilterLink sp={sp} field="status" value={undefined} label="Todos" />
+          {/* Default (sin params) = pendientes. "Todos" es elección explícita. */}
+          <FilterLink sp={sp} field="status" value={undefined} label="Pendientes" />
+          <FilterLink sp={sp} field="status" value="all" label="Todos" />
           {Object.entries(STATUS_LABEL).map(([key, { label }]) => (
             <FilterLink
               key={key}

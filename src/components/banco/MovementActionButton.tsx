@@ -17,7 +17,7 @@ type ExistingPayment = {
 
 // Botón que abre el modal de asignar pagos. Diseñado para inyectar en una
 // fila de tabla en /banco/movimientos. Pequeño y silencioso, no agrega
-// chrome propio (el form de /banco/conciliacion sigue usando AsignarMovimientoForm).
+// chrome propio.
 export default function MovementActionButton({
   movimientoId,
   amount,

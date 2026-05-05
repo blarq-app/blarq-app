@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 // GET /api/facturas/search
 //
 // Búsqueda dinámica de facturas para imputar a un movimiento bancario.
-// Usado por el modal "Asignar Pagos" en /banco/conciliacion y /banco/movimientos.
+// Usado por el modal "Asignar Pagos" en /banco/movimientos.
 //
 // Query params (todos opcionales):
 //   q                : texto libre — match en folioNumber, businessName, rutIssuer, rutReceiver

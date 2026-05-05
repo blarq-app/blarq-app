@@ -73,16 +73,16 @@ export default async function BancoPage() {
         </div>
         <div className="flex items-center gap-3">
           <Link
-            href="/banco/movimientos"
-            className="text-xs text-gray-500 hover:text-gray-900 underline"
-          >
-            Ver movimientos
-          </Link>
-          <Link
             href="/banco/reglas"
             className="text-xs text-gray-500 hover:text-gray-900 underline"
           >
             Reglas
+          </Link>
+          <Link
+            href="/banco/movimientos"
+            className="border border-gray-300 text-gray-900 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+          >
+            Ver movimientos
           </Link>
           <ImportCartolaButton />
         </div>
@@ -90,15 +90,15 @@ export default async function BancoPage() {
 
       {totalSinAsignar > 0 && (
         <Link
-          href="/banco/conciliacion"
-          className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 mb-4 hover:border-gray-400 transition-colors"
+          href="/banco/movimientos?status=sin_asignar"
+          className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4 hover:border-amber-400 transition-colors"
         >
-          <span className="text-gray-500 text-base leading-none">⚐</span>
+          <span className="text-amber-700 text-base leading-none">⚐</span>
           <p className="text-sm text-gray-900 flex-1">
-            <span className="font-semibold">{totalSinAsignar} movimientos sin asignar</span> —
+            <span className="font-semibold">{totalSinAsignar} movimientos pendientes</span> —
             categorizalos o vinculalos a una factura.
           </p>
-          <span className="text-xs text-gray-500 underline">Conciliar →</span>
+          <span className="text-xs text-amber-800 font-medium underline">Ver pendientes →</span>
         </Link>
       )}
 
@@ -156,8 +156,8 @@ export default async function BancoPage() {
                   <p className="text-xl font-semibold tabular-nums text-gray-300">—</p>
                   <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">
                     sin facturas emitidas pagadas todavía.{" "}
-                    <Link href="/banco/conciliacion" className="underline hover:text-gray-600">
-                      conciliá cobros →
+                    <Link href="/banco/movimientos?status=sin_asignar" className="underline hover:text-gray-600">
+                      ver pendientes →
                     </Link>
                   </p>
                 </>

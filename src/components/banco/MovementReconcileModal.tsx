@@ -135,7 +135,18 @@ export default function MovementReconcileModal({
       const data = await res.json();
       // Excluir las que ya están en drafts.
       const draftIds = new Set(drafts.map((d) => d.invoiceId));
-      setResults((data.facturas as Factura[]).filter((f) => !draftIds.has(f.id)));
+      // Ordenar candidatos por proximidad absoluta a la fecha del movimiento
+      // (lo más cercano arriba). Es lo que MJ usa visualmente para identificar
+      // a qué factura corresponde un cobro/pago.
+      const movTime = new Date(movement.date).getTime();
+      const filtered = (data.facturas as Factura[])
+        .filter((f) => !draftIds.has(f.id))
+        .sort((a, b) => {
+          const da = Math.abs(new Date(a.issueDate).getTime() - movTime);
+          const db = Math.abs(new Date(b.issueDate).getTime() - movTime);
+          return da - db;
+        });
+      setResults(filtered);
     } catch {
       setError("Error de red");
     } finally {
@@ -151,6 +162,10 @@ export default function MovementReconcileModal({
     }, 200);
     return () => clearTimeout(t);
   }, [open, q, filterSameClient, onlyWithBalance, filterProjectId, search]);
+
+  // Ventana ±15 días para marcar visualmente facturas "cerca" del movimiento.
+  const movTimeRef = new Date(movement.date).getTime();
+  const FIFTEEN_DAYS_MS = 15 * 24 * 60 * 60 * 1000;
 
   function addDraft(f: Factura) {
     const suggested = Math.min(remaining, f.remaining);
@@ -360,6 +375,7 @@ export default function MovementReconcileModal({
                   <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500">
                     <tr>
                       <th className="text-left px-3 py-2">Folio</th>
+                      <th className="text-left px-3 py-2">Fecha</th>
                       <th className="text-left px-3 py-2">Cliente / Proveedor</th>
                       <th className="text-left px-3 py-2">Proyecto</th>
                       <th className="text-right px-3 py-2">Total</th>
@@ -371,6 +387,11 @@ export default function MovementReconcileModal({
                     {results.map((f) => {
                       const isExact = Math.abs(f.remaining - remaining) < 1;
                       const isLessThanRemaining = f.remaining < remaining;
+                      const fTime = new Date(f.issueDate).getTime();
+                      const isNear = Math.abs(fTime - movTimeRef) <= FIFTEEN_DAYS_MS;
+                      // dd/mm/aa
+                      const d = new Date(f.issueDate);
+                      const fechaFmt = `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${String(d.getUTCFullYear()).slice(-2)}`;
                       return (
                         <tr key={f.id} className="hover:bg-gray-50">
                           <td className="px-3 py-2 tabular-nums text-gray-700 whitespace-nowrap">
@@ -380,6 +401,17 @@ export default function MovementReconcileModal({
                                 EX
                               </span>
                             )}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums text-gray-600 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1.5">
+                              {isNear && (
+                                <span
+                                  className="inline-block w-1.5 h-1.5 rounded-full bg-gray-400"
+                                  title="Fecha dentro de ±15 días del movimiento"
+                                />
+                              )}
+                              {fechaFmt}
+                            </span>
                           </td>
                           <td className="px-3 py-2 text-gray-700 truncate max-w-[200px]">
                             {f.businessName ?? "—"}

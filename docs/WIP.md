@@ -4,8 +4,18 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-05 (cierre · ronda 5)
-- **Última sesión**: ADR proveedor único lectura+emisión + plan de cutover de Maxxa. Bloque 3 del plan arrancado: campo `clientRut` agregado al modelo `Project` (commit `7d1f1d4`) con validación de formato + DV chileno (módulo 11) en form y API. Schema aplicado tanto en BD dev como en prod (Neon `ep-shy-morning`, vía SQL Editor de Neon). Próxima acción: MJ sigue con cotizaciones SimpleFactura + OpenFactura; en paralelo, ir poblando RUTs de clientes existentes a medida que MJ edita proyectos.
+- **Última actualización**: 2026-05-05 (cierre · ronda 6)
+- **Última sesión**:
+  1. Anotado el objetivo central de la app en docs (`business-model.md` §1.5): presupuestado vs gastado vs cobrado por proyecto. Cualquier feature nueva tiene que servir a esto. Los 3 documentos (obra/muebles/artefactos) son **centros de costo separados** con facturas separadas (anotado §2).
+  2. Anotada regla: catálogo de partidas — NO duplicar, NO pisar precios (`principles.md`). Si los precios del proyecto difieren del catálogo, viven en `ObraItem` con `isCustomized=true`.
+  3. Script `scripts/import-budget.ts` para traspaso legacy desde Excel V3/V4 (commit `9557478`). Lee los 3 archivos del template BLARQ y crea los BudgetVersion con sus items, respetando la regla de no duplicar partidas. Verificado contra Pauline Dumay V4: costo directo $26.948.285 calza exacto con Excel. Suma de componentes == costo directo, exacto.
+  4. Cargado en BD dev: **Cocina Farellones #59** (Pauline Dumay) V4 — 65 items oficiales + 3 extras de obra, 4 items de muebles, 9 artefactos.
+  5. Bug detectado y flaggeado (no resuelto en esta sesión): `metrics.ts` calcula utilidad sobre (costo+GG), debería ser sobre costo directo. Ver task spawneada.
+
+Próximas acciones:
+- Cargar V4 de los otros 3 proyectos (Arrau, Aguirre, Rosas) cuando MJ tenga las rutas de los Excel a mano. Mismo template, mismo script.
+- Fix de `metrics.ts` (separado).
+- Cuando V4 esté en prod: validar visual desde la app que se ven bien los 3 documentos.
 
 ### Sesión 2026-05-05 — backlog módulo financiero
 

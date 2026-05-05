@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { PROJECT_STATUSES, ProjectStatus } from "@/lib/utils";
 import Link from "next/link";
 import ProjectTabs from "@/components/proyecto/ProjectTabs";
+import ProjectStatusMenu from "@/components/proyecto/ProjectStatusMenu";
 
 // Layout compartido para todas las vistas dentro de un proyecto.
 // Renderea el header con datos básicos + tabs de navegación entre secciones.
@@ -62,12 +63,21 @@ export default async function ProjectLayout({
               {project.address && ` · ${project.address}`}
             </p>
           </div>
-          <Link
-            href={`/proyectos/${project.id}/editar`}
-            className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-700 hover:bg-white hover:border-gray-400 transition-colors flex-shrink-0"
-          >
-            Editar datos
-          </Link>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Link
+              href={`/proyectos/${project.id}/editar`}
+              className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-700 hover:bg-white hover:border-gray-400 transition-colors"
+            >
+              Editar datos
+            </Link>
+            {!project.isInternal && (
+              <ProjectStatusMenu
+                projectId={project.id}
+                projectName={project.name}
+                status={project.status}
+              />
+            )}
+          </div>
         </div>
 
         <ProjectTabs projectId={project.id} isInternal={project.isInternal} />

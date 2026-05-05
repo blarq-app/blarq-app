@@ -1,5 +1,6 @@
 import { formatCLP, relativeDate } from "@/lib/utils";
 import EditableCell from "@/components/proyecto/EditableCell";
+import ProjectStatusMenu from "@/components/proyecto/ProjectStatusMenu";
 
 // Tabla densa compartida entre Dashboard, /proyectos y /cotizaciones.
 // El "preset" decide qué columnas se muestran; el resto del estilo es
@@ -88,15 +89,23 @@ export default function ProjectsTable({
                 <th className="text-left px-3 py-2 w-32">→ Proyecto</th>
               </>
             )}
-            <th className="text-left px-3 py-2 w-28">
-              {variant === "convertida"
-                ? "Aprobada"
-                : variant === "terminado"
-                  ? "Terminado"
-                  : variant === "cotizacion" || variant === "archivado"
-                    ? "Creada"
-                    : "Últ Mov"}
-            </th>
+            {/* En proyectos en ejecución no mostramos columna de fecha
+                (MJ no la usa). En el resto de variants la columna sigue
+                con un label útil (Aprobada, Terminado, Creada). */}
+            {variant !== "ejecucion" && (
+              <th className="text-left px-3 py-2 w-28">
+                {variant === "convertida"
+                  ? "Aprobada"
+                  : variant === "terminado"
+                    ? "Terminado"
+                    : "Creada"}
+              </th>
+            )}
+            {/* Columna de acciones (menú "..."). Solo en variants donde
+                hay acción de estado disponible: ejecucion → terminado,
+                terminado → ejecucion. En cotización/convertida/archivado
+                se renderiza vacía para mantener el ancho consistente. */}
+            <th className="px-2 py-2 w-10" aria-label="Acciones"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -107,7 +116,10 @@ export default function ProjectsTable({
             <>
               <tr className="bg-gray-50">
                 <td
-                  colSpan={6}
+                  // colSpan dinámico: ejecucion=6 (sin columna de fecha),
+                  // terminado=7 (con columna "Terminado"). El resto de
+                  // variants no usa groupOtros.
+                  colSpan={variant === "ejecucion" ? 6 : 7}
                   className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-gray-500"
                 >
                   Otros (centros de costo internos)
@@ -214,7 +226,21 @@ function Row({
           </td>
         </>
       )}
-      <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">{dateLabel}</td>
+      {variant !== "ejecucion" && (
+        <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">{dateLabel}</td>
+      )}
+      <td className="px-2 py-2 text-right">
+        {/* El menú solo aparece para proyectos NO internos en estados
+            donde tiene sentido cambiar status (ejecucion, terminado).
+            En cotizacion/archivado/convertida, la celda queda vacía. */}
+        {!row.isInternal && (variant === "ejecucion" || variant === "terminado") && (
+          <ProjectStatusMenu
+            projectId={row.id}
+            projectName={row.name}
+            status={row.status}
+          />
+        )}
+      </td>
     </tr>
   );
 }

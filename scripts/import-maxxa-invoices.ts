@@ -229,9 +229,13 @@ async function main() {
       stats.catMissing.add(`${row.DescCatego}${row.DescSubCatego ? " > " + row.DescSubCatego : ""}`);
     }
 
-    // Montos: MontoTotal (c/IVA), MontoDoc (neto), iva = total - neto
-    const totalAmount = parseCLP(row.MontoTotal);
-    const netAmount = parseCLP(row.MontoDoc);
+    // Montos: MontoTotal (c/IVA), MontoDoc (neto), iva = total - neto.
+    // OJO: Maxxa exporta NC con MontoTotal NEGATIVO. La convención de la
+    // app es guardar SIEMPRE positivo y distinguir las NC por tipoDoc=61
+    // (metrics.ts aplica sign(-1) cuando suma). Si guardáramos negativo
+    // acá, se invertiría el signo doble vez.
+    const totalAmount = Math.abs(parseCLP(row.MontoTotal));
+    const netAmount = Math.abs(parseCLP(row.MontoDoc));
     const iva = Math.max(0, totalAmount - netAmount);
 
     // Fechas

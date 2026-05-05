@@ -109,7 +109,9 @@ const CATEGORY_TO_BREAKDOWN: Record<
 };
 
 // Selecciona la mejor versión para cada tipo: aprobada más reciente, o la
-// última creada si no hay aprobada.
+// última creada si no hay aprobada. Usado para muebles y artefactos donde
+// se espera UNA versión vigente. Para obra usamos `allApproved` que suma
+// múltiples obras (caso anexos como BAÑO VISITAS — ver business-model.md).
 function bestVersion<T extends { status: string; createdAt: Date }>(arr: T[]) {
   const aprobado = arr
     .filter((b) => b.status === "aprobado")
@@ -120,10 +122,23 @@ function bestVersion<T extends { status: string; createdAt: Date }>(arr: T[]) {
   );
 }
 
+// Para obra: TODAS las versiones aprobadas (un proyecto puede tener una
+// obra principal V7 + un anexo V4-BANO-VISITAS, ambos aprobados, que suman
+// al Total Acordado). Si no hay aprobadas, fallback a la más reciente.
+function allApproved<T extends { status: string; createdAt: Date }>(arr: T[]): T[] {
+  const aprobadas = arr.filter((b) => b.status === "aprobado");
+  if (aprobadas.length > 0) return aprobadas;
+  const fallback = arr.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+  return fallback ? [fallback] : [];
+}
+
 export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetrics {
-  const obra = bestVersion(
+  const obras = allApproved(
     project.budgetVersions.filter((b) => b.type === "obra")
   );
+  // Mantener `obra` como referencia primaria (la primera de las aprobadas)
+  // para campos que esperan una sola versión, ej: versionLabels en UI.
+  const obra = obras[0];
   const muebles = bestVersion(
     project.budgetVersions.filter((b) => b.type === "muebles")
   );
@@ -137,13 +152,25 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   // encadenados). Verificado: costo directo $26.948.285 → costo total
   // c/IVA $41.047.628 (GG 23% + Util 5% + IVA 19%, todos sobre
   // costoDirecto excepto IVA que es sobre el neto).
-  const obraCostoDirecto = obra
-    ? obra.obraItems.reduce((s, i) => s + i.total, 0)
-    : 0;
-  const obraGG = obraCostoDirecto * ((obra?.ggPercentage ?? 0) / 100);
-  const obraUtilidad = obraCostoDirecto * ((obra?.utilityPercentage ?? 0) / 100);
-  const obraNeto = obraCostoDirecto + obraGG + obraUtilidad;
-  const obraTotal = obraNeto * 1.19;
+  //
+  // Cuando hay múltiples obras aprobadas (caso anexos como BAÑO VISITAS),
+  // se calcula el costo total de cada una con sus propios % y se suman.
+  let obraCostoDirecto = 0;
+  let obraGG = 0;
+  let obraUtilidad = 0;
+  let obraNeto = 0;
+  let obraTotal = 0;
+  for (const o of obras) {
+    const cd = o.obraItems.reduce((s, i) => s + i.total, 0);
+    const gg = cd * ((o.ggPercentage ?? 0) / 100);
+    const util = cd * ((o.utilityPercentage ?? 0) / 100);
+    const neto = cd + gg + util;
+    obraCostoDirecto += cd;
+    obraGG += gg;
+    obraUtilidad += util;
+    obraNeto += neto;
+    obraTotal += neto * 1.19;
+  }
 
   // Muebles: subtotal (suma items) − descuento global del BudgetVersion.
   // El descuento se guarda como decimal (0.02 = 2%) en BudgetVersion y

@@ -4,8 +4,8 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-05 (cierre · ronda 4)
-- **Última sesión**: backlog de fixes y features del módulo financiero entregado. Discusión sobre saltarse SimpleFactura → ADR `2026-05-05-proveedor-unico-lectura-emision.md`. Plan de cutover de Maxxa armado en `docs/plan-emision-propia.md`. Próxima acción: MJ pide cotización a SimpleFactura + OpenFactura; en paralelo se puede arrancar Bloque 3 del plan (modelo `Client`).
+- **Última actualización**: 2026-05-05 (cierre · ronda 5)
+- **Última sesión**: ADR proveedor único lectura+emisión + plan de cutover de Maxxa. Bloque 3 del plan arrancado: campo `clientRut` agregado al modelo `Project` (commit `7d1f1d4`) con validación de formato + DV chileno (módulo 11) en form y API. Schema aplicado tanto en BD dev como en prod (Neon `ep-shy-morning`, vía SQL Editor de Neon). Próxima acción: MJ sigue con cotizaciones SimpleFactura + OpenFactura; en paralelo, ir poblando RUTs de clientes existentes a medida que MJ edita proyectos.
 
 ### Sesión 2026-05-05 — backlog módulo financiero
 

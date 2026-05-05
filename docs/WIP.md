@@ -4,8 +4,8 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-04
-- **Última sesión**: documentación viva — `/docs/` reestructurada, ADRs iniciados, glosario y principios consolidados desde memoria + reviews históricos.
+- **Última actualización**: 2026-05-04 (cierre)
+- **Última sesión**: documentación viva consolidada y empujada a prod (commits `b6e3834`, `c02e0f9`, `eb7fbbf`). Antes de la doc, se generalizó el comparador BLARQ vs Maxxa con fix de signo en NCs, y se auditaron 6 endpoints con `contains:` case-sensitive post-cutover Postgres. Vercel deploy disparado al push.
 
 ## Estado del proyecto
 
@@ -19,23 +19,18 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 - Backup CLI (`npm run db:backup`) probado en dev y prod.
 - Comparador `npm run compare:maxxa` generalizado y bug de signo NC arreglado.
 
-### Sprint 1 — pendiente (acordado, aún no arrancado)
+### Sprint 1 — pendiente, listo para arrancar
 
-> Bloqueado por la doc primero. Reanudar después de mergear esta sesión.
-
-Tareas Sprint 1:
-- Criterios de **alerta crítica** (qué dispara el banner en /proyectos/[id]).
-- **Snapshot plan B1** — protocolo formal de snapshot pre/post para cambios en `metrics.ts`.
-- (Resto del Sprint 1 a definir cuando se reactive.)
+Doc viva ya en repo y en prod. Sprint 1 puede arrancar la próxima sesión. Tareas en "Próximos pasos" §3.
 
 ## Próximos pasos concretos (orden recomendado)
 
-1. **Confirmar y commitear esta documentación** — `git add` + commit que cubre `CLAUDE.md`, `README.md`, `docs/{architecture,business-model,glossary,principles,WIP,CHANGELOG}.md`, `docs/decisions/*.md`, `docs/_templates/*.md`, eliminación `AGENTS.md`, rename `docs/SETUP_SII.md → docs/SETUP_SII_simplefactura.md`, nuevo `docs/SETUP_SII_pdf-oficial.md`.
-2. **Commitear cambios sueltos pendientes** del día 2026-05-04 (no incluidos arriba):
-   - Generalización del comparador: `scripts/compare-vs-maxxa.ts`, eliminación `scripts/compare-portofino-maxxa.ts`, npm script `compare:maxxa`, fix de signo NC.
-   - Auditoría case-sensitive: 6 archivos con `mode: "insensitive"` en `contains:` (catalogo/partidas, catalogo/materiales, api/facturas, api/facturas/search, banco/movimientos, proyectos/[id]/facturas).
-3. **Retomar Sprint 1** con MJ.
-4. **Verificar mañana 2026-05-05** que el LaunchAgent de PDFs SII corrió a las 9 AM (`tail ~/Library/Logs/blarq-sii-sync-pdfs.log`).
+1. **Verificar que Vercel terminó el deploy** de los 3 commits empujados al cerrar (~2 min post-push). https://vercel.com/blarq-apps-projects/blarq-app/deployments. Validar visualmente en `/facturas` que la búsqueda case-insensitive funciona en prod.
+2. **Verificar mañana 2026-05-05** que el LaunchAgent de PDFs SII corrió a las 9 AM (`tail ~/Library/Logs/blarq-sii-sync-pdfs.log`).
+3. **Retomar Sprint 1** con MJ — ítems pendientes:
+   - Criterios de alerta crítica (qué dispara el banner en `/proyectos/[id]`).
+   - Snapshot plan B1 — protocolo formal de snapshot pre/post para cambios en `metrics.ts`.
+   - (Resto del Sprint 1 a definir cuando se reactive.)
 
 ## Decisiones pendientes que requieren input de MJ
 

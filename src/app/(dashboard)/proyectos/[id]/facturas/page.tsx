@@ -59,10 +59,10 @@ export default async function ProyectoFacturasPage({
   }
   if (sp.q) {
     where.OR = [
-      { folioNumber: { contains: sp.q } },
-      { businessName: { contains: sp.q } },
-      { rutIssuer: { contains: sp.q } },
-      { notes: { contains: sp.q } },
+      { folioNumber: { contains: sp.q, mode: "insensitive" } },
+      { businessName: { contains: sp.q, mode: "insensitive" } },
+      { rutIssuer: { contains: sp.q, mode: "insensitive" } },
+      { notes: { contains: sp.q, mode: "insensitive" } },
     ];
   }
 

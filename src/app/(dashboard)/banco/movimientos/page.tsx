@@ -58,8 +58,8 @@ export default async function MovimientosPage({
   if (q) {
     // Búsqueda libre: descripción + nombre contraparte + RUT contraparte.
     const orFilters: Record<string, unknown>[] = [
-      { description: { contains: q } },
-      { counterpartyName: { contains: q } },
+      { description: { contains: q, mode: "insensitive" } },
+      { counterpartyName: { contains: q, mode: "insensitive" } },
       { counterpartyRut: { contains: q.replace(/\D/g, "") } },
     ];
     where.OR = orFilters;

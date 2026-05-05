@@ -37,10 +37,10 @@ export async function GET(request: NextRequest) {
   }
   if (q) {
     where.OR = [
-      { folioNumber: { contains: q } },
-      { businessName: { contains: q } },
-      { rutIssuer: { contains: q } },
-      { notes: { contains: q } },
+      { folioNumber: { contains: q, mode: "insensitive" } },
+      { businessName: { contains: q, mode: "insensitive" } },
+      { rutIssuer: { contains: q, mode: "insensitive" } },
+      { notes: { contains: q, mode: "insensitive" } },
     ];
   }
 

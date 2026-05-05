@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const where: any = {};
 
     if (q) {
-      where.name = { contains: q };
+      where.name = { contains: q, mode: "insensitive" };
     }
     if (category) {
       where.category = category;

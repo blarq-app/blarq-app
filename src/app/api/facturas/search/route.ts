@@ -39,10 +39,10 @@ export async function GET(request: NextRequest) {
 
     if (q) {
       const orFilters: Record<string, unknown>[] = [
-        { folioNumber: { contains: q } },
-        { businessName: { contains: q } },
-        { rutIssuer: { contains: q } },
-        { rutReceiver: { contains: q } },
+        { folioNumber: { contains: q, mode: "insensitive" } },
+        { businessName: { contains: q, mode: "insensitive" } },
+        { rutIssuer: { contains: q, mode: "insensitive" } },
+        { rutReceiver: { contains: q, mode: "insensitive" } },
       ];
       // Si q es solo números, también buscar en monto exacto
       const num = Number(q.replace(/\D/g, ""));

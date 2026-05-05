@@ -105,20 +105,24 @@ export default async function ProyectoFacturasPage({
 
   // Stats arriba: usan las facturas FILTRADAS (sin filtro = todas).
   // Eso responde al pedido de MJ: ver totales del filtro aplicado.
+  // Una nota de crédito (DTE 61) revierte la factura — debe restar, no sumar.
+  // Mismo helper que metrics.ts línea 147.
+  const sign = (i: { tipoDoc: number | null }) => (i.tipoDoc === 61 ? -1 : 1);
   const totalEmitido = invoices
     .filter((i) => i.type === "emitida")
-    .reduce((s, i) => s + i.totalAmount, 0);
+    .reduce((s, i) => s + sign(i) * i.totalAmount, 0);
   const totalRecibido = invoices
     .filter((i) => i.type === "recibida")
-    .reduce((s, i) => s + i.totalAmount, 0);
+    .reduce((s, i) => s + sign(i) * i.totalAmount, 0);
   // "Por cobrar/pagar" = saldo restante (totalAmount − ya imputado). Cubre
   // tanto status=pendiente (saldo completo) como parcial (saldo residual).
+  // Las NCs también revierten saldo pendiente.
   const porCobrar = invoices
     .filter((i) => i.type === "emitida" && i.status !== "pagada" && i.status !== "anulada")
-    .reduce((s, i) => s + remainingOf(i), 0);
+    .reduce((s, i) => s + sign(i) * remainingOf(i), 0);
   const porPagar = invoices
     .filter((i) => i.type === "recibida" && i.status !== "pagada" && i.status !== "anulada")
-    .reduce((s, i) => s + remainingOf(i), 0);
+    .reduce((s, i) => s + sign(i) * remainingOf(i), 0);
 
   const isFiltered =
     !!(sp.status || sp.origin || sp.category || sp.dateFrom || sp.dateTo || sp.q);
@@ -313,7 +317,7 @@ export default async function ProyectoFacturasPage({
                   Total mostrado · {invoices.length} factura{invoices.length !== 1 ? "s" : ""}
                 </td>
                 <td className="px-4 py-2 text-right tabular-nums text-gray-900">
-                  {formatCLP(invoices.reduce((s, i) => s + i.totalAmount, 0))}
+                  {formatCLP(invoices.reduce((s, i) => s + sign(i) * i.totalAmount, 0))}
                 </td>
                 <td colSpan={2}></td>
               </tr>

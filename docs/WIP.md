@@ -4,8 +4,8 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-05 (cierre · ronda 2)
-- **Última sesión**: backlog de fixes y features del módulo financiero — los 9 items entregados, sin pendientes. Resumen abajo.
+- **Última actualización**: 2026-05-05 (cierre · ronda 4)
+- **Última sesión**: backlog de fixes y features del módulo financiero entregado. Discusión sobre saltarse SimpleFactura → ADR `2026-05-05-proveedor-unico-lectura-emision.md`. Plan de cutover de Maxxa armado en `docs/plan-emision-propia.md`. Próxima acción: MJ pide cotización a SimpleFactura + OpenFactura; en paralelo se puede arrancar Bloque 3 del plan (modelo `Client`).
 
 ### Sesión 2026-05-05 — backlog módulo financiero
 
@@ -47,7 +47,7 @@ Doc viva ya en repo y en prod. Sprint 1 puede arrancar la próxima sesión. Tare
 
 ## Decisiones pendientes que requieren input de MJ
 
-- **Salida de Maxxa hacia emisión propia**: qué proveedor usar (OpenFactura, LibreDTE, SimpleAPI, Haulmer, integración directa). Tolerancia a fallos baja — correr en paralelo con Maxxa durante transición. Sin urgencia hoy.
+- **Salida de Maxxa hacia emisión propia**: plan operativo completo en [docs/plan-emision-propia.md](plan-emision-propia.md). Decisión sobre proveedor único lectura+emisión registrada en ADR [decisions/2026-05-05-proveedor-unico-lectura-emision.md](decisions/2026-05-05-proveedor-unico-lectura-emision.md). Próxima acción de MJ: pedir cotización a SimpleFactura (plan emisión) y OpenFactura (plan completo). Ahorro acumulado al cerrar Maxxa + SimpleFactura: ~$57.850/mes (~$694k/año).
 - **Renovación cert digital antes de 2026-08-01** (~89 días): trámite manual, no lo puede hacer Claude.
 - **Repo GitHub público vs privado**: hoy `blarq-app/blarq-app` es público — toda la lógica de negocio queda visible. Pasarlo a privado cuesta ~$4/mes adicional (para incluir a JT). Datos sensibles siguen fuera del repo (gitignored).
 - **Backfill de `descriptionMaestro` en PartidaCatalog**: 206 partidas con 0 pobladas en este campo. Se va completando caso a caso al editar EP, pero hay decisión de "¿hacer batch dedicado?".

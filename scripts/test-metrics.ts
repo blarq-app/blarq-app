@@ -198,21 +198,24 @@ console.log("\nTest 2: Cobrado al cliente (c/IVA) vs total acordado");
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// Test 3: utilidad real
+// Test 3: utilidad real (NETO − NETO, no mezcla c/IVA con neto)
 // ───────────────────────────────────────────────────────────────────────
-console.log("\nTest 3: Utilidad real = cobrado − gastado − pagos maestros");
+console.log("\nTest 3: Utilidad real = cobradoNeto − gastado (ambos sin IVA)");
 {
   const project = mockProject({
     invoices: [
-      // Cobrado 5M c/IVA
+      // Cobrado 5M c/IVA = 4.201.681 neto
       mockInvoice({ type: "emitida", netAmount: 4_201_681, iva: 798_319, totalAmount: 5_000_000 }),
       // Gastado 2M neto (2.380.000 c/IVA)
       mockInvoice({ type: "recibida", netAmount: 2_000_000, iva: 380_000, totalAmount: 2_380_000 }),
     ],
   });
   const m = computeProjectMetrics(project);
-  // utilidadReal = 5.000.000 - 2.000.000 - 0 (sin pagos a maestros) = 3.000.000
-  assertEq(m.utilidadReal, 3_000_000, "utilidadReal = cobrado − gastado − pagos maestros");
+  // ANTES: utilidadReal = 5.000.000 (c/IVA) − 2.000.000 (neto) = 3.000.000 (inflada por IVA cobrado).
+  // AHORA: utilidadReal = 4.201.681 (cobrado neto) − 2.000.000 (neto) = 2.201.681.
+  assertEq(m.totalCobrado, 5_000_000, "totalCobrado se mantiene c/IVA (firma del contrato)");
+  assertEq(m.totalCobradoNeto, 4_201_681, "totalCobradoNeto = sin IVA");
+  assertEq(m.utilidadReal, 2_201_681, "utilidadReal = totalCobradoNeto − totalGastado (sin mezclar IVA)");
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -227,7 +230,9 @@ console.log("\nTest 4: Proyecto vacío — debe devolver 0, no explotar");
   });
   const m = computeProjectMetrics(project);
   assertEq(m.totalAcordado, 0, "totalAcordado = 0");
+  assertEq(m.totalAcordadoNeto, 0, "totalAcordadoNeto = 0");
   assertEq(m.totalCobrado, 0, "totalCobrado = 0");
+  assertEq(m.totalCobradoNeto, 0, "totalCobradoNeto = 0");
   assertEq(m.totalGastado, 0, "totalGastado = 0");
   assertEq(m.totalPagadoMaestros, 0, "totalPagadoMaestros = 0");
   assertEq(m.utilidadReal, 0, "utilidadReal = 0");

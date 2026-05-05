@@ -50,13 +50,28 @@ export type ProjectMetrics = {
   // Versiones base (preferentemente aprobadas, fallback a más reciente)
   versionLabels: { obra?: string; muebles?: string; artefactos?: string };
 
-  // Resumen financiero (todos los montos en CLP)
-  totalAcordado: number; // obra c/IVA + muebles + artefactos al cliente
-  totalCobrado: number;
-  totalGastado: number; // facturas recibidas + pagos a maestros
+  // Resumen financiero (todos los montos en CLP).
+  //
+  // C/IVA vs NETO — convención del módulo:
+  //   - totalAcordado / totalCobrado: c/IVA (lo que el cliente paga / firma).
+  //     Se usan en cards "Total acordado", "Cobrado", barra de progreso de
+  //     cobros y forma de pago — porque las cuotas % se calculan sobre lo
+  //     que el cliente firma, que es c/IVA.
+  //   - totalAcordadoNeto / totalCobradoNeto: sin IVA (ingreso real para
+  //     BLARQ — el IVA se devuelve al SII). Usado SOLO para utilidadReal,
+  //     que mide cuánta plata efectivamente queda para BLARQ.
+  //   - totalGastado: ya es neto (el IVA pagado se recupera como crédito).
+  //
+  // Antes utilidadReal mezclaba criterios (cobrado c/IVA - gastado neto) y
+  // salía inflada ~19%. Bug arreglado en Plan B 2026-05-05.
+  totalAcordado: number; // c/IVA — obra + muebles + artefactos al cliente
+  totalAcordadoNeto: number; // sin IVA — para utilidad
+  totalCobrado: number; // c/IVA — entra a caja
+  totalCobradoNeto: number; // sin IVA — para utilidad
+  totalGastado: number; // neto — facturas recibidas + pagos a maestros
   totalPagadoMaestros: number;
-  utilidadReal: number;
-  pctCobrado: number; // 0..100+
+  utilidadReal: number; // = totalCobradoNeto − totalGastado
+  pctCobrado: number; // 0..100+ (sobre c/IVA, para coherencia con la barra)
 
   // Avance obra (% ponderado por MO presupuestada según EPs)
   avanceObraPct: number;
@@ -125,16 +140,27 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   const obraNeto = obraSubtotal + obraUtilidad;
   const obraTotal = obraNeto * 1.19;
 
-  const mueblesTotal = muebles
-    ? muebles.muebleChapters
-        .flatMap((c) => c.items)
-        .reduce((s, i) => s + i.clientPriceIva * i.quantity, 0)
-    : 0;
+  const mueblesItems = muebles
+    ? muebles.muebleChapters.flatMap((c) => c.items)
+    : [];
+  const mueblesTotal = mueblesItems.reduce(
+    (s, i) => s + i.clientPriceIva * i.quantity,
+    0
+  );
+  const mueblesTotalNeto = mueblesItems.reduce(
+    (s, i) => s + i.clientPriceNet * i.quantity,
+    0
+  );
   const artefactosTotal = artefactos
     ? artefactos.artefactoItems.reduce((s, i) => s + i.clientPrice, 0)
     : 0;
+  // Artefactos: clientPrice está cargado como precio final al cliente
+  // (c/IVA). El neto es / 1.19. Si en el futuro se decide cargar neto,
+  // ajustar acá y en mueblesTotalNeto.
+  const artefactosTotalNeto = artefactosTotal / 1.19;
 
   const totalAcordado = obraTotal + mueblesTotal + artefactosTotal;
+  const totalAcordadoNeto = obraNeto + mueblesTotalNeto + artefactosTotalNeto;
 
   // ── Cobrado / Gastado ─────────────────────────────────────────────────
   const facturasEmitidas = project.invoices.filter((i) => i.type === "emitida");
@@ -148,6 +174,13 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   // Cobrado al cliente: c/IVA (es lo que efectivamente entra a caja).
   const totalCobrado = facturasEmitidas.reduce(
     (s, i) => s + sign(i) * i.totalAmount,
+    0
+  );
+  // Cobrado NETO: lo mismo pero sin IVA. El IVA cobrado al cliente se le
+  // devuelve al SII, así que el ingreso real para BLARQ es el neto. Se
+  // usa solo para calcular la utilidad real.
+  const totalCobradoNeto = facturasEmitidas.reduce(
+    (s, i) => s + sign(i) * i.netAmount,
     0
   );
   // Gastado: NETO. El IVA pagado a proveedores se recupera como crédito
@@ -168,7 +201,9 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
     );
 
   const totalGastado = totalRecibidoFacturas + totalPagadoMaestros;
-  const utilidadReal = totalCobrado - totalGastado;
+  // Utilidad real: NETO contra NETO (antes mezclaba c/IVA y salía inflada
+  // ~19%). totalCobradoNeto = ingreso real, totalGastado ya es neto.
+  const utilidadReal = totalCobradoNeto - totalGastado;
   const pctCobrado = totalAcordado > 0 ? (totalCobrado / totalAcordado) * 100 : 0;
 
   // ── Desviaciones por concepto interno ─────────────────────────────────
@@ -312,7 +347,9 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
       artefactos: artefactos?.version,
     },
     totalAcordado,
+    totalAcordadoNeto,
     totalCobrado,
+    totalCobradoNeto,
     totalGastado,
     totalPagadoMaestros,
     utilidadReal,

@@ -71,6 +71,7 @@ export default async function ResultadosPage({
   const {
     totalAcordado: totalVendido,
     totalCobrado,
+    totalCobradoNeto,
     totalGastado,
     totalPagadoMaestros,
     utilidadReal,
@@ -79,7 +80,9 @@ export default async function ResultadosPage({
     realByCategory: realByTop,
     realBySpecific,
   } = m;
-  const margenReal = totalCobrado > 0 ? (utilidadReal / totalCobrado) * 100 : 0;
+  // Margen real: utilidad neta / cobrado neto. Las dos partes son sin IVA,
+  // así que el % es comparable año contra año (no se "infla" por el IVA).
+  const margenReal = totalCobradoNeto > 0 ? (utilidadReal / totalCobradoNeto) * 100 : 0;
 
   // ── Versions (lookups locales — no son cálculo, solo navegación al
   // nodo del árbol para acceder a obraItems / muebleChapters / etc).
@@ -363,7 +366,9 @@ export default async function ResultadosPage({
           <p className={`text-2xl font-bold mt-1 ${utilidadReal >= 0 ? "text-green-600" : "text-red-600"}`}>
             {formatCLP(utilidadReal)}
           </p>
-          <p className="text-xs text-gray-400 mt-0.5">margen {margenReal.toFixed(1)}%</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            margen {margenReal.toFixed(1)}% · neto, sin IVA
+          </p>
         </div>
       </div>
 

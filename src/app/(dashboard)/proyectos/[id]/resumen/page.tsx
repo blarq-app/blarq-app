@@ -466,6 +466,10 @@ export default async function ResultadosPage({
                   Real
                   <span className="block text-[9px] text-gray-400 normal-case font-normal">neto</span>
                 </th>
+                <th className="text-right pb-2">
+                  Diferencia
+                  <span className="block text-[9px] text-gray-400 normal-case font-normal">presup − real</span>
+                </th>
                 <th className="text-right pb-2">Desviación</th>
                 <th className="text-left pb-2 pl-4 w-64">% Consumido</th>
               </tr>
@@ -480,13 +484,21 @@ export default async function ResultadosPage({
                   <React.Fragment key={section.title}>
                     {/* Header de sección */}
                     <tr className="bg-gray-50 border-t border-gray-200">
-                      <td colSpan={5} className="py-1.5 px-2 text-xs uppercase tracking-wider font-semibold text-gray-700">
+                      <td colSpan={6} className="py-1.5 px-2 text-xs uppercase tracking-wider font-semibold text-gray-700">
                         {section.title}
                       </td>
                     </tr>
                     {/* Sub-filas */}
                     {section.rows.map((r) => {
                       const pct = r.presupuesto > 0 ? (r.real / r.presupuesto) * 100 : 0;
+                      // Diferencia $ = presupuesto - real. Positivo = sobró
+                      // (margen extra), negativo = sobregasto. Solo se
+                      // muestra cuando hay presupuesto Y hay real (para
+                      // filas como "Margen" que no tienen real mapeable,
+                      // queda como "—" porque la diferencia no es
+                      // informativa en ese caso).
+                      const tieneRealMapeable = r.real > 0 || r.presupuesto === 0;
+                      const diff = r.presupuesto - r.real;
                       return (
                         <tr key={r.label} className="border-t border-gray-100">
                           <td className="py-2 pl-4 text-gray-900">{r.label}</td>
@@ -495,6 +507,23 @@ export default async function ResultadosPage({
                           </td>
                           <td className="py-2 text-right text-gray-900 font-medium">
                             {r.real > 0 ? formatCLP(r.real) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td
+                            className={`py-2 text-right font-medium tabular-nums ${
+                              !tieneRealMapeable
+                                ? "text-gray-300"
+                                : diff > 0
+                                  ? "text-green-600"
+                                  : diff < 0
+                                    ? "text-red-600"
+                                    : "text-gray-400"
+                            }`}
+                          >
+                            {tieneRealMapeable
+                              ? diff !== 0
+                                ? `${diff > 0 ? "+" : ""}${formatCLP(diff)}`
+                                : formatCLP(0)
+                              : "—"}
                           </td>
                           <td
                             className={`py-2 text-right font-medium ${
@@ -517,38 +546,78 @@ export default async function ResultadosPage({
                       );
                     })}
                     {/* Subtotal de sección */}
-                    <tr className="border-t border-gray-200 text-gray-700">
-                      <td className="py-1.5 pl-4 text-xs uppercase tracking-wider">Subtotal</td>
-                      <td className="py-1.5 text-right tabular-nums">
-                        {formatCLP(subtot.presupuesto)}
-                      </td>
-                      <td className="py-1.5 text-right tabular-nums font-medium text-gray-900">
-                        {formatCLP(subtot.real)}
-                      </td>
-                      <td className="py-1.5 text-right">
-                        {subtot.presupuesto > 0 ? `${subtotPct.toFixed(0)}%` : "—"}
-                      </td>
-                      <td></td>
-                    </tr>
+                    {(() => {
+                      const subtotDiff = subtot.presupuesto - subtot.real;
+                      return (
+                        <tr className="border-t border-gray-200 text-gray-700">
+                          <td className="py-1.5 pl-4 text-xs uppercase tracking-wider">Subtotal</td>
+                          <td className="py-1.5 text-right tabular-nums">
+                            {formatCLP(subtot.presupuesto)}
+                          </td>
+                          <td className="py-1.5 text-right tabular-nums font-medium text-gray-900">
+                            {formatCLP(subtot.real)}
+                          </td>
+                          <td
+                            className={`py-1.5 text-right tabular-nums font-medium ${
+                              subtot.real === 0
+                                ? "text-gray-300"
+                                : subtotDiff > 0
+                                  ? "text-green-600"
+                                  : subtotDiff < 0
+                                    ? "text-red-600"
+                                    : "text-gray-400"
+                            }`}
+                          >
+                            {subtot.real > 0
+                              ? `${subtotDiff > 0 ? "+" : ""}${formatCLP(subtotDiff)}`
+                              : "—"}
+                          </td>
+                          <td className="py-1.5 text-right">
+                            {subtot.presupuesto > 0 ? `${subtotPct.toFixed(0)}%` : "—"}
+                          </td>
+                          <td></td>
+                        </tr>
+                      );
+                    })()}
                   </React.Fragment>
                 );
               })}
               {/* Total general */}
-              <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold text-gray-900">
-                <td className="py-2.5 pl-2 uppercase tracking-wider text-xs">Total general</td>
-                <td className="py-2.5 text-right tabular-nums">
-                  {formatCLP(totalPresupuesto)}
-                </td>
-                <td className="py-2.5 text-right tabular-nums">
-                  {formatCLP(totalReal)}
-                </td>
-                <td className="py-2.5 text-right">
-                  {totalPresupuesto > 0
-                    ? `${((totalReal / totalPresupuesto) * 100).toFixed(0)}%`
-                    : "—"}
-                </td>
-                <td></td>
-              </tr>
+              {(() => {
+                const totalDiff = totalPresupuesto - totalReal;
+                return (
+                  <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold text-gray-900">
+                    <td className="py-2.5 pl-2 uppercase tracking-wider text-xs">Total general</td>
+                    <td className="py-2.5 text-right tabular-nums">
+                      {formatCLP(totalPresupuesto)}
+                    </td>
+                    <td className="py-2.5 text-right tabular-nums">
+                      {formatCLP(totalReal)}
+                    </td>
+                    <td
+                      className={`py-2.5 text-right tabular-nums ${
+                        totalReal === 0
+                          ? "text-gray-300"
+                          : totalDiff > 0
+                            ? "text-green-600"
+                            : totalDiff < 0
+                              ? "text-red-600"
+                              : "text-gray-400"
+                      }`}
+                    >
+                      {totalReal > 0
+                        ? `${totalDiff > 0 ? "+" : ""}${formatCLP(totalDiff)}`
+                        : "—"}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      {totalPresupuesto > 0
+                        ? `${((totalReal / totalPresupuesto) * 100).toFixed(0)}%`
+                        : "—"}
+                    </td>
+                    <td></td>
+                  </tr>
+                );
+              })()}
             </tbody>
           </table>
         </div>

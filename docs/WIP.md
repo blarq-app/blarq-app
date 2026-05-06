@@ -4,7 +4,38 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-05 (cierre · ronda 10)
+- **Última actualización**: 2026-05-06 (cierre · ronda 11)
+- **Esta ronda — sesión larga, mucho que reportar**:
+  - **Filtro de monto** agregado en /facturas (input acepta formato chileno con puntos, tolerancia ±$10 para redondeos IVA).
+  - **Búsqueda libre /banco/movimientos** arreglada (q sin dígitos rompía el filtro RUT y devolvía todo).
+  - **Columna "Diferencia $"** en Presupuesto vs Real (presupuestado − real con colores verde/rojo).
+  - **2 fixes resumen muebles/artefactos**:
+    - Iluminación ya no usa `realCostBlarq` solamente — fallback a precio cliente neto cuando falta el costo cargado.
+    - Muebles "(Sin subcategoría)" → mapea a fila "Mueble" (convención MJ confirmada).
+    - Después MJ pidió revertir a costo proveedor real (`costDistributor`/`realCostBlarq`) con fallback al precio cliente neto si está vacío. Resultado correcto: Aguirre Mueble pasa de $11.538k → $8.290k.
+  - **Bug BANQUETA / MUEBLES**: Aguirre tenía costDistributor=$0 porque el parser de import no matcheó "MUEBLES" (PRESUPUESTO) con "BANQUETA" (hoja cálculo). Fix manual: $680.000, util 30%, supplier CARLOS.
+  - **Editor partidas — 3 fixes**:
+    - Flechas (↗) ocultas en pérdida/margen/leyes (no son linkeables).
+    - Inputs en modo edición muestran enteros (Math.round) en vez de decimales largos.
+    - Cleanup BD: 40 referenceLink borrados de pérdida/margen/leyes, 92 no-URL ("PACTADO JESUS" etc), 322 unitCost redondeados.
+  - **🚨 BUG CRÍTICO — presupuesto inmutable a cambios al catálogo (regla MJ)**: JT detectó que sus ediciones al catálogo aparecían en proyectos cerrados (Lefevre V5). Causa: lista de compras leía PartidaComponent del catálogo en runtime. Fix grande:
+    - Schema nueva: tabla `ObraItemComponent` (snapshot por proyecto).
+    - Aplicada en BD dev y prod.
+    - Migración 284 ObraItems con catalogPartidaId → snapshot poblado.
+    - API POST partidas snapshotea automáticamente al crear desde catálogo.
+    - Lista compras (page + sync + PDF) lee del snapshot, no del catálogo.
+    - Documentado en docs/principles.md.
+  - **Subido todo a prod**: presupuestos Pauline V4 + Aguirre V7 + anexo Baño Visitas, 84 facturas legacy 2025 Aguirre, cleanup catálogo, AJUSTE iluminación + BANQUETA fix, 290 movimientos bancarios enero/feb, snapshot ObraItemComponent. Validado: Aguirre Total Acordado $84.577.305, Pauline $78.692.133.
+
+Caveat conocido (no crítico): los `InvoicePayment` (link banco↔factura) no se replicaron dev→prod (IDs específicos). Movimientos copiados mantienen su `status` pero al expandir un movimiento "conciliado" no aparece la factura asociada. Re-conciliar desde la UI cuando MJ/JT lo necesite.
+
+Pendiente para iteraciones futuras:
+- Editor de partidas DENTRO del proyecto: hoy lee/edita PartidaComponent (catálogo). Para coherencia total, debería editar ObraItemComponent del proyecto. Lista de compras y derivados ya están aislados — esto es pulido.
+- Selector "Comparando contra: Obra ... aprobado" en /resumen muestra solo UNA versión cuando hay anexos (cosmético).
+- Re-asignar URLs correctas en componentes (los del catálogo BD están desfasados respecto al Excel original).
+- Arrau y Rosas: cargar V correspondiente cuando MJ pase los Excel.
+
+- **Ronda 10**:
 - **Esta ronda**: Fix del **Margen** en el desglose de obra. MJ detectó que el `costMargin` de los items no aparecía en "Presupuesto vs Real — Por Categoría". 2 fixes:
   1. **`metrics.ts > budgetByType`** ahora incluye `costMargin` en el desglose y suma items de TODAS las obras aprobadas (no solo la primera). Antes solo tomaba `obra?.obraItems` y la `obra` venía de `bestVersion()` que devuelve UNA, ignorando anexos como BAÑO VISITAS.
   2. **`page resumen`** ahora muestra fila "Margen" en la sección Obra. Columna "Presupuesto" = `costMargin` total. Columna "Real" queda en "—" porque las facturas reales no se categorizan como margen — el margen real del proyecto se ve a nivel agregado en la card "Utilidad Real".

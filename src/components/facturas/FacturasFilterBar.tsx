@@ -30,6 +30,8 @@ type FilterValues = {
   dateFrom: string;
   dateTo: string;
   q: string;
+  /** Monto exacto en CLP (con tolerancia ±$10 server-side para redondeo IVA). */
+  monto: string;
 };
 
 const FILTER_KEYS: (keyof FilterValues)[] = [
@@ -42,6 +44,7 @@ const FILTER_KEYS: (keyof FilterValues)[] = [
   "dateFrom",
   "dateTo",
   "q",
+  "monto",
 ];
 
 export default function FacturasFilterBar({
@@ -192,6 +195,23 @@ export default function FacturasFilterBar({
           />
         </div>
 
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] uppercase tracking-wider text-gray-500">monto</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="exacto ±$10"
+            value={v.monto}
+            onChange={(e) => setV({ ...v, monto: e.target.value })}
+            onBlur={() => applyFilter(v)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") applyFilter(v);
+            }}
+            className="w-[120px] px-2 py-1.5 border border-gray-300 rounded text-sm bg-white text-gray-700 text-right tabular-nums focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
+            title="Busca facturas con totalAmount cercano (±$10) al monto. Acepta formato chileno con puntos."
+          />
+        </div>
+
         {isAnyActive && (
           <button
             onClick={() =>
@@ -205,6 +225,7 @@ export default function FacturasFilterBar({
                 dateFrom: "",
                 dateTo: "",
                 q: "",
+                monto: "",
               })
             }
             className="text-xs text-gray-500 hover:text-gray-900 underline ml-auto"

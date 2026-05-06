@@ -15,6 +15,10 @@ type SearchParams = {
   dateFrom?: string;
   dateTo?: string;
   q?: string;
+  // Monto exacto en CLP. Búsqueda con tolerancia ±$10 para cubrir
+  // redondeos de IVA típicos (factura emitida $100.000 vs neto+iva
+  // que da $99.999 por floor).
+  monto?: string;
 };
 
 // Status tone moved to FacturasTable client component.
@@ -55,6 +59,15 @@ export default async function FacturasPage({
       { rutIssuer: { contains: sp.q, mode: "insensitive" } },
       { notes: { contains: sp.q, mode: "insensitive" } },
     ];
+  }
+  if (sp.monto) {
+    // Permitir formato chileno con puntos ("1.234.567") o solo dígitos.
+    const digits = sp.monto.replace(/[^\d]/g, "");
+    const m = parseFloat(digits);
+    if (!isNaN(m) && m > 0) {
+      // Tolerancia ±$10 para redondeos de IVA.
+      where.totalAmount = { gte: m - 10, lte: m + 10 };
+    }
   }
 
   const [invoices, projects, categories] = await Promise.all([
@@ -172,6 +185,7 @@ export default async function FacturasPage({
           dateFrom: sp.dateFrom ?? "",
           dateTo: sp.dateTo ?? "",
           q: sp.q ?? "",
+          monto: sp.monto ?? "",
         }}
       />
 

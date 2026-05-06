@@ -890,16 +890,22 @@ function ViewPanel({
                     </td>
                     <td className="py-1 px-2 text-gray-900">
                       {c.description}
-                      {c.referenceLink && (
-                        <a
-                          href={c.referenceLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="ml-1 text-blue-500"
-                        >
-                          ↗
-                        </a>
-                      )}
+                      {/* La flecha (link a producto) solo tiene sentido para
+                          materiales/herramientas/subcontrato. Pérdida, margen
+                          y leyes sociales NO son productos linkeables. */}
+                      {c.referenceLink &&
+                        c.type !== "perdida" &&
+                        c.type !== "margen" &&
+                        !(c.type === "mano_obra" && c.unit === "%") && (
+                          <a
+                            href={c.referenceLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ml-1 text-blue-500"
+                          >
+                            ↗
+                          </a>
+                        )}
                     </td>
                     <td className="py-1 px-2 text-center text-gray-500">{c.unit}</td>
                     <td className="py-1 px-2 text-right text-gray-700 tabular-nums">
@@ -1412,7 +1418,7 @@ function ComponentEditRow({
           <input
             type="number"
             step="1"
-            value={comp.unitCost}
+            value={Math.round(comp.unitCost)}
             onChange={(e) => onUpdate(comp.id, "unitCost", parseFloat(e.target.value) || 0)}
             className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-right tabular-nums"
           />

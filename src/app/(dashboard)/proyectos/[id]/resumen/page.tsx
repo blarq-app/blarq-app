@@ -142,6 +142,15 @@ export default async function ResultadosPage({
   };
 
   // 2) MUEBLES — agrupar items del presupuesto por sub (Mueble / Herrajes / Cubiertas)
+  // Convención BLARQ confirmada con MJ 2026-05-05: facturas categorizadas
+  // como "Muebles" sin subcategoría son MUEBLE (la cuadrilla de Carlos
+  // entrega el mueble armado completo, no se desagrega). Por eso ese real
+  // se agrega a la fila "Mueble", no aparece como "(Sin subcategoría)".
+  //
+  // Presupuesto: usar clientPriceNet (precio al cliente sin IVA), NO
+  // costDistributor (que es lo que BLARQ paga al proveedor — ese es un
+  // costo interno que no representa el "presupuestado" cuando lo que se
+  // mide es vs facturas reales del cliente).
   function muebleNameToSub(name: string): "Mueble" | "Herrajes" | "Cubiertas" {
     const u = (name || "").toUpperCase();
     if (u.includes("CUBIERTA")) return "Cubiertas";
@@ -150,23 +159,31 @@ export default async function ResultadosPage({
   }
   const mueblesPresupBySub = { Mueble: 0, Herrajes: 0, Cubiertas: 0 };
   for (const it of mueblesAllItems) {
-    mueblesPresupBySub[muebleNameToSub(it.name)] += it.costDistributor * it.quantity;
+    // clientPriceNet > 0 si está cargado correctamente. Fallback a
+    // clientPriceIva/1.19 por si en algún proyecto solo está el c/IVA.
+    const netoPorUnidad =
+      it.clientPriceNet > 0 ? it.clientPriceNet : it.clientPriceIva / 1.19;
+    mueblesPresupBySub[muebleNameToSub(it.name)] += netoPorUnidad * it.quantity;
   }
+  // Real de "Muebles" top (sin sub específica) cuenta como "Mueble".
+  const realMuebleTopSinSub = realBySpecific["Muebles"] || 0;
   const mueblesSection: ResumenSection = {
     title: "2. Muebles",
     rows: [
-      { label: "Mueble", presupuesto: mueblesPresupBySub.Mueble, real: realBySpecific["Mueble"] || 0 },
+      {
+        label: "Mueble",
+        presupuesto: mueblesPresupBySub.Mueble,
+        real: (realBySpecific["Mueble"] || 0) + realMuebleTopSinSub,
+      },
       { label: "Herrajes", presupuesto: mueblesPresupBySub.Herrajes, real: realBySpecific["Herrajes"] || 0 },
       { label: "Cubiertas", presupuesto: mueblesPresupBySub.Cubiertas, real: realBySpecific["Cubiertas"] || 0 },
     ],
   };
-  // Si hay facturas categorizadas al top "Muebles" sin sub, agregar fila visible
-  const mueblesSinClasificar = realBySpecific["Muebles"] || 0;
-  if (mueblesSinClasificar > 0) {
-    mueblesSection.rows.push({ label: "(Sin subcategoría)", presupuesto: 0, real: mueblesSinClasificar });
-  }
 
-  // 3) ARTEFACTOS — agrupar por subcategory del item (sanitario→Baño, cocina→Cocina, iluminacion→Iluminación)
+  // 3) ARTEFACTOS — agrupar por subcategory del item.
+  // Presupuesto: clientPrice (precio al cliente; ya viene como total).
+  // Para mostrar neto, dividimos por 1.19. NO usar realCostBlarq (es lo
+  // que BLARQ paga al proveedor — costo interno, no presupuestado).
   function artefactoSubToCat(sub: string): "Cocina" | "Baño" | "Iluminación" {
     if (sub === "iluminacion") return "Iluminación";
     if (sub === "sanitario") return "Baño";
@@ -175,7 +192,10 @@ export default async function ResultadosPage({
   const artefactosPresupBySub = { Cocina: 0, Baño: 0, Iluminación: 0 };
   if (lastArtefactos) {
     for (const it of lastArtefactos.artefactoItems) {
-      artefactosPresupBySub[artefactoSubToCat(it.subcategory)] += it.realCostBlarq || 0;
+      // clientPrice viene c/IVA — convertir a neto para coherencia con
+      // las otras secciones del resumen ("Presupuestado neto").
+      const netoPorItem = (it.clientPrice ?? 0) / 1.19;
+      artefactosPresupBySub[artefactoSubToCat(it.subcategory)] += netoPorItem;
     }
   }
   const artefactosSection: ResumenSection = {

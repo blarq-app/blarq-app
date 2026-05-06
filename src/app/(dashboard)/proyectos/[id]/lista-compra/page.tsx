@@ -39,35 +39,25 @@ export default async function ListaCompraPage({
   let itemsWithoutCatalog = 0;
 
   if (selectedBudget) {
+    // Lee componentes desde ObraItemComponent (snapshot por proyecto),
+    // NO desde PartidaComponent (catálogo). Regla MJ 2026-05-05: una
+    // cotización aprobada es inmutable ante cambios al catálogo.
     const full = await prisma.budgetVersion.findUnique({
       where: { id: selectedBudget.id },
-      include: { obraItems: true },
+      include: {
+        obraItems: {
+          include: {
+            components: {
+              where: { type: "material" },
+              include: { material: true },
+            },
+          },
+        },
+      },
     });
-
-    const catalogIds =
-      full?.obraItems
-        .map((i) => i.catalogPartidaId)
-        .filter((x): x is string => !!x) || [];
 
     itemsWithoutCatalog =
-      full?.obraItems.filter((i) => !i.catalogPartidaId).length || 0;
-
-    const componentsRaw = await prisma.partidaComponent.findMany({
-      where: {
-        partidaId: { in: catalogIds },
-        type: "material",
-      },
-      include: { material: true },
-    });
-    // Excluir provisiones — no son materiales que se compran
-    const components = componentsRaw.filter((c) => !c.material?.isProvision);
-
-    const compsByPartida = new Map<string, typeof components>();
-    for (const c of components) {
-      if (!compsByPartida.has(c.partidaId))
-        compsByPartida.set(c.partidaId, []);
-      compsByPartida.get(c.partidaId)!.push(c);
-    }
+      full?.obraItems.filter((i) => i.components.length === 0).length || 0;
 
     type Agg = {
       key: string;
@@ -82,8 +72,8 @@ export default async function ListaCompraPage({
     const agg = new Map<string, Agg>();
 
     for (const obraItem of full?.obraItems || []) {
-      if (!obraItem.catalogPartidaId) continue;
-      const comps = compsByPartida.get(obraItem.catalogPartidaId) || [];
+      // Excluir provisiones — no son materiales que se compran
+      const comps = obraItem.components.filter((c) => !c.material?.isProvision);
       for (const c of comps) {
         const qty = (c.quantity || 0) * (obraItem.quantity || 0);
         if (qty <= 0) continue;

@@ -58,6 +58,50 @@ export async function POST(
       },
     });
 
+    // Snapshot de componentes desde el catálogo (regla MJ 2026-05-05:
+    // los componentes del proyecto deben ser inmutables ante cambios al
+    // catálogo). Cada ObraItem tiene su propia copia de los componentes.
+    if (fromCatalog && data.catalogPartidaId) {
+      const catalogComps = await prisma.partidaComponent.findMany({
+        where: { partidaId: data.catalogPartidaId },
+        orderBy: { sortOrder: "asc" },
+      });
+      // Mapeo viejo→nuevo para resolver appliedToComponentId
+      const idMap = new Map<string, string>();
+      const created: Array<{ source: typeof catalogComps[number]; newId: string }> = [];
+      for (const c of catalogComps) {
+        const newComp = await prisma.obraItemComponent.create({
+          data: {
+            obraItemId: item.id,
+            type: c.type,
+            description: c.description,
+            unit: c.unit,
+            quantity: c.quantity,
+            unitCost: c.unitCost,
+            totalCost: c.totalCost,
+            referenceLink: c.referenceLink,
+            materialId: c.materialId,
+            sortOrder: c.sortOrder,
+            appliedToType: c.appliedToType,
+          },
+        });
+        idMap.set(c.id, newComp.id);
+        created.push({ source: c, newId: newComp.id });
+      }
+      // Segunda pasada: resolver appliedToComponentId con los nuevos IDs
+      for (const { source, newId } of created) {
+        if (source.appliedToComponentId) {
+          const target = idMap.get(source.appliedToComponentId);
+          if (target) {
+            await prisma.obraItemComponent.update({
+              where: { id: newId },
+              data: { appliedToComponentId: target },
+            });
+          }
+        }
+      }
+    }
+
     return NextResponse.json(item);
   } catch (error) {
     console.error("Error creating obra item:", error);

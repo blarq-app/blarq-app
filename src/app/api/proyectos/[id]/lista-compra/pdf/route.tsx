@@ -43,28 +43,21 @@ export async function GET(
     let rows: ListaCompraRow[] = [];
 
     if (selectedBudget) {
+      // Lee snapshot del proyecto (ObraItemComponent), no catálogo.
+      // Regla MJ 2026-05-05.
       const full = await prisma.budgetVersion.findUnique({
         where: { id: selectedBudget.id },
-        include: { obraItems: true },
+        include: {
+          obraItems: {
+            include: {
+              components: {
+                where: { type: "material" },
+                include: { material: true },
+              },
+            },
+          },
+        },
       });
-
-      const catalogIds =
-        full?.obraItems
-          .map((i) => i.catalogPartidaId)
-          .filter((x): x is string => !!x) || [];
-
-      const componentsRaw = await prisma.partidaComponent.findMany({
-        where: { partidaId: { in: catalogIds }, type: "material" },
-        include: { material: true },
-      });
-      const components = componentsRaw.filter((c) => !c.material?.isProvision);
-
-      const compsByPartida = new Map<string, typeof components>();
-      for (const c of components) {
-        if (!compsByPartida.has(c.partidaId))
-          compsByPartida.set(c.partidaId, []);
-        compsByPartida.get(c.partidaId)!.push(c);
-      }
 
       type Agg = {
         key: string;
@@ -77,8 +70,7 @@ export async function GET(
       const agg = new Map<string, Agg>();
 
       for (const obraItem of full?.obraItems || []) {
-        if (!obraItem.catalogPartidaId) continue;
-        const comps = compsByPartida.get(obraItem.catalogPartidaId) || [];
+        const comps = obraItem.components.filter((c) => !c.material?.isProvision);
         for (const c of comps) {
           const qty = (c.quantity || 0) * (obraItem.quantity || 0);
           if (qty <= 0) continue;

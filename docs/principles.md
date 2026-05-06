@@ -91,6 +91,25 @@ Todos los cálculos por proyecto (cobrado, gastado, utilidad real, % avance, ale
 
 (Ya cubierto arriba en "Lenguaje visual", pero reforzado acá: aplica a UI, PDFs, emails, todo).
 
+## Presupuesto aprobado es inmutable ante cambios al catálogo
+
+Confirmado por MJ 2026-05-05 en contexto del bug detectado por JT.
+
+**Regla**: una cotización aprobada y enviada al cliente debe quedar congelada. Modificaciones al `PartidaCatalog` (cambios de precio de mano de obra, materiales agregados/sacados, etc.) **NO deben propagarse** automáticamente a presupuestos ya iniciados, ni a sus EPs, ni a la lista de compras.
+
+La única forma legítima de mover precios en una cotización aprobada es una **modificación explícita dentro del proyecto** (ej: el cliente pidió una mano adicional de pintura → editar la partida del proyecto manualmente). Variaciones del catálogo no son ese vector.
+
+**Por qué importa**: si el cliente firmó por $X en V1, el proyecto se ejecuta a ese precio. Una edición de catálogo posterior que reflejara automáticamente nuevos precios en V1 contaminaría datos cerrados y podría confundir a JT, MJ o al cliente sobre cuál es la realidad del proyecto.
+
+**Implementación 2026-05-05**:
+- `ObraItem` tiene relación `components: ObraItemComponent[]` — copia denormalizada de los componentes del catálogo al momento de crear el ítem.
+- Cuando MJ agrega una partida al presupuesto desde catálogo, el endpoint `POST /api/presupuestos/[id]/partidas` crea el `ObraItem` Y simultáneamente snapshotea sus componentes en `ObraItemComponent`.
+- Lista de compras (`/proyectos/[id]/lista-compra`, sync, PDF) lee de `ObraItemComponent`, no de `PartidaComponent`.
+- EPs y demás derivados del presupuesto operan sobre los datos del proyecto, no del catálogo.
+- El editor del catálogo sí puede modificar `PartidaCatalog` y `PartidaComponent` libremente — afecta SOLO a ítems creados en el futuro.
+
+**Nota sobre MaterialCatalog**: el `materialId` en `ObraItemComponent` apunta al mismo catálogo de materiales global. Esto es deliberado: el material en sí (nombre, link a Sodimac) puede actualizarse sin afectar el presupuesto. Lo que se snapshotea son los precios y cantidades — esos son los datos del momento de la firma.
+
 ## Catálogo de partidas — no duplicar, no pisar
 
 Confirmado por MJ 2026-05-05 en contexto del traspaso legacy de presupuestos Excel.

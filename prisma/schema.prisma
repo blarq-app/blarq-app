@@ -198,10 +198,42 @@ model ObraItem {
   isCustomized      Boolean @default(false) // True si la partida fue editada respecto a su PartidaCatalog origen, o si fue creada manualmente sin catálogo. Habilita "refrescar precios desde catálogo" sin pisar customizaciones.
 
   budgetVersion     BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)
+  components        ObraItemComponent[]
 
   @@index([budgetVersionId])
   @@index([catalogPartidaId])
   @@index([lineageId])
+}
+
+// Snapshot de los componentes de una partida AL MOMENTO de crearse el ObraItem
+// (regla MJ 2026-05-05: una cotización aprobada debe ser inmutable ante
+// cambios al catálogo). Cada ObraItem tiene su propia copia denormalizada
+// de los componentes que se usan en la lista de compras y EPs. Si JT edita
+// el catálogo después, los proyectos vivos NO se ven afectados.
+//
+// Schema replica PartidaComponent uno-a-uno para mantener compatibilidad
+// con el editor existente. La diferencia: la FK apunta a ObraItem en lugar
+// de PartidaCatalog.
+model ObraItemComponent {
+  id            String   @id @default(cuid())
+  obraItemId    String
+  type          String   // material | mano_obra | margen | herramientas | subcontrato | perdida
+  description   String
+  unit          String   // UN, M2, ML, %, GL, DIA
+  quantity      Float    @default(0)
+  unitCost      Float    @default(0)
+  totalCost     Float    @default(0)
+  referenceLink String?
+  materialId    String?  // referencia al catálogo de materiales (compartido — esto sí puede actualizarse globalmente porque el material es solo info, no precio)
+  sortOrder     Int      @default(0)
+  appliedToComponentId String?
+  appliedToType        String?
+
+  obraItem      ObraItem @relation(fields: [obraItemId], references: [id], onDelete: Cascade)
+  material      MaterialCatalog? @relation(fields: [materialId], references: [id])
+
+  @@index([obraItemId])
+  @@index([materialId])
 }
 
 // Capítulos de muebles. Un proyecto puede tener varios:
@@ -392,6 +424,7 @@ model MaterialCatalog {
   updatedAt     DateTime @updatedAt
 
   components    PartidaComponent[]
+  obraItemComponents ObraItemComponent[]
   shoppingItems ShoppingItem[]
   priceOffers   MaterialPriceOffer[]
 }

@@ -34,22 +34,18 @@ export async function POST(
       );
     }
 
-    // Partidas con link a catálogo
-    const catalogIds = budget.obraItems
-      .map((i) => i.catalogPartidaId)
-      .filter((x): x is string => !!x);
-
-    const components = await prisma.partidaComponent.findMany({
-      where: { partidaId: { in: catalogIds }, type: "material" },
-      include: { material: true },
+    // Lee componentes del SNAPSHOT del proyecto (ObraItemComponent), NO
+    // del catálogo (PartidaComponent). Regla MJ 2026-05-05: el ppto
+    // aprobado es inmutable ante cambios al catálogo.
+    const obraItemsWithComps = await prisma.obraItem.findMany({
+      where: { budgetVersionId: budget.id },
+      include: {
+        components: {
+          where: { type: "material" },
+          include: { material: true },
+        },
+      },
     });
-
-    // Agrupar componentes por partida
-    const compsByPartida = new Map<string, typeof components>();
-    for (const c of components) {
-      if (!compsByPartida.has(c.partidaId)) compsByPartida.set(c.partidaId, []);
-      compsByPartida.get(c.partidaId)!.push(c);
-    }
 
     // Agregar: key = materialId || normalized(name+unit)
     type Agg = {
@@ -61,9 +57,8 @@ export async function POST(
     };
     const agg = new Map<string, Agg>();
 
-    for (const obraItem of budget.obraItems) {
-      if (!obraItem.catalogPartidaId) continue;
-      const comps = compsByPartida.get(obraItem.catalogPartidaId) || [];
+    for (const obraItem of obraItemsWithComps) {
+      const comps = obraItem.components;
       for (const c of comps) {
         const qty = (c.quantity || 0) * (obraItem.quantity || 0);
         if (qty <= 0) continue;
@@ -146,8 +141,10 @@ export async function POST(
       zeroed++;
     }
 
-    const itemsWithoutCatalog = budget.obraItems.filter(
-      (i) => !i.catalogPartidaId
+    // Items sin componentes (no se snapshotean = creados manual sin
+    // catálogo origen, o partidas viejas sin migrar).
+    const itemsWithoutCatalog = obraItemsWithComps.filter(
+      (i) => i.components.length === 0
     ).length;
 
     return NextResponse.json({

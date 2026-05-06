@@ -4,8 +4,13 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-06 (cierre · ronda 11)
-- **Esta ronda — sesión larga, mucho que reportar**:
+- **Última actualización**: 2026-05-06 (cierre · ronda 12)
+- **Ronda 12 — pulido post-cutover**:
+  - **Limpieza leak catálogo→proyecto en editor de presupuesto**. Investigué el ítem de "editor de partidas dentro del proyecto debería editar ObraItemComponent". Realidad: el editor del proyecto (`ObraEditor.tsx`) **no edita** PartidaComponent — sólo edita ObraItem y los 6 campos de desglose grueso. El único leak real era dead code en `presupuesto/[budgetId]/page.tsx` (líneas 42-75) que leía provisiones de `partidaComponent` y las pasaba como prop `provisionsByObraItem` a ObraEditor — prop que nunca se consumía. Eliminados ambos. `tsc --noEmit` limpio.
+  - **Caveat anotado**: si MJ alguna vez quiere editar componentes de una partida sólo para un proyecto (sin tocar el catálogo), eso es funcionalidad nueva (UI + endpoints `/api/proyectos/[id]/obra-items/[itemId]/componentes` que escriban en ObraItemComponent). Hoy no existe.
+  - **Re-conciliación InvoicePayment dev→prod resuelta**. Script `scripts/replicate-invoice-payments-dev-to-prod.ts` que matchea movs por `(accountNumber + fecha + monto + externalRef)` y facturas por `(folioNumber + tipoDoc + rutIssuer)`, dry-run por defecto, `--apply` para escribir. Corrido por MJ con éxito. Caveat de la ronda 11 cerrado.
+
+- **Ronda 11 — sesión larga, mucho que reportar**:
   - **Filtro de monto** agregado en /facturas (input acepta formato chileno con puntos, tolerancia ±$10 para redondeos IVA).
   - **Búsqueda libre /banco/movimientos** arreglada (q sin dígitos rompía el filtro RUT y devolvía todo).
   - **Columna "Diferencia $"** en Presupuesto vs Real (presupuestado − real con colores verde/rojo).
@@ -27,10 +32,7 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
     - Documentado en docs/principles.md.
   - **Subido todo a prod**: presupuestos Pauline V4 + Aguirre V7 + anexo Baño Visitas, 84 facturas legacy 2025 Aguirre, cleanup catálogo, AJUSTE iluminación + BANQUETA fix, 290 movimientos bancarios enero/feb, snapshot ObraItemComponent. Validado: Aguirre Total Acordado $84.577.305, Pauline $78.692.133.
 
-Caveat conocido (no crítico): los `InvoicePayment` (link banco↔factura) no se replicaron dev→prod (IDs específicos). Movimientos copiados mantienen su `status` pero al expandir un movimiento "conciliado" no aparece la factura asociada. Re-conciliar desde la UI cuando MJ/JT lo necesite.
-
 Pendiente para iteraciones futuras:
-- Editor de partidas DENTRO del proyecto: hoy lee/edita PartidaComponent (catálogo). Para coherencia total, debería editar ObraItemComponent del proyecto. Lista de compras y derivados ya están aislados — esto es pulido.
 - Selector "Comparando contra: Obra ... aprobado" en /resumen muestra solo UNA versión cuando hay anexos (cosmético).
 - Re-asignar URLs correctas en componentes (los del catálogo BD están desfasados respecto al Excel original).
 - Arrau y Rosas: cargar V correspondiente cuando MJ pase los Excel.

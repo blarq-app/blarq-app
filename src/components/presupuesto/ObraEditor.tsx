@@ -82,11 +82,9 @@ const DEFAULT_PAYMENT_TERMS = [
 export default function ObraEditor({
   budget: initialBudget,
   projectId,
-  provisionsByObraItem = {},
 }: {
   budget: Budget;
   projectId: string;
-  provisionsByObraItem?: Record<string, { name: string; unitCost: number }[]>;
 }) {
   const router = useRouter();
   const [items, setItems] = useState<ObraItem[]>(initialBudget.obraItems);

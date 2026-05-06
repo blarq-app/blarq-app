@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { formatCLP } from "@/lib/utils";
@@ -81,11 +82,19 @@ export default async function MovimientosPage({
   }
   if (q) {
     // Búsqueda libre: descripción + nombre contraparte + RUT contraparte.
-    where.OR = [
+    // OJO: el filtro de RUT solo se incluye si q tiene dígitos. De lo
+    // contrario `q.replace(/\D/g, "")` queda en "" y `contains: ""`
+    // matchea TODO, rompiendo el OR (cualquier movimiento con RUT pasa,
+    // sea o no del nombre buscado).
+    const rutDigits = q.replace(/\D/g, "");
+    const orFilters: Prisma.BankMovementWhereInput[] = [
       { description: { contains: q, mode: "insensitive" } },
       { counterpartyName: { contains: q, mode: "insensitive" } },
-      { counterpartyRut: { contains: q.replace(/\D/g, "") } },
     ];
+    if (rutDigits.length >= 3) {
+      orFilters.push({ counterpartyRut: { contains: rutDigits } });
+    }
+    where.OR = orFilters;
   }
 
   // ── Filtros avanzados ──────────────────────────────────────────────────

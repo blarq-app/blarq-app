@@ -87,6 +87,7 @@ export default function ProjectFacturasFilters({
         className="px-2 py-1.5 border border-gray-300 rounded bg-white text-sm"
       >
         <option value="">Todas las categorías</option>
+        <option value="__sin__">Sin categoría</option>
         {categories.map((c) => (
           <option key={c} value={c}>
             {c}

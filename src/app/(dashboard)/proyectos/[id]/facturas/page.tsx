@@ -49,16 +49,21 @@ export default async function ProyectoFacturasPage({
   if (sp.status) where.status = sp.status;
   if (sp.origin) where.origin = sp.origin;
   if (sp.category) {
-    // Match contra el nombre — si es una categoría padre (ej. "Artefactos"),
-    // incluir también sus subcategorías ("Baño", "Cocina", "Iluminación").
-    where.category = {
-      is: {
-        OR: [
-          { name: sp.category },
-          { parent: { is: { name: sp.category } } },
-        ],
-      },
-    };
+    if (sp.category === "__sin__") {
+      // Sentinela: facturas sin categoría asignada (para que MJ las cataloge).
+      where.categoryId = null;
+    } else {
+      // Match contra el nombre — si es una categoría padre (ej. "Artefactos"),
+      // incluir también sus subcategorías ("Baño", "Cocina", "Iluminación").
+      where.category = {
+        is: {
+          OR: [
+            { name: sp.category },
+            { parent: { is: { name: sp.category } } },
+          ],
+        },
+      };
+    }
   }
   if (sp.dateFrom || sp.dateTo) {
     const dateFilter: Record<string, Date> = {};

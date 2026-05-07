@@ -56,14 +56,30 @@ export default function MovementReconcileModal({
   const [q, setQ] = useState("");
   const [filterSameClient, setFilterSameClient] = useState(true);
   const [onlyWithBalance, setOnlyWithBalance] = useState(true);
+  // Filtro nuevo: monto exacto con tolerancia ±$10 (cubre redondeos IVA).
+  // String para que el input vacío sea "no filtrar".
+  const [montoExacto, setMontoExacto] = useState<string>("");
   const [filterProjectId, setFilterProjectId] = useState<string>("");
   const [projects, setProjects] = useState<
     { id: string; name: string; numeroProyecto: number | null; isInternal: boolean }[]
+  >([]);
+  // Reembolsadores: cuando la glosa del mov matchea con uno, el modal
+  // apaga "mismo proveedor" automáticamente y prioriza facturas con monto
+  // match. Se carga una vez al abrir.
+  const [reembolsadores, setReembolsadores] = useState<
+    { id: string; nombre: string; glosa: string }[]
   >([]);
   const [results, setResults] = useState<Factura[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Detección de reembolsador a partir de la glosa del mov (substring
+  // case-insensitive). Si matchea, devuelve el reembolsador; si no, null.
+  const detectedReembolsador = (() => {
+    const desc = (movement.description ?? "").toLowerCase();
+    return reembolsadores.find((r) => desc.includes(r.glosa.toLowerCase())) ?? null;
+  })();
 
   // Working copy de imputaciones: empieza con las que ya están y MJ agrega.
   const [drafts, setDrafts] = useState(
@@ -77,7 +93,9 @@ export default function MovementReconcileModal({
     }))
   );
 
-  // Reset drafts cuando cambia el movimiento o se abre el modal
+  // Reset drafts cuando cambia el movimiento o se abre el modal.
+  // Si la glosa matchea con un reembolsador, "mismo proveedor" se apaga
+  // por default — la factura no es del que aparece en la transferencia.
   useEffect(() => {
     if (open) {
       setDrafts(
@@ -90,11 +108,16 @@ export default function MovementReconcileModal({
         }))
       );
       setQ("");
-      setFilterSameClient(!!movement.counterpartyRut);
+      const desc = (movement.description ?? "").toLowerCase();
+      const isReembolso = reembolsadores.some((r) =>
+        desc.includes(r.glosa.toLowerCase())
+      );
+      setFilterSameClient(!!movement.counterpartyRut && !isReembolso);
       setFilterProjectId("");
+      setMontoExacto("");
       setError(null);
     }
-  }, [open, existingPayments, movement.counterpartyRut]);
+  }, [open, existingPayments, movement.counterpartyRut, movement.description, reembolsadores]);
 
   // Cargar listado de proyectos la primera vez que se abre.
   useEffect(() => {
@@ -106,6 +129,17 @@ export default function MovementReconcileModal({
       })
       .catch(() => {});
   }, [open, projects.length]);
+
+  // Cargar reembolsadores la primera vez que se abre.
+  useEffect(() => {
+    if (!open || reembolsadores.length > 0) return;
+    fetch("/api/reembolsadores")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.reembolsadores) setReembolsadores(data.reembolsadores);
+      })
+      .catch(() => {});
+  }, [open, reembolsadores.length]);
 
   const sumApplied = drafts.reduce((s, d) => s + d.amountApplied, 0);
   const remaining = Math.max(0, absAmount - sumApplied);
@@ -135,13 +169,32 @@ export default function MovementReconcileModal({
       const data = await res.json();
       // Excluir las que ya están en drafts.
       const draftIds = new Set(drafts.map((d) => d.invoiceId));
-      // Ordenar candidatos por proximidad absoluta a la fecha del movimiento
-      // (lo más cercano arriba). Es lo que MJ usa visualmente para identificar
-      // a qué factura corresponde un cobro/pago.
+      // Filtro adicional: monto exacto ±$10 (cubre redondeos IVA).
+      const montoFiltroNum = montoExacto
+        ? Number(String(montoExacto).replace(/[.\s]/g, "").replace(",", "."))
+        : null;
+      // Ordenar candidatos:
+      //   1) Si hay reembolsador detectado: monto match ±$10 arriba (caso
+      //      reembolso de compra o flete con monto conocido).
+      //   2) Después por proximidad de fecha (lo más cercano al mov).
       const movTime = new Date(movement.date).getTime();
+      const isReembolso = !!detectedReembolsador;
+      const matchesAmount = (f: Factura) =>
+        Math.abs(f.remaining - absAmount) <= 10;
       const filtered = (data.facturas as Factura[])
         .filter((f) => !draftIds.has(f.id))
+        .filter((f) =>
+          montoFiltroNum != null && !isNaN(montoFiltroNum)
+            ? Math.abs(f.remaining - montoFiltroNum) <= 10 ||
+              Math.abs(f.totalAmount - montoFiltroNum) <= 10
+            : true
+        )
         .sort((a, b) => {
+          if (isReembolso) {
+            const ma = matchesAmount(a) ? 0 : 1;
+            const mb = matchesAmount(b) ? 0 : 1;
+            if (ma !== mb) return ma - mb;
+          }
           const da = Math.abs(new Date(a.issueDate).getTime() - movTime);
           const db = Math.abs(new Date(b.issueDate).getTime() - movTime);
           return da - db;
@@ -152,7 +205,7 @@ export default function MovementReconcileModal({
     } finally {
       setLoading(false);
     }
-  }, [open, q, targetType, filterSameClient, onlyWithBalance, filterProjectId, absAmount, movement.counterpartyRut, drafts]);
+  }, [open, q, targetType, filterSameClient, onlyWithBalance, filterProjectId, absAmount, movement.counterpartyRut, movement.date, drafts, montoExacto, detectedReembolsador]);
 
   // Buscar al abrir, y cuando cambian filtros (debounced en q).
   useEffect(() => {
@@ -161,7 +214,7 @@ export default function MovementReconcileModal({
       search();
     }, 200);
     return () => clearTimeout(t);
-  }, [open, q, filterSameClient, onlyWithBalance, filterProjectId, search]);
+  }, [open, q, filterSameClient, onlyWithBalance, filterProjectId, montoExacto, search]);
 
   // Ventana ±15 días para marcar visualmente facturas "cerca" del movimiento.
   const movTimeRef = new Date(movement.date).getTime();
@@ -314,7 +367,21 @@ export default function MovementReconcileModal({
             </div>
           )}
 
-          {/* Search */}
+          {/* Banner reembolsador: aparece cuando la glosa del mov matchea
+              con un Reembolsador configurado en /configuracion/reembolsadores. */}
+          {remaining > 0 && detectedReembolsador && (
+            <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-lg px-3 py-2 text-xs leading-relaxed">
+              <span className="font-medium">{detectedReembolsador.nombre}</span> es
+              reembolsador. La factura puede ser de cualquier proveedor (compra
+              que él pagó con su tarjeta) o de Paula Johanna (flete). El filtro
+              &quot;Mismo proveedor&quot; se apagó automáticamente y las facturas con
+              monto exacto match aparecen primero.
+            </div>
+          )}
+
+          {/* Search — fila 1: búsqueda libre + filtros tipo toggle.
+              Fila 2: filtro de monto exacto separado, con label visible y
+              atajo para autocompletar con el monto del movimiento. */}
           {remaining > 0 && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
@@ -357,6 +424,40 @@ export default function MovementReconcileModal({
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <label
+                  htmlFor="mov-monto-exacto"
+                  className="text-xs text-gray-700 font-medium"
+                >
+                  Monto exacto (±$10):
+                </label>
+                <input
+                  id="mov-monto-exacto"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Ej. 357000"
+                  value={montoExacto}
+                  onChange={(e) => setMontoExacto(e.target.value)}
+                  className="w-40 px-3 py-1.5 border border-gray-300 rounded text-sm tabular-nums focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setMontoExacto(String(Math.round(absAmount)))}
+                  className="text-[11px] text-gray-600 hover:text-gray-900 underline"
+                  title="Llenar con el monto exacto del movimiento"
+                >
+                  usar monto del mov ({formatCLP(absAmount)})
+                </button>
+                {montoExacto && (
+                  <button
+                    type="button"
+                    onClick={() => setMontoExacto("")}
+                    className="text-[11px] text-gray-400 hover:text-rose-700"
+                  >
+                    limpiar
+                  </button>
+                )}
               </div>
             </div>
           )}

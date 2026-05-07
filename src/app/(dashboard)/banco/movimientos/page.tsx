@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { formatCLP } from "@/lib/utils";
 import MovementActionButton from "@/components/banco/MovementActionButton";
+import AutoConciliarPendientesButton from "@/components/banco/AutoConciliarPendientesButton";
 import MovementsSearch from "@/components/banco/MovementsSearch";
 import MatchHintButton from "@/components/banco/MatchHintButton";
 import MarkInternalButton from "@/components/banco/MarkInternalButton";
@@ -199,6 +200,11 @@ export default async function MovimientosPage({
   for (const r of egresos) egresoByStatus[r.status] = Math.abs(r._sum.amount ?? 0);
 
   const sinAsignar = (countByStatus.sin_asignar ?? 0) + (countByStatus.parcial ?? 0);
+  // Cuántos movs son candidatos a auto-conciliarse contra factura: están
+  // sin_asignar o sin_factura, sin payments. La cuenta exacta se hace en
+  // el endpoint; acá usamos un proxy razonable para mostrar al usuario.
+  const conciliablesAprox =
+    (countByStatus.sin_asignar ?? 0) + (countByStatus.sin_factura ?? 0);
   const conciliados = countByStatus.conciliado ?? 0;
   const pctConciliado = totalCount > 0 ? Math.round((conciliados / totalCount) * 100) : 0;
 
@@ -281,6 +287,7 @@ export default async function MovimientosPage({
             )}
           </p>
         </div>
+        <AutoConciliarPendientesButton pendientesCount={conciliablesAprox} />
       </div>
 
       {/* Stats arriba — conteo + desglose ingresos/egresos por estado */}

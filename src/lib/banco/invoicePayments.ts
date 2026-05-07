@@ -157,3 +157,90 @@ export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Pr
   await recomputeInvoiceStatus(inv.id);
   return 1;
 }
+
+/**
+ * Auto-match en la dirección movimiento → factura.
+ *
+ * Busca facturas pendientes/parciales con saldo restante ±$10 al monto
+ * del movimiento. Si hay >1 candidato, desambigua por RUT contraparte
+ * del banco. Si encuentra match único, crea el InvoicePayment y actualiza
+ * status. Devuelve { matched: true, invoiceId } o { matched: false, reason }.
+ *
+ * Esta es la misma lógica que corre al importar una cartola (en
+ * /api/banco/import) — extraída para reusarla en el endpoint de
+ * "Auto-conciliar pendientes" sobre movs ya existentes.
+ */
+export async function tryAutoMatchMovementWithInvoices(
+  movId: string
+): Promise<{ matched: boolean; invoiceId?: string; reason?: string }> {
+  const mov = await prisma.bankMovement.findUnique({
+    where: { id: movId },
+    include: { payments: true },
+  });
+  if (!mov) return { matched: false, reason: "mov_not_found" };
+  if (mov.status === "interno") return { matched: false, reason: "interno" };
+  if (mov.payments.length > 0) return { matched: false, reason: "already_has_payments" };
+
+  const isCargo = mov.amount < 0;
+  const targetType = isCargo ? "recibida" : "emitida";
+  const absAmount = Math.abs(mov.amount);
+
+  const rawCandidates = await prisma.invoice.findMany({
+    where: {
+      type: targetType,
+      status: { in: ["pendiente", "parcial"] },
+      tipoDoc: { not: 61 },
+      totalAmount: { gte: absAmount - 10 },
+    },
+    select: {
+      id: true,
+      rutIssuer: true,
+      rutReceiver: true,
+      businessName: true,
+      totalAmount: true,
+      payments: { select: { amountApplied: true } },
+    },
+  });
+
+  const candidates = rawCandidates
+    .map((c) => {
+      const paid = c.payments.reduce((s, p) => s + p.amountApplied, 0);
+      return { ...c, remaining: c.totalAmount - paid };
+    })
+    .filter((c) => c.remaining >= absAmount - 10 && c.remaining <= absAmount + 10);
+
+  if (candidates.length === 0) return { matched: false, reason: "no_candidates" };
+
+  let match = candidates[0];
+  if (candidates.length > 1) {
+    if (!mov.counterpartyRut) {
+      return { matched: false, reason: "ambiguous_no_rut" };
+    }
+    const movRutDigits = mov.counterpartyRut.replace(/\D/g, "");
+    const filtered = candidates.filter((c) => {
+      const cRut = (isCargo ? c.rutIssuer : c.rutReceiver) ?? "";
+      const cRutDigits = cRut.replace(/\D/g, "");
+      return (
+        cRutDigits.length > 0 &&
+        (movRutDigits.includes(cRutDigits) || cRutDigits.includes(movRutDigits))
+      );
+    });
+    if (filtered.length === 0) return { matched: false, reason: "no_rut_match" };
+    match = filtered[0];
+  }
+
+  await prisma.invoicePayment.create({
+    data: {
+      bankMovementId: mov.id,
+      invoiceId: match.id,
+      amountApplied: absAmount,
+    },
+  });
+  await prisma.bankMovement.update({
+    where: { id: mov.id },
+    data: { status: "conciliado" },
+  });
+  await recomputeInvoiceStatus(match.id);
+
+  return { matched: true, invoiceId: match.id };
+}

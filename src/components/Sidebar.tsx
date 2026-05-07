@@ -12,6 +12,7 @@ const navigation = [
   { name: "Banco", href: "/banco", icon: "🏦" },
   { name: "Partidas", href: "/catalogo/partidas", icon: "📋" },
   { name: "Materiales", href: "/catalogo/materiales", icon: "🧱" },
+  { name: "Reembolsadores", href: "/configuracion/reembolsadores", icon: "🔄" },
 ];
 
 export default function Sidebar() {

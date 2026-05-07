@@ -104,6 +104,72 @@ export async function PUT(
   }
 }
 
+// PATCH — edición parcial. A diferencia de PUT (formulario completo del
+// detalle), acepta solo categoryId y/o projectId y NO toca montos/fechas.
+// Pensado para edición inline desde la lista del proyecto.
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const data = await request.json();
+
+    const updates: Record<string, unknown> = {};
+    if ("categoryId" in data) updates.categoryId = data.categoryId || null;
+    if ("projectId" in data) updates.projectId = data.projectId || null;
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "Nada que actualizar" }, { status: 400 });
+    }
+
+    const invoice = await prisma.invoice.update({
+      where: { id },
+      data: updates,
+      select: {
+        id: true,
+        type: true,
+        categoryId: true,
+        projectId: true,
+        rutIssuer: true,
+        businessName: true,
+      },
+    });
+
+    // Si MJ asignó categoría a una recibida, reusar el motor de reglas
+    // (mismo comportamiento que PUT) — propaga retroactivamente al RUT.
+    let rule:
+      | {
+          ruleId: string;
+          created: boolean;
+          updated: boolean;
+          appliedRetroactively: number;
+          previousCategoryId?: string | null;
+        }
+      | null = null;
+    if (
+      "categoryId" in updates &&
+      invoice.type === "recibida" &&
+      invoice.categoryId &&
+      invoice.rutIssuer
+    ) {
+      const r = await upsertInvoiceRule(
+        invoice.rutIssuer,
+        invoice.businessName ?? null,
+        invoice.categoryId
+      ).catch(() => null);
+      if (r && (r.created || r.updated || r.appliedRetroactively > 0)) rule = r;
+    }
+
+    return NextResponse.json({ ...invoice, rule });
+  } catch (error) {
+    console.error("Error patching invoice:", error);
+    return NextResponse.json(
+      { error: "Error al actualizar factura" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

@@ -548,6 +548,22 @@ model Invoice {
   // referenceFolioNumber, rutIssuer del mismo emisor).
   referenceFolioNumber String?
   referenceTipoDoc     Int?
+  // Compensación de NC (tipoDoc=61). Tres modos:
+  //   "other_invoice": el proveedor aplica el crédito a OTRA factura
+  //     (caso DP — comprás, devolvés, te compensan en la próxima compra).
+  //     compensationType = "other_invoice" + appliedToInvoiceId = factura cubierta.
+  //   "cash_refund": el proveedor devuelve la plata en efectivo
+  //     (caso Sodimac). compensationType = "cash_refund" sin asociaciones.
+  //   "bank_refund": el proveedor devuelve la plata a tu cuenta bancaria.
+  //     compensationType = "bank_refund" + refundBankMovementId = ID del
+  //     BankMovement entrante donde se acreditó la devolución.
+  // En los tres casos la NC ya está "consumida" — no aparece como
+  // pendiente ni genera ruido visual. La factura compensada (en el modo
+  // other_invoice) queda cubierta por la suma de InvoicePayments + monto
+  // de NCs aplicadas.
+  compensationType        String?  // "other_invoice" | "cash_refund" | "bank_refund" | null
+  appliedToInvoiceId      String?
+  refundBankMovementId    String?
   origin          String   @default("manual") // manual | sii_automatica
   // Trazabilidad SII (cuando origin = sii_automatica)
   siiTrackId      String?  // Identificador del DTE en SII (track id que devuelve el proveedor)
@@ -575,6 +591,7 @@ model Invoice {
   @@index([categoryId])
   @@index([origin, projectId]) // para query "SII sin asignar"
   @@index([siiTrackId])
+  @@index([appliedToInvoiceId]) // para sumar NCs aplicadas a una factura
 }
 
 // Imputación de un movimiento bancario a una factura. Sirve para cobros
@@ -725,4 +742,29 @@ model BankMovement {
   @@index([bankAccountId])
   @@index([date])
   @@index([status])
+}
+
+// Reembolsadores: personas (maestros, socios, MJ misma) que compran a
+// nombre de BLARQ con su tarjeta personal y BLARQ les transfiere para
+// reembolsarles. La transferencia bancaria sale a su nombre, pero la
+// factura asociada es del proveedor real (Sodimac, MercadoLibre, etc.).
+//
+// Casos típicos: Cristobal y Elias (también fletes — facturados por
+// Paula Johanna), JP, MJ misma, eventualmente otros maestros.
+//
+// Cuando un BankMovement tiene una glosa que contiene el patrón de un
+// reembolsador, el modal "Asignar pagos" cambia su comportamiento:
+//   - Apaga "Mismo proveedor" por default (la contraparte del banco no
+//     es el RUT de la factura).
+//   - Ordena las facturas con monto exacto match arriba.
+//   - Muestra un banner explicativo.
+model Reembolsador {
+  id        String   @id @default(cuid())
+  nombre    String   // Nombre legible — "Cristobal", "Elias", "JP", "MJ"
+  glosa     String   // Texto que se busca (case-insensitive) en BankMovement.description
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([glosa])
+  @@index([glosa])
 }

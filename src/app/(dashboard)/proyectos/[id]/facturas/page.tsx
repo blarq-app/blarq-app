@@ -3,6 +3,12 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { formatCLP, formatDate } from "@/lib/utils";
 import ProjectFacturasFilters from "@/components/facturas/ProjectFacturasFilters";
+import {
+  EditableCategoryCell,
+  MoveProjectButton,
+  type CategoryOption,
+  type ProjectOption,
+} from "@/components/facturas/EditableInvoiceFields";
 
 type SearchParams = {
   type?: "emitida" | "recibida";
@@ -43,8 +49,16 @@ export default async function ProyectoFacturasPage({
   if (sp.status) where.status = sp.status;
   if (sp.origin) where.origin = sp.origin;
   if (sp.category) {
-    // Match contra category.name (incluye top y subs)
-    where.category = { is: { name: sp.category } };
+    // Match contra el nombre — si es una categoría padre (ej. "Artefactos"),
+    // incluir también sus subcategorías ("Baño", "Cocina", "Iluminación").
+    where.category = {
+      is: {
+        OR: [
+          { name: sp.category },
+          { parent: { is: { name: sp.category } } },
+        ],
+      },
+    };
   }
   if (sp.dateFrom || sp.dateTo) {
     const dateFilter: Record<string, Date> = {};
@@ -76,32 +90,103 @@ export default async function ProyectoFacturasPage({
     },
   });
 
+  // NCs aplicadas como compensación a alguna de estas facturas (caso DP):
+  //   NC.compensationType = "other_invoice"  +  NC.appliedToInvoiceId = ID
+  // de la factura que esta NC está cubriendo. Sumamos su totalAmount al
+  // "pagado" de la factura cubierta para que aparezca como pagada cuando
+  // NC + InvoicePayments cubren el total.
+  const invoiceIds = invoices.map((i) => i.id);
+  const ncsCompensadas =
+    invoiceIds.length > 0
+      ? await prisma.invoice.findMany({
+          where: {
+            compensationType: "other_invoice",
+            appliedToInvoiceId: { in: invoiceIds },
+          },
+          select: { appliedToInvoiceId: true, totalAmount: true },
+        })
+      : [];
+  const ncCreditByInvoice = new Map<string, number>();
+  for (const nc of ncsCompensadas) {
+    if (!nc.appliedToInvoiceId) continue;
+    // NC tiene totalAmount como número positivo en BD (Math.abs en import).
+    // Acá la usamos como crédito → suma al "pagado" de la factura.
+    ncCreditByInvoice.set(
+      nc.appliedToInvoiceId,
+      (ncCreditByInvoice.get(nc.appliedToInvoiceId) ?? 0) + Math.abs(nc.totalAmount)
+    );
+  }
+
   // Helper: cuánto está cobrado/pagado de una factura. Para facturas
   // pagadas via "marca manual" sin InvoicePayment, asumimos full.
+  // Suma además los créditos de NCs aplicadas a esta factura (caso DP).
   const paidOf = (
-    inv: { status: string; totalAmount: number; payments: { amountApplied: number }[] }
+    inv: { id: string; status: string; totalAmount: number; payments: { amountApplied: number }[] }
   ) => {
-    if (inv.payments.length > 0) return inv.payments.reduce((s, p) => s + p.amountApplied, 0);
-    return inv.status === "pagada" ? inv.totalAmount : 0;
+    const ncCredit = ncCreditByInvoice.get(inv.id) ?? 0;
+    if (inv.payments.length > 0) {
+      return inv.payments.reduce((s, p) => s + p.amountApplied, 0) + ncCredit;
+    }
+    if (inv.status === "pagada") return inv.totalAmount;
+    return ncCredit;
   };
   const remainingOf = (
-    inv: { status: string; totalAmount: number; payments: { amountApplied: number }[] }
+    inv: { id: string; status: string; totalAmount: number; payments: { amountApplied: number }[] }
   ) => Math.max(0, inv.totalAmount - paidOf(inv));
 
   // Lista global del proyecto (sin filtros) para tabs y para tener
   // contexto del "X de Y total" cuando hay filtros activos.
   const allInvoices = await prisma.invoice.findMany({
     where: { projectId: id },
-    select: { id: true, type: true, category: { select: { name: true } } },
+    select: {
+      id: true,
+      type: true,
+      category: {
+        select: {
+          name: true,
+          parent: { select: { name: true } },
+        },
+      },
+    },
   });
   const totalProjectInvoices = allInvoices.length;
   const totalEmitidasProject = allInvoices.filter((i) => i.type === "emitida").length;
   const totalRecibidasProject = allInvoices.filter((i) => i.type === "recibida").length;
 
-  // Categorías presentes en facturas de este proyecto, para el dropdown
-  const categoriesInProject = Array.from(
-    new Set(allInvoices.map((i) => i.category?.name).filter(Boolean) as string[])
-  ).sort();
+  // Categorías presentes en facturas de este proyecto, para el dropdown.
+  // Incluye también la categoría padre cuando hay subs presentes (ej.
+  // si hay facturas en "Baño" e "Iluminación", agregamos "Artefactos"
+  // como opción de filtro que incluye a ambas).
+  const catSet = new Set<string>();
+  for (const inv of allInvoices) {
+    if (inv.category?.name) catSet.add(inv.category.name);
+    if (inv.category?.parent?.name) catSet.add(inv.category.parent.name);
+  }
+  const categoriesInProject = Array.from(catSet).sort();
+
+  // Lista completa de categorías + proyectos para los selects inline.
+  // Se cargan acá una vez y se pasan como prop a cada fila — más barato
+  // que hacer fetch desde el cliente cada vez que MJ abre un dropdown.
+  const allCategoriesRaw = await prisma.costCategory.findMany({
+    select: {
+      id: true,
+      name: true,
+      parentId: true,
+      parent: { select: { name: true } },
+    },
+    orderBy: [{ parentId: "asc" }, { name: "asc" }],
+  });
+  const categoryOptions: CategoryOption[] = allCategoriesRaw.map((c) => ({
+    id: c.id,
+    name: c.name,
+    parentId: c.parentId,
+    parentName: c.parent?.name ?? null,
+  }));
+  const allProjects = await prisma.project.findMany({
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+  const projectOptions: ProjectOption[] = allProjects;
 
   // Stats arriba: usan las facturas FILTRADAS (sin filtro = todas).
   // Eso responde al pedido de MJ: ver totales del filtro aplicado.
@@ -252,11 +337,28 @@ export default async function ProyectoFacturasPage({
                       href={`/facturas/${inv.id}`}
                       className="hover:text-gray-900 hover:underline"
                     >
-                      {inv.folioNumber || "—"}
+                      {inv.origin === "maxxa_sin_respaldo"
+                        ? <span className="not-tabular text-[11px] font-normal text-gray-700">Mov sin respaldo</span>
+                        : (inv.folioNumber || "—")}
                     </Link>
+                    {inv.origin === "maxxa_sin_respaldo" && (
+                      <span className="ml-1.5 text-[9px] uppercase tracking-wider bg-gray-100 text-gray-600 px-1 py-0.5 rounded">
+                        sin IVA
+                      </span>
+                    )}
                     {inv.tipoDoc === 61 && (
                       <span className="ml-1.5 text-[9px] uppercase tracking-wider bg-rose-50 text-rose-700 px-1 py-0.5 rounded">
                         NC
+                      </span>
+                    )}
+                    {inv.compensationType === "cash_refund" && (
+                      <span className="ml-1.5 text-[9px] uppercase tracking-wider bg-green-50 text-green-700 px-1 py-0.5 rounded">
+                        $$ efectivo
+                      </span>
+                    )}
+                    {inv.compensationType === "other_invoice" && (
+                      <span className="ml-1.5 text-[9px] uppercase tracking-wider bg-blue-50 text-blue-700 px-1 py-0.5 rounded">
+                        compensada
                       </span>
                     )}
                     {inv.tipoDoc === 56 && (
@@ -273,13 +375,21 @@ export default async function ProyectoFacturasPage({
                   <td className="px-4 py-2 text-gray-600 whitespace-nowrap">
                     {formatDate(inv.issueDate)}
                   </td>
-                  <td className="px-4 py-2 text-gray-700 truncate max-w-[240px]">
-                    {inv.businessName || inv.rutIssuer || "—"}
+                  <td className="px-4 py-2 text-gray-700 max-w-[240px]">
+                    <div className="truncate">{inv.businessName || inv.rutIssuer || "—"}</div>
+                    <MoveProjectButton
+                      invoiceId={inv.id}
+                      currentProjectId={project.id}
+                      options={projectOptions}
+                    />
                   </td>
-                  <td className="px-4 py-2 text-gray-600">
-                    {inv.category?.name ?? (
-                      <span className="text-gray-400 italic">sin categoría</span>
-                    )}
+                  <td className="px-4 py-2">
+                    <EditableCategoryCell
+                      invoiceId={inv.id}
+                      currentCategoryId={inv.category?.id ?? null}
+                      currentCategoryName={inv.category?.name ?? null}
+                      options={categoryOptions}
+                    />
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums font-medium text-gray-900">
                     {formatCLP(inv.totalAmount)}

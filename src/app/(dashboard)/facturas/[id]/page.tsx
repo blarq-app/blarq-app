@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import FacturaForm from "@/components/facturas/FacturaForm";
+import CompensacionNC from "@/components/facturas/CompensacionNC";
 
 const DTE_LABEL: Record<number, string> = {
   33: "Factura",
@@ -72,6 +73,30 @@ export default async function EditFacturaPage({
       })
     : [];
 
+  // Para NCs (tipoDoc=61): si ya está compensada, traer datos de la
+  // factura cubierta (caso DP) o del mov bancario (caso reembolso a cuenta)
+  // para mostrar el link.
+  const isNC = invoice.tipoDoc === 61;
+  const appliedToInvoice =
+    isNC && invoice.appliedToInvoiceId
+      ? await prisma.invoice.findUnique({
+          where: { id: invoice.appliedToInvoiceId },
+          select: { id: true, folioNumber: true, totalAmount: true },
+        })
+      : null;
+  const refundMov =
+    isNC && invoice.refundBankMovementId
+      ? await prisma.bankMovement.findUnique({
+          where: { id: invoice.refundBankMovementId },
+          select: {
+            id: true,
+            date: true,
+            amount: true,
+            bankAccount: { select: { alias: true } },
+          },
+        })
+      : null;
+
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
@@ -109,6 +134,30 @@ export default async function EditFacturaPage({
           ↓ {invoice.siiCodigo ? "PDF oficial" : "PDF"}
         </a>
       </div>
+
+      {isNC && (
+        <CompensacionNC
+          invoiceId={invoice.id}
+          ncType={invoice.type as "emitida" | "recibida"}
+          ncTotal={Math.abs(invoice.totalAmount)}
+          initialCompensationType={invoice.compensationType}
+          initialAppliedTo={appliedToInvoice}
+          initialRefundMov={
+            refundMov
+              ? {
+                  id: refundMov.id,
+                  date: refundMov.date.toISOString(),
+                  amount: refundMov.amount,
+                  bankAccountAlias: refundMov.bankAccount?.alias ?? "",
+                }
+              : null
+          }
+          candidates={referenceCandidates.map((c) => ({
+            ...c,
+            issueDate: c.issueDate.toISOString(),
+          }))}
+        />
+      )}
 
       <FacturaForm
         mode="edit"

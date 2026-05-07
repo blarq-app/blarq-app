@@ -4,6 +4,12 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import { formatCLP, formatDate } from "@/lib/utils";
 import BulkAssignBar from "./BulkAssignBar";
+import {
+  EditableCategoryCell,
+  EditableProjectCell,
+  type CategoryOption,
+  type ProjectOption,
+} from "./EditableInvoiceFields";
 
 type Project = {
   id: string;
@@ -53,6 +59,22 @@ export default function FacturasTable({
   categories: Category[];
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Adaptamos los props existentes al shape que esperan los selects inline.
+  const projectOptions: ProjectOption[] = useMemo(
+    () => projects.map((p) => ({ id: p.id, name: p.name })),
+    [projects]
+  );
+  const categoryOptions: CategoryOption[] = useMemo(
+    () =>
+      categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        parentId: c.parent?.id ?? null,
+        parentName: c.parent?.name ?? null,
+      })),
+    [categories]
+  );
 
   const allVisibleIds = useMemo(() => invoices.map((i) => i.id), [invoices]);
   const allSelected = selected.size > 0 && selected.size === allVisibleIds.length;
@@ -158,22 +180,21 @@ export default function FacturasTable({
                 <td className="px-4 py-2 text-gray-700 truncate max-w-[200px]">
                   {inv.businessName || inv.rutIssuer || "—"}
                 </td>
-                <td className="px-4 py-2 text-gray-700 truncate max-w-[180px]">
-                  {inv.project ? (
-                    <Link
-                      href={`/proyectos/${inv.project.id}`}
-                      className="hover:underline"
-                    >
-                      {inv.project.name}
-                    </Link>
-                  ) : (
-                    <span className="text-gray-400 italic">sin asignar</span>
-                  )}
+                <td className="px-4 py-2 max-w-[180px]">
+                  <EditableProjectCell
+                    invoiceId={inv.id}
+                    currentProjectId={inv.project?.id ?? null}
+                    currentProjectName={inv.project?.name ?? null}
+                    options={projectOptions}
+                  />
                 </td>
-                <td className="px-4 py-2 text-gray-600">
-                  {inv.category?.name ?? (
-                    <span className="text-gray-400 italic">sin categoría</span>
-                  )}
+                <td className="px-4 py-2 max-w-[180px]">
+                  <EditableCategoryCell
+                    invoiceId={inv.id}
+                    currentCategoryId={inv.category?.id ?? null}
+                    currentCategoryName={inv.category?.name ?? null}
+                    options={categoryOptions}
+                  />
                 </td>
                 <td className="px-4 py-2 text-right tabular-nums font-medium text-gray-900">
                   {formatCLP(inv.totalAmount)}

@@ -28,7 +28,12 @@ export async function POST(request: NextRequest) {
 
     // Computar baseId antes de crear: si se duplica desde otra versión, ese id
     // queda como parentVersionId para trazabilidad explícita del lineage de versiones.
+    // EXCEPCIÓN: en modo plantilla (importar desde otro proyecto), no hay
+    // lineage — la versión nueva nace de cero estructuralmente aunque copió
+    // los nombres de partidas.
+    const isTemplateMode = !!data.resetQuantities;
     const baseId = data.baseVersionId || (existing.length > 0 ? existing[0].id : null);
+    const parentForNew = isTemplateMode ? null : baseId;
 
     const budget = await prisma.budgetVersion.create({
       data: {
@@ -36,7 +41,7 @@ export async function POST(request: NextRequest) {
         version,
         type: data.type,
         status: "borrador",
-        parentVersionId: baseId,
+        parentVersionId: parentForNew,
         observations: data.observations || null,
         ggPercentage: data.ggPercentage ?? 20,
         utilityPercentage: data.utilityPercentage ?? 5,
@@ -51,28 +56,67 @@ export async function POST(request: NextRequest) {
           where: { budgetVersionId: previousVersion.id },
           orderBy: { sortOrder: "asc" },
         });
+
+        // Si se está usando como plantilla (importar desde otro proyecto),
+        // queremos cantidades en 0 y precios refrescados del catálogo actual.
+        // Usado por el flujo "Importar desde otro proyecto" — el "Duplicar"
+        // normal sigue copiando todo tal cual.
+        const isTemplateMode = !!data.resetQuantities;
+        const refreshPrices = !!data.refreshFromCatalog;
+
+        // Pre-cargar el catálogo si hay que refrescar precios
+        const partidaIds = refreshPrices
+          ? items.filter((i) => i.catalogPartidaId).map((i) => i.catalogPartidaId!)
+          : [];
+        const partidasMap = new Map<string, typeof items[number] extends { catalogPartidaId: string | null } ? Awaited<ReturnType<typeof prisma.partidaCatalog.findUnique>> : never>();
+        if (partidaIds.length > 0) {
+          const partidas = await prisma.partidaCatalog.findMany({
+            where: { id: { in: partidaIds } },
+          });
+          for (const p of partidas) partidasMap.set(p.id, p as never);
+        }
+
         for (const item of items) {
+          // Resolver fuente de precios: catálogo (si refresh) o snapshot
+          const partida = item.catalogPartidaId ? partidasMap.get(item.catalogPartidaId) : null;
+          const useCatalog = refreshPrices && partida;
+
+          const unitPrice = useCatalog ? partida!.unitPrice : item.unitPrice;
+          const costMaterial = useCatalog ? partida!.costMaterial : (item.costMaterial ?? 0);
+          const costLabor = useCatalog ? partida!.costLabor : (item.costLabor ?? 0);
+          const costSubcontract = useCatalog ? partida!.costSubcontract : (item.costSubcontract ?? 0);
+          const costMargin = useCatalog ? partida!.costMargin : (item.costMargin ?? 0);
+          const costTools = useCatalog ? partida!.costTools : (item.costTools ?? 0);
+          const costLoss = useCatalog ? partida!.costLoss : (item.costLoss ?? 0);
+
+          const quantity = isTemplateMode ? 0 : item.quantity;
+          const total = quantity * unitPrice;
+
           await prisma.obraItem.create({
             data: {
               budgetVersionId: budget.id,
-              lineageId: item.lineageId, // preservar identidad estable a través de versiones
+              // En modo plantilla NO preservamos lineageId — el ítem importado
+              // es un punto de partida nuevo, no una continuación de la línea
+              // de versiones del proyecto fuente.
+              lineageId: isTemplateMode ? undefined : item.lineageId,
               chapter: item.chapter,
               itemNumber: item.itemNumber,
               name: item.name,
               descriptionCliente: item.descriptionCliente,
               descriptionMaestro: item.descriptionMaestro,
               unit: item.unit,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              total: item.total,
-              costMaterial: item.costMaterial,
-              costLabor: item.costLabor,
-              costSubcontract: item.costSubcontract,
-              costMargin: item.costMargin,
-              costTools: item.costTools,
-              costLoss: item.costLoss,
+              quantity,
+              unitPrice,
+              total,
+              costMaterial,
+              costLabor,
+              costSubcontract,
+              costMargin,
+              costTools,
+              costLoss,
               catalogPartidaId: item.catalogPartidaId,
-              isCustomized: item.isCustomized, // preservar customizaciones al duplicar
+              // En modo plantilla, isCustomized=false (estado limpio).
+              isCustomized: isTemplateMode ? false : item.isCustomized,
               sortOrder: item.sortOrder,
             },
           });
@@ -176,7 +220,11 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Copiar formas de pago
+      // Copiar formas de pago — salvo en modo plantilla, donde las formas
+      // de pago son específicas del proyecto fuente y no deben heredarse.
+      if (isTemplateMode) {
+        // skip
+      } else {
       const payments = await prisma.paymentTerm.findMany({
         where: { budgetVersionId: previousVersion.id },
         orderBy: { sortOrder: "asc" },
@@ -192,6 +240,7 @@ export async function POST(request: NextRequest) {
           },
         });
       }
+      } // cierra else !isTemplateMode
     }
 
     return NextResponse.json(budget);

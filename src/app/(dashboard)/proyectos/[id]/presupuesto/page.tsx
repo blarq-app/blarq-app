@@ -4,6 +4,7 @@ import { BUDGET_STATUSES, BudgetStatus, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import NuevaVersionButton from "@/components/presupuesto/NuevaVersionButton";
 import AprobarBudgetButton from "@/components/presupuesto/AprobarBudgetButton";
+import ImportarDesdeProyectoButton, { SourceProject } from "@/components/presupuesto/ImportarDesdeProyectoButton";
 
 export default async function PresupuestoPage({
   params,
@@ -28,6 +29,41 @@ export default async function PresupuestoPage({
   });
 
   if (!project) notFound();
+
+  // Lista de proyectos que pueden servir como fuente para importar partidas
+  // (cualquier proyecto que no sea este y que tenga al menos 1 obraItem en
+  // alguna versión Obra). La latestObraBudget es la más reciente — MJ casi
+  // siempre va a querer usar la última.
+  const sourceCandidates = await prisma.project.findMany({
+    where: {
+      id: { not: id },
+      budgetVersions: {
+        some: { type: "obra", obraItems: { some: {} } },
+      },
+    },
+    include: {
+      budgetVersions: {
+        where: { type: "obra", obraItems: { some: {} } },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          version: true,
+          _count: { select: { obraItems: true } },
+        },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+  const sources: SourceProject[] = sourceCandidates
+    .filter((p) => p.budgetVersions[0])
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      latestObraBudgetId: p.budgetVersions[0].id,
+      latestObraVersion: p.budgetVersions[0].version,
+      partidasCount: p.budgetVersions[0]._count.obraItems,
+    }));
 
   const obraVersions = project.budgetVersions.filter((b) => b.type === "obra");
   const muebleVersions = project.budgetVersions.filter(
@@ -57,7 +93,10 @@ export default async function PresupuestoPage({
           <h2 className="text-lg font-semibold text-gray-900">
             Presupuesto Obra
           </h2>
-          <NuevaVersionButton projectId={project.id} type="obra" />
+          <div className="flex items-center gap-2">
+            <ImportarDesdeProyectoButton projectId={project.id} sources={sources} />
+            <NuevaVersionButton projectId={project.id} type="obra" />
+          </div>
         </div>
 
         {obraVersions.length === 0 ? (

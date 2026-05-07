@@ -4,7 +4,63 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-06 (cierre · ronda 12)
+- **Última actualización**: 2026-05-06 (cierre · ronda 14 — Arrau a prod)
+
+- **Ronda 14 — Arrau replicado a prod**:
+  - Schema de la ronda 13 aplicado a prod (`prisma db push`): 3 columnas nullable nuevas en `Invoice` (`compensationType`, `appliedToInvoiceId`, `refundBankMovementId`) + tabla `Reembolsador` vacía. Aditivo, backward-compatible — el código viejo de Vercel sigue andando sin tocar esas columnas.
+  - Script `scripts/replicate-arrau-dev-to-prod.ts` (dry-run por defecto + `--apply`). Replica desde dev: 15 partidas catálogo nuevas, 2 BudgetVersions V5 (obra GG10/Util20 + artefactos GG20/Util5), 32 obraItems, 3 artefactos (con ×1.19 ya aplicado), 40 facturas (29 maxxa_legacy + 10 sin_respaldo + F-97 Pía manual), reasignó 6 facturas SII a Arrau (5 cambio de categoría — las recategorizaciones manuales — + 1 nueva asignación), F-151 → pagada. NO replicó el BankMovement ficticio de F-163 en prod (espera transferencia real de Pía).
+  - Validación: snapshot pre/post de los 22 proyectos en prod — solo Arrau se movió. Dev vs prod calzan en Total Acordado / Cobrado / Cobrado Neto / Acordado Neto al peso. Diff de -$16.230 en Gastado por 2 facturas SII recibidas que dev tiene y prod aún no — llegan en próximo sync diario.
+  - **Fix puntual artefactos Arrau** (`scripts/fix-artefactos-arrau.ts`): los `realCostBlarq` de los 3 artefactos venían mal cargados del Excel V5 (costo mayorista sin despacho). MJ confirmó que en este caso no hubo margen entre costo y venta. Igualados a `clientPrice / 1.19` (neto) en dev y prod. Card "Baño" en Centro de Costo pasa de Presupuestado $72.503 a $103.576 (vs Real $134.266 = diff -$30.690 por despachos extras).
+  - Nuevo helper `scripts/snapshot-metrics.ts` para correr pre/post de cualquier cambio masivo y diffear.
+
+- **Ronda 13 — sesión muy larga: carga Arrau + features de conciliación NC + reembolsadores + rediseño EERR de BLARQ**:
+  - **Arrau V5 cargado en dev y prod**:
+    - `import-budget` con presupuesto V5 ($41.419.000 c/IVA — calza al peso con cuadro resumen). 32 ítems obra, 39 partidas nuevas al catálogo, 3 artefactos sanitarios en BANO_PRINCIPAL.
+    - `import-maxxa-invoices` con 38 facturas legacy (incluyendo 9 movimientos sin respaldo MO + 1 manual JEFRY GOMEZ $1.450.000 que no estaba en el export).
+    - 4 facturas Arrau recategorizadas manualmente: 3 muebles → Subcontrato (CHRISTIAN GEOFFROY + 2 MÁRMOLES URBAN), 1 iluminación → Materiales (STUDIO GROUP), 1 sin sub → Artefactos > Baño (Comercial K).
+    - Artefactos Arrau V5: borrado ítem "IVA $19.679" (cargado mal por el parser, no era un producto), multiplicado clientPrice de los 3 ítems × 1.19 para alinear con convención bruto del resto de proyectos. Snapshot pre/post: 22 proyectos sin cambios de valor.
+    - Parser `import-budget.ts` arreglado para ignorar fila "IVA" en artefactos en futuros imports (igual que ya hacía en muebles).
+    - Factura emitida F-97 ($13.250.000) del 2025-06-25 a Pía Garcés agregada manualmente (no estaba en sync SimpleFactura ni en Maxxa).
+    - F-151 ($8.887.622) marcada como "pagada" (estaba como "pendiente" pero saldo era $0).
+    - F-163 ($15.279.426) marcada como "parcial" con BankMovement ficticio de $14M + InvoicePayment (registro manual dev — en prod se reemplaza al importar movs reales).
+
+  - **Movimiento sin respaldo (caso Arrau)**: nuevo `origin='maxxa_sin_respaldo'` para pagos a maestros sin DTE. Convención: `tipoDoc=1043` (código interno Maxxa), `iva=0`, `netAmount=totalAmount`. En la lista del proyecto: badge "Mov sin respaldo · sin IVA" en lugar del folio numérico.
+
+  - **Edición inline de categoría + proyecto** en `/proyectos/[id]/facturas` (la lista del proyecto) y `/facturas` (lista global). Click en celda → dropdown → guarda automático. Endpoint nuevo `PATCH /api/facturas/[id]` para edición parcial (no toca el PUT existente del formulario completo). Componentes en `src/components/facturas/EditableInvoiceFields.tsx`.
+
+  - **Filtro de categorías incluye padres**: en `/proyectos/[id]/facturas`, si hay subcategorías presentes (ej. "Baño", "Iluminación"), también se ofrece la padre ("Artefactos") como opción de filtro que matchea todas sus subs.
+
+  - **Resumen del proyecto — cards en NETO**: `Total Acordado`, `Cobrado`, `Por cobrar` (card nueva), `Gastado` y `Utilidad` ahora muestran neto en grande y c/IVA en línea pequeña abajo. Lógica única para Utilidad: **Total Acordado neto − Gastado** (proyectada, no cobrado − gastado). Snapshot pre/post: diff $0 en 22 proyectos.
+  - **Margen y Pérdidas con $0 explícito** en columna Real (ya no "—"), para que la diferencia se calcule visible.
+  - **Bug latente arreglado** en card Gastado: `totalGastado + totalPagadoMaestros` duplicaba EPs (totalGastado ya los incluía). Sin efecto observable porque ningún proyecto hoy tiene `totalPagadoMaestros > 0`, pero queda corregido. Nuevo campo `totalGastadoConIva` agregado a `metrics.ts`.
+
+  - **Compensación de NC** (caso DP, Sodimac, etc): nuevo bloque en el detalle de la NC con 3 botones según el modo:
+    - **"Aplicar a otra factura"** (azul): NC compensa otra factura del mismo proveedor (caso DP). También funciona para NCs emitidas que anulan una factura emitida sin transferencia de plata.
+    - **"Reembolso a la cuenta"** (índigo): el proveedor devolvió la plata al banco. Picker de BankMovements sin asignar con monto similar. Linkea NC ↔ mov y marca el mov como conciliado con categoría `reembolso_proveedor`.
+    - **"Reembolso en efectivo"** (verde): caso Sodimac.
+    - Schema: campos nuevos en Invoice — `compensationType` (`other_invoice` | `cash_refund` | `bank_refund` | null), `appliedToInvoiceId`, `refundBankMovementId`. Endpoint `POST /api/facturas/[id]/compensar`.
+    - Al compensar, la NC pasa a `status="pagada"` (sale del pendiente). Script `fix-nc-status.ts` usado para limpiar 2 NCs ya conciliadas que habían quedado en pendiente.
+    - **Trazabilidad**: en lista de facturas del proyecto, badges `compensada` / `$$ efectivo` al lado del badge "NC".
+
+  - **Reembolsadores**: nueva tabla `Reembolsador` (nombre + glosa). Pantalla `/configuracion/reembolsadores` para gestionar. Cuando un BankMovement tiene una glosa que matchea con un reembolsador (Cristobal, Elias, MJ misma, JP, Jefry, Ivan, etc.), el modal "Asignar pagos" muestra banner explicativo, apaga "Mismo proveedor" automático y ordena facturas con monto match arriba. **Filtro nuevo "Monto exacto ±$10"** en el modal con atajo "usar monto del mov".
+
+  - **Auto-conciliar pendientes**: botón en `/banco/movimientos` que corre la lógica de auto-match retroactivamente sobre BankMovements con status `sin_asignar` o `sin_factura` sin payments. Endpoint optimizado a 2 queries iniciales + loop en memoria (la versión naive con N×M tardaba >60s con 200 movs). Aplicado: 3 movs Cabify se conciliaron solos contra facturas Maxi Mobility (los otros 2 sin candidato porque la factura SII de feb no está en BD).
+
+  - **Estado de Resultados BLARQ (proyecto interno) — rediseño**: tabs reemplazadas. Antes: Mes/Trimestre/YTD/Año/Personalizado. Ahora: **Mes actual / Semestre / Año / Personalizado**.
+    - **Semestre rolling 6 meses**, **Año** y **Personalizado** muestran tabla con columnas mensuales (1 columna por mes en el rango). Año tiene scroll horizontal con columna Concepto pegada (sticky).
+    - "Mes actual" mantiene la vista actual vs anterior con variación %.
+    - Cards arriba: 4 (Total / Anterior / Variación / Por pagar) en "Mes actual"; 2 (Total / Por pagar) en multi-mes.
+    - `lib/periods.ts`: case "semester" agregado, "quarter" y "ytd" eliminados.
+
+Pendientes para próxima sesión:
+- **Cargar Rosas** (próxima en la fila): pasar Excel V correspondiente + export Maxxa si hay, cargar primero en dev validando contra cuadro resumen, recién después replicar a prod con el mismo patrón que Arrau.
+- **F-163 (Arrau) — transferencia real de Pía**: cuando llegue al banco, asignarla en `/banco/movimientos` (en prod va directo, no hay ficticio que borrar). En dev sí hay un BankMovement ficticio de $14M que conviene borrar cuando se reemplace por el real.
+- **"Mes actual" con benchmarks** en BLARQ: vs mes anterior + vs mismo mes año pasado + vs promedio últimos 6 meses, con coloreo automático cuando varía >20%. Confirmado por MJ pero no implementado en esta sesión.
+- **Vista tipo "matriz Proyecto × Mes"** en algún lugar (¿dashboard? ¿BLARQ?). Inspirado en Maxxa: filas = proyectos, columnas = meses, celdas con monto + color **rojo cuando es más gasto que ganancia, verde cuando es ganancia, gris cuando $0**. Sirve para ver "dónde se fue la plata" cada mes. Decisión pendiente: ¿dónde lo metemos? ¿una pantalla nueva `/dashboard/utilidades` o lo agregamos al dashboard top-level?
+- **Aprendizaje de matches en reembolsadores** (Opción A que MJ no eligió en esta ronda): cada vez que MJ asigna manualmente un mov "Cristobal" a una factura, guardar el patrón (glosa key → rutProveedor) para sugerir auto en próximos. Mejora si los manual matches recurrentes molestan.
+- **Auto-conciliación al sync SII**: hoy el sync trae facturas nuevas pero no dispara auto-match retroactivo. Las facturas que llegan después de un mov huérfano quedan sin asociar hasta que MJ aprete el botón. Mejora chica.
+- **Cosa rara observada**: en `/proyectos/[id]/resumen`, al limpiar el ítem IVA de Arrau y tocar metrics agregando `totalGastadoConIva`, el snapshot dio diff $0 — bien. Pero el doble conteo de `totalPagadoMaestros` que arreglé era un bug latente que conviene revisar si más adelante algún proyecto activa EPs cerrados con maestros no facturadores.
+
 - **Ronda 12 — pulido post-cutover**:
   - **Limpieza leak catálogo→proyecto en editor de presupuesto**. Investigué el ítem de "editor de partidas dentro del proyecto debería editar ObraItemComponent". Realidad: el editor del proyecto (`ObraEditor.tsx`) **no edita** PartidaComponent — sólo edita ObraItem y los 6 campos de desglose grueso. El único leak real era dead code en `presupuesto/[budgetId]/page.tsx` (líneas 42-75) que leía provisiones de `partidaComponent` y las pasaba como prop `provisionsByObraItem` a ObraEditor — prop que nunca se consumía. Eliminados ambos. `tsc --noEmit` limpio.
   - **Caveat anotado**: si MJ alguna vez quiere editar componentes de una partida sólo para un proyecto (sin tocar el catálogo), eso es funcionalidad nueva (UI + endpoints `/api/proyectos/[id]/obra-items/[itemId]/componentes` que escriban en ObraItemComponent). Hoy no existe.

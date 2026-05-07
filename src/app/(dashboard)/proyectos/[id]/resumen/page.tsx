@@ -218,7 +218,23 @@ export default async function ResultadosPage({
     artefactosSection.rows.push({ label: "(Sin subcategoría)", presupuesto: 0, real: artefactosSinClasificar });
   }
 
+  // 4) SIN CLASIFICAR — facturas recibidas asignadas al proyecto pero sin
+  // ninguna categoría puesta. Antes quedaban afuera del desglose pero
+  // sumaban en la card "Gastado" — eso generaba un mismatch visual entre
+  // el subtotal del desglose y la card de arriba. Las explicitamos acá
+  // para que MJ las catalogue. Misma convención de signo (NC=-1) y neto
+  // que el resto del desglose.
+  const sign = (i: { tipoDoc: number | null }) => (i.tipoDoc === 61 ? -1 : 1);
+  const realSinCategoria = facturasRecibidas
+    .filter((i) => !i.category)
+    .reduce((s, i) => s + sign(i) * i.netAmount, 0);
+  const sinClasificarSection: ResumenSection = {
+    title: "4. Sin clasificar",
+    rows: [{ label: "(Sin categoría)", presupuesto: 0, real: realSinCategoria }],
+  };
+
   const resumenSections: ResumenSection[] = [obraSection, mueblesSection, artefactosSection];
+  if (realSinCategoria > 0) resumenSections.push(sinClasificarSection);
 
   // Subtotales y total general
   const sectionTotals = resumenSections.map((s) => ({

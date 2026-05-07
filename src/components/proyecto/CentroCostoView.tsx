@@ -68,8 +68,7 @@ export default function CentroCostoView({
 }) {
   // ── Período actual y anterior ────────────────────────────────────────
   const period: Period =
-    searchParams.period === "quarter" ||
-    searchParams.period === "ytd" ||
+    searchParams.period === "semester" ||
     searchParams.period === "year" ||
     searchParams.period === "custom"
       ? searchParams.period
@@ -137,6 +136,71 @@ export default function CentroCostoView({
   const totalPrevious = facturasPrevious.reduce((s, i) => s + i.netAmount, 0);
   const totalVar = pctVar(totalCurrent, totalPrevious);
 
+  // ── Vista multi-mes (semester / year / custom) ──────────────────────
+  // Para esos períodos mostramos columnas mensuales en lugar de la
+  // comparación current vs previous. Generamos la lista de meses en el
+  // rango y agrupamos las facturas por (sub, mes).
+  const isMonthlyView = period !== "month";
+  const monthKeys: string[] = [];
+  if (isMonthlyView) {
+    const cursor = new Date(range.current.start);
+    cursor.setHours(0, 0, 0, 0);
+    while (cursor <= range.current.end) {
+      monthKeys.push(
+        `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`
+      );
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+  }
+  // Matriz: sectionName → subName → monthKey → monto neto.
+  type SubMonthly = { name: string; byMonth: Record<string, number>; total: number };
+  type SectionMonthly = { name: string; subs: Map<string, SubMonthly>; total: number };
+  const sectionsMonthlyMap = new Map<string, SectionMonthly>();
+  if (isMonthlyView) {
+    for (const sectionName of SECTION_ORDER) {
+      sectionsMonthlyMap.set(sectionName, {
+        name: sectionName,
+        subs: new Map(),
+        total: 0,
+      });
+    }
+    for (const inv of facturasCurrent) {
+      const cat = inv.category;
+      const top = cat?.parent?.name ?? cat?.name ?? null;
+      const subRaw = cat?.parent ? cat.name : null;
+      const sectionName = top
+        ? (SECTION_BY_TOP[top] ?? "Otros")
+        : UNCATEGORIZED_SECTION;
+      const subKey = subRaw ?? top ?? UNCATEGORIZED_SECTION;
+      const section = sectionsMonthlyMap.get(sectionName)!;
+      let s = section.subs.get(subKey);
+      if (!s) {
+        s = { name: subKey, byMonth: {}, total: 0 };
+        section.subs.set(subKey, s);
+      }
+      const d = new Date(inv.issueDate);
+      const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      s.byMonth[mk] = (s.byMonth[mk] ?? 0) + inv.netAmount;
+      s.total += inv.netAmount;
+      section.total += inv.netAmount;
+    }
+  }
+  const sectionsMonthly = isMonthlyView
+    ? SECTION_ORDER.map((name) => sectionsMonthlyMap.get(name)!).filter(
+        (s) => s.total > 0
+      )
+    : [];
+  // Totales por mes (footer de la tabla)
+  const totalsByMonth: Record<string, number> = {};
+  if (isMonthlyView) {
+    for (const mk of monthKeys) totalsByMonth[mk] = 0;
+    for (const inv of facturasCurrent) {
+      const d = new Date(inv.issueDate);
+      const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      totalsByMonth[mk] = (totalsByMonth[mk] ?? 0) + inv.netAmount;
+    }
+  }
+
   // ── Métricas para cards arriba ──────────────────────────────────────
   // Por pagar (a hoy, no del período): facturas pendientes c/IVA
   const porPagar = facturas
@@ -203,38 +267,52 @@ export default function CentroCostoView({
         }
       />
 
-      {/* Cards arriba */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {/* Cards arriba — distinta cantidad según vista.
+          "Mes actual" muestra 4 (Total, Anterior, Variación, Por pagar).
+          Las vistas multi-mes (semester/year/custom) muestran solo 2
+          (Total y Por pagar) — la comparación contra "anterior" pierde
+          sentido cuando ya tenés tendencia mes a mes en la tabla. */}
+      <div
+        className={`grid gap-4 mb-6 ${
+          isMonthlyView
+            ? "grid-cols-2"
+            : "grid-cols-2 md:grid-cols-4"
+        }`}
+      >
         <Stat
           label="Total del período"
           value={formatCLP(totalCurrent)}
           sub={`${facturasCurrent.length} facturas`}
         />
-        <Stat
-          label="Período anterior"
-          value={formatCLP(totalPrevious)}
-          sub={range.previous.label}
-        />
-        <Stat
-          label="Variación"
-          value={
-            totalPrevious > 0
-              ? `${totalVar > 0 ? "+" : ""}${totalVar.toFixed(0)}%`
-              : "—"
-          }
-          sub={
-            totalPrevious > 0
-              ? `${formatCLP(totalCurrent - totalPrevious)} dif.`
-              : "sin comparable"
-          }
-          tone={
-            totalVar > 20
-              ? "text-red-600"
-              : totalVar < -20
-                ? "text-green-600"
-                : undefined
-          }
-        />
+        {!isMonthlyView && (
+          <>
+            <Stat
+              label="Período anterior"
+              value={formatCLP(totalPrevious)}
+              sub={range.previous.label}
+            />
+            <Stat
+              label="Variación"
+              value={
+                totalPrevious > 0
+                  ? `${totalVar > 0 ? "+" : ""}${totalVar.toFixed(0)}%`
+                  : "—"
+              }
+              sub={
+                totalPrevious > 0
+                  ? `${formatCLP(totalCurrent - totalPrevious)} dif.`
+                  : "sin comparable"
+              }
+              tone={
+                totalVar > 20
+                  ? "text-red-600"
+                  : totalVar < -20
+                    ? "text-green-600"
+                    : undefined
+              }
+            />
+          </>
+        )}
         <Stat
           label="Por pagar"
           value={formatCLP(porPagar)}
@@ -251,12 +329,13 @@ export default function CentroCostoView({
         <p className="text-xs text-gray-400 mb-4">
           Gastos del período · montos en neto (sin IVA)
         </p>
-        {sections.length === 0 ? (
+        {!isMonthlyView && sections.length === 0 && (
           <p className="text-sm text-gray-500">
-            No hay gastos en este período. Probá ampliar el rango con &quot;YTD&quot; o
+            No hay gastos en este período. Probá ampliar el rango con &quot;Semestre&quot; o
             &quot;Año&quot;.
           </p>
-        ) : (
+        )}
+        {!isMonthlyView && sections.length > 0 && (
           <table className="w-full text-sm">
             <thead className="text-[10px] uppercase tracking-wider text-gray-500 border-b border-gray-200">
               <tr>
@@ -274,11 +353,7 @@ export default function CentroCostoView({
                 const sectionCurrent = subs.reduce((s, x) => s + x.current, 0);
                 const sectionPrev = subs.reduce((s, x) => s + x.previous, 0);
                 const sectionVar = pctVar(sectionCurrent, sectionPrev);
-                // Si solo hay 1 sub, no la mostramos como fila aparte:
-                // la fila de sección ya muestra el total y la sub única
-                // es redundante.
                 const showSubs = subs.length > 1;
-
                 return (
                   <SectionBlock
                     key={section.name}
@@ -291,7 +366,6 @@ export default function CentroCostoView({
                   />
                 );
               })}
-              {/* Total general */}
               <tr className="border-t-2 border-gray-300 bg-gray-50">
                 <td className="pl-2 py-2.5 font-bold text-gray-900 uppercase tracking-wider text-xs">
                   Total
@@ -308,6 +382,80 @@ export default function CentroCostoView({
               </tr>
             </tbody>
           </table>
+        )}
+
+        {/* Vista multi-mes: columnas mensuales. Para "year" hacemos scroll
+            horizontal con la columna Concepto pegada (sticky). */}
+        {isMonthlyView && sectionsMonthly.length === 0 && (
+          <p className="text-sm text-gray-500">No hay gastos en este período.</p>
+        )}
+        {isMonthlyView && sectionsMonthly.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="text-sm min-w-full">
+              <thead className="text-[10px] uppercase tracking-wider text-gray-500 border-b border-gray-200">
+                <tr>
+                  <th className="text-left pb-2 sticky left-0 bg-white z-10 min-w-[180px]">
+                    Concepto
+                  </th>
+                  {monthKeys.map((mk) => (
+                    <th
+                      key={mk}
+                      className="text-right pb-2 px-2 whitespace-nowrap min-w-[90px]"
+                    >
+                      {formatMonthEs(mk)}
+                    </th>
+                  ))}
+                  <th className="text-right pb-2 px-2 min-w-[100px] font-semibold">
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sectionsMonthly.map((section) => {
+                  const subs = Array.from(section.subs.values()).sort(
+                    (a, b) => b.total - a.total
+                  );
+                  const showSubs = subs.length > 1;
+                  const dim = section.name === UNCATEGORIZED_SECTION;
+                  return (
+                    <MonthlySectionBlock
+                      key={section.name}
+                      name={section.name}
+                      subs={showSubs ? subs : []}
+                      sectionByMonth={subs.reduce<Record<string, number>>(
+                        (acc, s) => {
+                          for (const mk of monthKeys) {
+                            acc[mk] = (acc[mk] ?? 0) + (s.byMonth[mk] ?? 0);
+                          }
+                          return acc;
+                        },
+                        Object.fromEntries(monthKeys.map((mk) => [mk, 0]))
+                      )}
+                      sectionTotal={section.total}
+                      monthKeys={monthKeys}
+                      dim={dim}
+                    />
+                  );
+                })}
+                <tr className="border-t-2 border-gray-300 bg-gray-50">
+                  <td className="pl-2 py-2.5 font-bold text-gray-900 uppercase tracking-wider text-xs sticky left-0 bg-gray-50 z-10">
+                    Total
+                  </td>
+                  {monthKeys.map((mk) => (
+                    <td
+                      key={mk}
+                      className="text-right px-2 py-2.5 font-bold tabular-nums text-gray-900"
+                    >
+                      {totalsByMonth[mk] > 0 ? formatCLP(totalsByMonth[mk]) : <span className="text-gray-300">—</span>}
+                    </td>
+                  ))}
+                  <td className="text-right px-2 py-2.5 font-bold tabular-nums text-gray-900">
+                    {formatCLP(totalCurrent)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -520,6 +668,72 @@ function VarCell({
     <span className={color}>
       {arrow} {Math.abs(pct).toFixed(0)}%
     </span>
+  );
+}
+
+// Render de una sección con columnas mensuales (vista semestre/año/custom).
+// Una fila por sección + filas de subs si hay >1.
+function MonthlySectionBlock({
+  name,
+  subs,
+  sectionByMonth,
+  sectionTotal,
+  monthKeys,
+  dim,
+}: {
+  name: string;
+  subs: Array<{ name: string; byMonth: Record<string, number>; total: number }>;
+  sectionByMonth: Record<string, number>;
+  sectionTotal: number;
+  monthKeys: string[];
+  dim?: boolean;
+}) {
+  const labelClass = dim
+    ? "pl-2 py-1.5 italic text-gray-400 sticky left-0 bg-white z-10"
+    : "pl-2 py-1.5 font-medium text-gray-900 sticky left-0 bg-white z-10";
+  const amountClass = dim
+    ? "text-right px-2 py-1.5 tabular-nums italic text-gray-400"
+    : "text-right px-2 py-1.5 tabular-nums font-medium text-gray-900";
+  return (
+    <>
+      <tr className="border-t border-gray-100 hover:bg-gray-50">
+        <td className={labelClass}>{name}</td>
+        {monthKeys.map((mk) => (
+          <td key={mk} className={amountClass}>
+            {sectionByMonth[mk] > 0 ? (
+              formatCLP(sectionByMonth[mk])
+            ) : (
+              <span className="text-gray-300">—</span>
+            )}
+          </td>
+        ))}
+        <td className={amountClass + " font-semibold"}>
+          {formatCLP(sectionTotal)}
+        </td>
+      </tr>
+      {subs.map((sub) => (
+        <tr key={sub.name} className="text-xs hover:bg-gray-50">
+          <td className="pl-6 py-1 text-gray-500 sticky left-0 bg-white z-10">
+            ▸ {sub.name}
+          </td>
+          {monthKeys.map((mk) => (
+            <td
+              key={mk}
+              className="text-right px-2 py-1 tabular-nums text-gray-700"
+            >
+              {sub.byMonth[mk] > 0 ? (
+                formatCLP(sub.byMonth[mk])
+              ) : (
+                <span className="text-gray-300">—</span>
+              )}
+            </td>
+          ))}
+          <td className="text-right px-2 py-1 tabular-nums text-gray-700 font-medium">
+            {formatCLP(sub.total)}
+          </td>
+        </tr>
+      ))}
+    </>
   );
 }
 

@@ -8,12 +8,11 @@ import { usePathname, useSearchParams } from "next/navigation";
 // Sincroniza el período a search params (?period=month|quarter|ytd|year|custom
 // y, si es custom, ?from=...&to=...).
 
-export type Period = "month" | "quarter" | "ytd" | "year" | "custom";
+export type Period = "month" | "semester" | "year" | "custom";
 
 const TABS: Array<{ key: Period; label: string }> = [
   { key: "month", label: "Mes actual" },
-  { key: "quarter", label: "Trimestre" },
-  { key: "ytd", label: "YTD" },
+  { key: "semester", label: "Semestre" },
   { key: "year", label: "Año" },
   { key: "custom", label: "Personalizado" },
 ];

@@ -77,19 +77,23 @@ export default async function ResultadosPage({
   const m = computeProjectMetrics(project);
   const {
     totalAcordado: totalVendido,
+    totalAcordadoNeto,
     totalCobrado,
     totalCobradoNeto,
     totalGastado,
+    totalGastadoConIva,
     totalPagadoMaestros,
     utilidadReal,
+    utilidadProyectada,
     pctCobrado,
     budgetByType,
     realByCategory: realByTop,
     realBySpecific,
   } = m;
-  // Margen real: utilidad neta / cobrado neto. Las dos partes son sin IVA,
-  // así que el % es comparable año contra año (no se "infla" por el IVA).
-  const margenReal = totalCobradoNeto > 0 ? (utilidadReal / totalCobradoNeto) * 100 : 0;
+  // Margen proyectado: utilidad / total acordado neto. La fórmula única
+  // que MJ acordó: presupuestado − gastado, no cobrado − gastado.
+  const margenProyectado =
+    totalAcordadoNeto > 0 ? (utilidadProyectada / totalAcordadoNeto) * 100 : 0;
 
   // ── Versions (lookups locales — no son cálculo, solo navegación al
   // nodo del árbol para acceder a obraItems / muebleChapters / etc).
@@ -265,7 +269,7 @@ export default async function ResultadosPage({
     .filter((r): r is NonNullable<typeof r> => r !== null)
     .sort((a, b) => a.index - b.index);
 
-  // (utilidadReal y margenReal vienen de computeProjectMetrics, declarados arriba)
+  // (utilidadProyectada y margenProyectado se declaran arriba)
 
   // ==================== Alertas ====================
   const now = new Date();
@@ -322,6 +326,7 @@ export default async function ResultadosPage({
   // expuesto como `totalVendido` en este page para conservar el nombre antiguo.)
   const totalAcordado = totalVendido;
   const porCobrar = Math.max(0, totalAcordado - totalCobrado);
+  const porCobrarNeto = Math.max(0, totalAcordadoNeto - totalCobradoNeto);
 
   const barColor = (pct: number) =>
     pct <= 80
@@ -376,33 +381,48 @@ export default async function ResultadosPage({
         </div>
       )}
 
-      {/* Cards resumen */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {/* Cards resumen — todas en NETO para que sean comparables entre sí.
+          Total acordado, Cobrado, Por cobrar y Gastado: neto arriba con
+          IVA en línea pequeña abajo. Utilidad ya es neto puro. */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Total acordado</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{formatCLP(totalVendido)}</p>
-          <p className="text-xs text-gray-400 mt-0.5">c/IVA al cliente</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{formatCLP(totalAcordadoNeto)}</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            neto · {formatCLP(totalVendido)} c/IVA
+          </p>
         </div>
         <div className="bg-white rounded-xl border border-blue-100 p-5">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Cobrado</p>
-          <p className="text-2xl font-bold text-blue-600 mt-1">{formatCLP(totalCobrado)}</p>
-          <p className="text-xs text-gray-400 mt-0.5">{pctCobrado.toFixed(0)}% del total</p>
+          <p className="text-2xl font-bold text-blue-600 mt-1">{formatCLP(totalCobradoNeto)}</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            neto · {formatCLP(totalCobrado)} c/IVA · {pctCobrado.toFixed(0)}% del total
+          </p>
+        </div>
+        <div className={`bg-white rounded-xl border p-5 ${porCobrarNeto > 0 ? "border-orange-100" : "border-gray-200"}`}>
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Por cobrar</p>
+          <p className={`text-2xl font-bold mt-1 ${porCobrarNeto > 0 ? "text-orange-600" : "text-gray-400"}`}>
+            {formatCLP(porCobrarNeto)}
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            neto · {formatCLP(porCobrar)} c/IVA
+          </p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Gastado</p>
-          <p className="text-2xl font-bold text-red-600 mt-1">{formatCLP(totalGastado + totalPagadoMaestros)}</p>
+          <p className="text-2xl font-bold text-red-600 mt-1">{formatCLP(totalGastado)}</p>
           <p className="text-xs text-gray-400 mt-0.5">
-            neto, sin IVA
+            neto · {formatCLP(totalGastadoConIva)} c/IVA
             {totalPagadoMaestros > 0 && ` · incl. ${formatCLP(totalPagadoMaestros)} EPs`}
           </p>
         </div>
-        <div className={`bg-white rounded-xl border p-5 ${utilidadReal >= 0 ? "border-green-100" : "border-red-100"}`}>
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Utilidad real</p>
-          <p className={`text-2xl font-bold mt-1 ${utilidadReal >= 0 ? "text-green-600" : "text-red-600"}`}>
-            {formatCLP(utilidadReal)}
+        <div className={`bg-white rounded-xl border p-5 ${utilidadProyectada >= 0 ? "border-green-100" : "border-red-100"}`}>
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Utilidad</p>
+          <p className={`text-2xl font-bold mt-1 ${utilidadProyectada >= 0 ? "text-green-600" : "text-red-600"}`}>
+            {formatCLP(utilidadProyectada)}
           </p>
           <p className="text-xs text-gray-400 mt-0.5">
-            margen {margenReal.toFixed(1)}% · neto, sin IVA
+            margen {margenProyectado.toFixed(1)}% · acordado − gastado
           </p>
         </div>
       </div>
@@ -514,13 +534,15 @@ export default async function ResultadosPage({
                     {/* Sub-filas */}
                     {section.rows.map((r) => {
                       const pct = r.presupuesto > 0 ? (r.real / r.presupuesto) * 100 : 0;
-                      // Diferencia $ = presupuesto - real. Positivo = sobró
-                      // (margen extra), negativo = sobregasto. Solo se
-                      // muestra cuando hay presupuesto Y hay real (para
-                      // filas como "Margen" que no tienen real mapeable,
-                      // queda como "—" porque la diferencia no es
-                      // informativa en ese caso).
-                      const tieneRealMapeable = r.real > 0 || r.presupuesto === 0;
+                      // Diferencia $ = presupuesto - real.
+                      // Positivo = sobró (no se gastó todo el presupuesto),
+                      // negativo = sobregasto.
+                      // Margen y Pérdidas no se cargan como facturas en la
+                      // realidad: su "real" siempre es 0 y la diferencia es
+                      // todo el presupuesto. MJ pidió mostrar $0 explícito
+                      // (no "—") para que la diferencia se calcule visible.
+                      const realComoCero = r.label === "Margen" || r.label === "Pérdidas";
+                      const tieneRealMapeable = r.real > 0 || r.presupuesto === 0 || realComoCero;
                       const diff = r.presupuesto - r.real;
                       return (
                         <tr key={r.label} className="border-t border-gray-100">
@@ -529,7 +551,11 @@ export default async function ResultadosPage({
                             {r.presupuesto > 0 ? formatCLP(r.presupuesto) : <span className="text-gray-300">—</span>}
                           </td>
                           <td className="py-2 text-right text-gray-900 font-medium">
-                            {r.real > 0 ? formatCLP(r.real) : <span className="text-gray-300">—</span>}
+                            {r.real > 0
+                              ? formatCLP(r.real)
+                              : realComoCero
+                                ? formatCLP(0)
+                                : <span className="text-gray-300">—</span>}
                           </td>
                           <td
                             className={`py-2 text-right font-medium tabular-nums ${

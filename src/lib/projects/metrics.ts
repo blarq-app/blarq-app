@@ -70,8 +70,14 @@ export type ProjectMetrics = {
   totalCobrado: number; // c/IVA — entra a caja
   totalCobradoNeto: number; // sin IVA — para utilidad
   totalGastado: number; // neto — facturas recibidas + pagos a maestros
+  totalGastadoConIva: number; // c/IVA — facturas recibidas (totalAmount) + pagos a maestros (sin IVA, pasan tal cual)
   totalPagadoMaestros: number;
   utilidadReal: number; // = totalCobradoNeto − totalGastado
+  // Utilidad PROYECTADA: lo que MJ se queda cuando termine de cobrar el
+  // total acordado. Útil para proyectos terminados con saldo pendiente,
+  // o como vista de "rentabilidad esperada" en cualquier momento.
+  // = totalAcordadoNeto − (totalGastado + totalPagadoMaestros).
+  utilidadProyectada: number;
   pctCobrado: number; // 0..100+ (sobre c/IVA, para coherencia con la barra)
 
   // Avance obra (% ponderado por MO presupuestada según EPs)
@@ -250,9 +256,21 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   const totalPagadoMaestros = maestroFactura ? 0 : epsCerradosTotal;
 
   const totalGastado = totalRecibidoFacturas + totalPagadoMaestros;
+  // Versión c/IVA del gastado: para mostrar al lado del neto en la card.
+  // Las facturas recibidas se suman por totalAmount (con IVA); los pagos
+  // a maestros sin respaldo no llevan IVA, pero los EPs cerrados son
+  // pagos directos sin DTE — se pasan como están.
+  const totalRecibidoFacturasConIva = project.invoices
+    .filter((i) => i.type === "recibida")
+    .reduce((s, i) => s + sign(i) * i.totalAmount, 0);
+  const totalGastadoConIva = totalRecibidoFacturasConIva + totalPagadoMaestros;
   // Utilidad real: NETO contra NETO (antes mezclaba c/IVA y salía inflada
   // ~19%). totalCobradoNeto = ingreso real, totalGastado ya es neto.
   const utilidadReal = totalCobradoNeto - totalGastado;
+  // Utilidad proyectada: lo que MJ se queda cuando termine de cobrar el
+  // total acordado, restando los gastos. totalGastado ya incluye
+  // totalPagadoMaestros (línea 257), no sumarlo dos veces.
+  const utilidadProyectada = totalAcordadoNeto - totalGastado;
   const pctCobrado = totalAcordado > 0 ? (totalCobrado / totalAcordado) * 100 : 0;
 
   // ── Desviaciones por concepto interno ─────────────────────────────────
@@ -405,8 +423,10 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
     totalCobrado,
     totalCobradoNeto,
     totalGastado,
+    totalGastadoConIva,
     totalPagadoMaestros,
     utilidadReal,
+    utilidadProyectada,
     pctCobrado,
     avanceObraPct,
     conceptDeviations,

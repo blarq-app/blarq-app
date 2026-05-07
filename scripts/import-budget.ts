@@ -1091,6 +1091,11 @@ function parseArtefactos(
       if (!itemName) continue;
       if (itemUpper.startsWith("TOTAL")) continue; // "TOTAL ARTEFACTOS..."
       if (itemUpper === "ITEM") continue; // header repetida (en hoja Teka)
+      // Algunos Excels (caso Arrau V5) traen una fila "IVA" con el monto
+      // del IVA del bloque como si fuera un producto más. No es un
+      // artefacto — la convención de la app es guardar clientPrice como
+      // bruto y dejar que el sistema calcule IVA solo. Saltarla.
+      if (itemUpper === "IVA") continue;
 
       const detail = clean(row[3]);
       const brand = clean(row[4]);

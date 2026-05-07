@@ -195,12 +195,21 @@ async function main() {
   // Dedup: si el archivo Maxxa tiene la misma factura 2 veces (raro), me
   // quedo con la última.
   const seen = new Set<string>();
+  let sinRespaldoCount = 0;
 
   for (const row of rows) {
     const tipoDoc = parseInt(row.CodTipoDoc || "0", 10);
     if (!tipoDoc) continue;
     const folio = String(row.FolioDoc || "").trim();
     if (!folio) continue;
+
+    // "Movimiento sin Respaldo" en Maxxa = pago a maestro sin factura.
+    // CodTipoDoc=1043 es código interno propio de Maxxa (no DTE SII real),
+    // sin IVA (MontoTotal == MontoDoc). Se guardan con origin distinto
+    // para que la UI los pueda mostrar como "Pago sin documento" y MJ no
+    // los confunda con facturas. tipoDoc=1043 se mantiene para que el
+    // unique (type,tipoDoc,folio,rutIssuer) evite duplicados al re-importar.
+    const isSinRespaldo = row.DetalleTipo === "Movimiento sin Respaldo";
 
     // TipoMov "out" = recibida, "in" = emitida
     const isEmitida = String(row.TipoMov).toLowerCase() === "in";
@@ -305,17 +314,20 @@ async function main() {
           paidAt,
           projectId,
           categoryId,
-          origin: "maxxa_legacy",
-          notes: `Importado desde Maxxa el ${new Date().toISOString().slice(0, 10)}. id_inout=${row.id_inout}`,
+          origin: isSinRespaldo ? "maxxa_sin_respaldo" : "maxxa_legacy",
+          notes: isSinRespaldo
+            ? `Pago a maestro sin documento tributario. Importado desde Maxxa el ${new Date().toISOString().slice(0, 10)}. id_inout=${row.id_inout}`
+            : `Importado desde Maxxa el ${new Date().toISOString().slice(0, 10)}. id_inout=${row.id_inout}`,
         },
       });
     }
     stats.created++;
+    if (isSinRespaldo) sinRespaldoCount++;
   }
 
   // 6) Reporte
   console.log(`\n=== Resumen ===`);
-  console.log(`  Creadas:           ${stats.created}`);
+  console.log(`  Creadas:           ${stats.created}${sinRespaldoCount ? ` (incluye ${sinRespaldoCount} sin respaldo, sin IVA)` : ""}`);
   console.log(`  Actualizadas:      ${stats.updated} (existían sin projectId/categoryId)`);
   console.log(`  Sin cambio:        ${stats.skipped} (ya existían con todo asignado)`);
   if (stats.centroMissing.size > 0) {

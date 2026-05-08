@@ -96,6 +96,14 @@ export default async function PresupuestoPage({
             Presupuesto Obra
           </h2>
           <div className="flex items-center gap-2">
+            {obraVersions.length >= 2 && (
+              <Link
+                href={`/proyectos/${project.id}/presupuesto/comparar`}
+                className="text-sm text-gray-700 hover:text-gray-900 border border-gray-300 hover:border-gray-500 px-3 py-2 rounded-lg transition-colors"
+              >
+                Comparar versiones
+              </Link>
+            )}
             <ImportarDesdeProyectoButton projectId={project.id} sources={sources} />
             <NuevaVersionButton projectId={project.id} type="obra" />
           </div>

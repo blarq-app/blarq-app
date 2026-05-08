@@ -673,19 +673,12 @@ export default function ObraEditor({
                         />
                       </td>
                       <td className="px-2 py-0.5 align-top text-center">
-                        <select
-                          value={item.unit}
-                          onChange={(e) =>
-                            handleUpdateItem(item.id, "unit", e.target.value)
-                          }
-                          className="text-force-11 bg-transparent border-0 p-0 text-gray-700 focus:ring-0 outline-none text-center"
-                        >
-                          {UNITS.map((u) => (
-                            <option key={u} value={u}>
-                              {u}
-                            </option>
-                          ))}
-                        </select>
+                        {/* Unidad NO editable — viene de la PartidaCatalog
+                            y mantenerla acá editable confunde porque cada
+                            proyecto podría tener una unidad distinta para
+                            la misma partida. Si hay que cambiarla, se
+                            edita en el catálogo. */}
+                        <span className="text-force-11 text-gray-700">{item.unit}</span>
                       </td>
                       <td className="px-2 py-0.5 align-top">
                         <input

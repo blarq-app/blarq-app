@@ -4,6 +4,7 @@ import { BUDGET_STATUSES, BudgetStatus, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import NuevaVersionButton from "@/components/presupuesto/NuevaVersionButton";
 import AprobarBudgetButton from "@/components/presupuesto/AprobarBudgetButton";
+import BorrarBudgetButton from "@/components/presupuesto/BorrarBudgetButton";
 import ImportarDesdeProyectoButton, { SourceProject } from "@/components/presupuesto/ImportarDesdeProyectoButton";
 
 export default async function PresupuestoPage({
@@ -178,6 +179,11 @@ export default async function PresupuestoPage({
                             currentStatus={budget.status}
                             version={budget.version}
                           />
+                          <BorrarBudgetButton
+                            budgetId={budget.id}
+                            currentStatus={budget.status}
+                            version={budget.version}
+                          />
                         </div>
                       </td>
                     </tr>
@@ -267,6 +273,11 @@ export default async function PresupuestoPage({
                             currentStatus={budget.status}
                             version={budget.version}
                           />
+                          <BorrarBudgetButton
+                            budgetId={budget.id}
+                            currentStatus={budget.status}
+                            version={budget.version}
+                          />
                         </div>
                       </td>
                     </tr>
@@ -352,6 +363,11 @@ export default async function PresupuestoPage({
                             variant="secondary"
                           />
                           <AprobarBudgetButton
+                            budgetId={budget.id}
+                            currentStatus={budget.status}
+                            version={budget.version}
+                          />
+                          <BorrarBudgetButton
                             budgetId={budget.id}
                             currentStatus={budget.status}
                             version={budget.version}

@@ -62,6 +62,30 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+
+    // Solo se pueden borrar borradores y rechazadas. Una versión aprobada
+    // implica que ya hay decisiones de negocio tomadas encima (puede tener
+    // EPs ligados por lineageId, factura asociada al presupuesto cliente,
+    // etc) — borrarla rompería trazabilidad. Si MJ realmente quiere
+    // borrarla, primero tiene que cambiar el status (no expuesto en UI).
+    const bv = await prisma.budgetVersion.findUnique({
+      where: { id },
+      select: { status: true, type: true, _count: { select: { estadosPago: true } } },
+    });
+    if (!bv) return NextResponse.json({ error: "No existe" }, { status: 404 });
+    if (bv.status === "aprobado") {
+      return NextResponse.json(
+        { error: "No se puede borrar una versión aprobada. Cámbiale el status primero si es necesario." },
+        { status: 400 }
+      );
+    }
+    if (bv._count.estadosPago > 0) {
+      return NextResponse.json(
+        { error: `No se puede borrar: tiene ${bv._count.estadosPago} estado${bv._count.estadosPago > 1 ? "s" : ""} de pago asociado${bv._count.estadosPago > 1 ? "s" : ""}.` },
+        { status: 400 }
+      );
+    }
+
     await prisma.budgetVersion.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {

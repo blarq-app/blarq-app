@@ -532,14 +532,33 @@ export default function ObraEditor({
 
   return (
     <div className="space-y-3">
-      {/* Tabla de partidas por capitulo */}
+      {/* Header de tabla — UNA sola vez arriba, después chapters y items
+          forman una tabla continua estilo Excel maestro. */}
+      <div className="bg-white border border-gray-200 rounded-t-xl overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b-2 border-gray-900 bg-white">
+              <th className="text-center px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-12">Item</th>
+              <th className="text-left px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "24%" }}>Partida</th>
+              <th className="text-left px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "40%" }}>Descripcion</th>
+              <th className="text-center px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-14">Un.</th>
+              <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-20">Cant.</th>
+              <th className="text-right px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-28">P.U.</th>
+              <th className="text-right px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-28">Total</th>
+              <th className="w-8"></th>
+            </tr>
+          </thead>
+        </table>
+      </div>
+
+      <div className="space-y-0 -mt-3">
       {itemsByChapter.map((chapter) => (
         <div
           key={chapter.key}
-          className="bg-white rounded-xl border border-gray-200 overflow-visible"
+          className="bg-white border-x border-gray-200 overflow-visible last:border-b last:rounded-b-xl"
         >
-          {/* Chapter bar — matches PDF's #DBDBDB chapter row */}
-          <div className="flex items-center justify-between px-4 py-1 bg-[#DBDBDB]">
+          {/* Chapter bar — gris claro, formato cuadro Excel */}
+          <div className="flex items-center justify-between px-4 py-1 bg-gray-200 border-y border-gray-200">
             <h3 className="font-bold text-gray-900 text-xs uppercase tracking-wide">
               <span className="inline-block w-6">{chapter.index}</span>
               {chapter.label}
@@ -563,32 +582,16 @@ export default function ObraEditor({
           {chapter.items.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-y-2 border-gray-900 bg-white">
-                    <th className="text-center px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-12">
-                      Item
-                    </th>
-                    <th className="text-left px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "24%" }}>
-                      Partida
-                    </th>
-                    <th className="text-left px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "40%" }}>
-                      Descripcion
-                    </th>
-                    <th className="text-center px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-14">
-                      Un.
-                    </th>
-                    <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-20">
-                      Cant.
-                    </th>
-                    <th className="text-right px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-28">
-                      P.U.
-                    </th>
-                    <th className="text-right px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-28">
-                      Total
-                    </th>
-                    <th className="w-8"></th>
-                  </tr>
-                </thead>
+                <colgroup>
+                  <col className="w-12" />
+                  <col style={{ width: "24%" }} />
+                  <col style={{ width: "40%" }} />
+                  <col className="w-14" />
+                  <col className="w-20" />
+                  <col className="w-28" />
+                  <col className="w-28" />
+                  <col className="w-8" />
+                </colgroup>
                 <tbody className="divide-y divide-gray-50">
                   {chapter.items.map((item) => (
                     <Fragment key={item.id}>
@@ -1193,6 +1196,7 @@ export default function ObraEditor({
           )}
         </div>
       ))}
+      </div>
 
       {/* "+ Capítulo": dropdown para re-habilitar capítulos vacíos. Solo
           aparece cuando hay capítulos ocultos disponibles. */}

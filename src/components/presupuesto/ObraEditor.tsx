@@ -531,7 +531,7 @@ export default function ObraEditor({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* Configuracion GG + Utilidad */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
@@ -581,8 +581,8 @@ export default function ObraEditor({
           className="bg-white rounded-xl border border-gray-200 overflow-visible"
         >
           {/* Chapter bar — matches PDF's #DBDBDB chapter row */}
-          <div className="flex items-center justify-between px-4 py-2 bg-[#DBDBDB]">
-            <h3 className="font-bold text-gray-900 text-sm uppercase tracking-wide">
+          <div className="flex items-center justify-between px-4 py-1 bg-[#DBDBDB]">
+            <h3 className="font-bold text-gray-900 text-xs uppercase tracking-wide">
               <span className="inline-block w-6">{chapter.index}</span>
               {chapter.label}
             </h3>
@@ -677,17 +677,19 @@ export default function ObraEditor({
                           className="text-force-11 w-full bg-transparent border-0 p-0 text-gray-900 focus:ring-0 outline-none uppercase"
                         />
                       </td>
-                      <td className="px-3 py-0.5 align-top">
+                      <td className="px-3 py-0.5 align-middle">
+                        {/* Descripción — UNA línea truncada en estado normal,
+                            tooltip con texto completo al hover. Al focus se
+                            expande hasta 200px para edición cómoda. Estilo
+                            Excel: lista densa, edición a pedido. */}
                         <textarea
                           ref={(el) => {
                             if (el) {
                               el.style.height = "auto";
-                              // Cap a ~2 líneas en estado normal — al focus
-                              // el handler lo expande. Mantiene la lista de
-                              // partidas densa estilo Excel.
                               const focused = document.activeElement === el;
-                              const cap = focused ? 200 : 32;
-                              el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
+                              el.style.height = focused
+                                ? `${Math.min(el.scrollHeight, 200)}px`
+                                : "16px";
                             }
                           }}
                           onFocus={(e) => {
@@ -695,8 +697,7 @@ export default function ObraEditor({
                             e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 200)}px`;
                           }}
                           onBlur={(e) => {
-                            e.currentTarget.style.height = "auto";
-                            e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 32)}px`;
+                            e.currentTarget.style.height = "16px";
                           }}
                           value={item.descriptionCliente ?? ""}
                           onChange={(e) => {
@@ -704,10 +705,11 @@ export default function ObraEditor({
                             e.currentTarget.style.height = "auto";
                             e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 200)}px`;
                           }}
+                          title={item.descriptionCliente || ""}
                           placeholder="Descripción para el cliente (PDF)…"
                           rows={1}
-                          className="text-force-10 w-full resize-none bg-transparent border-0 p-0 text-gray-600 placeholder:text-gray-300 focus:ring-0 outline-none leading-tight overflow-hidden"
-                          style={{ minHeight: "1rem", maxHeight: "200px" }}
+                          className="text-force-10 w-full resize-none bg-transparent border-0 p-0 text-gray-600 placeholder:text-gray-300 focus:ring-0 outline-none leading-tight overflow-hidden whitespace-nowrap"
+                          style={{ minHeight: "16px", maxHeight: "200px", height: "16px" }}
                         />
                       </td>
                       <td className="px-2 py-0.5 align-top text-center">

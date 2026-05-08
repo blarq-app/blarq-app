@@ -607,25 +607,25 @@ export default function ObraEditor({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-y-2 border-gray-900 bg-white">
-                    <th className="text-center px-3 py-2 text-[11px] font-bold text-gray-900 uppercase tracking-wider w-12">
+                    <th className="text-center px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-12">
                       Item
                     </th>
-                    <th className="text-left px-3 py-2 text-[11px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "24%" }}>
+                    <th className="text-left px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "24%" }}>
                       Partida
                     </th>
-                    <th className="text-left px-3 py-2 text-[11px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "40%" }}>
+                    <th className="text-left px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "40%" }}>
                       Descripcion
                     </th>
-                    <th className="text-center px-2 py-2 text-[11px] font-bold text-gray-900 uppercase tracking-wider w-14">
+                    <th className="text-center px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-14">
                       Un.
                     </th>
-                    <th className="text-right px-2 py-2 text-[11px] font-bold text-gray-900 uppercase tracking-wider w-20">
+                    <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-20">
                       Cant.
                     </th>
-                    <th className="text-right px-3 py-2 text-[11px] font-bold text-gray-900 uppercase tracking-wider w-28">
+                    <th className="text-right px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-28">
                       P.U.
                     </th>
-                    <th className="text-right px-3 py-2 text-[11px] font-bold text-gray-900 uppercase tracking-wider w-28">
+                    <th className="text-right px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-28">
                       Total
                     </th>
                     <th className="w-8"></th>

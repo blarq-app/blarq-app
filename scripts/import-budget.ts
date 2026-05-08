@@ -28,6 +28,34 @@
 import { PrismaClient } from "@prisma/client";
 import * as XLSX from "xlsx";
 import * as path from "path";
+
+// Mapping de chapters del Excel (UPPERCASE/variantes) a las 8 keys
+// oficiales en lib/utils.ts > OBRA_CHAPTERS. Históricamente se cargaba
+// el chapter "tal cual" del Excel (DEMOLICIONES, INSTALACIONES SANITARIAS,
+// etc) pero el editor del front filtra por las keys lowercase y los
+// items quedaban "invisibles". Mismo mapping que scripts/normalize-obra-chapters.ts.
+const CHAPTER_MAPPING: Record<string, string> = {
+  DEMOLICIONES: "demoliciones",
+  DEMOLICION: "demoliciones",
+  "OBRA GRUESA": "obra_gruesa",
+  REPARACIONES: "reparaciones",
+  "INSTALACIONES SANITARIAS": "sanitarias",
+  "INSTALACIONES ELECTRICAS": "electricas",
+  TERMINACIONES: "terminaciones",
+  ADICIONALES: "adicionales",
+  "LIMPIEZA Y ASEO": "limpieza",
+  "ASEO Y LIMPIEZA": "limpieza",
+  "INSTALACIONES GAS": "sanitarias",
+  "AISLACION E IMPERMEABILIZACION": "obra_gruesa",
+  "CLIMATIZACION Y AISLACION TERMICA": "terminaciones",
+  PAISAJISMO: "adicionales",
+};
+
+function normalizeChapter(raw: string | undefined | null): string {
+  if (!raw) return "adicionales";
+  const upper = raw.trim().toUpperCase();
+  return CHAPTER_MAPPING[upper] ?? raw.trim().toLowerCase().replace(/\s+/g, "_");
+}
 import "dotenv/config";
 
 const prisma = new PrismaClient();
@@ -1312,7 +1340,7 @@ async function commitObra(
       await tx.obraItem.create({
         data: {
           budgetVersionId: bv.id,
-          chapter: it.chapter || "SIN CAPÍTULO",
+          chapter: normalizeChapter(it.chapter),
           itemNumber: it.itemNumber,
           name: it.partidaName,
           descriptionCliente: it.descriptionCliente,

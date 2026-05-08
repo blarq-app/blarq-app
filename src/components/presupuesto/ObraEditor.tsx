@@ -667,7 +667,7 @@ export default function ObraEditor({
                         </button>
                         {item.itemNumber}
                       </td>
-                      <td className="px-3 py-1 align-top">
+                      <td className="px-3 py-0.5 align-top">
                         <input
                           type="text"
                           value={item.name}
@@ -677,27 +677,40 @@ export default function ObraEditor({
                           className="text-force-11 w-full bg-transparent border-0 p-0 text-gray-900 focus:ring-0 outline-none uppercase"
                         />
                       </td>
-                      <td className="px-3 py-1 align-top">
+                      <td className="px-3 py-0.5 align-top">
                         <textarea
                           ref={(el) => {
                             if (el) {
                               el.style.height = "auto";
-                              el.style.height = `${el.scrollHeight}px`;
+                              // Cap a ~2 líneas en estado normal — al focus
+                              // el handler lo expande. Mantiene la lista de
+                              // partidas densa estilo Excel.
+                              const focused = document.activeElement === el;
+                              const cap = focused ? 200 : 32;
+                              el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
                             }
+                          }}
+                          onFocus={(e) => {
+                            e.currentTarget.style.height = "auto";
+                            e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 200)}px`;
+                          }}
+                          onBlur={(e) => {
+                            e.currentTarget.style.height = "auto";
+                            e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 32)}px`;
                           }}
                           value={item.descriptionCliente ?? ""}
                           onChange={(e) => {
                             handleUpdateItem(item.id, "descriptionCliente", e.target.value);
                             e.currentTarget.style.height = "auto";
-                            e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                            e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 200)}px`;
                           }}
                           placeholder="Descripción para el cliente (PDF)…"
                           rows={1}
-                          className="text-force-10 w-full resize-none bg-transparent border-0 p-0 text-gray-600 placeholder:text-gray-300 focus:ring-0 outline-none leading-snug"
-                          style={{ minHeight: "1rem" }}
+                          className="text-force-10 w-full resize-none bg-transparent border-0 p-0 text-gray-600 placeholder:text-gray-300 focus:ring-0 outline-none leading-tight overflow-hidden"
+                          style={{ minHeight: "1rem", maxHeight: "200px" }}
                         />
                       </td>
-                      <td className="px-2 py-1 align-top text-center">
+                      <td className="px-2 py-0.5 align-top text-center">
                         <select
                           value={item.unit}
                           onChange={(e) =>
@@ -712,7 +725,7 @@ export default function ObraEditor({
                           ))}
                         </select>
                       </td>
-                      <td className="px-2 py-1 align-top">
+                      <td className="px-2 py-0.5 align-top">
                         <input
                           type="number"
                           step="0.01"
@@ -727,7 +740,7 @@ export default function ObraEditor({
                           className="text-force-11 w-full min-w-0 bg-transparent border-0 p-0 text-right text-gray-900 tabular-nums focus:ring-0 outline-none"
                         />
                       </td>
-                      <td className="px-3 py-1 align-top">
+                      <td className="px-3 py-0.5 align-top">
                         <div className="flex items-center justify-end gap-0.5 tabular-nums">
                           <span className="text-gray-400 text-sm">$</span>
                           <MoneyInput
@@ -737,7 +750,7 @@ export default function ObraEditor({
                           />
                         </div>
                       </td>
-                      <td className="px-3 py-1 align-top text-right text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap">
+                      <td className="px-3 py-0.5 align-top text-right text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
                           {saveStatus === "saving" && (
                             <span className="text-[10px] text-gray-400 animate-pulse hidden group-hover:inline">guardando…</span>
@@ -748,7 +761,7 @@ export default function ObraEditor({
                           {formatCLP(item.total)}
                         </div>
                       </td>
-                      <td className="px-2 py-1 align-top">
+                      <td className="px-2 py-0.5 align-top">
                         <button
                           onClick={() => handleDeleteItem(item.id)}
                           className="text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all text-xs"

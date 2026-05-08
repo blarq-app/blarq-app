@@ -35,6 +35,20 @@ export async function POST(request: NextRequest) {
     const baseId = data.baseVersionId || (existing.length > 0 ? existing[0].id : null);
     const parentForNew = isTemplateMode ? null : baseId;
 
+    // Si se duplica/importa desde una versión base, heredar GG/Util de esa
+    // versión a menos que el cliente mande valores explícitos. Antes usábamos
+    // defaults (20/5) y al duplicar se perdían los porcentajes del original
+    // — bug: V1 con 20/10 se duplicaba como V2 con 20/5 y los totales no
+    // calzaban.
+    let basePrev: { ggPercentage: number | null; utilityPercentage: number | null; discountPercentage: number | null } | null = null;
+    if (baseId) {
+      basePrev = await prisma.budgetVersion.findUnique({
+        where: { id: baseId },
+        select: { ggPercentage: true, utilityPercentage: true, discountPercentage: true },
+      });
+      if (!basePrev) return NextResponse.json({ error: "Versión base no encontrada" }, { status: 404 });
+    }
+
     const budget = await prisma.budgetVersion.create({
       data: {
         projectId: data.projectId,
@@ -43,8 +57,9 @@ export async function POST(request: NextRequest) {
         status: "borrador",
         parentVersionId: parentForNew,
         observations: data.observations || null,
-        ggPercentage: data.ggPercentage ?? 20,
-        utilityPercentage: data.utilityPercentage ?? 5,
+        ggPercentage: data.ggPercentage ?? basePrev?.ggPercentage ?? 20,
+        utilityPercentage: data.utilityPercentage ?? basePrev?.utilityPercentage ?? 5,
+        discountPercentage: data.discountPercentage ?? basePrev?.discountPercentage ?? 0,
       },
     });
     if (baseId) {

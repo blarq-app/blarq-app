@@ -1,4 +1,4 @@
-import puppeteer, { type PaperFormat, type PDFMargin } from "puppeteer";
+import type { Browser, PaperFormat, PDFMargin } from "puppeteer-core";
 
 export interface RenderPDFOptions {
   format?: PaperFormat;
@@ -9,6 +9,33 @@ export interface RenderPDFOptions {
   printBackground?: boolean;
 }
 
+// En Vercel (serverless) el bundle de chromium completo no entra ni
+// arranca. Usamos @sparticuz/chromium (binario optimizado para Lambda)
+// + puppeteer-core. En local seguimos usando el `puppeteer` con su
+// chromium bundleado, así no cambia nada para dev.
+async function launchBrowser(): Promise<Browser> {
+  const isServerless =
+    !!process.env.VERCEL || process.env.NODE_ENV === "production";
+
+  if (isServerless) {
+    const [{ default: chromium }, puppeteerCore] = await Promise.all([
+      import("@sparticuz/chromium"),
+      import("puppeteer-core"),
+    ]);
+    return puppeteerCore.default.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    }) as unknown as Promise<Browser>;
+  }
+
+  const { default: puppeteer } = await import("puppeteer");
+  return puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  }) as unknown as Promise<Browser>;
+}
+
 /**
  * Render an HTML string to a PDF buffer via headless Chromium.
  * Waits for fonts and images to load before capturing.
@@ -17,10 +44,7 @@ export async function renderPDF(
   html: string,
   opts: RenderPDFOptions = {}
 ): Promise<Uint8Array> {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+  const browser = await launchBrowser();
 
   try {
     const page = await browser.newPage();

@@ -33,12 +33,13 @@ export async function GET(request: NextRequest) {
         },
       },
     });
+    // Orden: categorías por etapa cronológica de obra; dentro de cada
+    // categoría, alfabético por nombre (regla MJ 2026-05-08, antes era
+    // sortOrder manual + name como tiebreaker).
     const partidas = rawPartidas.sort((a, b) => {
       const c = compareCatalogCategories(a.category, b.category);
       if (c !== 0) return c;
-      const so = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
-      if (so !== 0) return so;
-      return a.name.localeCompare(b.name);
+      return a.name.localeCompare(b.name, "es");
     });
 
     // Agregar campo derivado: provisiones de esta partida

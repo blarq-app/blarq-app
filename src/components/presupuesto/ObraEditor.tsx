@@ -179,12 +179,16 @@ export default function ObraEditor({
     ObraChapter,
     { label: string; index: number }
   ][];
+  // Orden interno: alfabético por nombre (regla MJ 2026-05-08).
+  // El orden de los capítulos sigue siendo por etapa cronológica (definido
+  // en OBRA_CHAPTERS). Dentro de cada capítulo, las partidas se ordenan
+  // por nombre con localeCompare("es") para manejar acentos correctamente.
   const itemsByChapter = chapters.map(([key, chapter]) => ({
     key,
     ...chapter,
     items: items
       .filter((item) => item.chapter === key)
-      .sort((a, b) => a.sortOrder - b.sortOrder),
+      .sort((a, b) => a.name.localeCompare(b.name, "es")),
     subtotal: items
       .filter((item) => item.chapter === key)
       .reduce((sum, item) => sum + item.total, 0),

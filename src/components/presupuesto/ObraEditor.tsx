@@ -532,48 +532,6 @@ export default function ObraEditor({
 
   return (
     <div className="space-y-3">
-      {/* Configuracion GG + Utilidad */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Configuracion
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Gastos Generales (%)
-            </label>
-            <input
-              type="number"
-              step="0.1"
-              value={ggPercent}
-              onChange={(e) => setGgPercent(parseFloat(e.target.value) || 0)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Utilidad (%)
-            </label>
-            <input
-              type="number"
-              step="0.1"
-              value={utilPercent}
-              onChange={(e) => setUtilPercent(parseFloat(e.target.value) || 0)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
-            />
-          </div>
-          <div className="flex items-end">
-            <button
-              onClick={handleSaveConfig}
-              disabled={saving}
-              className="bg-gray-900 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
-            >
-              {saving ? "Guardando..." : "Guardar Config"}
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Tabla de partidas por capitulo */}
       {itemsByChapter.map((chapter) => (
         <div
@@ -1398,15 +1356,47 @@ export default function ObraEditor({
         />
       </div>
 
-      {/* Boton guardar todo */}
-      <div className="flex justify-end">
-        <button
-          onClick={handleSaveConfig}
-          disabled={saving}
-          className="bg-gray-900 text-white px-8 py-3 rounded-lg font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
-        >
-          {saving ? "Guardando..." : "Guardar Todo"}
-        </button>
+      {/* Configuracion GG + Utilidad — al final, una vez seteados al
+          principio del proyecto no estorban arriba. */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          Configuración
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Gastos Generales (%)
+            </label>
+            <input
+              type="number"
+              step="0.1"
+              value={ggPercent}
+              onChange={(e) => setGgPercent(parseFloat(e.target.value) || 0)}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Utilidad (%)
+            </label>
+            <input
+              type="number"
+              step="0.1"
+              value={utilPercent}
+              onChange={(e) => setUtilPercent(parseFloat(e.target.value) || 0)}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              onClick={handleSaveConfig}
+              disabled={saving}
+              className="bg-gray-900 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
+            >
+              {saving ? "Guardando..." : "Guardar Todo"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -69,9 +69,11 @@ export default function BorrarBudgetButton({
   return (
     <button
       onClick={() => setConfirm(true)}
-      className="text-sm text-red-600 hover:text-red-800 px-3 py-1 rounded-lg hover:bg-red-50 transition-colors"
+      title="Borrar versión"
+      aria-label="Borrar versión"
+      className="text-gray-400 hover:text-red-600 hover:bg-red-50 w-6 h-6 rounded flex items-center justify-center transition-colors"
     >
-      Borrar
+      ✕
     </button>
   );
 }

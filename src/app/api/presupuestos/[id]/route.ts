@@ -10,14 +10,24 @@ export async function PUT(
     const { id } = await params;
     const data = await request.json();
 
+    // Solo incluimos los campos que vienen en el body (PATCH-style sobre PUT).
+    // Permite renombrar version (ej. "V3" → "Alternativa A") sin tocar el resto.
+    const updateData: Record<string, unknown> = {};
+    if (data.observations !== undefined) updateData.observations = data.observations;
+    if (data.ggPercentage !== undefined) updateData.ggPercentage = data.ggPercentage;
+    if (data.utilityPercentage !== undefined) updateData.utilityPercentage = data.utilityPercentage;
+    if (data.status !== undefined) updateData.status = data.status;
+    if (data.version !== undefined) {
+      const v = String(data.version).trim();
+      if (!v) {
+        return NextResponse.json({ error: "El nombre no puede estar vacío" }, { status: 400 });
+      }
+      updateData.version = v;
+    }
+
     const budget = await prisma.budgetVersion.update({
       where: { id },
-      data: {
-        observations: data.observations,
-        ggPercentage: data.ggPercentage,
-        utilityPercentage: data.utilityPercentage,
-        status: data.status,
-      },
+      data: updateData,
     });
 
     // Cuando se aprueba un presupuesto de obra, el proyecto pasa a "ejecucion"

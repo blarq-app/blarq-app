@@ -5,6 +5,7 @@ import Link from "next/link";
 import NuevaVersionButton from "@/components/presupuesto/NuevaVersionButton";
 import AprobarBudgetButton from "@/components/presupuesto/AprobarBudgetButton";
 import BorrarBudgetButton from "@/components/presupuesto/BorrarBudgetButton";
+import EditableVersionLabel from "@/components/presupuesto/EditableVersionLabel";
 import ImportarDesdeProyectoButton, { SourceProject } from "@/components/presupuesto/ImportarDesdeProyectoButton";
 
 export default async function PresupuestoPage({
@@ -138,12 +139,11 @@ export default async function PresupuestoPage({
                       className="hover:bg-gray-50 transition-colors"
                     >
                       <td className="px-6 py-4">
-                        <Link
+                        <EditableVersionLabel
+                          budgetId={budget.id}
+                          initialValue={budget.version}
                           href={`/proyectos/${project.id}/presupuesto/${budget.id}`}
-                          className="font-medium text-gray-900 hover:underline"
-                        >
-                          {budget.version}
-                        </Link>
+                        />
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {formatDate(budget.date)}
@@ -239,12 +239,11 @@ export default async function PresupuestoPage({
                       className="hover:bg-gray-50 transition-colors"
                     >
                       <td className="px-6 py-4">
-                        <Link
+                        <EditableVersionLabel
+                          budgetId={budget.id}
+                          initialValue={budget.version}
                           href={`/proyectos/${project.id}/presupuesto/${budget.id}`}
-                          className="font-medium text-gray-900 hover:underline"
-                        >
-                          {budget.version}
-                        </Link>
+                        />
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {formatDate(budget.date)}
@@ -333,12 +332,11 @@ export default async function PresupuestoPage({
                       className="hover:bg-gray-50 transition-colors"
                     >
                       <td className="px-6 py-4">
-                        <Link
+                        <EditableVersionLabel
+                          budgetId={budget.id}
+                          initialValue={budget.version}
                           href={`/proyectos/${project.id}/presupuesto/${budget.id}`}
-                          className="font-medium text-gray-900 hover:underline"
-                        >
-                          {budget.version}
-                        </Link>
+                        />
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {formatDate(budget.date)}

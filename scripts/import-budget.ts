@@ -46,6 +46,7 @@ const CHAPTER_MAPPING: Record<string, string> = {
   "LIMPIEZA Y ASEO": "limpieza",
   "ASEO Y LIMPIEZA": "limpieza",
   "INSTALACIONES GAS": "sanitarias",
+  "INSTALACIONES SANITARIAS Y GASFITERIA": "sanitarias",
   "AISLACION E IMPERMEABILIZACION": "obra_gruesa",
   "CLIMATIZACION Y AISLACION TERMICA": "terminaciones",
   PAISAJISMO: "adicionales",

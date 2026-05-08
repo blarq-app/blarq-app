@@ -110,6 +110,11 @@ export default function ObraEditor({
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSaveRef = useRef<{ itemId: string; item: ObraItem } | null>(null);
   const [addingChapter, setAddingChapter] = useState<string | null>(null);
+  // Capítulos vacíos que el usuario "habilitó" explícitamente para que se
+  // muestren aunque no tengan items. Se vacía cuando el usuario pone un
+  // ítem dentro (ya no necesita el flag — el chapter se muestra solo).
+  const [enabledEmptyChapters, setEnabledEmptyChapters] = useState<Set<string>>(new Set());
+  const [showChapterPicker, setShowChapterPicker] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   // Provision price overrides: componentId → precio c/IVA ingresado por usuario
   const [provisionPrices, setProvisionPrices] = useState<Record<string, number>>({});
@@ -183,7 +188,12 @@ export default function ObraEditor({
   // El orden de los capítulos sigue siendo por etapa cronológica (definido
   // en OBRA_CHAPTERS). Dentro de cada capítulo, las partidas se ordenan
   // por nombre con localeCompare("es") para manejar acentos correctamente.
-  const itemsByChapter = chapters.map(([key, chapter]) => ({
+  //
+  // Capítulos vacíos NO se muestran por default — la numeración se reflowa
+  // sobre los capítulos visibles (1, 2, 3...). Para "agregar" un capítulo
+  // vacío de vuelta, hay un dropdown "+ Capítulo" abajo de todo. (regla
+  // MJ 2026-05-08).
+  const allChaptersData = chapters.map(([key, chapter]) => ({
     key,
     ...chapter,
     items: items
@@ -193,6 +203,17 @@ export default function ObraEditor({
       .filter((item) => item.chapter === key)
       .reduce((sum, item) => sum + item.total, 0),
   }));
+  // Filtrar vacíos, EXCEPTO si el usuario está activamente agregando a uno
+  // (addingChapter) — ese se muestra aunque esté vacío.
+  const visibleChapters = allChaptersData.filter(
+    (c) => c.items.length > 0 || c.key === addingChapter || enabledEmptyChapters.has(c.key)
+  );
+  // Re-asignar índices visualmente (1, 2, 3...) en el orden cronológico.
+  const itemsByChapter = visibleChapters.map((c, i) => ({ ...c, index: i + 1 }));
+  // Capítulos disponibles para "+ agregar" (los que no están visibles).
+  const hiddenChapters = allChaptersData.filter(
+    (c) => c.items.length === 0 && c.key !== addingChapter && !enabledEmptyChapters.has(c.key)
+  );
 
   function handleSelectFromCatalog(partida: CatalogPartida) {
     setSelectedCatalog(partida);
@@ -1200,6 +1221,35 @@ export default function ObraEditor({
           )}
         </div>
       ))}
+
+      {/* "+ Capítulo": dropdown para re-habilitar capítulos vacíos. Solo
+          aparece cuando hay capítulos ocultos disponibles. */}
+      {hiddenChapters.length > 0 && (
+        <div className="relative">
+          <button
+            onClick={() => setShowChapterPicker((s) => !s)}
+            className="text-sm text-gray-600 hover:text-gray-900 border border-dashed border-gray-300 hover:border-gray-500 px-4 py-2 rounded-lg transition-colors"
+          >
+            + Capítulo
+          </button>
+          {showChapterPicker && (
+            <div className="absolute z-10 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden min-w-[220px]">
+              {hiddenChapters.map((c) => (
+                <button
+                  key={c.key}
+                  onClick={() => {
+                    setEnabledEmptyChapters((prev) => new Set(prev).add(c.key));
+                    setShowChapterPicker(false);
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Resumen financiero */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">

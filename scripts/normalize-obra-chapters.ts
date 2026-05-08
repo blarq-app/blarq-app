@@ -26,6 +26,8 @@ const MAPPING: Record<string, string> = {
 
   // Mapeos opinados — chapters que no calzan 1:1 con los oficiales:
   "INSTALACIONES GAS": "sanitarias", // gas es plomería
+  "INSTALACIONES SANITARIAS Y GASFITERIA": "sanitarias",
+  "INSTALACIONES_SANITARIAS_Y_GASFITERIA": "sanitarias", // ya normalizado mal
   "AISLACION E IMPERMEABILIZACION": "obra_gruesa",
   "CLIMATIZACION Y AISLACION TERMICA": "terminaciones",
   "PAISAJISMO": "adicionales",
@@ -36,11 +38,20 @@ async function main() {
     select: { id: true, chapter: true },
   });
 
+  // 8 keys oficiales — las dejamos como están
+  const OFFICIAL = new Set(["demoliciones", "obra_gruesa", "reparaciones", "sanitarias", "electricas", "terminaciones", "limpieza", "adicionales"]);
+
   const stats: Record<string, number> = {};
   let updated = 0;
   for (const it of items) {
-    const target = MAPPING[it.chapter];
-    if (!target) continue; // ya está lowercase o es desconocido
+    if (OFFICIAL.has(it.chapter)) continue; // ya OK
+    // Búsqueda en MAPPING — case-insensitive y tolera underscores
+    const upper = it.chapter.toUpperCase().replace(/_/g, " ");
+    const target = MAPPING[upper] ?? MAPPING[it.chapter.toUpperCase()];
+    if (!target) {
+      console.log(`  ⚠ chapter desconocido: "${it.chapter}" (mantener)`);
+      continue;
+    }
     if (target === it.chapter) continue;
     await prisma.obraItem.update({
       where: { id: it.id },

@@ -593,7 +593,7 @@ export default function ObraEditor({
                   <col className="w-8" />
                 </colgroup>
                 <tbody className="divide-y divide-gray-50">
-                  {chapter.items.map((item) => (
+                  {chapter.items.map((item, itemIdx) => (
                     <Fragment key={item.id}>
                     <tr className="border-b border-gray-100 hover:bg-gray-50/60 group">
                       <td className="px-3 py-1 text-gray-700 text-xs tabular-nums align-top whitespace-nowrap">
@@ -626,7 +626,7 @@ export default function ObraEditor({
                         >
                           {expandedItems[item.id] ? "▾" : "▸"}
                         </button>
-                        {item.itemNumber}
+                        {chapter.index}.{itemIdx + 1}
                       </td>
                       <td className="px-3 py-0.5 align-top">
                         <input

@@ -557,8 +557,12 @@ export default async function ResultadosPage({
                       // realidad: su "real" siempre es 0 y la diferencia es
                       // todo el presupuesto. MJ pidió mostrar $0 explícito
                       // (no "—") para que la diferencia se calcule visible.
-                      const realComoCero = r.label === "Margen" || r.label === "Pérdidas";
-                      const tieneRealMapeable = r.real > 0 || r.presupuesto === 0 || realComoCero;
+                      // Si hay presupuesto, mostramos real=$0 explícito y la
+                      // diferencia calculada — incluso cuando no hay facturas
+                      // todavía. Antes mostraba "—" para Materiales/MO/etc
+                      // (incomparable visualmente con Margen/Pérdidas que sí
+                      // muestran $0 forzado). Ahora consistente.
+                      const tieneRealMapeable = r.presupuesto > 0 || r.real > 0;
                       const diff = r.presupuesto - r.real;
                       return (
                         <tr key={r.label} className="border-t border-gray-100">
@@ -567,11 +571,9 @@ export default async function ResultadosPage({
                             {r.presupuesto > 0 ? formatCLP(r.presupuesto) : <span className="text-gray-300">—</span>}
                           </td>
                           <td className="py-2 text-right text-gray-900 font-medium">
-                            {r.real > 0
+                            {tieneRealMapeable
                               ? formatCLP(r.real)
-                              : realComoCero
-                                ? formatCLP(0)
-                                : <span className="text-gray-300">—</span>}
+                              : <span className="text-gray-300">—</span>}
                           </td>
                           <td
                             className={`py-2 text-right font-medium tabular-nums ${

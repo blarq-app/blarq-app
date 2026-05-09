@@ -14,33 +14,65 @@ export default function AprobarBudgetButton({ budgetId, currentStatus, version }
   const [loading, setLoading] = useState(false);
   const [confirm, setConfirm] = useState(false);
 
+  async function handleSetStatus(newStatus: string, errMsg: string) {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/presupuestos/${budgetId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error(errMsg);
+      router.refresh();
+    } catch (e) {
+      console.error(e);
+      alert(errMsg);
+    } finally {
+      setLoading(false);
+      setConfirm(false);
+    }
+  }
+
+  // Versión aprobada: click → confirma → vuelve a borrador. Útil para
+  // deshacer una aprobación o cambiar cuál versión es la aprobada
+  // (aprobando otra automáticamente desaprueba ésta).
   if (currentStatus === "aprobado") {
+    if (confirm) {
+      return (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600">¿Volver {version} a borrador?</span>
+          <button
+            onClick={() => handleSetStatus("borrador", "Error al cambiar status")}
+            disabled={loading}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            {loading ? "Guardando…" : "Confirmar"}
+          </button>
+          <button
+            onClick={() => setConfirm(false)}
+            disabled={loading}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200"
+          >
+            Cancelar
+          </button>
+        </div>
+      );
+    }
     return (
-      <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-green-100 text-green-700 border border-green-200">
+      <button
+        onClick={() => setConfirm(true)}
+        title="Click para volver a borrador"
+        className="px-3 py-1.5 rounded-lg text-sm font-medium bg-green-100 text-green-700 border border-green-200 hover:bg-green-200 transition-colors"
+      >
         ✓ Aprobado
-      </span>
+      </button>
     );
   }
 
   if (currentStatus === "rechazado") return null;
 
   async function handleAprobar() {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/presupuestos/${budgetId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "aprobado" }),
-      });
-      if (!res.ok) throw new Error("Error al aprobar");
-      router.refresh();
-    } catch (e) {
-      console.error(e);
-      alert("Error al aprobar el presupuesto");
-    } finally {
-      setLoading(false);
-      setConfirm(false);
-    }
+    return handleSetStatus("aprobado", "Error al aprobar el presupuesto");
   }
 
   if (confirm) {

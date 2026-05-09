@@ -25,6 +25,12 @@ export async function PUT(
       updateData.version = v;
     }
 
+    // Nota: NO se auto-desaprueban otras versiones cuando se aprueba una.
+    // Caso de uso: anexos (Aguirre V7 + V4-BAÑO-VISITAS), donde múltiples
+    // versiones de obra aprobadas se SUMAN al Total Acordado en metrics.
+    // El control de qué versión está aprobada lo lleva MJ manualmente
+    // (puede des-aprobar clickeando el badge "✓ Aprobado").
+
     const budget = await prisma.budgetVersion.update({
       where: { id },
       data: updateData,

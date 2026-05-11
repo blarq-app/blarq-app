@@ -38,6 +38,11 @@ export default function BulkAssignBar({
   const router = useRouter();
   const [projectId, setProjectId] = useState<string>("");
   const [categoryId, setCategoryId] = useState<string>("");
+  // Por default se guarda regla automática (RUT → categoría). MJ apaga
+  // este toggle para proveedores cuya categoría varía (caso MK que a veces
+  // es Materiales, a veces Artefactos). Si está apagado, esta asignación
+  // no toca la regla existente del proveedor (ni la crea si no había).
+  const [learnRule, setLearnRule] = useState(true);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{
     message: string;
@@ -65,6 +70,7 @@ export default function BulkAssignBar({
       else if (projectId) body.projectId = projectId;
       if (categoryId === "__none__") body.categoryId = null;
       else if (categoryId) body.categoryId = categoryId;
+      if (!learnRule) body.learnRule = false;
 
       const res = await fetch("/api/facturas/bulk-assign", {
         method: "POST",
@@ -178,6 +184,20 @@ export default function BulkAssignBar({
             ))}
           </select>
 
+          {/* Solo mostramos el toggle cuando se asignó categoría (no aplica
+              para proyecto — el proyecto nunca se aprende como regla). */}
+          {categoryId && categoryId !== "__none__" && (
+            <label className="text-xs flex items-center gap-1 text-gray-300 hover:text-white cursor-pointer select-none" title="Si lo apagás, no se crea ni actualiza la regla automática del proveedor (útil para MK u otros donde la categoría varía)">
+              <input
+                type="checkbox"
+                checked={learnRule}
+                onChange={(e) => setLearnRule(e.target.checked)}
+                disabled={busy}
+                className="accent-emerald-600"
+              />
+              Guardar regla
+            </label>
+          )}
           <button
             disabled={busy || (!projectId && !categoryId)}
             onClick={apply}

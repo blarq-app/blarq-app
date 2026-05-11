@@ -16,19 +16,29 @@
         <string>cd /Users/mjblanco/Desktop/blarq-app &amp;&amp; /usr/local/bin/npm run sii:sync-pdfs</string>
     </array>
 
-    <!-- Schedule: todos los días a las 9:00 AM. Si la mac está dormida a esa
-         hora, LaunchAgent dispara el job apenas despierte (semántica de
+    <!-- Schedule: cada hora en punto entre las 9 AM y las 8 PM (12 corridas
+         al día en horario laboral). Antes era 1x/día a las 9; MJ quería que
+         las facturas sincronizadas tuvieran su PDF más rápido. Si la mac
+         está dormida, LaunchAgent dispara apenas despierte (semántica de
          StartCalendarInterval en macOS). -->
     <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>
-        <integer>9</integer>
-        <key>Minute</key>
-        <integer>0</integer>
-    </dict>
+    <array>
+        <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>12</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>14</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>15</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>17</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>18</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>19</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>20</integer><key>Minute</key><integer>0</integer></dict>
+    </array>
 
-    <!-- Sin auto-restart en caso de error. Si falla, esperamos al siguiente
-         día a las 9:00 — no queremos retry-loop que mande N requests al SII. -->
+    <!-- Sin auto-restart en caso de error. Si falla, esperamos a la próxima
+         hora — no queremos retry-loop que mande N requests al SII. -->
     <key>KeepAlive</key>
     <false/>
 

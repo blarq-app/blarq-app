@@ -20,6 +20,7 @@ type Project = {
 type Category = {
   id: string;
   name: string;
+  appliesTo?: string;
   parent: { id: string; name: string } | null;
 };
 
@@ -72,6 +73,7 @@ export default function FacturasTable({
         name: c.name,
         parentId: c.parent?.id ?? null,
         parentName: c.parent?.name ?? null,
+        appliesTo: c.appliesTo,
       })),
     [categories]
   );
@@ -191,6 +193,7 @@ export default function FacturasTable({
                 <td className="px-4 py-2 max-w-[180px]">
                   <EditableCategoryCell
                     invoiceId={inv.id}
+                    invoiceType={inv.type as "emitida" | "recibida"}
                     currentCategoryId={inv.category?.id ?? null}
                     currentCategoryName={inv.category?.name ?? null}
                     options={categoryOptions}
@@ -248,6 +251,13 @@ export default function FacturasTable({
 
       <BulkAssignBar
         selectedIds={Array.from(selected)}
+        selectedTypes={
+          new Set(
+            invoices
+              .filter((i) => selected.has(i.id))
+              .map((i) => i.type as "emitida" | "recibida")
+          )
+        }
         onClear={() => setSelected(new Set())}
         projects={projects}
         categories={categories}

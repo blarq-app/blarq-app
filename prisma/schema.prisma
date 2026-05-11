@@ -62,6 +62,7 @@ model Project {
   maestro         Maestro?        @relation(fields: [maestroId], references: [id])
   estadosPago     EstadoPago[]
   shoppingItems   ShoppingItem[]
+  invoiceRules    InvoiceCategorizationRule[]
 
   @@index([maestroId])
   @@index([status])
@@ -493,6 +494,13 @@ model CostCategory {
   name        String
   parentId    String? // Para subcategorias
   type        String  @default("directo") // directo | indirecto
+  // A qué tipo de factura aplica esta categoría:
+  //   "recibida" = solo facturas que llegan a BLARQ (proveedores). Default.
+  //                Acá vivien Materiales, MO, Herramientas, Subcontrato, etc.
+  //   "emitida"  = solo facturas que emite BLARQ al cliente. Acá viven
+  //                Obra, Muebles, Artefactos (top-level del cobro).
+  //   "both"     = aplica a ambas (raro, dejado por completitud).
+  appliesTo   String  @default("recibida")
   sortOrder   Int     @default(0)
 
   parent      CostCategory?  @relation("CategoryParent", fields: [parentId], references: [id])
@@ -635,15 +643,23 @@ model InvoiceCategorizationRule {
   id           String   @id @default(cuid())
   rutIssuer    String   @unique // RUT del proveedor — único, una regla por proveedor
   businessName String?  // nombre referencial, se actualiza con la última factura vista
-  categoryId   String
+  // Acción de la regla. Al menos uno de los dos campos debe estar puesto:
+  //   - categoryId: auto-asigna categoría al matchear el RUT
+  //   - projectId: auto-asigna centro de costo (proyecto)
+  // Si ambos están, la regla setea las 2 cosas en una pasada. Si solo
+  // uno, ese campo se setea y el otro se respeta (no se sobreescribe).
+  categoryId   String?
+  projectId    String?
   hits         Int      @default(0) // cuántas facturas se categorizaron con esta regla
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  category     CostCategory @relation(fields: [categoryId], references: [id])
+  category     CostCategory? @relation(fields: [categoryId], references: [id])
+  project      Project?      @relation(fields: [projectId], references: [id])
 
   @@index([rutIssuer])
   @@index([categoryId])
+  @@index([projectId])
 }
 
 model BankCategorizationRule {

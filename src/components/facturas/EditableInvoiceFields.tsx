@@ -8,6 +8,7 @@ export type CategoryOption = {
   name: string;
   parentId: string | null;
   parentName: string | null;
+  appliesTo?: string; // "recibida" | "emitida" | "both"
 };
 
 export type ProjectOption = {
@@ -30,11 +31,13 @@ function useFlash() {
 
 export function EditableCategoryCell({
   invoiceId,
+  invoiceType,
   currentCategoryId,
   currentCategoryName,
   options,
 }: {
   invoiceId: string;
+  invoiceType: "emitida" | "recibida";
   currentCategoryId: string | null;
   currentCategoryName: string | null;
   options: CategoryOption[];
@@ -110,11 +113,13 @@ export function EditableCategoryCell({
       className="w-full text-sm border border-gray-300 rounded px-1 py-0.5 bg-white"
     >
       <option value="">— sin categoría —</option>
-      {options.map((c) => (
-        <option key={c.id} value={c.id}>
-          {c.parentName ? `${c.parentName} > ${c.name}` : c.name}
-        </option>
-      ))}
+      {options
+        .filter((c) => !c.appliesTo || c.appliesTo === invoiceType || c.appliesTo === "both")
+        .map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.parentName ? `${c.parentName} > ${c.name}` : c.name}
+          </option>
+        ))}
     </select>
   );
 }

@@ -177,6 +177,7 @@ export default async function ProyectoFacturasPage({
       id: true,
       name: true,
       parentId: true,
+      appliesTo: true,
       parent: { select: { name: true } },
     },
     orderBy: [{ parentId: "asc" }, { name: "asc" }],
@@ -186,6 +187,7 @@ export default async function ProyectoFacturasPage({
     name: c.name,
     parentId: c.parentId,
     parentName: c.parent?.name ?? null,
+    appliesTo: c.appliesTo,
   }));
   const allProjects = await prisma.project.findMany({
     select: { id: true, name: true },
@@ -391,6 +393,7 @@ export default async function ProyectoFacturasPage({
                   <td className="px-4 py-2">
                     <EditableCategoryCell
                       invoiceId={inv.id}
+                      invoiceType={inv.type as "emitida" | "recibida"}
                       currentCategoryId={inv.category?.id ?? null}
                       currentCategoryName={inv.category?.name ?? null}
                       options={categoryOptions}

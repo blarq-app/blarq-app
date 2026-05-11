@@ -7,8 +7,10 @@ type Rule = {
   id: string;
   rutIssuer: string;
   businessName: string | null;
-  categoryId: string;
-  categoryLabel: string;
+  categoryId: string | null;
+  categoryLabel: string | null;
+  projectId: string | null;
+  projectLabel: string | null;
   hits: number;
   createdAt: string;
 };
@@ -19,16 +21,24 @@ type Category = {
   parent: { id: string; name: string } | null;
 };
 
+type Project = {
+  id: string;
+  name: string;
+};
+
 export default function InvoiceRulesTable({
   rules,
   categories,
+  projects,
 }: {
   rules: Rule[];
   categories: Category[];
+  projects: Project[];
 }) {
   const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState<string>("");
+  const [editingProjectId, setEditingProjectId] = useState<string>("");
   const [busy, setBusy] = useState(false);
 
   // Categorías agrupadas por padre
@@ -41,13 +51,19 @@ export default function InvoiceRulesTable({
   const parentNames = Object.keys(grouped).sort();
 
   async function saveEdit(ruleId: string) {
-    if (busy || !editingCategoryId) return;
+    if (busy) return;
+    // Necesita al menos uno de los dos campos puestos.
+    if (!editingCategoryId && !editingProjectId) return;
     setBusy(true);
     try {
+      const body: Record<string, unknown> = {};
+      // Permitimos vaciar enviando "" → null para borrar uno de los dos.
+      body.categoryId = editingCategoryId || null;
+      body.projectId = editingProjectId || null;
       const res = await fetch(`/api/facturas/reglas/${ruleId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categoryId: editingCategoryId }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         alert("Error al actualizar regla");
@@ -55,6 +71,7 @@ export default function InvoiceRulesTable({
       }
       setEditingId(null);
       setEditingCategoryId("");
+      setEditingProjectId("");
       router.refresh();
     } finally {
       setBusy(false);
@@ -101,6 +118,7 @@ export default function InvoiceRulesTable({
             <th className="text-left px-4 py-2">Proveedor</th>
             <th className="text-left px-4 py-2 w-32 tabular-nums">RUT</th>
             <th className="text-left px-4 py-2">Categoría</th>
+            <th className="text-left px-4 py-2">Centro de costo</th>
             <th className="text-right px-4 py-2 w-24">Aplicada</th>
             <th className="text-left px-4 py-2 w-32">Creada</th>
             <th className="px-4 py-2 w-28"></th>
@@ -125,7 +143,7 @@ export default function InvoiceRulesTable({
                       autoFocus
                       className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
                     >
-                      <option value="">— Elegir —</option>
+                      <option value="">— sin categoría —</option>
                       {parentNames.map((parent) => (
                         <optgroup key={parent} label={parent}>
                           {grouped[parent].map((c) => (
@@ -137,7 +155,23 @@ export default function InvoiceRulesTable({
                       ))}
                     </select>
                   ) : (
-                    r.categoryLabel
+                    r.categoryLabel ?? <span className="text-gray-400 italic">—</span>
+                  )}
+                </td>
+                <td className="px-4 py-2 text-gray-700">
+                  {isEditing ? (
+                    <select
+                      value={editingProjectId}
+                      onChange={(e) => setEditingProjectId(e.target.value)}
+                      className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+                    >
+                      <option value="">— sin proyecto —</option>
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    r.projectLabel ?? <span className="text-gray-400 italic">—</span>
                   )}
                 </td>
                 <td className="px-4 py-2 text-right tabular-nums text-gray-600">
@@ -155,7 +189,7 @@ export default function InvoiceRulesTable({
                     <div className="flex items-center gap-1 justify-end">
                       <button
                         onClick={() => saveEdit(r.id)}
-                        disabled={busy || !editingCategoryId}
+                        disabled={busy || (!editingCategoryId && !editingProjectId)}
                         className="text-xs bg-gray-900 text-white px-2 py-0.5 rounded hover:bg-gray-800 disabled:opacity-50"
                       >
                         Guardar
@@ -164,6 +198,7 @@ export default function InvoiceRulesTable({
                         onClick={() => {
                           setEditingId(null);
                           setEditingCategoryId("");
+                          setEditingProjectId("");
                         }}
                         className="text-xs text-gray-500 hover:text-gray-700"
                       >
@@ -175,7 +210,8 @@ export default function InvoiceRulesTable({
                       <button
                         onClick={() => {
                           setEditingId(r.id);
-                          setEditingCategoryId(r.categoryId);
+                          setEditingCategoryId(r.categoryId ?? "");
+                          setEditingProjectId(r.projectId ?? "");
                         }}
                         className="text-xs text-gray-500 hover:text-gray-900 underline"
                       >

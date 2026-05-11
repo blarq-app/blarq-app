@@ -75,23 +75,18 @@ export async function PUT(
           created: boolean;
           updated: boolean;
           appliedRetroactively: number;
-          previousCategoryId?: string | null;
         }
       | null = null;
-    if (invoice.type === "recibida" && invoice.categoryId && invoice.rutIssuer) {
+    if (invoice.rutIssuer && (invoice.categoryId || invoice.projectId)) {
       const r = await upsertInvoiceRule(
         invoice.rutIssuer,
         invoice.businessName ?? null,
-        invoice.categoryId
+        {
+          ...(invoice.categoryId && { categoryId: invoice.categoryId }),
+          ...(invoice.projectId && { projectId: invoice.projectId }),
+        }
       ).catch(() => null);
-      // Solo emitimos rule en la respuesta si pasó algo digno de toast:
-      // creó la regla, la cambió, o aplicó retroactivamente.
-      if (
-        r &&
-        (r.created || r.updated || r.appliedRetroactively > 0)
-      ) {
-        rule = r;
-      }
+      if (r && (r.created || r.updated || r.appliedRetroactively > 0)) rule = r;
     }
 
     return NextResponse.json({ ...invoice, rule });
@@ -143,19 +138,20 @@ export async function PATCH(
           created: boolean;
           updated: boolean;
           appliedRetroactively: number;
-          previousCategoryId?: string | null;
         }
       | null = null;
     if (
-      "categoryId" in updates &&
-      invoice.type === "recibida" &&
-      invoice.categoryId &&
-      invoice.rutIssuer
+      invoice.rutIssuer &&
+      ((("categoryId" in updates) && invoice.categoryId) ||
+        (("projectId" in updates) && invoice.projectId))
     ) {
       const r = await upsertInvoiceRule(
         invoice.rutIssuer,
         invoice.businessName ?? null,
-        invoice.categoryId
+        {
+          ...("categoryId" in updates && invoice.categoryId && { categoryId: invoice.categoryId }),
+          ...("projectId" in updates && invoice.projectId && { projectId: invoice.projectId }),
+        }
       ).catch(() => null);
       if (r && (r.created || r.updated || r.appliedRetroactively > 0)) rule = r;
     }

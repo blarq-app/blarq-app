@@ -58,9 +58,13 @@ Si algo está roto, a medias, o dudoso: decilo claro. MJ prefiere directo a dipl
 
 Si una decisión razonable tiene 2+ opciones (estructura de datos, UX, naming), **no asumir** — preguntar a MJ con las opciones puestas adelante y la recomendación. Match scope of action to what was asked.
 
-### 4.5 No auto-asignar categoría ni proyecto
+### 4.5 Auto-asignación por regla de proveedor
 
-Decisión de negocio confirmada: las facturas que llegan del SII por sync **nunca** se auto-asignan a categoría ni proyecto. Quedan con `categoryId = null` y `projectId = null` esperando catalogación manual de MJ.
+Las facturas que llegan del SII por sync **se auto-asignan** a categoría y/o proyecto **si existe una regla activa** para el `rutIssuer` (modelo `InvoiceCategorizationRule`). Las reglas se crean automáticamente cuando MJ asigna manualmente categoría y/o proyecto en `/facturas` (bulk o edición inline) — siempre que el toggle "Guardar regla" esté activo en el bulk-assign (default ON).
+
+Una regla puede tener categoría, proyecto, o ambos. Al aplicarse, solo completa los campos vacíos en la factura — no pisa asignaciones manuales previas. Si MJ no quiere regla para un proveedor (caso MK que varía caso a caso), apaga el toggle al asignar.
+
+Histórico (regla anterior, hasta 2026-05-09): el sync nunca auto-asignaba nada — todo quedaba `null` esperando catalogación manual. Cambió con la introducción del motor de reglas + project rules.
 
 ### 4.6 Placeholders ↔ null
 

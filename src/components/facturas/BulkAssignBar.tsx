@@ -12,6 +12,7 @@ type Project = {
 type Category = {
   id: string;
   name: string;
+  appliesTo?: string; // "recibida" | "emitida" | "both"
   parent: { id: string; name: string } | null;
 };
 
@@ -26,11 +27,17 @@ function projectLabel(p: Project) {
 // endpoint), y se muestra un toast con "Deshacer" todas las reglas creadas.
 export default function BulkAssignBar({
   selectedIds,
+  selectedTypes,
   onClear,
   projects,
   categories,
 }: {
   selectedIds: string[];
+  // Tipos de factura seleccionadas (set para evitar duplicados). Si son
+  // todas del mismo tipo filtramos las categorías al subset que aplica.
+  // Si hay tipos mezclados (raro pero posible), mostramos todas con
+  // grupos separados.
+  selectedTypes: Set<"emitida" | "recibida">;
   onClear: () => void;
   projects: Project[];
   categories: Category[];
@@ -49,9 +56,20 @@ export default function BulkAssignBar({
     learnedRuleIds: string[];
   } | null>(null);
 
+  // Filtrar categorías según el tipo de las facturas seleccionadas.
+  // Si todas son del mismo tipo: mostramos las que appliesTo a ese tipo
+  // (+ las "both"). Si hay tipos mezclados: mostramos todas.
+  const onlyType =
+    selectedTypes.size === 1 ? Array.from(selectedTypes)[0] : null;
+  const visibleCategories = onlyType
+    ? categories.filter(
+        (c) => !c.appliesTo || c.appliesTo === onlyType || c.appliesTo === "both"
+      )
+    : categories;
+
   // Categorías agrupadas por padre (igual al filter bar)
   const grouped: Record<string, Category[]> = {};
-  for (const c of categories) {
+  for (const c of visibleCategories) {
     const parentName = c.parent?.name ?? c.name;
     if (!grouped[parentName]) grouped[parentName] = [];
     grouped[parentName].push(c);

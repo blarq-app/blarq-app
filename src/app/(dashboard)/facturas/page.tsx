@@ -97,6 +97,7 @@ export default async function FacturasPage({
       select: {
         id: true,
         name: true,
+        appliesTo: true,
         parent: { select: { id: true, name: true } },
       },
     }),

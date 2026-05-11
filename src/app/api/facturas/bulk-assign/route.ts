@@ -55,39 +55,43 @@ export async function POST(request: NextRequest) {
       updated: boolean;
       rutIssuer: string;
       businessName: string | null;
-      previousCategoryId?: string | null;
     }> = [];
 
-    if (body.categoryId && body.learnRule !== false) {
-      const recibidas = await prisma.invoice.findMany({
+    // Aprender reglas: tanto categoría como proyecto si fueron asignados.
+    // body.learnRule controla ambos (default true). Aplica a facturas con
+    // rutIssuer (cualquier tipo — las emitidas también pueden tener regla
+    // por RUT receptor, aunque hoy la regla usa rutIssuer del proveedor).
+    if (
+      body.learnRule !== false &&
+      (body.categoryId || body.projectId)
+    ) {
+      const facturas = await prisma.invoice.findMany({
         where: {
           id: { in: body.invoiceIds },
-          type: "recibida",
           rutIssuer: { not: null },
         },
         select: { rutIssuer: true, businessName: true },
       });
 
-      // Agrupar por RUT — una regla por RUT
       const seen = new Set<string>();
-      console.log(`[bulk-assign] ${recibidas.length} facturas recibidas con rutIssuer, applying rules`);
-      for (const inv of recibidas) {
+      for (const inv of facturas) {
         if (!inv.rutIssuer || seen.has(inv.rutIssuer)) continue;
         seen.add(inv.rutIssuer);
         try {
           const r = await upsertInvoiceRule(
             inv.rutIssuer,
             inv.businessName ?? null,
-            body.categoryId
+            {
+              ...(body.categoryId && { categoryId: body.categoryId }),
+              ...(body.projectId && { projectId: body.projectId }),
+            }
           );
-          console.log(`[bulk-assign] regla ${r.created ? "creada" : r.updated ? "actualizada" : "incrementada"} ${inv.rutIssuer} → cat — retro: ${r.appliedRetroactively}`);
           learnedRules.push({
             ruleId: r.ruleId,
             created: r.created,
             updated: r.updated,
             rutIssuer: inv.rutIssuer,
             businessName: inv.businessName ?? null,
-            previousCategoryId: r.previousCategoryId,
           });
         } catch (e) {
           console.error(`[bulk-assign] upsertInvoiceRule failed for ${inv.rutIssuer}:`, e);

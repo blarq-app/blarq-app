@@ -3,11 +3,12 @@ import Link from "next/link";
 import InvoiceRulesTable from "@/components/facturas/InvoiceRulesTable";
 
 export default async function FacturasReglasPage() {
-  const [rules, categories] = await Promise.all([
+  const [rules, categories, projects] = await Promise.all([
     prisma.invoiceCategorizationRule.findMany({
       orderBy: [{ hits: "desc" }, { updatedAt: "desc" }],
       include: {
         category: { select: { id: true, name: true, parent: { select: { name: true } } } },
+        project: { select: { id: true, name: true } },
       },
     }),
     prisma.costCategory.findMany({
@@ -17,6 +18,10 @@ export default async function FacturasReglasPage() {
         name: true,
         parent: { select: { id: true, name: true } },
       },
+    }),
+    prisma.project.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
     }),
   ]);
 
@@ -37,12 +42,12 @@ export default async function FacturasReglasPage() {
       </div>
 
       <div className="bg-blue-50/40 border border-blue-100 rounded-lg p-3 mb-4 text-xs text-gray-700 leading-relaxed">
-        Cada vez que asignás categoría a una factura recibida (manual, edición o
-        bulk en /facturas), se guarda una regla{" "}
-        <span className="font-medium">RUT proveedor → categoría</span>. Las próximas facturas
-        del mismo proveedor que entren por sync SII o creación manual heredan la
-        categoría automáticamente. El centro de costo / proyecto NO se auto-asigna —
-        siempre lo definís vos.
+        Cada vez que asignás categoría o centro de costo a una factura
+        recibida (manual, edición o bulk en /facturas), se guarda una regla{" "}
+        <span className="font-medium">RUT proveedor → categoría / proyecto</span>.
+        Las próximas facturas del mismo proveedor que entren por sync SII o
+        creación manual heredan estos valores automáticamente. Cada regla
+        puede tener categoría, proyecto, o ambos.
       </div>
 
       <InvoiceRulesTable
@@ -51,13 +56,18 @@ export default async function FacturasReglasPage() {
           rutIssuer: r.rutIssuer,
           businessName: r.businessName,
           categoryId: r.categoryId,
-          categoryLabel: r.category.parent
-            ? `${r.category.parent.name} · ${r.category.name}`
-            : r.category.name,
+          categoryLabel: r.category
+            ? r.category.parent
+              ? `${r.category.parent.name} · ${r.category.name}`
+              : r.category.name
+            : null,
+          projectId: r.projectId,
+          projectLabel: r.project?.name ?? null,
           hits: r.hits,
           createdAt: r.createdAt.toISOString(),
         }))}
         categories={categories}
+        projects={projects}
       />
     </div>
   );

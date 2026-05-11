@@ -22,35 +22,42 @@ export async function DELETE(
 }
 
 // PATCH /api/facturas/reglas/[id]
-// Permite cambiar la categoría de una regla existente.
-// Aplica retroactivamente a facturas SIN categoría asignada del mismo RUT.
-// Las facturas que ya tenían otra categoría asignada NO se tocan.
+// Permite cambiar categoría y/o proyecto de una regla existente.
+// Body acepta { categoryId?: string|null, projectId?: string|null }.
+// Aplica retroactivamente a facturas SIN ese campo asignado del mismo RUT.
+// Las facturas que ya tenían valor manual NO se tocan.
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const body = (await request.json()) as Partial<{ categoryId: string }>;
+    const body = (await request.json()) as Partial<{
+      categoryId: string | null;
+      projectId: string | null;
+    }>;
     const updated = await prisma.invoiceCategorizationRule.update({
       where: { id },
       data: {
         ...(body.categoryId !== undefined && { categoryId: body.categoryId }),
+        ...(body.projectId !== undefined && { projectId: body.projectId }),
       },
     });
 
-    // Si cambió la categoría, aplicar retroactivamente a facturas sin categoría.
     let appliedRetroactively = 0;
-    if (body.categoryId !== undefined) {
+    if (body.categoryId) {
       const retro = await prisma.invoice.updateMany({
-        where: {
-          type: "recibida",
-          rutIssuer: updated.rutIssuer,
-          categoryId: null,
-        },
+        where: { rutIssuer: updated.rutIssuer, categoryId: null },
         data: { categoryId: body.categoryId },
       });
-      appliedRetroactively = retro.count;
+      appliedRetroactively += retro.count;
+    }
+    if (body.projectId) {
+      const retro = await prisma.invoice.updateMany({
+        where: { rutIssuer: updated.rutIssuer, projectId: null },
+        data: { projectId: body.projectId },
+      });
+      appliedRetroactively += retro.count;
     }
 
     return NextResponse.json({ ok: true, rule: updated, appliedRetroactively });

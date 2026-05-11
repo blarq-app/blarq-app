@@ -86,7 +86,7 @@ export function EditableCategoryCell({
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="text-left w-full text-gray-600 hover:text-gray-900 hover:bg-gray-100 -mx-1 px-1 rounded"
+        className="text-left w-full text-gray-600 hover:text-gray-900 hover:bg-gray-100 -mx-1 px-1 rounded decoration-dotted underline decoration-gray-300 underline-offset-4 hover:decoration-gray-500"
         title="Click para cambiar categoría"
       >
         {currentCategoryName ?? <span className="text-gray-400 italic">sin categoría</span>}
@@ -179,7 +179,7 @@ export function EditableProjectCell({
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="text-left w-full text-gray-700 hover:text-gray-900 hover:bg-gray-100 -mx-1 px-1 rounded truncate"
+        className="text-left w-full text-gray-700 hover:text-gray-900 hover:bg-gray-100 -mx-1 px-1 rounded truncate decoration-dotted underline decoration-gray-300 underline-offset-4 hover:decoration-gray-500"
         title="Click para cambiar proyecto"
       >
         {currentProjectName ?? <span className="text-gray-400 italic">sin asignar</span>}

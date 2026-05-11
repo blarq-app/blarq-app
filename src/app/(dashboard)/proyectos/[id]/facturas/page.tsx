@@ -203,9 +203,17 @@ export default async function ProyectoFacturasPage({
   const totalEmitido = invoices
     .filter((i) => i.type === "emitida")
     .reduce((s, i) => s + sign(i) * i.totalAmount, 0);
+  const totalEmitidoNeto = invoices
+    .filter((i) => i.type === "emitida")
+    .reduce((s, i) => s + sign(i) * i.netAmount, 0);
   const totalRecibido = invoices
     .filter((i) => i.type === "recibida")
     .reduce((s, i) => s + sign(i) * i.totalAmount, 0);
+  // Versión NETA del recibido — para cuadrar con el "real" del Resumen,
+  // que está en neto porque el IVA se recupera como crédito fiscal.
+  const totalRecibidoNeto = invoices
+    .filter((i) => i.type === "recibida")
+    .reduce((s, i) => s + sign(i) * i.netAmount, 0);
   // "Por cobrar/pagar" = saldo restante (totalAmount − ya imputado). Cubre
   // tanto status=pendiente (saldo completo) como parcial (saldo residual).
   // Las NCs también revierten saldo pendiente.
@@ -223,8 +231,16 @@ export default async function ProyectoFacturasPage({
     <div>
       {/* Stats — reflejan el filtro aplicado */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <Stat label="Emitido" value={formatCLP(totalEmitido)} sub="cobros al cliente" />
-        <Stat label="Recibido" value={formatCLP(totalRecibido)} sub="gastos a proveedores" />
+        <Stat
+          label="Emitido"
+          value={formatCLP(totalEmitido)}
+          sub={`neto ${formatCLP(totalEmitidoNeto)}`}
+        />
+        <Stat
+          label="Recibido"
+          value={formatCLP(totalRecibido)}
+          sub={`neto ${formatCLP(totalRecibidoNeto)} · gastos a proveedores`}
+        />
         <Stat
           label="Por cobrar"
           value={formatCLP(porCobrar)}

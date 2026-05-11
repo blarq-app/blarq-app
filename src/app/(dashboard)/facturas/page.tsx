@@ -106,9 +106,15 @@ export default async function FacturasPage({
   const totalEmitido = invoices
     .filter((i) => i.type === "emitida")
     .reduce((s, i) => s + i.totalAmount, 0);
+  const totalEmitidoNeto = invoices
+    .filter((i) => i.type === "emitida")
+    .reduce((s, i) => s + i.netAmount, 0);
   const totalRecibido = invoices
     .filter((i) => i.type === "recibida")
     .reduce((s, i) => s + i.totalAmount, 0);
+  const totalRecibidoNeto = invoices
+    .filter((i) => i.type === "recibida")
+    .reduce((s, i) => s + i.netAmount, 0);
 
   // Default desde el cual sincronizar SII (1 abril, fecha de corte de MJ)
   const SII_SYNC_FROM = "2026-04-01";
@@ -164,12 +170,12 @@ export default async function FacturasPage({
         <Stat
           label="Emitido"
           value={formatCLP(totalEmitido)}
-          sub="cobros al cliente"
+          sub={`neto ${formatCLP(totalEmitidoNeto)}`}
         />
         <Stat
           label="Recibido"
           value={formatCLP(totalRecibido)}
-          sub="gastos a proveedores"
+          sub={`neto ${formatCLP(totalRecibidoNeto)}`}
         />
       </div>
 

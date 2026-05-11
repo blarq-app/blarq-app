@@ -4,29 +4,32 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 // Botón "Importar desde otro proyecto" — abre un modal con la lista de
-// proyectos que tienen al menos una versión Obra cargada. Al elegir uno,
-// se clona la última versión Obra como punto de partida en el proyecto
-// actual: misma estructura de partidas, pero cantidades en 0 y precios
-// refrescados del catálogo (no del snapshot del proyecto fuente).
+// proyectos que tienen al menos una versión del tipo elegido (obra,
+// muebles, artefactos) cargada. Al elegir uno, se clona como punto de
+// partida con estructura preservada pero precios/cantidades reseteados.
 //
-// Pensado para el caso de uso "tengo una cotización nueva y quiero
-// arrancar desde una estructura típica" — donde la mayoría de las
-// partidas son las mismas que en proyectos anteriores.
+// Para obra: precios refrescados del catálogo, qty=0.
+// Para muebles: precios reseteados a 0, qty=1, supplier preservado.
+// Para artefactos: similar a muebles (no implementado todavía).
 
 export type SourceProject = {
   id: string;
   name: string;
-  latestObraBudgetId: string;
-  latestObraVersion: string;
-  partidasCount: number;
+  latestBudgetId: string;
+  latestVersion: string;
+  itemsCount: number;
 };
 
 export default function ImportarDesdeProyectoButton({
   projectId,
   sources,
+  type = "obra",
+  label,
 }: {
   projectId: string;
   sources: SourceProject[];
+  type?: "obra" | "muebles" | "artefactos";
+  label?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -44,10 +47,10 @@ export default function ImportarDesdeProyectoButton({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId,
-          type: "obra",
+          type,
           baseVersionId: selected,
           resetQuantities: true,
-          refreshFromCatalog: true,
+          refreshFromCatalog: type === "obra", // catálogo solo aplica a obra
         }),
       });
       if (!res.ok) throw new Error("Error al importar");
@@ -66,7 +69,7 @@ export default function ImportarDesdeProyectoButton({
         onClick={() => setOpen(true)}
         className="text-sm text-gray-700 hover:text-gray-900 border border-gray-300 hover:border-gray-500 px-3 py-2 rounded-lg transition-colors"
       >
-        Importar desde otro proyecto
+        {label ?? "Importar desde otro proyecto"}
       </button>
 
       {open && (
@@ -80,12 +83,15 @@ export default function ImportarDesdeProyectoButton({
           >
             <div className="px-5 py-4 border-b border-gray-200">
               <h3 className="font-semibold text-gray-900">
-                Importar partidas desde otro proyecto
+                Importar {type === "muebles" ? "muebles" : type === "artefactos" ? "artefactos" : "partidas"} desde otro proyecto
               </h3>
               <p className="text-xs text-gray-500 mt-1">
-                Crea una versión Obra nueva con la misma estructura del
-                proyecto elegido. Cantidades se ponen en 0 y los precios se
-                refrescan del catálogo actual.
+                Crea una versión {type === "muebles" ? "Muebles" : type === "artefactos" ? "Artefactos" : "Obra"} nueva con la misma estructura del
+                proyecto elegido. {type === "obra"
+                  ? "Cantidades se ponen en 0 y los precios se refrescan del catálogo actual."
+                  : type === "muebles"
+                    ? "Cantidades vuelven a 1, precios a $0, proveedores se mantienen."
+                    : "Cantidades y precios reseteados; estructura preservada."}
               </p>
             </div>
 
@@ -94,15 +100,15 @@ export default function ImportarDesdeProyectoButton({
                 <label
                   key={s.id}
                   className={`flex items-center gap-3 px-5 py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 ${
-                    selected === s.latestObraBudgetId ? "bg-gray-50" : ""
+                    selected === s.latestBudgetId ? "bg-gray-50" : ""
                   }`}
                 >
                   <input
                     type="radio"
                     name="source"
-                    value={s.latestObraBudgetId}
-                    checked={selected === s.latestObraBudgetId}
-                    onChange={() => setSelected(s.latestObraBudgetId)}
+                    value={s.latestBudgetId}
+                    checked={selected === s.latestBudgetId}
+                    onChange={() => setSelected(s.latestBudgetId)}
                     className="accent-gray-900"
                   />
                   <div className="flex-1">
@@ -110,7 +116,7 @@ export default function ImportarDesdeProyectoButton({
                       {s.name}
                     </div>
                     <div className="text-xs text-gray-500">
-                      Obra {s.latestObraVersion} · {s.partidasCount} partidas
+                      {s.latestVersion} · {s.itemsCount} {type === "obra" ? "partidas" : "items"}
                     </div>
                   </div>
                 </label>

@@ -32,40 +32,56 @@ export default async function PresupuestoPage({
 
   if (!project) notFound();
 
-  // Lista de proyectos que pueden servir como fuente para importar partidas
-  // (cualquier proyecto que no sea este y que tenga al menos 1 obraItem en
-  // alguna versión Obra). La latestObraBudget es la más reciente — MJ casi
-  // siempre va a querer usar la última.
-  const sourceCandidates = await prisma.project.findMany({
-    where: {
-      id: { not: id },
-      budgetVersions: {
-        some: { type: "obra", obraItems: { some: {} } },
+  // Helper para armar la lista de fuentes para "Importar desde otro proyecto"
+  // de un tipo (obra / muebles / artefactos). Filtra proyectos que tengan al
+  // menos una versión del tipo elegido con contenido.
+  async function buildSources(
+    forType: "obra" | "muebles" | "artefactos"
+  ): Promise<SourceProject[]> {
+    const someItems =
+      forType === "obra"
+        ? { obraItems: { some: {} } }
+        : forType === "muebles"
+          ? { muebleItems: { some: {} } }
+          : { artefactoItems: { some: {} } };
+    const candidates = await prisma.project.findMany({
+      where: {
+        id: { not: id },
+        budgetVersions: { some: { type: forType, ...someItems } },
       },
-    },
-    include: {
-      budgetVersions: {
-        where: { type: "obra", obraItems: { some: {} } },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: {
-          id: true,
-          version: true,
-          _count: { select: { obraItems: true } },
+      include: {
+        budgetVersions: {
+          where: { type: forType, ...someItems },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            version: true,
+            _count: { select: { obraItems: true, muebleItems: true, artefactoItems: true } },
+          },
         },
       },
-    },
-    orderBy: { name: "asc" },
-  });
-  const sources: SourceProject[] = sourceCandidates
-    .filter((p) => p.budgetVersions[0])
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      latestObraBudgetId: p.budgetVersions[0].id,
-      latestObraVersion: p.budgetVersions[0].version,
-      partidasCount: p.budgetVersions[0]._count.obraItems,
-    }));
+      orderBy: { name: "asc" },
+    });
+    return candidates
+      .filter((p) => p.budgetVersions[0])
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        latestBudgetId: p.budgetVersions[0].id,
+        latestVersion: p.budgetVersions[0].version,
+        itemsCount:
+          forType === "obra"
+            ? p.budgetVersions[0]._count.obraItems
+            : forType === "muebles"
+              ? p.budgetVersions[0]._count.muebleItems
+              : p.budgetVersions[0]._count.artefactoItems,
+      }));
+  }
+  const [sources, mueblesSources] = await Promise.all([
+    buildSources("obra"),
+    buildSources("muebles"),
+  ]);
 
   const obraVersions = project.budgetVersions.filter((b) => b.type === "obra");
   const muebleVersions = project.budgetVersions.filter(
@@ -209,7 +225,15 @@ export default async function PresupuestoPage({
           <h2 className="text-lg font-semibold text-gray-900">
             Presupuesto Muebles
           </h2>
-          <NuevaVersionButton projectId={project.id} type="muebles" />
+          <div className="flex items-center gap-2">
+            <ImportarDesdeProyectoButton
+              projectId={project.id}
+              sources={mueblesSources}
+              type="muebles"
+              label="Importar desde otro proyecto"
+            />
+            <NuevaVersionButton projectId={project.id} type="muebles" />
+          </div>
         </div>
         {muebleVersions.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500">

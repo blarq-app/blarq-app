@@ -139,7 +139,14 @@ export async function POST(request: NextRequest) {
       }
 
       if (data.type === "muebles") {
-        // Duplicar capítulos → items → detalles preservando estructura
+        // En modo plantilla (importar desde otro proyecto):
+        // - Mantenemos chapters + estructura de items (Mueble, Herrajes,
+        //   Cubierta, etc) + supplier (Carlos, Giacomo, etc — son fijos).
+        // - Reseteamos precios y cantidades — son específicos del proyecto.
+        // - NO copiamos quotes (cotizaciones alternativas) — son del
+        //   contexto histórico del proyecto fuente.
+        // En modo duplicar normal, copia todo tal cual.
+        const isTemplate = !!data.resetQuantities;
         const chapters = await prisma.muebleChapter.findMany({
           where: { budgetVersionId: previousVersion.id },
           orderBy: { sortOrder: "asc" },
@@ -169,13 +176,13 @@ export async function POST(request: NextRequest) {
                 chapterId: newChapter.id,
                 itemNumber: item.itemNumber,
                 name: item.name,
-                descriptionGeneral: item.descriptionGeneral,
-                quantity: item.quantity,
-                supplier: item.supplier,
-                costDistributor: item.costDistributor,
-                utilityPercentage: item.utilityPercentage,
-                clientPriceNet: item.clientPriceNet,
-                clientPriceIva: item.clientPriceIva,
+                descriptionGeneral: isTemplate ? null : item.descriptionGeneral,
+                quantity: isTemplate ? 1 : item.quantity,
+                supplier: item.supplier, // preservar — proveedores son típicos
+                costDistributor: isTemplate ? 0 : item.costDistributor,
+                utilityPercentage: item.utilityPercentage, // % se mantiene
+                clientPriceNet: isTemplate ? 0 : item.clientPriceNet,
+                clientPriceIva: isTemplate ? 0 : item.clientPriceIva,
                 sortOrder: item.sortOrder,
               },
             });
@@ -189,21 +196,23 @@ export async function POST(request: NextRequest) {
                 },
               });
             }
-            // Clonar cotizaciones (preservando cuál está activa)
-            for (const q of item.quotes) {
-              await prisma.muebleQuote.create({
-                data: {
-                  itemId: newItem.id,
-                  supplier: q.supplier,
-                  costDistributor: q.costDistributor,
-                  utilityPercentage: q.utilityPercentage,
-                  clientPriceNet: q.clientPriceNet,
-                  clientPriceIva: q.clientPriceIva,
-                  notes: q.notes,
-                  isSelected: q.isSelected,
-                  sortOrder: q.sortOrder,
-                },
-              });
+            // En modo plantilla NO copiamos cotizaciones alternativas.
+            if (!isTemplate) {
+              for (const q of item.quotes) {
+                await prisma.muebleQuote.create({
+                  data: {
+                    itemId: newItem.id,
+                    supplier: q.supplier,
+                    costDistributor: q.costDistributor,
+                    utilityPercentage: q.utilityPercentage,
+                    clientPriceNet: q.clientPriceNet,
+                    clientPriceIva: q.clientPriceIva,
+                    notes: q.notes,
+                    isSelected: q.isSelected,
+                    sortOrder: q.sortOrder,
+                  },
+                });
+              }
             }
           }
         }

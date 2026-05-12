@@ -8,6 +8,12 @@ import {
 } from "@/lib/pdf/ArtefactosPDF.html";
 import { renderPDF } from "@/lib/pdf/renderPDF";
 
+// Forzar Node runtime (no edge) — Puppeteer/Chromium necesita Node.
+export const runtime = "nodejs";
+// La generación de PDF con Chromium headless puede tomar 10-30s. Default
+// Vercel free tier es 10s, Pro 60s — subimos al máximo permitido.
+export const maxDuration = 60;
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

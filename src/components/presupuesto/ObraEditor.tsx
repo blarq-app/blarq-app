@@ -1220,37 +1220,115 @@ export default function ObraEditor({
         </div>
       )}
 
-      {/* Resumen financiero */}
+      {/* Resumen financiero — 2 columnas:
+          IZQUIERDA: desglose del costo directo por tipo (Materiales, MO,
+          Herramientas, Subcontrato, Pérdidas, Margen). Sirve para que
+          MJ vea cuánto se le está pagando al maestro mientras cotiza,
+          y ajuste valores in-situ si algo se desbalancea.
+          DERECHA: cascada CD + GG + Util + IVA = Total. */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
           Resumen Presupuesto
         </h2>
-        <div className="max-w-md space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Costo Directo</span>
-            <span className="font-medium">{formatCLP(costoDirecto)}</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Desglose costo directo por tipo */}
+          <div>
+            <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">
+              Desglose costo directo
+            </div>
+            {(() => {
+              // Sumar por tipo. Costo directo total = suma de items.total
+              // (que ya incluye desglose interno). Cada componente es la
+              // suma de cost{X} × quantity en todos los items.
+              const sumByType = items.reduce(
+                (acc, it) => ({
+                  material: acc.material + (it.costMaterial ?? 0) * it.quantity,
+                  labor: acc.labor + (it.costLabor ?? 0) * it.quantity,
+                  tools: acc.tools + (it.costTools ?? 0) * it.quantity,
+                  subcontract:
+                    acc.subcontract + (it.costSubcontract ?? 0) * it.quantity,
+                  loss: acc.loss + (it.costLoss ?? 0) * it.quantity,
+                  margin: acc.margin + (it.costMargin ?? 0) * it.quantity,
+                }),
+                { material: 0, labor: 0, tools: 0, subcontract: 0, loss: 0, margin: 0 }
+              );
+              const rows: { label: string; value: number; tone?: string }[] = [
+                { label: "Materiales", value: sumByType.material },
+                { label: "Mano de obra", value: sumByType.labor, tone: "text-amber-700" },
+                { label: "Herramientas", value: sumByType.tools },
+                { label: "Subcontrato", value: sumByType.subcontract },
+                { label: "Pérdidas", value: sumByType.loss },
+                { label: "Margen", value: sumByType.margin, tone: "text-green-700" },
+              ];
+              const sumDesglose = rows.reduce((s, r) => s + r.value, 0);
+              const sinClasificar = costoDirecto - sumDesglose;
+              return (
+                <div className="space-y-1.5">
+                  {rows.map((r) => {
+                    const pct = costoDirecto > 0 ? (r.value / costoDirecto) * 100 : 0;
+                    return (
+                      <div key={r.label} className="flex items-center justify-between text-sm">
+                        <span className={`text-gray-600 ${r.tone ?? ""}`}>{r.label}</span>
+                        <div className="flex items-center gap-3 tabular-nums">
+                          <span className="text-xs text-gray-400 w-10 text-right">{pct.toFixed(0)}%</span>
+                          <span className={`font-medium w-28 text-right ${r.tone ?? ""}`}>{formatCLP(r.value)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {Math.abs(sinClasificar) > 1 && (
+                    <div className="flex items-center justify-between text-sm pt-1.5 border-t border-gray-100">
+                      <span className="text-gray-400 italic">(sin desglose)</span>
+                      <div className="flex items-center gap-3 tabular-nums">
+                        <span className="text-xs text-gray-400 w-10 text-right">
+                          {costoDirecto > 0 ? ((sinClasificar / costoDirecto) * 100).toFixed(0) : 0}%
+                        </span>
+                        <span className="font-medium text-gray-400 w-28 text-right">
+                          {formatCLP(sinClasificar)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-sm pt-1.5 border-t-2 border-gray-300 font-bold">
+                    <span>Costo directo</span>
+                    <span className="tabular-nums">{formatCLP(costoDirecto)}</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">
-              Gastos Generales ({ggPercent}%)
-            </span>
-            <span className="font-medium">{formatCLP(gastosGenerales)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Utilidad ({utilPercent}%)</span>
-            <span className="font-medium">{formatCLP(utilidad)}</span>
-          </div>
-          <div className="flex justify-between text-sm border-t border-gray-100 pt-2">
-            <span className="text-gray-600">Neto</span>
-            <span className="font-medium">{formatCLP(neto)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">IVA (19%)</span>
-            <span className="font-medium">{formatCLP(iva)}</span>
-          </div>
-          <div className="flex justify-between text-base font-bold border-t-2 border-gray-900 pt-2">
-            <span>Total con IVA</span>
-            <span>{formatCLP(totalConIva)}</span>
+
+          {/* Cascada hacia Total */}
+          <div className="space-y-2">
+            <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">
+              Cascada hacia total
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Costo Directo</span>
+              <span className="font-medium tabular-nums">{formatCLP(costoDirecto)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">
+                Gastos Generales ({ggPercent}%)
+              </span>
+              <span className="font-medium tabular-nums">{formatCLP(gastosGenerales)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Utilidad ({utilPercent}%)</span>
+              <span className="font-medium tabular-nums">{formatCLP(utilidad)}</span>
+            </div>
+            <div className="flex justify-between text-sm border-t border-gray-100 pt-2">
+              <span className="text-gray-600">Neto</span>
+              <span className="font-medium tabular-nums">{formatCLP(neto)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">IVA (19%)</span>
+              <span className="font-medium tabular-nums">{formatCLP(iva)}</span>
+            </div>
+            <div className="flex justify-between text-base font-bold border-t-2 border-gray-900 pt-2">
+              <span>Total con IVA</span>
+              <span className="tabular-nums">{formatCLP(totalConIva)}</span>
+            </div>
           </div>
         </div>
       </div>

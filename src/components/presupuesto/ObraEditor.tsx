@@ -539,10 +539,11 @@ export default function ObraEditor({
           <thead>
             <tr className="border-b-2 border-gray-900 bg-white">
               <th className="text-center px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-12">Item</th>
-              <th className="text-left px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "24%" }}>Partida</th>
-              <th className="text-left px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "40%" }}>Descripcion</th>
+              <th className="text-left px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "22%" }}>Partida</th>
+              <th className="text-left px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "36%" }}>Descripcion</th>
               <th className="text-center px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-14">Un.</th>
               <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-20">Cant.</th>
+              <th className="text-right px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-24" title="Mano de obra por unidad — lo que pagás al maestro">M.O.</th>
               <th className="text-right px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-28">P.U.</th>
               <th className="text-right px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-28">Total</th>
               <th className="w-8"></th>
@@ -584,10 +585,11 @@ export default function ObraEditor({
               <table className="w-full text-sm">
                 <colgroup>
                   <col className="w-12" />
-                  <col style={{ width: "24%" }} />
-                  <col style={{ width: "40%" }} />
+                  <col style={{ width: "22%" }} />
+                  <col style={{ width: "36%" }} />
                   <col className="w-14" />
                   <col className="w-20" />
+                  <col className="w-24" />
                   <col className="w-28" />
                   <col className="w-28" />
                   <col className="w-8" />
@@ -695,6 +697,16 @@ export default function ObraEditor({
                           className="text-force-11 w-full min-w-0 bg-transparent border-0 p-0 text-right text-gray-900 tabular-nums focus:ring-0 outline-none"
                         />
                       </td>
+                      <td className="px-3 py-0.5 align-top" title="Mano de obra por unidad — lo que pagás al maestro por cada m²/un/ml">
+                        <div className="flex items-center justify-end gap-0.5 tabular-nums">
+                          <span className="text-amber-700/60 text-sm">$</span>
+                          <MoneyInput
+                            value={item.costLabor ?? 0}
+                            onChange={(v) => handleUpdateItem(item.id, "costLabor", v)}
+                            className="w-16 bg-transparent border-0 p-0 text-right text-sm text-amber-800 tabular-nums focus:ring-0 outline-none"
+                          />
+                        </div>
+                      </td>
                       <td className="px-3 py-0.5 align-top">
                         <div className="flex items-center justify-end gap-0.5 tabular-nums">
                           <span className="text-gray-400 text-sm">$</span>
@@ -728,7 +740,7 @@ export default function ObraEditor({
                     </tr>
                     {expandedItems[item.id] && (
                       <tr className="bg-gray-50">
-                        <td colSpan={8} className="px-4 py-3 space-y-3">
+                        <td colSpan={9} className="px-4 py-3 space-y-3">
                           {/* Descripción para el maestro (no aparece en PDF cliente) */}
                           <div>
                             <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">

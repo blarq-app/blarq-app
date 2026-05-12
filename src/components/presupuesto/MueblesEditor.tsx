@@ -936,7 +936,7 @@ function ItemBlock({
           panel de cálculo del proveedor activo + tabla de comparativa.
           Pintado en rojo burdeo para señalar visualmente que es info
           INTERNA (no va al PDF del cliente). Utilidad sigue en verde. */}
-      <div className="px-4 py-1.5 border-b border-red-100 bg-red-50/40">
+      <div className="px-4 py-1.5 border-b border-red-200 bg-gray-50">
         <button
           onClick={() => setShowCost((v) => !v)}
           className="text-[11px] text-red-800 hover:text-red-900 flex items-center gap-1.5 w-full text-left"
@@ -961,8 +961,11 @@ function ItemBlock({
 
         {showCost && (
           <div className="mt-2 space-y-2">
-            {/* Cálculo activo — todo en burdeo salvo la utilidad (verde)
-                y Neto/C/IVA (negro, son el precio al cliente). */}
+            {/* Cálculo activo — solo se muestra cuando hay 2+ cotizaciones
+                (sea o no comparando contra alternativas). Cuando solo hay
+                una, el editor de la cotización única vive directamente
+                en la tabla de comparativa de abajo, evitando duplicación. */}
+            {item.quotes.length >= 2 && (
             <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-xs bg-white border border-red-200 rounded px-2.5 py-1.5">
               <label className="flex items-center gap-1.5">
                 <span className="text-red-700">Proveedor</span>
@@ -1021,11 +1024,12 @@ function ItemBlock({
                 util {formatCLP(item.clientPriceNet - item.costDistributor)}
               </span>
             </div>
+            )}
 
             {/* Comparativa de cotizaciones */}
             <div className="border border-red-200 rounded overflow-hidden bg-white">
             <table className="w-full text-[11px]">
-              <thead className="bg-red-50/60 text-red-700 uppercase tracking-wider text-[9.5px]">
+              <thead className="bg-gray-50 text-red-700 uppercase tracking-wider text-[9.5px]">
                 <tr>
                   <th className="text-left px-2 py-1 font-bold">Proveedor</th>
                   <th className="text-right px-2 py-1 font-bold w-24">Costo dist.</th>
@@ -1037,6 +1041,64 @@ function ItemBlock({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
+                {/* Fila "virtual" para editar item.* directamente cuando
+                    no hay cotizaciones alternativas. Así MJ puede llenar
+                    el primer proveedor inline en la tabla sin necesidad
+                    del panel "Cálculo activo" arriba. */}
+                {item.quotes.length === 0 && (
+                  <tr className="bg-green-50/50">
+                    <td className="px-2 py-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[8px] uppercase tracking-wider px-1 py-0.5 rounded bg-green-700 text-white font-bold">
+                          activa
+                        </span>
+                        <input
+                          type="text"
+                          value={item.supplier ?? ""}
+                          onChange={(e) => onUpdate({ supplier: e.target.value })}
+                          placeholder="proveedor"
+                          className="flex-1 bg-transparent border-0 p-0 outline-none font-bold text-gray-900"
+                        />
+                      </div>
+                    </td>
+                    <td className="px-2 py-1 text-right">
+                      <ThousandsInput
+                        value={item.costDistributor}
+                        onChange={(v) => onUpdate({ costDistributor: v })}
+                        placeholder="0"
+                        className="w-full bg-transparent border-0 p-0 text-right tabular-nums outline-none font-bold text-gray-900"
+                      />
+                    </td>
+                    <td className="px-2 py-1 text-right">
+                      <input
+                        type="number"
+                        step="1"
+                        value={
+                          item.utilityPercentage
+                            ? Math.round(item.utilityPercentage * 100)
+                            : ""
+                        }
+                        onChange={(e) =>
+                          onUpdate({
+                            utilityPercentage: (parseFloat(e.target.value) || 0) / 100,
+                          })
+                        }
+                        placeholder="30"
+                        className="w-full bg-transparent border-0 p-0 text-right tabular-nums outline-none font-bold text-gray-900"
+                      />
+                    </td>
+                    <td className="px-2 py-1 text-right tabular-nums font-bold text-gray-900">
+                      {formatCLP(item.clientPriceNet)}
+                    </td>
+                    <td className="px-2 py-1 text-right tabular-nums font-bold text-gray-900">
+                      {formatCLP(item.clientPriceIva)}
+                    </td>
+                    <td className="px-2 py-1 text-right tabular-nums text-green-700 font-bold">
+                      {formatCLP(item.clientPriceNet - item.costDistributor)}
+                    </td>
+                    <td className="px-2 py-1"></td>
+                  </tr>
+                )}
                 {item.quotes.map((q) => {
                   const isActive = q.isSelected;
                   // En la fila activa los valores van en negrita; en las

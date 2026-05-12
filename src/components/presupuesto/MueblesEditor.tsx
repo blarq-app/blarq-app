@@ -933,18 +933,20 @@ function ItemBlock({
       </div>
 
       {/* Costo interno — colapsado por default. Cuando se expande, muestra el
-          panel de cálculo del proveedor activo + tabla de comparativa. */}
-      <div className="px-4 py-1.5 border-b border-gray-100 bg-gray-50/40">
+          panel de cálculo del proveedor activo + tabla de comparativa.
+          Pintado en rojo burdeo para señalar visualmente que es info
+          INTERNA (no va al PDF del cliente). Utilidad sigue en verde. */}
+      <div className="px-4 py-1.5 border-b border-red-100 bg-red-50/40">
         <button
           onClick={() => setShowCost((v) => !v)}
-          className="text-[11px] text-gray-500 hover:text-gray-900 flex items-center gap-1.5 w-full text-left"
+          className="text-[11px] text-red-800 hover:text-red-900 flex items-center gap-1.5 w-full text-left"
         >
           <span className="inline-block w-3">{showCost ? "▾" : "▸"}</span>
           <span className="font-medium">Costo interno</span>
-          <span className="text-gray-400">·</span>
-          <span className="text-gray-700">{item.supplier || "—"}</span>
-          <span className="text-gray-400">·</span>
-          <span className="text-gray-700 tabular-nums">
+          <span className="text-red-300">·</span>
+          <span className="text-red-900">{item.supplier || "—"}</span>
+          <span className="text-red-300">·</span>
+          <span className="text-red-900 tabular-nums">
             {formatCLP(item.clientPriceIva)} c/iva
           </span>
           {item.quotes.length > 1 && (
@@ -959,28 +961,29 @@ function ItemBlock({
 
         {showCost && (
           <div className="mt-2 space-y-2">
-            {/* Cálculo activo */}
-            <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-xs bg-white border border-gray-200 rounded px-2.5 py-1.5">
+            {/* Cálculo activo — todo en burdeo salvo la utilidad (verde)
+                y Neto/C/IVA (negro, son el precio al cliente). */}
+            <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-xs bg-white border border-red-200 rounded px-2.5 py-1.5">
               <label className="flex items-center gap-1.5">
-                <span className="text-gray-500">Proveedor</span>
+                <span className="text-red-700">Proveedor</span>
                 <input
                   type="text"
                   value={item.supplier ?? ""}
                   onChange={(e) => onUpdate({ supplier: e.target.value })}
-                  className="w-28 bg-white border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-gray-900 font-bold text-gray-900"
+                  className="w-28 bg-white border border-red-200 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-red-700 font-bold text-red-900"
                 />
               </label>
               <label className="flex items-center gap-1.5">
-                <span className="text-gray-500">Costo dist.</span>
+                <span className="text-red-700">Costo dist.</span>
                 <ThousandsInput
                   value={item.costDistributor}
                   onChange={(v) => onUpdate({ costDistributor: v })}
                   placeholder="0"
-                  className="w-28 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900 font-bold text-gray-900"
+                  className="w-28 bg-white border border-red-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-red-700 font-bold text-red-900"
                 />
               </label>
               <label className="flex items-center gap-1.5">
-                <span className="text-gray-500">% util.</span>
+                <span className="text-red-700">% util.</span>
                 <input
                   type="number"
                   step="1"
@@ -995,9 +998,9 @@ function ItemBlock({
                     })
                   }
                   placeholder="30"
-                  className="w-14 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-gray-900 font-bold text-gray-900"
+                  className="w-14 bg-white border border-red-200 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:ring-1 focus:ring-red-700 font-bold text-red-900"
                 />
-                <span className="text-gray-500">%</span>
+                <span className="text-red-700">%</span>
               </label>
               <span className="text-gray-300">→</span>
               <span className="text-gray-500">
@@ -1020,16 +1023,16 @@ function ItemBlock({
             </div>
 
             {/* Comparativa de cotizaciones */}
-            <div className="border border-gray-200 rounded overflow-hidden bg-white">
+            <div className="border border-red-200 rounded overflow-hidden bg-white">
             <table className="w-full text-[11px]">
-              <thead className="bg-gray-50 text-gray-500 uppercase tracking-wider text-[9.5px]">
+              <thead className="bg-red-50/60 text-red-700 uppercase tracking-wider text-[9.5px]">
                 <tr>
                   <th className="text-left px-2 py-1 font-bold">Proveedor</th>
                   <th className="text-right px-2 py-1 font-bold w-24">Costo dist.</th>
                   <th className="text-right px-2 py-1 font-bold w-14">% util</th>
-                  <th className="text-right px-2 py-1 font-bold w-24">Neto</th>
-                  <th className="text-right px-2 py-1 font-bold w-24">C/IVA</th>
-                  <th className="text-right px-2 py-1 font-bold w-20">Util</th>
+                  <th className="text-right px-2 py-1 font-bold w-24 text-gray-500">Neto</th>
+                  <th className="text-right px-2 py-1 font-bold w-24 text-gray-500">C/IVA</th>
+                  <th className="text-right px-2 py-1 font-bold w-20 text-green-700">Util</th>
                   <th className="px-2 py-1 w-28"></th>
                 </tr>
               </thead>

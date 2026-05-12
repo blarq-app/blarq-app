@@ -253,6 +253,9 @@ export default async function PresupuestoPage({
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Items
                   </th>
+                  <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Total c/IVA
+                  </th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Estado
                   </th>
@@ -265,6 +268,20 @@ export default async function PresupuestoPage({
                 {muebleVersions.map((budget) => {
                   const status =
                     BUDGET_STATUSES[budget.status as BudgetStatus];
+                  // Total c/IVA = suma de clientPriceIva × quantity en todos
+                  // los items de todos los chapters. Aplica discountPercentage
+                  // si el ppto lo tiene cargado (cierre de deal).
+                  const subtotal = budget.muebleChapters.reduce(
+                    (s, c) =>
+                      s +
+                      c.items.reduce(
+                        (si, it) => si + it.clientPriceIva * it.quantity,
+                        0
+                      ),
+                    0
+                  );
+                  const discount = budget.discountPercentage ?? 0;
+                  const total = subtotal * (1 - discount);
                   return (
                     <tr
                       key={budget.id}
@@ -282,6 +299,13 @@ export default async function PresupuestoPage({
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
                         {budget.muebleChapters.reduce((s, c) => s + c.items.length, 0)} items en {budget.muebleChapters.length} cap.
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 text-right font-medium">
+                        {new Intl.NumberFormat("es-CL", {
+                          style: "currency",
+                          currency: "CLP",
+                          minimumFractionDigits: 0,
+                        }).format(total)}
                       </td>
                       <td className="px-6 py-4">
                         <span
@@ -346,6 +370,9 @@ export default async function PresupuestoPage({
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Items
                   </th>
+                  <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Total c/IVA
+                  </th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Estado
                   </th>
@@ -358,6 +385,12 @@ export default async function PresupuestoPage({
                 {artefactoVersions.map((budget) => {
                   const status =
                     BUDGET_STATUSES[budget.status as BudgetStatus];
+                  // Artefactos: clientPrice ya está c/IVA por convención
+                  // (ver business-model.md). Quantity puede ser >1.
+                  const total = budget.artefactoItems.reduce(
+                    (s, i) => s + i.clientPrice * i.quantity,
+                    0
+                  );
                   return (
                     <tr
                       key={budget.id}
@@ -375,6 +408,13 @@ export default async function PresupuestoPage({
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
                         {budget.artefactoItems.length} items
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 text-right font-medium">
+                        {new Intl.NumberFormat("es-CL", {
+                          style: "currency",
+                          currency: "CLP",
+                          minimumFractionDigits: 0,
+                        }).format(total)}
                       </td>
                       <td className="px-6 py-4">
                         <span

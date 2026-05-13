@@ -282,7 +282,7 @@ const CSS = `
   }
 
   /* ── Payment terms ──────────────────────────────────────────── */
-  .payment-wrap { margin-top: 8px; }
+  .payment-wrap { margin-top: 24px; }
   table.payment { border-collapse: collapse; white-space: nowrap; border: none; }
   .payment td {
     padding: 0.3px 0;
@@ -295,7 +295,7 @@ const CSS = `
   .payment .p-pct   { color: #808080; }
 
   /* ── Observations ───────────────────────────────────────────── */
-  .obs-wrap  { margin-top: 8px; }
+  .obs-wrap  { margin-top: 16px; }
   .obs-grid  { column-count: 2; column-gap: 16px; }
   .obs-item {
     display: flex;

@@ -251,7 +251,7 @@ const CSS = `
   }
 
   /* ── Forma de pago ──────────────────────────────────────────── */
-  .payment-wrap { margin-top: 12px; }
+  .payment-wrap { margin-top: 24px; }
   .section-title {
     font-size: 6.5pt;
     font-weight: 700;
@@ -268,7 +268,7 @@ const CSS = `
   .payment .p-pct   { width: 30%; text-align: right; font-variant-numeric: tabular-nums; }
 
   /* ── Observaciones ─────────────────────────────────────────── */
-  .obs-wrap { margin-top: 12px; page-break-inside: avoid; }
+  .obs-wrap { margin-top: 16px; page-break-inside: avoid; }
   .obs-item {
     display: flex;
     gap: 6px;

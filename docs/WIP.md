@@ -4,7 +4,34 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-06 (cierre · ronda 14 — Arrau a prod)
+- **Última actualización**: 2026-05-13 (cierre · ronda 15 — rediseño PDF + Rosas a prod)
+
+- **Ronda 15 — Rediseño completo del PDF de cotización + Rosas V4 cargado en dev y prod**:
+  - **Nueva línea editorial unificada para obra y muebles** (`src/lib/pdf/ObraPDF.html.ts` + `MueblesPDF.html.ts` + `route.tsx` + `renderPDF.ts`). Cambios visuales mergeados a main 2026-05-13 (PR #1, commit `fd7705b`):
+    - Tipografía suave `#1A1A1A` (no negro absoluto). Pesos más livianos (500 en valores de header).
+    - Header: logo BLARQ a 45px arriba izquierda, "V1 COTIZACION" 18pt + subtítulo (OBRA o MUEBLES Y ARTEFACTOS) + "Profesional a cargo" alineados a la derecha. Debajo: grilla 2 columnas con Mandante/Proyecto/Direccion (izq) + Celular/Fecha/Valor UF (der).
+    - Tabla: sin bordes verticales internos, líneas horizontales `0.15pt #E5E5E5` (casi imperceptibles), header sin fondo gris (solo líneas top/bottom `0.5pt #1A1A1A`), filas de capítulo en `#E5E5E5` + bold 600, padding 2pt/5pt, line-height 1.2.
+    - Bloque de totales: sutil, sin marco rectangular. Solo líneas top/bottom `0.5pt #1A1A1A`. Internas `0.3pt #BFBFBF`. 55% ancho derecha. Labels pegados al borde izquierdo del bloque.
+    - Sin footer (matchea Excel reference).
+    - Márgenes 10mm vertical / 12mm horizontal.
+    - Eliminados `buildObraFooter` y `buildMueblesFooter` (sin uso).
+    - `renderPDF` agregó parámetro `scale` opcional (no usado actualmente, queda disponible si vuelve a hacer falta meter algo en 1 página).
+  - **Lefevre V5 (51 ítems) sale en 2 páginas** con las proporciones nuevas — priorizada legibilidad por encima de 1 página, como pidió MJ en la spec definitiva.
+  - **Artefactos sigue con su formato anterior** — se replicará si MJ lo pide. Pendiente.
+  - **Rosas V4 obra cargado en dev y prod** (Cristian Zulueta · Costo Total $30.989.264 · GG 20%/Util 10% · 5 ítems aprobados):
+    - `import-budget` corrido sobre `V4_ OBRA_16.02.26.xlsx`. 5 partidas matched al catálogo (193 partidas Excel ya estaban + 3 de BASE DATOS no usadas).
+    - Script nuevo `scripts/replicate-rosas-dev-to-prod.ts` (mismo patrón que `replicate-arrau-dev-to-prod.ts` pero más liviano — solo 3 fases: PartidaCatalog → BudgetVersion → ObraItems).
+    - Snapshot pre/post en prod: solo Rosas se movió. utilidadProyectada pasó de -$10.934.194 (sin presupuesto) a +$15.107.204 (con presupuesto + facturas SII existentes).
+    - **No tiene muebles ni artefactos** (MJ confirmó).
+  - **Fix cosmético en `import-budget.ts`**: el print de la proyección a Costo Total mostraba "GG (23%)" y "Util (5%)" hardcoded (defaults Pauline V4) aunque internamente aplicaba los % correctos del Excel. Ahora muestra los % reales (`parsed.percentages.gg/utility`). Confundía revisar antes de `--commit`.
+
+Pendientes para próxima sesión:
+- **Aplicar línea editorial nueva a Artefactos PDF** (`src/lib/pdf/ArtefactosPDF.html.ts`) cuando MJ confirme. Mismo patrón que obra/muebles.
+- **F-163 (Arrau) — transferencia real de Pía**: cuando llegue al banco, asignarla en `/banco/movimientos` (en prod va directo, no hay ficticio que borrar). En dev sí hay un BankMovement ficticio de $14M que conviene borrar cuando se reemplace por el real.
+- **"Mes actual" con benchmarks** en BLARQ EERR: vs mes anterior + año pasado + promedio últimos 6 meses, con coloreo automático cuando varía >20%. Confirmado por MJ pero no implementado.
+- **Vista tipo "matriz Proyecto × Mes"** en algún lugar (¿dashboard? ¿BLARQ?). Inspirado en Maxxa: filas = proyectos, columnas = meses, celdas con monto + color rojo cuando es más gasto que ganancia, verde cuando es ganancia, gris cuando $0. Decisión pendiente: ¿dónde lo metemos?
+- **Aprendizaje de matches en reembolsadores**: cada vez que MJ asigna manualmente un mov "Cristobal" a una factura, guardar el patrón (glosa key → rutProveedor) para sugerir auto en próximos.
+- **Auto-conciliación al sync SII**: hoy el sync trae facturas nuevas pero no dispara auto-match retroactivo. Mejora chica.
 
 - **Ronda 14 — Arrau replicado a prod**:
   - Schema de la ronda 13 aplicado a prod (`prisma db push`): 3 columnas nullable nuevas en `Invoice` (`compensationType`, `appliedToInvoiceId`, `refundBankMovementId`) + tabla `Reembolsador` vacía. Aditivo, backward-compatible — el código viejo de Vercel sigue andando sin tocar esas columnas.

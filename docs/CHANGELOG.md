@@ -4,6 +4,16 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-13 — Rediseño PDF cotización + Rosas V4 a prod
+
+- **PDF obra y muebles unificados con nueva línea editorial** (PR #1, commit `fd7705b`, mergeado a main): tipografía `#1A1A1A`, header con grilla 2 cols, tabla sin verticales y con líneas casi invisibles `0.15pt #E5E5E5`, bloque de totales sutil sin marco rectangular, sin footer, márgenes 10/12 mm. Eliminadas `buildObraFooter` y `buildMueblesFooter`. `renderPDF` ahora soporta `scale` opcional.
+- **Artefactos PDF sigue con formato anterior** — pendiente decidir si replicar.
+- **Rosas V4 obra cargado** en dev y prod (Cristian Zulueta, Costo Total $30.989.264, GG 20% / Util 10%, 5 ítems aprobados). Snapshot pre/post en prod confirma que solo Rosas se movió.
+- Script nuevo `scripts/replicate-rosas-dev-to-prod.ts` (patrón liviano de `replicate-arrau`).
+- Fix cosmético en `scripts/import-budget.ts`: el print de la proyección muestra los % GG/Util reales del Excel en vez de hardcoded 23%/5%.
+
+---
+
 ## 2026-05-04 — Documentación viva inicial
 
 - Reestructura completa de `/docs/`: `architecture.md`, `business-model.md`, `glossary.md`, `principles.md` consolidan info que vivía dispersa en memoria de Claude y en reviews históricos. ADRs en `docs/decisions/` para 3 decisiones estructurales (numeración paralela, cantidad ejecutada base EP, descripción dual). Plantillas en `docs/_templates/`. `WIP.md` para estado entre sesiones.

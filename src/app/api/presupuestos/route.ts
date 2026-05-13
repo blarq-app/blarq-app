@@ -79,10 +79,13 @@ export async function POST(request: NextRequest) {
         const isTemplateMode = !!data.resetQuantities;
         const refreshPrices = !!data.refreshFromCatalog;
 
-        // Pre-cargar el catálogo si hay que refrescar precios
-        const partidaIds = refreshPrices
-          ? items.filter((i) => i.catalogPartidaId).map((i) => i.catalogPartidaId!)
-          : [];
+        // Pre-cargar el catálogo (siempre que haya catalogPartidaId).
+        // Usamos para 2 cosas:
+        // - Refrescar precios (si refreshFromCatalog está activo)
+        // - Fallback de descripciones si el source no tiene
+        const partidaIds = items
+          .filter((i) => i.catalogPartidaId)
+          .map((i) => i.catalogPartidaId!);
         const partidasMap = new Map<string, typeof items[number] extends { catalogPartidaId: string | null } ? Awaited<ReturnType<typeof prisma.partidaCatalog.findUnique>> : never>();
         if (partidaIds.length > 0) {
           const partidas = await prisma.partidaCatalog.findMany({
@@ -104,6 +107,14 @@ export async function POST(request: NextRequest) {
           const costTools = useCatalog ? partida!.costTools : (item.costTools ?? 0);
           const costLoss = useCatalog ? partida!.costLoss : (item.costLoss ?? 0);
 
+          // Descripciones: priorizar las del source (lo más reciente que
+          // MJ editó). Si el source no tiene, fallback al catálogo. Sin
+          // este fallback los items importados venían sin descripción.
+          const descriptionCliente =
+            item.descriptionCliente ?? partida?.descriptionCliente ?? null;
+          const descriptionMaestro =
+            item.descriptionMaestro ?? partida?.descriptionMaestro ?? null;
+
           const quantity = isTemplateMode ? 0 : item.quantity;
           const total = quantity * unitPrice;
 
@@ -117,8 +128,8 @@ export async function POST(request: NextRequest) {
               chapter: item.chapter,
               itemNumber: item.itemNumber,
               name: item.name,
-              descriptionCliente: item.descriptionCliente,
-              descriptionMaestro: item.descriptionMaestro,
+              descriptionCliente,
+              descriptionMaestro,
               unit: item.unit,
               quantity,
               unitPrice,

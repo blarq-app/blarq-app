@@ -135,8 +135,13 @@ export async function GET(
     });
   } catch (error) {
     console.error("Error generating PDF:", error);
+    // Devolver el mensaje real del error para poder diagnosticar — vivo
+    // en prod por ahora hasta que el PDF esté estable. Después se puede
+    // ocultar de nuevo si MJ quiere.
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
     return NextResponse.json(
-      { error: "Error al generar PDF" },
+      { error: "Error al generar PDF", detail: message, stack },
       { status: 500 }
     );
   }

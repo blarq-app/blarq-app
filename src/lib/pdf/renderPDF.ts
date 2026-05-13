@@ -22,9 +22,16 @@ async function launchBrowser(): Promise<Browser> {
       import("@sparticuz/chromium"),
       import("puppeteer-core"),
     ]);
+    // El binario local /node_modules/@sparticuz/chromium/bin no se está
+    // copiando al bundle de Vercel pese a outputFileTracingIncludes.
+    // Workaround: pasar la URL del release de GitHub a executablePath()
+    // — descarga el .tar.br comprimido a /tmp/chromium en cold start
+    // (+~10s la primera vez) y lo reusa entre invocaciones tibias.
+    const CHROMIUM_URL =
+      "https://github.com/Sparticuz/chromium/releases/download/v147.0.0/chromium-v147.0.0-pack.x64.tar";
     return puppeteerCore.default.launch({
       args: chromium.args,
-      executablePath: await chromium.executablePath(),
+      executablePath: await chromium.executablePath(CHROMIUM_URL),
       headless: true,
     }) as unknown as Promise<Browser>;
   }

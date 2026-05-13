@@ -77,18 +77,42 @@ export function parseCartolaSantander(buffer: Buffer): ParsedCartola {
   }
 
   // ── Header de columnas + saldo inicial/final ────────────────────────
+  // Detección flexible: el banco tiene varios formatos (Cartola, Movimientos
+  // CtaCte, Histórica, Provisoria) y el orden de columnas cambia. Buscamos
+  // la fila que tenga MONTO + DESCRIPCIÓN + FECHA + CARGO/ABONO en cualquier
+  // posición, y guardamos el índice de cada columna.
   let headerRow = -1;
+  const cols = {
+    monto: -1,
+    descripcion: -1,
+    fecha: -1,
+    saldo: -1,
+    documento: -1,
+    cargoAbono: -1,
+  };
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     if (!row) continue;
-    if (
-      row[0] === "MONTO" &&
-      typeof row[1] === "string" &&
-      row[1].includes("DESCRIPC") &&
-      typeof row[3] === "string" &&
-      row[3].includes("FECHA")
-    ) {
+    const c = { monto: -1, descripcion: -1, fecha: -1, saldo: -1, documento: -1, cargoAbono: -1 };
+    for (let j = 0; j < row.length; j++) {
+      const cell = row[j];
+      if (typeof cell !== "string") continue;
+      const upper = cell.toUpperCase();
+      if (upper === "MONTO" || upper.startsWith("MONTO ")) c.monto = j;
+      else if (upper.includes("DESCRIPC")) c.descripcion = j;
+      else if (upper === "FECHA" || upper.startsWith("FECHA ")) c.fecha = j;
+      else if (upper === "SALDO" || upper.startsWith("SALDO ")) c.saldo = j;
+      else if (upper.includes("DOCUMENTO") || upper === "N° DOCUMENTO" || upper === "Nº DOCUMENTO") c.documento = j;
+      else if (upper.includes("CARGO") && upper.includes("ABONO")) c.cargoAbono = j;
+    }
+    if (c.monto >= 0 && c.descripcion >= 0 && c.fecha >= 0) {
       headerRow = i;
+      cols.monto = c.monto;
+      cols.descripcion = c.descripcion;
+      cols.fecha = c.fecha;
+      cols.saldo = c.saldo;
+      cols.documento = c.documento;
+      cols.cargoAbono = c.cargoAbono;
       break;
     }
   }
@@ -138,12 +162,14 @@ export function parseCartolaSantander(buffer: Buffer): ParsedCartola {
     }
     if (firstCell === null) continue;
 
-    // Línea de movimiento
-    const amount = typeof row[0] === "number" ? row[0] : 0;
-    const description = String(row[1] ?? "").trim();
+    // Línea de movimiento — leemos según el mapa de columnas detectado
+    // arriba (cols.monto, cols.fecha, etc) en lugar de índices hardcoded.
+    const amountCell = row[cols.monto];
+    const amount = typeof amountCell === "number" ? amountCell : 0;
+    const description = String(row[cols.descripcion] ?? "").trim();
     if (!description) continue;
-    const docRef = row[4];
-    const dateRaw: unknown = row[3];
+    const docRef = cols.documento >= 0 ? row[cols.documento] : null;
+    const dateRaw: unknown = row[cols.fecha];
     let date: Date | null = null;
     if (typeof dateRaw === "string") {
       const m = dateRaw.match(/(\d{2})\/(\d{2})\/(\d{4})/);
@@ -157,7 +183,9 @@ export function parseCartolaSantander(buffer: Buffer): ParsedCartola {
     }
     if (!date) continue;
 
-    const tipoLetter = String(row[7] ?? "").trim().toUpperCase();
+    const tipoLetter = cols.cargoAbono >= 0
+      ? String(row[cols.cargoAbono] ?? "").trim().toUpperCase()
+      : "";
     const type: "cargo" | "abono" =
       tipoLetter === "C" ? "cargo" : tipoLetter === "A" ? "abono" : amount < 0 ? "cargo" : "abono";
 

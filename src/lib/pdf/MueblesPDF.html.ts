@@ -108,7 +108,7 @@ function getLogoDataUri(): string {
 
 // ─── CSS ──────────────────────────────────────────────────────────────────
 const CSS = `
-  @page { size: A4; margin: 12mm 14mm 16mm 14mm; }
+  @page { size: A4; margin: 14mm 16mm 14mm 16mm; }
 
   * { box-sizing: border-box; }
 
@@ -116,7 +116,7 @@ const CSS = `
     margin: 0;
     padding: 0;
     font-family: 'Montserrat', sans-serif;
-    font-size: 8pt;
+    font-size: 7pt;
     font-weight: 400;
     color: #000;
     -webkit-font-smoothing: antialiased;
@@ -127,36 +127,53 @@ const CSS = `
   .header {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    column-gap: 40px;
+    column-gap: 30px;
+    margin-bottom: 8px;
   }
   .header-left  { text-align: left; }
   .header-right { text-align: right; }
 
-  .logo { display: block; height: 36px; width: auto; margin-bottom: 4px; }
-
-  .doc-title {
-    font-family: 'Montserrat', sans-serif;
-    font-size: 11pt;
-    font-weight: 500;
-    color: #808080;
-    line-height: 1;
-    margin: 0 0 4px 0;
-  }
-
-  .field { margin-bottom: 2px; }
-  .field .label {
+  .logo { display: block; height: 38px; width: auto; margin-bottom: 12px; }
+  .logo-text {
     font-size: 5.5pt;
     font-weight: 400;
     color: #808080;
+    letter-spacing: 0.08em;
+    margin-top: -8px;
+    margin-bottom: 12px;
+  }
+
+  .doc-title {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 16pt;
+    font-weight: 500;
+    color: #808080;
+    line-height: 1;
+    margin: 0 0 2px 0;
+    letter-spacing: 0.02em;
+  }
+  .doc-subtitle {
+    font-size: 8pt;
+    font-weight: 500;
+    color: #808080;
     letter-spacing: 0.06em;
+    margin: 0 0 10px 0;
     text-transform: uppercase;
-    line-height: 1.15;
+  }
+
+  .field { margin-bottom: 4px; }
+  .field .label {
+    font-size: 6pt;
+    font-weight: 400;
+    color: #404040;
+    line-height: 1.1;
   }
   .field .value {
-    font-size: 6.5pt;
-    font-weight: 500;
+    font-size: 7pt;
+    font-weight: 700;
     color: #000;
-    line-height: 1.15;
+    line-height: 1.1;
+    text-transform: uppercase;
   }
 
   /* ── Tabla principal — match al cuadro Excel master, compacto ──── */
@@ -250,34 +267,47 @@ const CSS = `
     font-weight: 700;
   }
 
-  /* ── Forma de pago ──────────────────────────────────────────── */
-  .payment-wrap { margin-top: 24px; }
+  /* ── Section titles (match Excel) ───────────────────────────── */
   .section-title {
-    font-size: 6.5pt;
-    font-weight: 700;
+    font-size: 7pt;
+    font-weight: 400;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.03em;
     color: #000;
-    margin-bottom: 3px;
+    margin: 0 0 4px 0;
+    border-bottom: 0.5pt solid #000;
     padding-bottom: 1px;
-    border-bottom: 0.5pt solid #999;
+    display: inline-block;
   }
-  .payment { width: 50%; border-collapse: collapse; font-size: 5.5pt; }
-  .payment td { padding: 1.5px 6px; border-bottom: 0.4pt solid #CCC; }
-  .payment .p-stage { width: 70%; }
-  .payment .p-pct   { width: 30%; text-align: right; font-variant-numeric: tabular-nums; }
+  .section-title-italic {
+    font-size: 7pt;
+    font-weight: 400;
+    font-style: italic;
+    color: #000;
+    margin: 0 0 4px 0;
+    padding-bottom: 1px;
+    border-bottom: 0.5pt solid #000;
+    display: inline-block;
+  }
 
-  /* ── Observaciones ─────────────────────────────────────────── */
-  .obs-wrap { margin-top: 16px; page-break-inside: avoid; }
+  /* ── Forma de pago — estilo Excel compacto ─────────────────── */
+  .payment-wrap { margin-top: 18px; }
+  .payment { border-collapse: collapse; font-size: 6.5pt; }
+  .payment td { padding: 1px 0; border: none; }
+  .payment .p-stage { padding-right: 24px; font-weight: 400; }
+  .payment .p-pct { text-align: right; font-variant-numeric: tabular-nums; min-width: 30px; }
+
+  /* ── Observaciones — estilo Excel ──────────────────────────── */
+  .obs-wrap { margin-top: 14px; page-break-inside: avoid; }
   .obs-item {
     display: flex;
-    gap: 6px;
-    margin-bottom: 2px;
-    font-size: 5.5pt;
+    gap: 4px;
+    margin-bottom: 1.5px;
+    font-size: 6pt;
     line-height: 1.3;
   }
-  .obs-num { flex: 0 0 12px; font-weight: 700; color: #555; }
-  .obs-text { flex: 1; color: #333; }
+  .obs-num { flex: 0 0 12px; font-weight: 400; color: #000; }
+  .obs-text { flex: 1; color: #000; }
 
   .extra-obs {
     margin-top: 8px;
@@ -384,37 +414,40 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
   <div class="header">
     <div class="header-left">
       ${logoHtml}
+      <div class="logo-text">BLANCO LARRAÍN ARQUITECTOS</div>
       <div class="field">
-        <div class="label">Mandante</div>
+        <div class="label">Mandante:</div>
         <div class="value">${esc(project.clientName)}</div>
       </div>
       <div class="field">
-        <div class="label">Proyecto</div>
+        <div class="label">Proyecto:</div>
         <div class="value">${esc(project.name)}</div>
       </div>
       <div class="field">
-        <div class="label">Dirección</div>
+        <div class="label">Direccion:</div>
         <div class="value">${esc(project.address || "—")}</div>
       </div>
     </div>
     <div class="header-right">
-      <h1 class="doc-title">${esc(budget.version)} COTIZACION MUEBLES</h1>
+      <div class="field"><div class="label">Version:</div></div>
+      <h1 class="doc-title">${esc(budget.version)} COTIZACION</h1>
+      <div class="doc-subtitle">MUEBLES Y ARTEFACTOS</div>
       <div class="field">
-        <div class="label">Profesional a cargo</div>
+        <div class="label">Profesional a cargo:</div>
         <div class="value">${esc(PROFESSIONAL)}</div>
       </div>
       ${
         project.clientPhone
-          ? `<div class="field"><div class="label">Celular</div><div class="value">${esc(project.clientPhone)}</div></div>`
+          ? `<div class="field"><div class="label">Celular:</div><div class="value">${esc(project.clientPhone)}</div></div>`
           : ""
       }
       <div class="field">
-        <div class="label">Fecha</div>
+        <div class="label">Fecha:</div>
         <div class="value">${dateStr}</div>
       </div>
       ${
         project.ufReference != null
-          ? `<div class="field"><div class="label">Valor UF</div><div class="value">${fmtCLP(project.ufReference)}</div></div>`
+          ? `<div class="field"><div class="label">Valor UF:</div><div class="value">$ ${Math.round(project.ufReference).toLocaleString("es-CL")}</div></div>`
           : ""
       }
     </div>
@@ -444,7 +477,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
   </div>
 
   <div class="payment-wrap">
-    <div class="section-title">FORMAS DE PAGO</div>
+    <div class="section-title-italic">Formas de Pago</div>
     <table class="payment">
       ${terms
         .map(
@@ -459,7 +492,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
   </div>
 
   <div class="obs-wrap">
-    <div class="section-title">OBSERVACIONES GENERALES</div>
+    <div class="section-title">OBSERVACIONES GENERALES:</div>
     ${OBSERVACIONES.map(
       (obs, i) => `
       <div class="obs-item">

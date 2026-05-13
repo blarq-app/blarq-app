@@ -116,8 +116,16 @@ function getLogoDataUri(): string {
 }
 
 // ─── CSS ──────────────────────────────────────────────────────────────────
+// El layout y proporciones replican el cuadro Excel master que MJ usaba
+// para sus cotizaciones. Cambios clave vs versiones anteriores:
+//   - Header en 2 columnas: lado izq (logo + Mandante/Proyecto/Direccion),
+//     lado der (Version big + Pro a cargo + Celular/Fecha/Valor UF).
+//   - Tabla con bordes en TODAS las celdas (estilo Excel), no solo bottom.
+//   - Headers de tabla con bg gris #DBDBDB.
+//   - Totales en 4 columnas: LABEL | % | $ | VALUE — el $ separado del nro.
+//   - Forma de Pago + Observaciones más compactas estilo Excel.
 const CSS = `
-  @page { size: A4; margin: 10mm 12mm 12mm 12mm; }
+  @page { size: A4; margin: 14mm 16mm 14mm 16mm; }
 
   * { box-sizing: border-box; }
 
@@ -125,7 +133,7 @@ const CSS = `
     margin: 0;
     padding: 0;
     font-family: 'Montserrat', sans-serif;
-    font-size: 8pt;
+    font-size: 7pt;
     font-weight: 400;
     color: #000;
     -webkit-font-smoothing: antialiased;
@@ -134,173 +142,185 @@ const CSS = `
   }
 
   /* ── Header ─────────────────────────────────────────────────── */
+  /* Layout 2 columnas: izquierda logo+Mandante/Proyecto/Direccion;
+     derecha Version+Pro a cargo+Celular/Fecha/Valor UF.
+     Match Excel reference. */
   .header {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    column-gap: 40px;
+    column-gap: 30px;
+    margin-bottom: 8px;
   }
   .header-left  { text-align: left; }
   .header-right { text-align: right; }
 
   .logo {
     display: block;
-    height: 36px;
+    height: 38px;
     width: auto;
-    margin-bottom: 4px;
+    margin-bottom: 12px;
+  }
+  .logo-text {
+    font-size: 5.5pt;
+    font-weight: 400;
+    color: #808080;
+    letter-spacing: 0.08em;
+    margin-top: -8px;
+    margin-bottom: 12px;
   }
 
   .doc-title {
     font-family: 'Montserrat', sans-serif;
-    font-size: 11pt;
+    font-size: 16pt;
     font-weight: 500;
     color: #808080;
     line-height: 1;
-    margin: 0 0 4px 0;
-    letter-spacing: 0;
+    margin: 0 0 2px 0;
+    letter-spacing: 0.02em;
   }
-
-  .field { margin-bottom: 2px; }
-  .field .label {
-    font-size: 5.5pt;
-    font-weight: 400;
+  .doc-subtitle {
+    font-size: 8pt;
+    font-weight: 500;
     color: #808080;
     letter-spacing: 0.06em;
+    margin: 0 0 10px 0;
     text-transform: uppercase;
-    margin-bottom: 0;
-    line-height: 1.15;
-  }
-  .field .value {
-    font-size: 6.5pt;
-    font-weight: 500;
-    color: #000;
-    line-height: 1.15;
   }
 
-  .header-divider {
-    border: none;
-    border-top: 1px solid #ddd;
-    margin: 3px 0;
+  .field { margin-bottom: 4px; }
+  .field .label {
+    font-size: 6pt;
+    font-weight: 400;
+    color: #404040;
+    letter-spacing: 0;
+    margin-bottom: 0;
+    line-height: 1.1;
+  }
+  .field .value {
+    font-size: 7pt;
+    font-weight: 700;
+    color: #000;
+    line-height: 1.1;
+    text-transform: uppercase;
   }
 
   /* ── Table ──────────────────────────────────────────────────── */
-  /* Match al cuadro Excel master — compacto + objetivo 1 hoja.
-   * Si crece el contenido y no entra, partir página es OK pero idealmente
-   * con totales + observaciones todo en la 1era. */
+  /* Bordes en TODAS las celdas (estilo Excel). */
   table.partidas {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
     font-size: 6pt;
-    margin-top: 8px;
+    margin-top: 6px;
   }
   .partidas th, .partidas td {
-    padding: 0.5px 4px;
-    vertical-align: top;
-    border: none;
-    border-bottom: 0.4pt solid #CCCCCC;
+    padding: 2px 4px;
+    vertical-align: middle;
+    border: 0.5pt solid #000;
     word-wrap: break-word;
-    line-height: 1.1;
+    line-height: 1.15;
   }
   .partidas thead th {
-    background: #FFFFFF;
+    background: #DBDBDB;
     color: #000;
     font-weight: 700;
     text-transform: uppercase;
-    border-top: 0.8pt solid #000;
-    border-bottom: 0.8pt solid #000;
-    padding: 2px 4px;
+    padding: 3px 4px;
     font-size: 6pt;
+    text-align: center;
   }
   .partidas tr.chapter-row td {
     background: #DBDBDB;
     font-weight: 700;
     text-transform: uppercase;
-    border-top: none;
-    border-bottom: 0.4pt solid #CCCCCC;
-    padding-top: 1.5px;
-    padding-bottom: 1.5px;
-    font-size: 6pt;
+    padding: 2.5px 4px;
+    font-size: 6.5pt;
   }
-  /* Extra breathing room between thead and first chapter row */
-  .partidas tbody tr:first-child td { padding-top: 2px; }
   .partidas tr.chapter-row td.chapter-idx { text-align: center; }
 
   /* Column widths (must sum to 100%) */
-  .col-item   { width: 4%;  text-align: center; white-space: nowrap; }
-  .col-name   { width: 24%; text-align: left; }
-  .col-desc   { width: 39%; text-align: left; font-size: 5.5pt; }
-  .col-unit   { width: 6%;  text-align: center; white-space: nowrap; }
+  .col-item   { width: 5%;  text-align: center; white-space: nowrap; }
+  .col-name   { width: 21%; text-align: left; font-weight: 600; }
+  .col-desc   { width: 40%; text-align: left; font-size: 6pt; font-weight: 400; }
+  .col-unit   { width: 5%;  text-align: center; white-space: nowrap; }
   .col-qty    { width: 7%;  text-align: center; font-variant-numeric: tabular-nums; }
-  .col-pu     { width: 9%;  text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .col-total  { width: 11%; text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
-  thead .col-desc { font-size: 6pt; }
-  /* Explicit alignments for THs (inherit width from first cell) */
-  thead th.col-item { text-align: center; }
-  thead th.col-name { text-align: left; }
-  thead th.col-desc { text-align: left; }
-  thead th.col-unit { text-align: center; }
-  thead th.col-qty  { text-align: center; }
-  thead th.col-pu   { text-align: right; }
-  thead th.col-total{ text-align: right; }
+  .col-pu     { width: 10%; text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .col-total  { width: 12%; text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
 
   /* ── Totals ─────────────────────────────────────────────────── */
+  /* Estilo Excel: 4 columnas — LABEL | % | $ | VALUE.
+     Sin bordes salvo top en COSTO TOTAL. Alineado a la derecha. */
   .totals-wrap {
     width: 100%;
-    margin-top: 4px;
+    margin-top: 8px;
+    display: flex;
+    justify-content: flex-end;
   }
   table.totals {
-    width: 100%;
     border-collapse: collapse;
-    font-size: 6pt;
+    font-size: 6.5pt;
   }
   .totals td {
-    padding: 0.8px 8px;
+    padding: 1.5px 4px;
     font-weight: 400;
     font-variant-numeric: tabular-nums;
     border: none;
     color: #000;
   }
-  .totals .t-label { width: 100%; text-align: left; text-transform: uppercase; font-weight: 400; white-space: nowrap; }
-  .totals .t-pct   { text-align: right; white-space: nowrap; padding-left: 16px; padding-right: 14px; }
-  .totals .t-cur   { text-align: left; white-space: nowrap; padding-left: 0; padding-right: 10px; }
-  .totals .t-val   { text-align: right; white-space: nowrap; padding-left: 0; padding-right: 4px; }
+  .totals .t-label { text-align: left; text-transform: uppercase; font-weight: 400; white-space: nowrap; padding-right: 14px; }
+  .totals .t-pct   { text-align: right; white-space: nowrap; padding-right: 12px; min-width: 28px; }
+  .totals .t-cur   { text-align: right; white-space: nowrap; padding-right: 2px; }
+  .totals .t-val   { text-align: right; white-space: nowrap; min-width: 70px; }
   .totals tr.total td {
-    border-top: 0.5pt solid #000;
+    border-top: 1pt solid #000;
     font-weight: 700;
+    padding-top: 3px;
   }
 
-  /* ── Section titles (unified con muebles) ────────────────────── */
+  /* ── Section titles — match Excel: subrayado fino sin negrita */
   .section-title {
-    font-size: 6.5pt;
-    font-weight: 700;
+    font-size: 7pt;
+    font-weight: 400;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.03em;
     color: #000;
-    margin-bottom: 3px;
+    margin: 0 0 4px 0;
+    padding: 0;
+    border-bottom: 0.5pt solid #000;
     padding-bottom: 1px;
-    border-bottom: 0.5pt solid #999;
+    display: inline-block;
+  }
+  .section-title-italic {
+    font-size: 7pt;
+    font-weight: 400;
+    font-style: italic;
+    color: #000;
+    margin: 0 0 4px 0;
+    padding-bottom: 1px;
+    border-bottom: 0.5pt solid #000;
+    display: inline-block;
   }
 
-  /* ── Payment terms (unified con muebles) ─────────────────────── */
-  .payment-wrap { margin-top: 24px; }
-  table.payment { width: 50%; border-collapse: collapse; font-size: 5.5pt; }
-  .payment td { padding: 1.5px 6px; border-bottom: 0.4pt solid #CCC; }
-  .payment .p-stage { width: 70%; }
-  .payment .p-pct   { width: 30%; text-align: right; font-variant-numeric: tabular-nums; }
+  /* ── Payment terms — estilo Excel compacto ─────────────────── */
+  .payment-wrap { margin-top: 18px; }
+  table.payment { border-collapse: collapse; font-size: 6.5pt; }
+  .payment td { padding: 1px 0; border: none; }
+  .payment .p-stage { padding-right: 24px; font-weight: 400; }
+  .payment .p-pct { text-align: right; font-variant-numeric: tabular-nums; min-width: 30px; }
 
-  /* ── Observations (unified con muebles) ──────────────────────── */
-  .obs-wrap  { margin-top: 16px; page-break-inside: avoid; }
+  /* ── Observaciones — estilo Excel, lista numerada compacta ──── */
+  .obs-wrap  { margin-top: 14px; page-break-inside: avoid; }
   .obs-item {
     display: flex;
-    gap: 6px;
-    margin-bottom: 2px;
-    font-size: 5.5pt;
+    gap: 4px;
+    margin-bottom: 1.5px;
+    font-size: 6pt;
     line-height: 1.3;
     break-inside: avoid;
     page-break-inside: avoid;
   }
-  .obs-num { flex: 0 0 12px; font-weight: 700; color: #555; }
-  .obs-text { flex: 1; color: #333; }
+  .obs-num { flex: 0 0 12px; font-weight: 400; color: #000; }
+  .obs-text { flex: 1; color: #000; }
 
   /* Avoid splitting a row across pages */
   tr { page-break-inside: avoid; }
@@ -336,6 +356,11 @@ export function renderObraHTML(data: ObraHTMLInput): string {
     ? `<img class="logo" src="${logoUri}" alt="BLARQ" />`
     : `<div class="logo" style="line-height:60px;font-size:28pt;font-weight:700;letter-spacing:0.15em;">BLARQ</div>`;
 
+  // Formato CLP en tabla: P.U. va sin $ (solo número), TOTAL va con
+  // "$ XXX.XXX" con espacio — para que matchee al cuadro Excel master.
+  const fmtNum = (n: number) => Math.round(n).toLocaleString("es-CL");
+  const fmtMoney = (n: number) => "$ " + Math.round(n).toLocaleString("es-CL");
+
   const tableRows = chapters
     .map(
       (ch) => `
@@ -357,8 +382,8 @@ export function renderObraHTML(data: ObraHTMLInput): string {
             <td class="col-desc">${esc(item.descriptionCliente ?? "")}</td>
             <td class="col-unit">${esc(item.unit)}</td>
             <td class="col-qty">${fmtQty(item.quantity)}</td>
-            <td class="col-pu">${fmtCLP(item.unitPrice)}</td>
-            <td class="col-total">${fmtCLP(item.total)}</td>
+            <td class="col-pu">${fmtNum(item.unitPrice)}</td>
+            <td class="col-total">${fmtMoney(item.total)}</td>
           </tr>`
           )
           .join("")}
@@ -378,41 +403,44 @@ export function renderObraHTML(data: ObraHTMLInput): string {
 </head>
 <body>
 
-  <!-- HEADER -->
+  <!-- HEADER — match Excel reference exact -->
   <div class="header">
     <div class="header-left">
       ${logoHtml}
+      <div class="logo-text">BLANCO LARRAÍN ARQUITECTOS</div>
       <div class="field">
-        <div class="label">Mandante</div>
+        <div class="label">Mandante:</div>
         <div class="value">${esc(project.clientName)}</div>
       </div>
       <div class="field">
-        <div class="label">Proyecto</div>
+        <div class="label">Proyecto:</div>
         <div class="value">${esc(project.name)}</div>
       </div>
       <div class="field">
-        <div class="label">Dirección</div>
+        <div class="label">Direccion:</div>
         <div class="value">${esc(project.address || "—")}</div>
       </div>
     </div>
     <div class="header-right">
-      <h1 class="doc-title">${esc(budget.version)} COTIZACION OBRA</h1>
+      <div class="field"><div class="label">Version:</div></div>
+      <h1 class="doc-title">${esc(budget.version)} COTIZACION</h1>
+      <div class="doc-subtitle">OBRA</div>
       <div class="field">
-        <div class="label">Profesional a cargo</div>
+        <div class="label">Profesional a cargo:</div>
         <div class="value">${esc(PROFESSIONAL)}</div>
-      </div>
-      <div class="field">
-        <div class="label">Fecha</div>
-        <div class="value">${dateStr}</div>
       </div>
       ${
         project.clientPhone
-          ? `<div class="field"><div class="label">Celular</div><div class="value">${esc(project.clientPhone)}</div></div>`
+          ? `<div class="field"><div class="label">Celular:</div><div class="value">${esc(project.clientPhone)}</div></div>`
           : ""
       }
+      <div class="field">
+        <div class="label">Fecha:</div>
+        <div class="value">${dateStr}</div>
+      </div>
       ${
         project.ufReference != null
-          ? `<div class="field"><div class="label">Valor UF</div><div class="value">${fmtCLP(project.ufReference)}</div></div>`
+          ? `<div class="field"><div class="label">Valor UF:</div><div class="value">$ ${Math.round(project.ufReference).toLocaleString("es-CL")}</div></div>`
           : ""
       }
     </div>
@@ -426,9 +454,9 @@ export function renderObraHTML(data: ObraHTMLInput): string {
         <th class="col-item">ITEM</th>
         <th class="col-name">PARTIDA</th>
         <th class="col-desc">DESCRIPCION</th>
-        <th class="col-unit">UN.</th>
-        <th class="col-qty">CANT.</th>
-        <th class="col-pu">P.U.</th>
+        <th class="col-unit">UNIDAD</th>
+        <th class="col-qty">CANTIDAD</th>
+        <th class="col-pu">P.U</th>
         <th class="col-total">TOTAL</th>
       </tr>
     </thead>
@@ -479,9 +507,9 @@ export function renderObraHTML(data: ObraHTMLInput): string {
     </table>
   </div>
 
-  <!-- FORMAS DE PAGO -->
+  <!-- FORMAS DE PAGO — title en cursiva como el Excel -->
   <div class="payment-wrap">
-    <div class="section-title">FORMAS DE PAGO</div>
+    <div class="section-title-italic">Formas de Pago</div>
     <table class="payment">
       ${terms
         .map(
@@ -495,9 +523,9 @@ export function renderObraHTML(data: ObraHTMLInput): string {
     </table>
   </div>
 
-  <!-- OBSERVACIONES -->
+  <!-- OBSERVACIONES GENERALES -->
   <div class="obs-wrap">
-    <div class="section-title">OBSERVACIONES GENERALES</div>
+    <div class="section-title">OBSERVACIONES GENERALES:</div>
     ${OBSERVACIONES.map(
       (obs, i) => `
       <div class="obs-item">

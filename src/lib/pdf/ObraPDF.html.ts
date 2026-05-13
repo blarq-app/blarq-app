@@ -269,48 +269,38 @@ const CSS = `
     font-weight: 700;
   }
 
-  /* ── Section titles (unified) ───────────────────────────────── */
+  /* ── Section titles (unified con muebles) ────────────────────── */
   .section-title {
-    font-size: 6pt;
-    font-weight: 400;
-    color: #808080;
-    letter-spacing: 0.06em;
+    font-size: 6.5pt;
+    font-weight: 700;
     text-transform: uppercase;
-    border-bottom: 0.4pt solid #CCCCCC;
-    padding-bottom: 1px;
-    margin: 0 0 3px 0;
-  }
-
-  /* ── Payment terms ──────────────────────────────────────────── */
-  .payment-wrap { margin-top: 24px; }
-  table.payment { border-collapse: collapse; white-space: nowrap; border: none; }
-  .payment td {
-    padding: 0.3px 0;
-    font-size: 5.5pt;
-    font-weight: 400;
-    border: none;
+    letter-spacing: 0.06em;
     color: #000;
+    margin-bottom: 3px;
+    padding-bottom: 1px;
+    border-bottom: 0.5pt solid #999;
   }
-  .payment .p-stage { width: 70px; padding-right: 8px; }
-  .payment .p-pct   { color: #808080; }
 
-  /* ── Observations ───────────────────────────────────────────── */
-  .obs-wrap  { margin-top: 16px; }
-  .obs-grid  { column-count: 2; column-gap: 16px; }
+  /* ── Payment terms (unified con muebles) ─────────────────────── */
+  .payment-wrap { margin-top: 24px; }
+  table.payment { width: 50%; border-collapse: collapse; font-size: 5.5pt; }
+  .payment td { padding: 1.5px 6px; border-bottom: 0.4pt solid #CCC; }
+  .payment .p-stage { width: 70%; }
+  .payment .p-pct   { width: 30%; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* ── Observations (unified con muebles) ──────────────────────── */
+  .obs-wrap  { margin-top: 16px; page-break-inside: avoid; }
   .obs-item {
     display: flex;
-    font-size: 5pt;
-    font-weight: 400;
-    color: #808080;
-    line-height: 1.25;
-    margin-bottom: 1.5px;
-    text-align: left;
+    gap: 6px;
+    margin-bottom: 2px;
+    font-size: 5.5pt;
+    line-height: 1.3;
     break-inside: avoid;
-    -webkit-column-break-inside: avoid;
     page-break-inside: avoid;
   }
-  .obs-num  { width: 10px; flex-shrink: 0; font-weight: 500; color: #808080; }
-  .obs-text { flex: 1; }
+  .obs-num { flex: 0 0 12px; font-weight: 700; color: #555; }
+  .obs-text { flex: 1; color: #333; }
 
   /* Avoid splitting a row across pages */
   tr { page-break-inside: avoid; }
@@ -508,7 +498,6 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   <!-- OBSERVACIONES -->
   <div class="obs-wrap">
     <div class="section-title">OBSERVACIONES GENERALES</div>
-    <div class="obs-grid">
     ${OBSERVACIONES.map(
       (obs, i) => `
       <div class="obs-item">
@@ -516,7 +505,6 @@ export function renderObraHTML(data: ObraHTMLInput): string {
         <div class="obs-text">${esc(obs)}</div>
       </div>`
     ).join("")}
-    </div>
   </div>
 
 </body>

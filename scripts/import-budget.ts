@@ -1635,8 +1635,8 @@ async function main() {
       `\nProyección a Costo Total (GG ${parsed.percentages.gg}% · Util ${parsed.percentages.utility}% sobre costo directo · IVA 19%):`
     );
     console.log(`  Costo directo:     ${fmt(costoDirecto)}`);
-    console.log(`  + GG (23%):        ${fmt(ggMonto)}`);
-    console.log(`  + Utilidad (5%):   ${fmt(utilMonto)}`);
+    console.log(`  + GG (${parsed.percentages.gg}%):        ${fmt(ggMonto)}`);
+    console.log(`  + Utilidad (${parsed.percentages.utility}%):   ${fmt(utilMonto)}`);
     console.log(`  = Costo neto:      ${fmt(costoNeto)}`);
     console.log(`  + IVA (19%):       ${fmt(ivaMonto)}`);
     console.log(`  = Costo total:     ${fmt(costoTotal)}`);

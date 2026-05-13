@@ -4,7 +4,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import fs from "node:fs";
-import { renderObraHTML, buildObraFooter } from "../src/lib/pdf/ObraPDF.html";
+import { renderObraHTML } from "../src/lib/pdf/ObraPDF.html";
 import { renderPDF } from "../src/lib/pdf/renderPDF";
 
 const prisma = new PrismaClient();
@@ -40,10 +40,8 @@ async function main() {
 
   const pdf = await renderPDF(html, {
     format: "A4",
-    displayHeaderFooter: true,
-    headerTemplate: "<div></div>",
-    footerTemplate: buildObraFooter(b.version, b.date),
-    margin: { top: "14mm", bottom: "16mm", left: "15mm", right: "15mm" },
+    displayHeaderFooter: false,
+    margin: { top: "10mm", bottom: "10mm", left: "12mm", right: "12mm" },
   });
 
   fs.writeFileSync("/tmp/obra-v5.pdf", pdf);

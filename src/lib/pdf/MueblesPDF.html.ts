@@ -107,8 +107,11 @@ function getLogoDataUri(): string {
 }
 
 // ─── CSS ──────────────────────────────────────────────────────────────────
+// Misma línea editorial que ObraPDF: tipografía suave (#1A1A1A, no negro),
+// header con grilla 2-cols pareadas, tabla sin verticales y con líneas
+// internas finísimas, totales sutiles sin marco rectangular.
 const CSS = `
-  @page { size: A4; margin: 14mm 16mm 14mm 16mm; }
+  @page { size: A4; margin: 10mm 12mm; }
 
   * { box-sizing: border-box; }
 
@@ -118,164 +121,204 @@ const CSS = `
     font-family: 'Montserrat', sans-serif;
     font-size: 7pt;
     font-weight: 400;
-    color: #000;
+    color: #1A1A1A;
     -webkit-font-smoothing: antialiased;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  .header {
+  /* ── Header ─────────────────────────────────────────────────── */
+  .header-strip {
     display: grid;
     grid-template-columns: 1fr 1fr;
     column-gap: 30px;
-    margin-bottom: 8px;
+    margin-bottom: 4pt;
+    align-items: start;
   }
-  .header-left  { text-align: left; }
-  .header-right { text-align: right; }
+  .header-strip .strip-left  { text-align: left; }
+  .header-strip .strip-right { text-align: right; }
 
-  .logo { display: block; height: 38px; width: auto; margin-bottom: 12px; }
-  .logo-text {
-    font-size: 5.5pt;
-    font-weight: 400;
-    color: #808080;
-    letter-spacing: 0.08em;
-    margin-top: -8px;
-    margin-bottom: 12px;
+  .header-fields {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 6pt;
   }
+  .header-fields .col-left,
+  .header-fields .col-right {
+    display: flex;
+    flex-direction: column;
+    gap: 2pt;
+  }
+  .header-fields .col-right { text-align: left; }
+
+  .logo { display: block; height: 45px; width: auto; margin-bottom: 2pt; }
 
   .doc-title {
     font-family: 'Montserrat', sans-serif;
-    font-size: 16pt;
-    font-weight: 500;
+    font-size: 18pt;
+    font-weight: 400;
     color: #808080;
     line-height: 1;
-    margin: 0 0 2px 0;
+    margin: 0;
     letter-spacing: 0.02em;
   }
   .doc-subtitle {
-    font-size: 8pt;
-    font-weight: 500;
+    font-size: 9pt;
+    font-weight: 400;
     color: #808080;
     letter-spacing: 0.06em;
-    margin: 0 0 10px 0;
+    margin: 0 0 4pt 0;
     text-transform: uppercase;
   }
 
-  .field { margin-bottom: 4px; }
+  .field { margin-bottom: 1pt; }
   .field .label {
     font-size: 6pt;
     font-weight: 400;
-    color: #404040;
+    color: #808080;
     line-height: 1.1;
   }
   .field .value {
-    font-size: 7pt;
-    font-weight: 700;
-    color: #000;
+    font-size: 8pt;
+    font-weight: 500;
+    color: #1A1A1A;
     line-height: 1.1;
     text-transform: uppercase;
   }
 
-  /* ── Tabla principal — match al cuadro Excel master, compacto ──── */
-  .partidas {
+  /* ── Tabla principal — misma estética que Obra ──────────────── */
+  table.partidas {
     width: 100%;
-    margin-top: 8px;
     border-collapse: collapse;
-    font-size: 6pt;
+    table-layout: fixed;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 6.5pt;
+    margin-top: 0;
   }
-  .partidas thead th {
-    background: #DBDBDB;
-    color: #000;
-    font-weight: 700;
-    font-size: 5.5pt;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 1.5px 4px;
-    border: 0.4pt solid #000;
-    text-align: left;
-  }
-  .partidas tbody td {
-    padding: 0.8px 4px;
-    border-bottom: 0.4pt solid #CCCCCC;
+  /* Cuerpo: sin bordes verticales, líneas internas muy sutiles. */
+  .partidas th, .partidas td {
+    border: none;
+    border-bottom: 0.15pt solid #E5E5E5;
+    padding: 2pt 5pt;
     vertical-align: top;
+    word-wrap: break-word;
+    line-height: 1.2;
+    font-weight: 400;
+    font-size: 6.5pt;
+    color: #1A1A1A;
   }
-
-  /* Capítulo (1 MUEBLES DE COCINA) */
-  .chapter-row td {
-    background: #DBDBDB;
-    font-weight: 700;
+  /* Header tabla — sin fill, solo líneas top/bottom */
+  .partidas thead th {
+    background: transparent;
+    color: #1A1A1A;
+    font-weight: 500;
     text-transform: uppercase;
-    font-size: 6pt;
-    padding: 2px 4px;
-    border-top: 0.4pt solid #000;
-    border-bottom: 0.4pt solid #000;
+    text-align: center;
+    font-size: 7pt;
+    padding: 2pt 5pt;
+    white-space: nowrap;
+    vertical-align: middle;
+    border-top: 0.5pt solid #1A1A1A;
+    border-bottom: 0.5pt solid #1A1A1A;
   }
-  .chapter-row .col-num { width: 22px; }
 
-  /* Item (1.1 MUEBLES) */
-  .item-row td {
+  /* Fila de capítulo (1 COCINA, 2 BAÑO, …) */
+  .chapter-row td {
+    background: #E5E5E5;
     font-weight: 600;
-    font-size: 6pt;
-    padding: 1.2px 4px;
+    text-transform: uppercase;
+    font-size: 7pt;
+    padding: 2pt 5pt;
+    border-bottom: 0.15pt solid #E5E5E5;
+    color: #1A1A1A;
+    vertical-align: middle;
   }
-  .item-row .col-num { width: 22px; padding-right: 0; tabular-nums: true; }
+
+  /* Fila ítem (1.1 MUEBLES, 1.2 CUBIERTA, …) */
+  .item-row td {
+    font-weight: 500;
+    font-size: 6.5pt;
+    padding: 2pt 5pt;
+  }
   .item-desc-general {
     font-weight: 400;
     font-style: italic;
     color: #555;
-    font-size: 5.5pt;
-    margin-top: 0;
+    font-size: 6pt;
+    margin-top: 1pt;
   }
 
-  /* Detalle (CUERPO INTERIOR / TRASERA / etc) */
+  /* Detalle (CUERPO INTERIOR / FRENTES PUERTAS / etc) — indented */
   .detail-row td {
-    background: #FBFBFB;
-    padding: 0.5px 4px;
-    font-size: 5.5pt;
+    padding: 1pt 5pt;
+    font-size: 6pt;
     border-bottom: none;
+    color: #1A1A1A;
   }
   .detail-row .col-detail-name {
-    font-weight: 600;
+    font-weight: 500;
     text-transform: uppercase;
-    color: #333;
     padding-left: 18px;
+    color: #1A1A1A;
   }
   .detail-row .col-detail-material {
     color: #555;
+    font-weight: 400;
   }
 
-  .col-qty   { width: 50px; text-align: center; font-variant-numeric: tabular-nums; }
-  .col-total { width: 90px; text-align: right; font-variant-numeric: tabular-nums; }
-  .col-name  { /* default flex */ }
+  /* Column widths (suman 100%) */
+  .col-num   { width: 6%;  text-align: center; white-space: nowrap; }
+  .col-name  { width: 70%; text-align: left; }
+  .col-qty   { width: 9%;  text-align: center; font-variant-numeric: tabular-nums; }
+  .col-total { width: 15%; text-align: right; font-variant-numeric: tabular-nums; }
 
-  /* ── Totales ─────────────────────────────────────────────────── */
-  .totals-wrap { margin-top: 10px; display: flex; justify-content: flex-end; }
-  .totals { font-size: 6.5pt; border-collapse: collapse; }
-  .totals td { padding: 2px 8px; font-variant-numeric: tabular-nums; }
-  .totals .t-label {
-    font-weight: 700;
-    text-transform: uppercase;
-    font-size: 6pt;
-    letter-spacing: 0.05em;
-    text-align: right;
+  /* ── Totales — sutil, línea top/bottom, sin marco ───────────── */
+  .totals-wrap {
+    width: 100%;
+    margin-top: 6pt;
+    display: flex;
+    justify-content: flex-end;
   }
-  .totals .t-val { text-align: right; min-width: 80px; }
-  .totals .total td {
-    border-top: 0.5pt solid #000;
-    background: #DBDBDB;
+  table.totals {
+    border-collapse: collapse;
+    font-family: 'Montserrat', sans-serif;
     font-size: 7pt;
+    width: 55%;
+    margin-left: auto;
+    border: none;
+    border-top: 0.5pt solid #1A1A1A;
+    border-bottom: 0.5pt solid #1A1A1A;
+  }
+  .totals td {
+    padding: 2.5pt 6pt;
+    background: transparent;
+    color: #1A1A1A;
+    font-variant-numeric: tabular-nums;
+  }
+  .totals .t-label {
+    text-align: left;
+    text-transform: uppercase;
     font-weight: 700;
+    font-size: 7.5pt;
+    padding-left: 2pt;
+  }
+  .totals .t-val {
+    text-align: right;
+    font-weight: 700;
+    font-size: 7.5pt;
+    white-space: nowrap;
   }
 
-  /* ── Section titles (match Excel) ───────────────────────────── */
+  /* ── Section titles ─────────────────────────────────────────── */
   .section-title {
     font-size: 7pt;
     font-weight: 400;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    color: #000;
-    margin: 0 0 4px 0;
-    border-bottom: 0.5pt solid #000;
+    color: #1A1A1A;
+    margin: 0 0 2pt 0;
+    border-bottom: 0.5pt solid #1A1A1A;
     padding-bottom: 1px;
     display: inline-block;
   }
@@ -283,38 +326,38 @@ const CSS = `
     font-size: 7pt;
     font-weight: 400;
     font-style: italic;
-    color: #000;
-    margin: 0 0 4px 0;
+    color: #1A1A1A;
+    margin: 0 0 2pt 0;
     padding-bottom: 1px;
-    border-bottom: 0.5pt solid #000;
+    border-bottom: 0.5pt solid #1A1A1A;
     display: inline-block;
   }
 
-  /* ── Forma de pago — estilo Excel compacto ─────────────────── */
-  .payment-wrap { margin-top: 18px; }
-  .payment { border-collapse: collapse; font-size: 6.5pt; }
-  .payment td { padding: 1px 0; border: none; }
+  /* ── Formas de pago ─────────────────────────────────────────── */
+  .payment-wrap { margin-top: 8pt; }
+  table.payment { border-collapse: collapse; font-size: 6.5pt; }
+  .payment td { padding: 0.5pt 0; border: none; line-height: 1.2; color: #1A1A1A; }
   .payment .p-stage { padding-right: 24px; font-weight: 400; }
   .payment .p-pct { text-align: right; font-variant-numeric: tabular-nums; min-width: 30px; }
 
-  /* ── Observaciones — estilo Excel ──────────────────────────── */
-  .obs-wrap { margin-top: 14px; page-break-inside: avoid; }
+  /* ── Observaciones ──────────────────────────────────────────── */
+  .obs-wrap { margin-top: 8pt; }
   .obs-item {
     display: flex;
     gap: 4px;
-    margin-bottom: 1.5px;
-    font-size: 6pt;
-    line-height: 1.3;
+    margin-bottom: 0;
+    font-size: 6.5pt;
+    line-height: 1.25;
   }
-  .obs-num { flex: 0 0 12px; font-weight: 400; color: #000; }
-  .obs-text { flex: 1; color: #000; }
+  .obs-num { flex: 0 0 12px; font-weight: 400; color: #1A1A1A; }
+  .obs-text { flex: 1; color: #1A1A1A; }
 
   .extra-obs {
-    margin-top: 8px;
+    margin-top: 6pt;
     padding: 6px;
     background: #F8F8F8;
     border-left: 1.5pt solid #999;
-    font-size: 5.5pt;
+    font-size: 6pt;
     line-height: 1.35;
     color: #333;
   }
@@ -411,10 +454,27 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
 </head>
 <body>
 
-  <div class="header">
-    <div class="header-left">
+  <!-- 1) Franja: logo (izq) + título + Pro a cargo (der) -->
+  <div class="header-strip">
+    <div class="strip-left">
       ${logoHtml}
-      <div class="logo-text">BLANCO LARRAÍN ARQUITECTOS</div>
+    </div>
+    <div class="strip-right">
+      <div class="field"><div class="label">Version:</div></div>
+      <h1 class="doc-title">${esc(budget.version)} COTIZACION</h1>
+      <div class="doc-subtitle">MUEBLES Y ARTEFACTOS</div>
+      <div class="field">
+        <div class="label">Profesional a cargo:</div>
+        <div class="value">${esc(PROFESSIONAL)}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2) Header fields: izquierda (Mandante/Proyecto/Direccion)
+       pegada al borde izq; derecha (Celular/Fecha/Valor UF)
+       pegada al borde derecho. -->
+  <div class="header-fields">
+    <div class="col-left">
       <div class="field">
         <div class="label">Mandante:</div>
         <div class="value">${esc(project.clientName)}</div>
@@ -428,28 +488,19 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
         <div class="value">${esc(project.address || "—")}</div>
       </div>
     </div>
-    <div class="header-right">
-      <div class="field"><div class="label">Version:</div></div>
-      <h1 class="doc-title">${esc(budget.version)} COTIZACION</h1>
-      <div class="doc-subtitle">MUEBLES Y ARTEFACTOS</div>
+    <div class="col-right">
       <div class="field">
-        <div class="label">Profesional a cargo:</div>
-        <div class="value">${esc(PROFESSIONAL)}</div>
+        <div class="label">Celular:</div>
+        <div class="value">${esc(project.clientPhone || "—")}</div>
       </div>
-      ${
-        project.clientPhone
-          ? `<div class="field"><div class="label">Celular:</div><div class="value">${esc(project.clientPhone)}</div></div>`
-          : ""
-      }
       <div class="field">
         <div class="label">Fecha:</div>
         <div class="value">${dateStr}</div>
       </div>
-      ${
-        project.ufReference != null
-          ? `<div class="field"><div class="label">Valor UF:</div><div class="value">$ ${Math.round(project.ufReference).toLocaleString("es-CL")}</div></div>`
-          : ""
-      }
+      <div class="field">
+        <div class="label">Valor UF:</div>
+        <div class="value">${project.ufReference != null ? "$ " + Math.round(project.ufReference).toLocaleString("es-CL") : "—"}</div>
+      </div>
     </div>
   </div>
 
@@ -511,24 +562,3 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
 </html>`;
 }
 
-export function buildMueblesFooter(
-  version: string,
-  date: string | Date
-): string {
-  const dateStr = fmtDate(date);
-  return `
-    <div style="
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 7pt;
-      color: #808080;
-      width: 100%;
-      padding: 4px 14mm 0;
-      border-top: 0.5pt solid #CCC;
-      display: flex;
-      justify-content: space-between;
-    ">
-      <span>blarq.cl</span>
-      <span>${esc(version)} — ${dateStr}</span>
-    </div>
-  `;
-}

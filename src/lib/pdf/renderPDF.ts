@@ -7,6 +7,8 @@ export interface RenderPDFOptions {
   headerTemplate?: string;
   footerTemplate?: string;
   printBackground?: boolean;
+  // Scale factor for the PDF render. Defaults to 1.0. Allowed: 0.1 – 2.
+  scale?: number;
 }
 
 // En Vercel (serverless) el bundle de chromium completo no entra ni
@@ -86,6 +88,7 @@ export async function renderPDF(
       displayHeaderFooter: opts.displayHeaderFooter ?? false,
       headerTemplate: opts.headerTemplate ?? "<div></div>",
       footerTemplate: opts.footerTemplate ?? "<div></div>",
+      scale: opts.scale,
     });
 
     return buffer;

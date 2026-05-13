@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import { renderObraHTML, buildObraFooter } from "@/lib/pdf/ObraPDF.html";
-import { renderMueblesHTML, buildMueblesFooter } from "@/lib/pdf/MueblesPDF.html";
+import { renderObraHTML } from "@/lib/pdf/ObraPDF.html";
+import { renderMueblesHTML } from "@/lib/pdf/MueblesPDF.html";
 import {
   renderArtefactosHTML,
   buildArtefactosFooter,
@@ -48,7 +48,9 @@ export async function GET(
     }
 
     let html: string;
-    let footer: string;
+    // En obra ya no hay footer (match al template Excel). En muebles y
+    // artefactos sí se mantiene blarq.cl + versión a pie de página.
+    let footer: string = "";
     let filename: string;
     const baseName = budget.project.name.replace(/\s+/g, "_");
 
@@ -67,7 +69,6 @@ export async function GET(
           percentage: t.percentage,
         })),
       });
-      footer = buildObraFooter(budget.version, budget.date);
       filename = `BLARQ_Obra_${baseName}_${budget.version}.pdf`;
     } else if (budget.type === "muebles") {
       html = renderMueblesHTML({
@@ -97,7 +98,6 @@ export async function GET(
           percentage: t.percentage,
         })),
       });
-      footer = buildMueblesFooter(budget.version, budget.date);
       filename = `BLARQ_Muebles_${baseName}_${budget.version}.pdf`;
     } else {
       html = renderArtefactosHTML({
@@ -117,12 +117,17 @@ export async function GET(
       filename = `BLARQ_Artefactos_${baseName}_${budget.version}.pdf`;
     }
 
+    // Obra y muebles ya usan la nueva línea editorial: sin footer +
+    // márgenes 10mm/12mm. Artefactos sigue con su formato anterior.
+    const useNewFormat = budget.type === "obra" || budget.type === "muebles";
     const pdfBuffer = await renderPDF(html, {
       format: "A4",
-      displayHeaderFooter: true,
-      headerTemplate: "<div></div>",
-      footerTemplate: footer,
-      margin: { top: "14mm", bottom: "16mm", left: "15mm", right: "15mm" },
+      displayHeaderFooter: !useNewFormat,
+      headerTemplate: useNewFormat ? undefined : "<div></div>",
+      footerTemplate: useNewFormat ? undefined : footer,
+      margin: useNewFormat
+        ? { top: "10mm", bottom: "10mm", left: "12mm", right: "12mm" }
+        : { top: "14mm", bottom: "16mm", left: "15mm", right: "15mm" },
     });
 
     const body = new Uint8Array(pdfBuffer.byteLength);

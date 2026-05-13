@@ -125,7 +125,7 @@ function getLogoDataUri(): string {
 //   - Totales en 4 columnas: LABEL | % | $ | VALUE — el $ separado del nro.
 //   - Forma de Pago + Observaciones más compactas estilo Excel.
 const CSS = `
-  @page { size: A4; margin: 14mm 16mm 14mm 16mm; }
+  @page { size: A4; margin: 10mm 12mm; }
 
   * { box-sizing: border-box; }
 
@@ -135,158 +135,192 @@ const CSS = `
     font-family: 'Montserrat', sans-serif;
     font-size: 7pt;
     font-weight: 400;
-    color: #000;
+    color: #1A1A1A;
     -webkit-font-smoothing: antialiased;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  /* ── Header ─────────────────────────────────────────────────── */
-  /* Layout 2 columnas: izquierda logo+Mandante/Proyecto/Direccion;
-     derecha Version+Pro a cargo+Celular/Fecha/Valor UF.
-     Match Excel reference. */
-  .header {
+  /* ── Header — match IGUALAR reference ───────────────────────── */
+  /* Layout en 2 bloques:
+     1) Franja superior: logo (izq) + título "V1 COTIZACION / OBRA /
+        Profesional a cargo / JTL" (der).
+     2) Grilla 2×3 abajo con campos pareados:
+        Mandante | Celular
+        Proyecto | Fecha
+        Direccion | Valor UF
+  */
+  .header-strip {
     display: grid;
     grid-template-columns: 1fr 1fr;
     column-gap: 30px;
-    margin-bottom: 8px;
+    margin-bottom: 4pt;
+    align-items: start;
   }
-  .header-left  { text-align: left; }
-  .header-right { text-align: right; }
+  .header-strip .strip-left  { text-align: left; }
+  .header-strip .strip-right { text-align: right; }
+
+  .header-fields {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 6pt;
+  }
+  .header-fields .col-left,
+  .header-fields .col-right {
+    display: flex;
+    flex-direction: column;
+    gap: 2pt;
+  }
+  .header-fields .col-right { text-align: left; }
 
   .logo {
     display: block;
-    height: 38px;
+    height: 45px;
     width: auto;
-    margin-bottom: 12px;
-  }
-  .logo-text {
-    font-size: 5.5pt;
-    font-weight: 400;
-    color: #808080;
-    letter-spacing: 0.08em;
-    margin-top: -8px;
-    margin-bottom: 12px;
+    margin-bottom: 2pt;
   }
 
   .doc-title {
     font-family: 'Montserrat', sans-serif;
-    font-size: 16pt;
-    font-weight: 500;
+    font-size: 18pt;
+    font-weight: 400;
     color: #808080;
     line-height: 1;
-    margin: 0 0 2px 0;
+    margin: 0;
     letter-spacing: 0.02em;
   }
   .doc-subtitle {
-    font-size: 8pt;
-    font-weight: 500;
+    font-size: 9pt;
+    font-weight: 400;
     color: #808080;
     letter-spacing: 0.06em;
-    margin: 0 0 10px 0;
+    margin: 0 0 4pt 0;
     text-transform: uppercase;
   }
 
-  .field { margin-bottom: 4px; }
+  .field { margin-bottom: 1pt; }
   .field .label {
     font-size: 6pt;
     font-weight: 400;
-    color: #404040;
+    color: #808080;
     letter-spacing: 0;
     margin-bottom: 0;
     line-height: 1.1;
   }
   .field .value {
-    font-size: 7pt;
-    font-weight: 700;
-    color: #000;
+    font-size: 8pt;
+    font-weight: 500;
+    color: #1A1A1A;
     line-height: 1.1;
     text-transform: uppercase;
   }
 
-  /* ── Table ──────────────────────────────────────────────────── */
-  /* Bordes en TODAS las celdas (estilo Excel). */
+  /* ── Table — spec definitivo MJ ─────────────────────────────── */
   table.partidas {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
-    font-size: 6pt;
-    margin-top: 6px;
-  }
-  .partidas th, .partidas td {
-    padding: 2px 4px;
-    vertical-align: middle;
-    border: 0.5pt solid #000;
-    word-wrap: break-word;
-    line-height: 1.15;
-  }
-  .partidas thead th {
-    background: #DBDBDB;
-    color: #000;
-    font-weight: 700;
-    text-transform: uppercase;
-    padding: 3px 4px;
-    font-size: 6pt;
-    text-align: center;
-  }
-  .partidas tr.chapter-row td {
-    background: #DBDBDB;
-    font-weight: 700;
-    text-transform: uppercase;
-    padding: 2.5px 4px;
+    font-family: 'Montserrat', sans-serif;
     font-size: 6.5pt;
+    margin-top: 0;
+  }
+  /* Cuerpo: SIN bordes verticales, líneas internas muy sutiles. */
+  .partidas th, .partidas td {
+    border: none;
+    border-bottom: 0.15pt solid #E5E5E5;
+    padding: 2pt 5pt;
+    vertical-align: top;
+    word-wrap: break-word;
+    line-height: 1.2;
+    font-weight: 400;
+    font-size: 6.5pt;
+    color: #1A1A1A;
+  }
+  /* Header de tabla (ITEM | PARTIDA | …) — sin fill, solo líneas */
+  .partidas thead th {
+    background: transparent;
+    color: #1A1A1A;
+    font-weight: 500;
+    text-transform: uppercase;
+    text-align: center;
+    font-size: 7pt;
+    padding: 2pt 5pt;
+    white-space: nowrap;
+    vertical-align: middle;
+    border-top: 0.5pt solid #1A1A1A;
+    border-bottom: 0.5pt solid #1A1A1A;
+  }
+  /* Filas de capítulo (1 DEMOLICIONES, …) — gris sutil */
+  .partidas tr.chapter-row td {
+    background: #E5E5E5;
+    font-weight: 600;
+    text-transform: uppercase;
+    border-bottom: 0.15pt solid #E5E5E5;
+    font-size: 7pt;
+    vertical-align: middle;
+    padding: 2pt 5pt;
+    color: #1A1A1A;
   }
   .partidas tr.chapter-row td.chapter-idx { text-align: center; }
 
-  /* Column widths (must sum to 100%) */
-  .col-item   { width: 5%;  text-align: center; white-space: nowrap; }
-  .col-name   { width: 21%; text-align: left; font-weight: 600; }
-  .col-desc   { width: 40%; text-align: left; font-size: 6pt; font-weight: 400; }
-  .col-unit   { width: 5%;  text-align: center; white-space: nowrap; }
-  .col-qty    { width: 7%;  text-align: center; font-variant-numeric: tabular-nums; }
-  .col-pu     { width: 10%; text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .col-total  { width: 12%; text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+  /* Anchos de columna (suman 100%). TOTAL en peso regular per spec. */
+  .col-item   { width: 4%;  text-align: center; white-space: nowrap; }
+  .col-name   { width: 28%; text-align: left; }
+  .col-desc   { width: 37%; text-align: left; }
+  .col-unit   { width: 6%;  text-align: center; white-space: nowrap; }
+  .col-qty    { width: 7%;  text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .col-pu     { width: 8%;  text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .col-total  { width: 10%; text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-  /* ── Totals ─────────────────────────────────────────────────── */
-  /* Estilo Excel: 4 columnas — LABEL | % | $ | VALUE.
-     Sin bordes salvo top en COSTO TOTAL. Alineado a la derecha. */
+  /* ── Totals — apilado vertical, 55% ancho derecha (spec MJ) ──── */
   .totals-wrap {
     width: 100%;
-    margin-top: 8px;
+    margin-top: 6pt;
     display: flex;
     justify-content: flex-end;
   }
   table.totals {
     border-collapse: collapse;
-    font-size: 6.5pt;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 7pt;
+    width: 55%;
+    margin-left: auto;
+    border: none;
+    border-top: 0.5pt solid #1A1A1A;
+    border-bottom: 0.5pt solid #1A1A1A;
   }
   .totals td {
-    padding: 1.5px 4px;
+    padding: 2.5pt 6pt;
+    border-bottom: 0.3pt solid #BFBFBF;
+    background: transparent;
+    color: #1A1A1A;
     font-weight: 400;
     font-variant-numeric: tabular-nums;
-    border: none;
-    color: #000;
   }
-  .totals .t-label { text-align: left; text-transform: uppercase; font-weight: 400; white-space: nowrap; padding-right: 14px; }
-  .totals .t-pct   { text-align: right; white-space: nowrap; padding-right: 12px; min-width: 28px; }
-  .totals .t-cur   { text-align: right; white-space: nowrap; padding-right: 2px; }
-  .totals .t-val   { text-align: right; white-space: nowrap; min-width: 70px; }
+  .totals tr:last-child td { border-bottom: none; }
+
+  .totals .t-label { text-align: left; text-transform: uppercase; white-space: nowrap; padding-left: 2pt; }
+  .totals .t-pct   { text-align: center; width: 12%; }
+  .totals .t-cur   { text-align: center; width: 6%; }
+  .totals .t-val   { text-align: right; white-space: nowrap; }
+
   .totals tr.total td {
-    border-top: 1pt solid #000;
     font-weight: 700;
-    padding-top: 3px;
+    font-size: 7.5pt;
+    border-top: 0.5pt solid #1A1A1A;
   }
 
-  /* ── Section titles — match Excel: subrayado fino sin negrita */
+  /* ── Section titles — subrayado fino sin negrita */
   .section-title {
     font-size: 7pt;
     font-weight: 400;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    color: #000;
-    margin: 0 0 4px 0;
+    color: #1A1A1A;
+    margin: 0 0 2pt 0;
     padding: 0;
-    border-bottom: 0.5pt solid #000;
+    border-bottom: 0.5pt solid #1A1A1A;
     padding-bottom: 1px;
     display: inline-block;
   }
@@ -294,36 +328,34 @@ const CSS = `
     font-size: 7pt;
     font-weight: 400;
     font-style: italic;
-    color: #000;
-    margin: 0 0 4px 0;
+    color: #1A1A1A;
+    margin: 0 0 2pt 0;
     padding-bottom: 1px;
-    border-bottom: 0.5pt solid #000;
+    border-bottom: 0.5pt solid #1A1A1A;
     display: inline-block;
   }
 
-  /* ── Payment terms — estilo Excel compacto ─────────────────── */
-  .payment-wrap { margin-top: 18px; }
+  /* ── Payment terms ─────────────────────────────────────────── */
+  .payment-wrap { margin-top: 8pt; }
   table.payment { border-collapse: collapse; font-size: 6.5pt; }
-  .payment td { padding: 1px 0; border: none; }
+  .payment td { padding: 0.5pt 0; border: none; line-height: 1.2; }
   .payment .p-stage { padding-right: 24px; font-weight: 400; }
   .payment .p-pct { text-align: right; font-variant-numeric: tabular-nums; min-width: 30px; }
 
-  /* ── Observaciones — estilo Excel, lista numerada compacta ──── */
-  .obs-wrap  { margin-top: 14px; page-break-inside: avoid; }
+  /* ── Observaciones — lista numerada ─────────────────────────── */
+  .obs-wrap  { margin-top: 8pt; }
   .obs-item {
     display: flex;
     gap: 4px;
-    margin-bottom: 1.5px;
-    font-size: 6pt;
-    line-height: 1.3;
-    break-inside: avoid;
-    page-break-inside: avoid;
+    margin-bottom: 0;
+    font-size: 6.5pt;
+    line-height: 1.25;
   }
-  .obs-num { flex: 0 0 12px; font-weight: 400; color: #000; }
-  .obs-text { flex: 1; color: #000; }
+  .obs-num { flex: 0 0 12px; font-weight: 400; color: #1A1A1A; }
+  .obs-text { flex: 1; color: #1A1A1A; }
 
-  /* Avoid splitting a row across pages */
-  tr { page-break-inside: avoid; }
+  /* Avoid splitting rows ONLY in totals (más legible si queda junto). */
+  .totals tr { page-break-inside: avoid; }
 `;
 
 // ─── Renderer ─────────────────────────────────────────────────────────────
@@ -403,11 +435,28 @@ export function renderObraHTML(data: ObraHTMLInput): string {
 </head>
 <body>
 
-  <!-- HEADER — match Excel reference exact -->
-  <div class="header">
-    <div class="header-left">
+  <!-- HEADER — match IGUALAR reference -->
+  <!-- 1) Franja: logo (izq) + título + Pro a cargo (der) -->
+  <div class="header-strip">
+    <div class="strip-left">
       ${logoHtml}
-      <div class="logo-text">BLANCO LARRAÍN ARQUITECTOS</div>
+    </div>
+    <div class="strip-right">
+      <div class="field"><div class="label">Version:</div></div>
+      <h1 class="doc-title">${esc(budget.version)} COTIZACION</h1>
+      <div class="doc-subtitle">OBRA</div>
+      <div class="field">
+        <div class="label">Profesional a cargo:</div>
+        <div class="value">${esc(PROFESSIONAL)}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2) Header fields: izquierda (Mandante/Proyecto/Direccion)
+       pegada al borde izq; derecha (Celular/Fecha/Valor UF)
+       pegada al borde derecho. -->
+  <div class="header-fields">
+    <div class="col-left">
       <div class="field">
         <div class="label">Mandante:</div>
         <div class="value">${esc(project.clientName)}</div>
@@ -421,28 +470,19 @@ export function renderObraHTML(data: ObraHTMLInput): string {
         <div class="value">${esc(project.address || "—")}</div>
       </div>
     </div>
-    <div class="header-right">
-      <div class="field"><div class="label">Version:</div></div>
-      <h1 class="doc-title">${esc(budget.version)} COTIZACION</h1>
-      <div class="doc-subtitle">OBRA</div>
+    <div class="col-right">
       <div class="field">
-        <div class="label">Profesional a cargo:</div>
-        <div class="value">${esc(PROFESSIONAL)}</div>
+        <div class="label">Celular:</div>
+        <div class="value">${esc(project.clientPhone || "—")}</div>
       </div>
-      ${
-        project.clientPhone
-          ? `<div class="field"><div class="label">Celular:</div><div class="value">${esc(project.clientPhone)}</div></div>`
-          : ""
-      }
       <div class="field">
         <div class="label">Fecha:</div>
         <div class="value">${dateStr}</div>
       </div>
-      ${
-        project.ufReference != null
-          ? `<div class="field"><div class="label">Valor UF:</div><div class="value">$ ${Math.round(project.ufReference).toLocaleString("es-CL")}</div></div>`
-          : ""
-      }
+      <div class="field">
+        <div class="label">Valor UF:</div>
+        <div class="value">${project.ufReference != null ? "$ " + Math.round(project.ufReference).toLocaleString("es-CL") : "—"}</div>
+      </div>
     </div>
   </div>
 
@@ -465,7 +505,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
     </tbody>
   </table>
 
-  <!-- TOTALS -->
+  <!-- TOTALS — alineado a la derecha al 55% -->
   <div class="totals-wrap">
     <table class="totals">
       <tr>
@@ -507,7 +547,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
     </table>
   </div>
 
-  <!-- FORMAS DE PAGO — title en cursiva como el Excel -->
+  <!-- FORMAS DE PAGO -->
   <div class="payment-wrap">
     <div class="section-title-italic">Formas de Pago</div>
     <table class="payment">
@@ -539,28 +579,3 @@ export function renderObraHTML(data: ObraHTMLInput): string {
 </html>`;
 }
 
-/**
- * Footer template for Puppeteer's displayHeaderFooter.
- * Puppeteer's footer runs in an isolated sandbox — Montserrat is unavailable,
- * so fall back to Arial. Inline styles only.
- */
-export function buildObraFooter(version: string, date: string | Date): string {
-  const dateStr = fmtDate(date);
-  return `
-    <div style="
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 7pt;
-      font-weight: 400;
-      color: #808080;
-      width: 100%;
-      padding: 4px 15mm 0;
-      margin: 0;
-      border-top: 0.5pt solid #CCC;
-      display: flex;
-      justify-content: space-between;
-    ">
-      <span>blarq.cl</span>
-      <span>${esc(version)} — ${dateStr}</span>
-    </div>
-  `;
-}

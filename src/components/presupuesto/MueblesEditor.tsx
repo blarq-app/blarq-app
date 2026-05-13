@@ -1046,27 +1046,22 @@ function ItemBlock({
                     el primer proveedor inline en la tabla sin necesidad
                     del panel "Cálculo activo" arriba. */}
                 {item.quotes.length === 0 && (
-                  <tr className="bg-green-50/50">
+                  <tr>
                     <td className="px-2 py-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[8px] uppercase tracking-wider px-1 py-0.5 rounded bg-green-700 text-white font-bold">
-                          activa
-                        </span>
-                        <input
-                          type="text"
-                          value={item.supplier ?? ""}
-                          onChange={(e) => onUpdate({ supplier: e.target.value })}
-                          placeholder="proveedor"
-                          className="flex-1 bg-transparent border-0 p-0 outline-none font-bold text-gray-900"
-                        />
-                      </div>
+                      <input
+                        type="text"
+                        value={item.supplier ?? ""}
+                        onChange={(e) => onUpdate({ supplier: e.target.value })}
+                        placeholder="proveedor"
+                        className="flex-1 bg-transparent border-0 p-0 outline-none text-red-900"
+                      />
                     </td>
                     <td className="px-2 py-1 text-right">
                       <ThousandsInput
                         value={item.costDistributor}
                         onChange={(v) => onUpdate({ costDistributor: v })}
                         placeholder="0"
-                        className="w-full bg-transparent border-0 p-0 text-right tabular-nums outline-none font-bold text-gray-900"
+                        className="w-full bg-transparent border-0 p-0 text-right tabular-nums outline-none text-red-900"
                       />
                     </td>
                     <td className="px-2 py-1 text-right">
@@ -1084,16 +1079,19 @@ function ItemBlock({
                           })
                         }
                         placeholder="30"
-                        className="w-full bg-transparent border-0 p-0 text-right tabular-nums outline-none font-bold text-gray-900"
+                        className="w-full bg-transparent border-0 p-0 text-right tabular-nums outline-none text-red-900"
                       />
                     </td>
-                    <td className="px-2 py-1 text-right tabular-nums font-bold text-gray-900">
+                    {/* Neto y C/IVA en gris — son el precio cliente.
+                        Util en verde (utilidad sigue siendo verde como
+                        antes). */}
+                    <td className="px-2 py-1 text-right tabular-nums text-gray-700">
                       {formatCLP(item.clientPriceNet)}
                     </td>
-                    <td className="px-2 py-1 text-right tabular-nums font-bold text-gray-900">
+                    <td className="px-2 py-1 text-right tabular-nums text-gray-700">
                       {formatCLP(item.clientPriceIva)}
                     </td>
-                    <td className="px-2 py-1 text-right tabular-nums text-green-700 font-bold">
+                    <td className="px-2 py-1 text-right tabular-nums text-green-700">
                       {formatCLP(item.clientPriceNet - item.costDistributor)}
                     </td>
                     <td className="px-2 py-1"></td>

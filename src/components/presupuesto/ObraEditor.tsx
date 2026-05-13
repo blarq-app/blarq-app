@@ -642,14 +642,15 @@ export default function ObraEditor({
                       </td>
                       <td className="px-3 py-0.5 align-top">
                         {/* Descripción — máx 2 líneas en estado normal
-                            (~32px). Al focus se expande hasta 200px para
-                            edición cómoda. Texto completo en tooltip. */}
+                            (~64px = 4 líneas). Al focus se expande hasta
+                            200px para edición cómoda. Texto completo
+                            siempre en tooltip al hover. */}
                         <textarea
                           ref={(el) => {
                             if (el) {
                               el.style.height = "auto";
                               const focused = document.activeElement === el;
-                              const cap = focused ? 200 : 32;
+                              const cap = focused ? 200 : 64;
                               el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
                             }
                           }}
@@ -659,7 +660,7 @@ export default function ObraEditor({
                           }}
                           onBlur={(e) => {
                             e.currentTarget.style.height = "auto";
-                            e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 32)}px`;
+                            e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 64)}px`;
                           }}
                           value={item.descriptionCliente ?? ""}
                           onChange={(e) => {
@@ -669,7 +670,7 @@ export default function ObraEditor({
                           }}
                           title={item.descriptionCliente || ""}
                           placeholder="Descripción para el cliente (PDF)…"
-                          rows={2}
+                          rows={4}
                           className="text-force-10 w-full resize-none bg-transparent border-0 p-0 text-gray-600 placeholder:text-gray-300 focus:ring-0 outline-none leading-tight overflow-hidden"
                           style={{ minHeight: "16px", maxHeight: "200px" }}
                         />

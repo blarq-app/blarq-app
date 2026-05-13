@@ -117,7 +117,7 @@ function getLogoDataUri(): string {
 
 // ─── CSS ──────────────────────────────────────────────────────────────────
 const CSS = `
-  @page { size: A4; margin: 12mm 14mm 16mm 14mm; }
+  @page { size: A4; margin: 10mm 12mm 12mm 12mm; }
 
   * { box-sizing: border-box; }
 
@@ -183,17 +183,18 @@ const CSS = `
   }
 
   /* ── Table ──────────────────────────────────────────────────── */
-  /* Match al cuadro Excel master — compacto, mismas proporciones que
-   * el archivo de referencia que usa MJ en su flujo de cotización. */
+  /* Match al cuadro Excel master — compacto + objetivo 1 hoja.
+   * Si crece el contenido y no entra, partir página es OK pero idealmente
+   * con totales + observaciones todo en la 1era. */
   table.partidas {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
     font-size: 6pt;
-    margin-top: 14px;
+    margin-top: 8px;
   }
   .partidas th, .partidas td {
-    padding: 1px 4px;
+    padding: 0.5px 4px;
     vertical-align: top;
     border: none;
     border-bottom: 0.4pt solid #CCCCCC;
@@ -205,9 +206,9 @@ const CSS = `
     color: #000;
     font-weight: 700;
     text-transform: uppercase;
-    border-top: 1pt solid #000;
-    border-bottom: 1pt solid #000;
-    padding: 2.5px 4px;
+    border-top: 0.8pt solid #000;
+    border-bottom: 0.8pt solid #000;
+    padding: 2px 4px;
     font-size: 6pt;
   }
   .partidas tr.chapter-row td {
@@ -216,12 +217,12 @@ const CSS = `
     text-transform: uppercase;
     border-top: none;
     border-bottom: 0.4pt solid #CCCCCC;
-    padding-top: 2px;
-    padding-bottom: 2px;
-    font-size: 6.5pt;
+    padding-top: 1.5px;
+    padding-bottom: 1.5px;
+    font-size: 6pt;
   }
   /* Extra breathing room between thead and first chapter row */
-  .partidas tbody tr:first-child td { padding-top: 4px; }
+  .partidas tbody tr:first-child td { padding-top: 2px; }
   .partidas tr.chapter-row td.chapter-idx { text-align: center; }
 
   /* Column widths (must sum to 100%) */
@@ -245,7 +246,7 @@ const CSS = `
   /* ── Totals ─────────────────────────────────────────────────── */
   .totals-wrap {
     width: 100%;
-    margin-top: 10px;
+    margin-top: 4px;
   }
   table.totals {
     width: 100%;
@@ -253,7 +254,7 @@ const CSS = `
     font-size: 6pt;
   }
   .totals td {
-    padding: 1.5px 8px;
+    padding: 0.8px 8px;
     font-weight: 400;
     font-variant-numeric: tabular-nums;
     border: none;
@@ -276,15 +277,15 @@ const CSS = `
     letter-spacing: 0.06em;
     text-transform: uppercase;
     border-bottom: 0.4pt solid #CCCCCC;
-    padding-bottom: 2px;
-    margin: 0 0 5px 0;
+    padding-bottom: 1px;
+    margin: 0 0 3px 0;
   }
 
   /* ── Payment terms ──────────────────────────────────────────── */
-  .payment-wrap { margin-top: 16px; }
+  .payment-wrap { margin-top: 8px; }
   table.payment { border-collapse: collapse; white-space: nowrap; border: none; }
   .payment td {
-    padding: 0.5px 0;
+    padding: 0.3px 0;
     font-size: 5.5pt;
     font-weight: 400;
     border: none;
@@ -294,21 +295,21 @@ const CSS = `
   .payment .p-pct   { color: #808080; }
 
   /* ── Observations ───────────────────────────────────────────── */
-  .obs-wrap  { margin-top: 20px; }
-  .obs-grid  { column-count: 1; }
+  .obs-wrap  { margin-top: 8px; }
+  .obs-grid  { column-count: 2; column-gap: 16px; }
   .obs-item {
     display: flex;
-    font-size: 5.5pt;
+    font-size: 5pt;
     font-weight: 400;
     color: #808080;
-    line-height: 1.3;
-    margin-bottom: 2px;
+    line-height: 1.25;
+    margin-bottom: 1.5px;
     text-align: left;
     break-inside: avoid;
     -webkit-column-break-inside: avoid;
     page-break-inside: avoid;
   }
-  .obs-num  { width: 12px; flex-shrink: 0; font-weight: 500; color: #808080; }
+  .obs-num  { width: 10px; flex-shrink: 0; font-weight: 500; color: #808080; }
   .obs-text { flex: 1; }
 
   /* Avoid splitting a row across pages */

@@ -162,7 +162,7 @@ const CSS = `
   /* ── Tabla principal — match al cuadro Excel master, compacto ──── */
   .partidas {
     width: 100%;
-    margin-top: 10px;
+    margin-top: 8px;
     border-collapse: collapse;
     font-size: 6pt;
   }
@@ -173,12 +173,12 @@ const CSS = `
     font-size: 5.5pt;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    padding: 2px 4px;
-    border: 0.5pt solid #000;
+    padding: 1.5px 4px;
+    border: 0.4pt solid #000;
     text-align: left;
   }
   .partidas tbody td {
-    padding: 1.5px 4px;
+    padding: 0.8px 4px;
     border-bottom: 0.4pt solid #CCCCCC;
     vertical-align: top;
   }
@@ -189,9 +189,9 @@ const CSS = `
     font-weight: 700;
     text-transform: uppercase;
     font-size: 6pt;
-    padding: 3px 4px;
-    border-top: 0.5pt solid #000;
-    border-bottom: 0.5pt solid #000;
+    padding: 2px 4px;
+    border-top: 0.4pt solid #000;
+    border-bottom: 0.4pt solid #000;
   }
   .chapter-row .col-num { width: 22px; }
 
@@ -199,7 +199,7 @@ const CSS = `
   .item-row td {
     font-weight: 600;
     font-size: 6pt;
-    padding: 2px 4px;
+    padding: 1.2px 4px;
   }
   .item-row .col-num { width: 22px; padding-right: 0; tabular-nums: true; }
   .item-desc-general {
@@ -213,7 +213,7 @@ const CSS = `
   /* Detalle (CUERPO INTERIOR / TRASERA / etc) */
   .detail-row td {
     background: #FBFBFB;
-    padding: 1px 4px 1px 4px;
+    padding: 0.5px 4px;
     font-size: 5.5pt;
     border-bottom: none;
   }

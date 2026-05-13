@@ -116,7 +116,7 @@ const CSS = `
     margin: 0;
     padding: 0;
     font-family: 'Montserrat', sans-serif;
-    font-size: 10pt;
+    font-size: 8pt;
     font-weight: 400;
     color: #000;
     -webkit-font-smoothing: antialiased;
@@ -132,54 +132,54 @@ const CSS = `
   .header-left  { text-align: left; }
   .header-right { text-align: right; }
 
-  .logo { display: block; height: 44px; width: auto; margin-bottom: 6px; }
+  .logo { display: block; height: 36px; width: auto; margin-bottom: 4px; }
 
   .doc-title {
     font-family: 'Montserrat', sans-serif;
-    font-size: 14pt;
+    font-size: 11pt;
     font-weight: 500;
     color: #808080;
     line-height: 1;
-    margin: 0 0 6px 0;
+    margin: 0 0 4px 0;
   }
 
-  .field { margin-bottom: 3px; }
+  .field { margin-bottom: 2px; }
   .field .label {
-    font-size: 6pt;
+    font-size: 5.5pt;
     font-weight: 400;
     color: #808080;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    line-height: 1.2;
+    line-height: 1.15;
   }
   .field .value {
-    font-size: 7.5pt;
+    font-size: 6.5pt;
     font-weight: 500;
     color: #000;
-    line-height: 1.2;
+    line-height: 1.15;
   }
 
-  /* ── Tabla principal ────────────────────────────────────────────── */
+  /* ── Tabla principal — match al cuadro Excel master, compacto ──── */
   .partidas {
     width: 100%;
-    margin-top: 14px;
+    margin-top: 10px;
     border-collapse: collapse;
-    font-size: 7pt;
+    font-size: 6pt;
   }
   .partidas thead th {
     background: #DBDBDB;
     color: #000;
     font-weight: 700;
-    font-size: 6.5pt;
+    font-size: 5.5pt;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    padding: 4px 6px;
+    padding: 2px 4px;
     border: 0.5pt solid #000;
     text-align: left;
   }
   .partidas tbody td {
-    padding: 3px 6px;
-    border-bottom: 0.5pt solid #CCCCCC;
+    padding: 1.5px 4px;
+    border-bottom: 0.4pt solid #CCCCCC;
     vertical-align: top;
   }
 
@@ -188,104 +188,104 @@ const CSS = `
     background: #DBDBDB;
     font-weight: 700;
     text-transform: uppercase;
-    font-size: 7.5pt;
-    padding: 5px 6px;
+    font-size: 6pt;
+    padding: 3px 4px;
     border-top: 0.5pt solid #000;
     border-bottom: 0.5pt solid #000;
   }
-  .chapter-row .col-num { width: 28px; }
+  .chapter-row .col-num { width: 22px; }
 
   /* Item (1.1 MUEBLES) */
   .item-row td {
     font-weight: 600;
-    font-size: 7pt;
-    padding: 4px 6px;
+    font-size: 6pt;
+    padding: 2px 4px;
   }
-  .item-row .col-num { width: 28px; padding-right: 0; tabular-nums: true; }
+  .item-row .col-num { width: 22px; padding-right: 0; tabular-nums: true; }
   .item-desc-general {
     font-weight: 400;
     font-style: italic;
     color: #555;
-    font-size: 6.5pt;
-    margin-top: 1px;
+    font-size: 5.5pt;
+    margin-top: 0;
   }
 
   /* Detalle (CUERPO INTERIOR / TRASERA / etc) */
   .detail-row td {
     background: #FBFBFB;
-    padding: 2px 6px 2px 6px;
-    font-size: 6.5pt;
+    padding: 1px 4px 1px 4px;
+    font-size: 5.5pt;
     border-bottom: none;
   }
   .detail-row .col-detail-name {
     font-weight: 600;
     text-transform: uppercase;
     color: #333;
-    padding-left: 22px;
+    padding-left: 18px;
   }
   .detail-row .col-detail-material {
     color: #555;
   }
 
-  .col-qty   { width: 60px; text-align: center; font-variant-numeric: tabular-nums; }
-  .col-total { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+  .col-qty   { width: 50px; text-align: center; font-variant-numeric: tabular-nums; }
+  .col-total { width: 90px; text-align: right; font-variant-numeric: tabular-nums; }
   .col-name  { /* default flex */ }
 
   /* ── Totales ─────────────────────────────────────────────────── */
-  .totals-wrap { margin-top: 16px; display: flex; justify-content: flex-end; }
-  .totals { font-size: 8pt; border-collapse: collapse; }
-  .totals td { padding: 4px 10px; font-variant-numeric: tabular-nums; }
+  .totals-wrap { margin-top: 10px; display: flex; justify-content: flex-end; }
+  .totals { font-size: 6.5pt; border-collapse: collapse; }
+  .totals td { padding: 2px 8px; font-variant-numeric: tabular-nums; }
   .totals .t-label {
     font-weight: 700;
     text-transform: uppercase;
-    font-size: 7.5pt;
+    font-size: 6pt;
     letter-spacing: 0.05em;
     text-align: right;
   }
-  .totals .t-val { text-align: right; min-width: 90px; }
+  .totals .t-val { text-align: right; min-width: 80px; }
   .totals .total td {
-    border-top: 1pt solid #000;
+    border-top: 0.5pt solid #000;
     background: #DBDBDB;
-    font-size: 9pt;
+    font-size: 7pt;
     font-weight: 700;
   }
 
   /* ── Forma de pago ──────────────────────────────────────────── */
-  .payment-wrap { margin-top: 18px; }
+  .payment-wrap { margin-top: 12px; }
   .section-title {
-    font-size: 8pt;
+    font-size: 6.5pt;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: #000;
-    margin-bottom: 6px;
-    padding-bottom: 2px;
+    margin-bottom: 3px;
+    padding-bottom: 1px;
     border-bottom: 0.5pt solid #999;
   }
-  .payment { width: 50%; border-collapse: collapse; font-size: 7pt; }
-  .payment td { padding: 3px 8px; border-bottom: 0.5pt solid #CCC; }
+  .payment { width: 50%; border-collapse: collapse; font-size: 5.5pt; }
+  .payment td { padding: 1.5px 6px; border-bottom: 0.4pt solid #CCC; }
   .payment .p-stage { width: 70%; }
   .payment .p-pct   { width: 30%; text-align: right; font-variant-numeric: tabular-nums; }
 
   /* ── Observaciones ─────────────────────────────────────────── */
-  .obs-wrap { margin-top: 18px; page-break-inside: avoid; }
+  .obs-wrap { margin-top: 12px; page-break-inside: avoid; }
   .obs-item {
     display: flex;
-    gap: 8px;
-    margin-bottom: 4px;
-    font-size: 7pt;
-    line-height: 1.4;
+    gap: 6px;
+    margin-bottom: 2px;
+    font-size: 5.5pt;
+    line-height: 1.3;
   }
-  .obs-num { flex: 0 0 14px; font-weight: 700; color: #555; }
+  .obs-num { flex: 0 0 12px; font-weight: 700; color: #555; }
   .obs-text { flex: 1; color: #333; }
 
   .extra-obs {
-    margin-top: 12px;
-    padding: 8px;
+    margin-top: 8px;
+    padding: 6px;
     background: #F8F8F8;
-    border-left: 2pt solid #999;
-    font-size: 7pt;
-    line-height: 1.45;
+    border-left: 1.5pt solid #999;
+    font-size: 5.5pt;
+    line-height: 1.35;
     color: #333;
   }
 `;

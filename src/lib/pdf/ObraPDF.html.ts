@@ -125,7 +125,7 @@ const CSS = `
     margin: 0;
     padding: 0;
     font-family: 'Montserrat', sans-serif;
-    font-size: 10pt;
+    font-size: 8pt;
     font-weight: 400;
     color: #000;
     -webkit-font-smoothing: antialiased;
@@ -144,96 +144,95 @@ const CSS = `
 
   .logo {
     display: block;
-    height: 44px;
+    height: 36px;
     width: auto;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }
 
   .doc-title {
     font-family: 'Montserrat', sans-serif;
-    font-size: 14pt;
+    font-size: 11pt;
     font-weight: 500;
     color: #808080;
     line-height: 1;
-    margin: 0 0 6px 0;
+    margin: 0 0 4px 0;
     letter-spacing: 0;
   }
 
-  .field { margin-bottom: 3px; }
+  .field { margin-bottom: 2px; }
   .field .label {
-    font-size: 6pt;
+    font-size: 5.5pt;
     font-weight: 400;
     color: #808080;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     margin-bottom: 0;
-    line-height: 1.2;
+    line-height: 1.15;
   }
   .field .value {
-    font-size: 7.5pt;
+    font-size: 6.5pt;
     font-weight: 500;
     color: #000;
-    line-height: 1.2;
+    line-height: 1.15;
   }
 
   .header-divider {
     border: none;
     border-top: 1px solid #ddd;
-    margin: 4px 0;
+    margin: 3px 0;
   }
 
   /* ── Table ──────────────────────────────────────────────────── */
-  /* NOTE: spec asks 10pt but 51 items + 6 chapters does not fit in 2 pages
-   * at that size. Dropped to 8.5pt / tighter padding to match the Excel's
-   * page count. */
+  /* Match al cuadro Excel master — compacto, mismas proporciones que
+   * el archivo de referencia que usa MJ en su flujo de cotización. */
   table.partidas {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
-    font-size: 7pt;
-    margin-top: 20px;
+    font-size: 6pt;
+    margin-top: 14px;
   }
   .partidas th, .partidas td {
-    padding: 1.5px 4px;
+    padding: 1px 4px;
     vertical-align: top;
     border: none;
-    border-bottom: 0.5pt solid #CCCCCC;
+    border-bottom: 0.4pt solid #CCCCCC;
     word-wrap: break-word;
-    line-height: 1.15;
+    line-height: 1.1;
   }
   .partidas thead th {
     background: #FFFFFF;
     color: #000;
     font-weight: 700;
     text-transform: uppercase;
-    border-top: 1.5pt solid #000;
-    border-bottom: 1.5pt solid #000;
-    padding: 4px 4px;
-    font-size: 7.5pt;
+    border-top: 1pt solid #000;
+    border-bottom: 1pt solid #000;
+    padding: 2.5px 4px;
+    font-size: 6pt;
   }
   .partidas tr.chapter-row td {
     background: #DBDBDB;
     font-weight: 700;
     text-transform: uppercase;
     border-top: none;
-    border-bottom: 0.5pt solid #CCCCCC;
-    padding-top: 2.5px;
-    padding-bottom: 2.5px;
+    border-bottom: 0.4pt solid #CCCCCC;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    font-size: 6.5pt;
   }
   /* Extra breathing room between thead and first chapter row */
-  .partidas tbody tr:first-child td { padding-top: 7px; }
+  .partidas tbody tr:first-child td { padding-top: 4px; }
   .partidas tr.chapter-row td.chapter-idx { text-align: center; }
 
   /* Column widths (must sum to 100%) */
   .col-item   { width: 4%;  text-align: center; white-space: nowrap; }
   .col-name   { width: 24%; text-align: left; }
-  .col-desc   { width: 39%; text-align: left; font-size: 6pt; }
+  .col-desc   { width: 39%; text-align: left; font-size: 5.5pt; }
   .col-unit   { width: 6%;  text-align: center; white-space: nowrap; }
   .col-qty    { width: 7%;  text-align: center; font-variant-numeric: tabular-nums; }
   .col-pu     { width: 9%;  text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
   .col-total  { width: 11%; text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
-  /* thead DESCRIPCION slightly larger than body (6pt) but not jarring */
-  thead .col-desc { font-size: 7pt; }
+  thead .col-desc { font-size: 6pt; }
   /* Explicit alignments for THs (inherit width from first cell) */
   thead th.col-item { text-align: center; }
   thead th.col-name { text-align: left; }
@@ -246,23 +245,23 @@ const CSS = `
   /* ── Totals ─────────────────────────────────────────────────── */
   .totals-wrap {
     width: 100%;
-    margin-top: 16px;
+    margin-top: 10px;
   }
   table.totals {
     width: 100%;
     border-collapse: collapse;
-    font-size: 7pt;
+    font-size: 6pt;
   }
   .totals td {
-    padding: 2.5px 10px;
+    padding: 1.5px 8px;
     font-weight: 400;
     font-variant-numeric: tabular-nums;
     border: none;
     color: #000;
   }
   .totals .t-label { width: 100%; text-align: left; text-transform: uppercase; font-weight: 400; white-space: nowrap; }
-  .totals .t-pct   { text-align: right; white-space: nowrap; padding-left: 20px; padding-right: 18px; }
-  .totals .t-cur   { text-align: left; white-space: nowrap; padding-left: 0; padding-right: 14px; }
+  .totals .t-pct   { text-align: right; white-space: nowrap; padding-left: 16px; padding-right: 14px; }
+  .totals .t-cur   { text-align: left; white-space: nowrap; padding-left: 0; padding-right: 10px; }
   .totals .t-val   { text-align: right; white-space: nowrap; padding-left: 0; padding-right: 4px; }
   .totals tr.total td {
     border-top: 0.5pt solid #000;
@@ -271,45 +270,45 @@ const CSS = `
 
   /* ── Section titles (unified) ───────────────────────────────── */
   .section-title {
-    font-size: 7pt;
+    font-size: 6pt;
     font-weight: 400;
     color: #808080;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    border-bottom: 0.5pt solid #CCCCCC;
-    padding-bottom: 3px;
-    margin: 0 0 8px 0;
+    border-bottom: 0.4pt solid #CCCCCC;
+    padding-bottom: 2px;
+    margin: 0 0 5px 0;
   }
 
   /* ── Payment terms ──────────────────────────────────────────── */
-  .payment-wrap { margin-top: 24px; }
+  .payment-wrap { margin-top: 16px; }
   table.payment { border-collapse: collapse; white-space: nowrap; border: none; }
   .payment td {
-    padding: 1px 0;
-    font-size: 6.5pt;
+    padding: 0.5px 0;
+    font-size: 5.5pt;
     font-weight: 400;
     border: none;
     color: #000;
   }
-  .payment .p-stage { width: 80px; padding-right: 10px; }
+  .payment .p-stage { width: 70px; padding-right: 8px; }
   .payment .p-pct   { color: #808080; }
 
   /* ── Observations ───────────────────────────────────────────── */
-  .obs-wrap  { margin-top: 32px; }
+  .obs-wrap  { margin-top: 20px; }
   .obs-grid  { column-count: 1; }
   .obs-item {
     display: flex;
-    font-size: 7pt;
+    font-size: 5.5pt;
     font-weight: 400;
     color: #808080;
-    line-height: 1.4;
-    margin-bottom: 3px;
+    line-height: 1.3;
+    margin-bottom: 2px;
     text-align: left;
     break-inside: avoid;
     -webkit-column-break-inside: avoid;
     page-break-inside: avoid;
   }
-  .obs-num  { width: 14px; flex-shrink: 0; font-weight: 500; color: #808080; }
+  .obs-num  { width: 12px; flex-shrink: 0; font-weight: 500; color: #808080; }
   .obs-text { flex: 1; }
 
   /* Avoid splitting a row across pages */

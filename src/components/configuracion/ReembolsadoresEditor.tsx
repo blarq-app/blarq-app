@@ -7,6 +7,8 @@ type Reembolsador = {
   id: string;
   nombre: string;
   glosa: string;
+  rutAlias?: string | null;
+  businessName?: string | null;
 };
 
 export default function ReembolsadoresEditor({
@@ -18,6 +20,8 @@ export default function ReembolsadoresEditor({
   const [items, setItems] = useState(initial);
   const [nombre, setNombre] = useState("");
   const [glosa, setGlosa] = useState("");
+  const [rutAlias, setRutAlias] = useState("");
+  const [businessName, setBusinessName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,7 +37,12 @@ export default function ReembolsadoresEditor({
       const res = await fetch("/api/reembolsadores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre: nombre.trim(), glosa: glosa.trim() }),
+        body: JSON.stringify({
+          nombre: nombre.trim(),
+          glosa: glosa.trim(),
+          rutAlias: rutAlias.trim() || null,
+          businessName: businessName.trim() || null,
+        }),
       });
       const body = await res.json();
       if (!res.ok) {
@@ -43,6 +52,8 @@ export default function ReembolsadoresEditor({
       setItems((arr) => [...arr, body].sort((a, b) => a.nombre.localeCompare(b.nombre)));
       setNombre("");
       setGlosa("");
+      setRutAlias("");
+      setBusinessName("");
       router.refresh();
     } catch {
       setError("Error de red");
@@ -77,16 +88,16 @@ export default function ReembolsadoresEditor({
         className="bg-white border border-gray-200 rounded-xl p-5 space-y-3"
       >
         <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-          Agregar reembolsador
+          Agregar reembolsador / alias
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-3 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs text-gray-600 mb-1">Nombre</label>
             <input
               type="text"
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              placeholder="Cristobal"
+              placeholder="Cristobal · Jose Perez"
               className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
               disabled={busy}
             />
@@ -99,7 +110,35 @@ export default function ReembolsadoresEditor({
               type="text"
               value={glosa}
               onChange={(e) => setGlosa(e.target.value)}
-              placeholder="cristobal"
+              placeholder="cristobal · jose perez"
+              className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
+              disabled={busy}
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-3 items-end pt-2 border-t border-gray-100">
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">
+              RUT empresa <span className="text-gray-400">(opcional)</span>
+            </label>
+            <input
+              type="text"
+              value={rutAlias}
+              onChange={(e) => setRutAlias(e.target.value)}
+              placeholder="77270733-9"
+              className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
+              disabled={busy}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">
+              Nombre empresa <span className="text-gray-400">(opcional)</span>
+            </label>
+            <input
+              type="text"
+              value={businessName}
+              onChange={(e) => setBusinessName(e.target.value)}
+              placeholder="JPB SpA"
               className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
               disabled={busy}
             />
@@ -113,13 +152,20 @@ export default function ReembolsadoresEditor({
           </button>
         </div>
         {error && <p className="text-xs text-red-700">{error}</p>}
-        <p className="text-[11px] text-gray-500 leading-relaxed">
-          La glosa se busca como substring en la descripción del banco. Por
-          ejemplo, si la glosa es <span className="font-mono bg-gray-100 px-1">cristobal</span>,
-          va a matchear movimientos con descripción &quot;Transf a Cristobal Alej&quot; o
-          &quot;Pago Cristobal&quot;. Mantenerlo simple — solo el primer nombre suele
-          alcanzar.
-        </p>
+        <div className="text-[11px] text-gray-500 leading-relaxed space-y-1.5 pt-2 border-t border-gray-100">
+          <p>
+            <span className="font-medium">Reembolsador clásico</span> (RUT empresa
+            vacío): cuando la glosa matchea, asumimos que la factura puede ser
+            de cualquier proveedor (compras que la persona pagó con su tarjeta).
+          </p>
+          <p>
+            <span className="font-medium">Alias de proveedor</span> (con RUT
+            empresa): cuando la glosa matchea, el modal filtra automáticamente
+            las facturas por ese RUT. Ej.: glosa &quot;jose perez&quot; → RUT JPB SpA.
+            Útil cuando le pagás a la persona pero las facturas las emite su
+            empresa.
+          </p>
+        </div>
       </form>
 
       {/* Lista */}
@@ -134,6 +180,8 @@ export default function ReembolsadoresEditor({
               <tr>
                 <th className="text-left px-4 py-2">Nombre</th>
                 <th className="text-left px-4 py-2">Glosa</th>
+                <th className="text-left px-4 py-2">RUT empresa</th>
+                <th className="text-left px-4 py-2">Empresa</th>
                 <th className="px-4 py-2 w-16"></th>
               </tr>
             </thead>
@@ -142,6 +190,12 @@ export default function ReembolsadoresEditor({
                 <tr key={r.id} className="hover:bg-gray-50">
                   <td className="px-4 py-2 text-gray-900 font-medium">{r.nombre}</td>
                   <td className="px-4 py-2 text-gray-600 font-mono text-xs">{r.glosa}</td>
+                  <td className="px-4 py-2 text-gray-600 font-mono text-xs">
+                    {r.rutAlias || <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-2 text-gray-600 text-xs">
+                    {r.businessName || <span className="text-gray-300">—</span>}
+                  </td>
                   <td className="px-4 py-2 text-right">
                     <button
                       type="button"

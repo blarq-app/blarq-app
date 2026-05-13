@@ -13,6 +13,8 @@ export async function POST(request: NextRequest) {
     const data = await request.json();
     const nombre = String(data.nombre ?? "").trim();
     const glosa = String(data.glosa ?? "").trim().toLowerCase();
+    const rutAlias = data.rutAlias ? String(data.rutAlias).trim() : null;
+    const businessName = data.businessName ? String(data.businessName).trim() : null;
     if (!nombre || !glosa) {
       return NextResponse.json(
         { error: "Nombre y glosa son obligatorios" },
@@ -20,7 +22,7 @@ export async function POST(request: NextRequest) {
       );
     }
     const created = await prisma.reembolsador.create({
-      data: { nombre, glosa },
+      data: { nombre, glosa, rutAlias, businessName },
     });
     return NextResponse.json(created);
   } catch (e) {

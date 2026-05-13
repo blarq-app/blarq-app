@@ -778,9 +778,18 @@ model Reembolsador {
   id        String   @id @default(cuid())
   nombre    String   // Nombre legible — "Cristobal", "Elias", "JP", "MJ"
   glosa     String   // Texto que se busca (case-insensitive) en BankMovement.description
+  // Alias de proveedor: si el movimiento bancario va al RUT de una
+  // persona (ej "Jose Perez") pero las facturas las emite una empresa
+  // suya (ej "JPB SpA", RUT 77...), seteá aquí el RUT de la empresa.
+  // Cuando matchea la glosa, el modal de conciliación filtra facturas
+  // por este RUT en vez de buscar por contraparte. Si está vacío, el
+  // Reembolsador funciona como antes (compras personales reembolsables).
+  rutAlias     String?
+  businessName String?  // nombre legible de la empresa alias (informativo)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([glosa])
   @@index([glosa])
+  @@index([rutAlias])
 }

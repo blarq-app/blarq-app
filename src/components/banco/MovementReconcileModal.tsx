@@ -67,7 +67,7 @@ export default function MovementReconcileModal({
   // apaga "mismo proveedor" automáticamente y prioriza facturas con monto
   // match. Se carga una vez al abrir.
   const [reembolsadores, setReembolsadores] = useState<
-    { id: string; nombre: string; glosa: string }[]
+    { id: string; nombre: string; glosa: string; rutAlias?: string | null; businessName?: string | null }[]
   >([]);
   const [results, setResults] = useState<Factura[]>([]);
   const [loading, setLoading] = useState(false);
@@ -155,7 +155,12 @@ export default function MovementReconcileModal({
       const params = new URLSearchParams();
       if (q.trim()) params.set("q", q.trim());
       params.set("type", targetType);
-      if (filterSameClient && movement.counterpartyRut) {
+      // Si el Reembolsador detectado tiene rutAlias, lo usamos como RUT
+      // de búsqueda (caso "Jose Perez" → facturas de "JPB SpA"). Si no,
+      // y "Mismo proveedor" está marcado, usamos el RUT contraparte normal.
+      if (detectedReembolsador?.rutAlias) {
+        params.set("counterpartyRut", detectedReembolsador.rutAlias);
+      } else if (filterSameClient && movement.counterpartyRut) {
         params.set("counterpartyRut", movement.counterpartyRut);
       }
       if (filterProjectId) params.set("projectId", filterProjectId);
@@ -367,15 +372,27 @@ export default function MovementReconcileModal({
             </div>
           )}
 
-          {/* Banner reembolsador: aparece cuando la glosa del mov matchea
-              con un Reembolsador configurado en /configuracion/reembolsadores. */}
+          {/* Banner reembolsador / alias de proveedor */}
           {remaining > 0 && detectedReembolsador && (
             <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-lg px-3 py-2 text-xs leading-relaxed">
-              <span className="font-medium">{detectedReembolsador.nombre}</span> es
-              reembolsador. La factura puede ser de cualquier proveedor (compra
-              que él pagó con su tarjeta) o de Paula Johanna (flete). El filtro
-              &quot;Mismo proveedor&quot; se apagó automáticamente y las facturas con
-              monto exacto match aparecen primero.
+              {detectedReembolsador.rutAlias ? (
+                <>
+                  Movimiento detectado para <span className="font-medium">{detectedReembolsador.nombre}</span>.
+                  Se está buscando facturas de{" "}
+                  <span className="font-medium">
+                    {detectedReembolsador.businessName ?? detectedReembolsador.rutAlias}
+                  </span>{" "}
+                  (RUT {detectedReembolsador.rutAlias}).
+                </>
+              ) : (
+                <>
+                  <span className="font-medium">{detectedReembolsador.nombre}</span> es
+                  reembolsador. La factura puede ser de cualquier proveedor (compra
+                  que él pagó con su tarjeta) o de Paula Johanna (flete). El filtro
+                  &quot;Mismo proveedor&quot; se apagó automáticamente y las facturas con
+                  monto exacto match aparecen primero.
+                </>
+              )}
             </div>
           )}
 

@@ -225,7 +225,11 @@ model ObraItemComponent {
   unitCost      Float    @default(0)
   totalCost     Float    @default(0)
   referenceLink String?
-  materialId    String?  // referencia al catálogo de materiales (compartido — esto sí puede actualizarse globalmente porque el material es solo info, no precio)
+  materialId    String?  // referencia al catálogo de materiales
+  // Marca true cuando MJ edita este componente manualmente desde el editor
+  // del presupuesto. El sync automático con MaterialCatalog respeta este
+  // flag — no pisa componentes personalizados para ese proyecto.
+  isCustomized  Boolean  @default(false)
   sortOrder     Int      @default(0)
   appliedToComponentId String?
   appliedToType        String?

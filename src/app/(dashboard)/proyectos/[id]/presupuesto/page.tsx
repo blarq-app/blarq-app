@@ -7,6 +7,7 @@ import AprobarBudgetButton from "@/components/presupuesto/AprobarBudgetButton";
 import BorrarBudgetButton from "@/components/presupuesto/BorrarBudgetButton";
 import EditableVersionLabel from "@/components/presupuesto/EditableVersionLabel";
 import ImportarDesdeProyectoButton, { SourceProject } from "@/components/presupuesto/ImportarDesdeProyectoButton";
+import ImportarCubicacionButton from "@/components/presupuesto/ImportarCubicacionButton";
 
 export default async function PresupuestoPage({
   params,
@@ -120,6 +121,7 @@ export default async function PresupuestoPage({
                 Comparar versiones
               </Link>
             )}
+            <ImportarCubicacionButton projectId={project.id} />
             <ImportarDesdeProyectoButton projectId={project.id} sources={sources} />
             <NuevaVersionButton projectId={project.id} type="obra" />
           </div>

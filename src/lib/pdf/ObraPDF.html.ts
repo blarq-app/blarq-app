@@ -407,9 +407,12 @@ export function renderObraHTML(data: ObraHTMLInput): string {
         </tr>
         ${ch.items
           .map(
-            (item) => `
+            // Renumeramos correlativo dentro del capítulo (ch.index.idx+1),
+            // ignorando el item.itemNumber crudo de la BD — los Excel de
+            // origen a veces tenían duplicados o saltos (1.3, 1.3, 1.5…).
+            (item, idx) => `
           <tr>
-            <td class="col-item">${esc(item.itemNumber)}</td>
+            <td class="col-item">${ch.index}.${idx + 1}</td>
             <td class="col-name">${esc(item.name)}</td>
             <td class="col-desc">${esc(item.descriptionCliente ?? "")}</td>
             <td class="col-unit">${esc(item.unit)}</td>

@@ -153,6 +153,9 @@ export async function POST(request: NextRequest) {
         // En modo plantilla (importar desde otro proyecto):
         // - Mantenemos chapters + estructura de items (Mueble, Herrajes,
         //   Cubierta, etc) + supplier (Carlos, Giacomo, etc — son fijos).
+        // - Mantenemos descriptionGeneral del item y la lista de details
+        //   con su materialidad — es información estructural del mueble
+        //   (qué lleva adentro, qué materiales), no específica del proyecto.
         // - Reseteamos precios y cantidades — son específicos del proyecto.
         // - NO copiamos quotes (cotizaciones alternativas) — son del
         //   contexto histórico del proyecto fuente.
@@ -187,7 +190,7 @@ export async function POST(request: NextRequest) {
                 chapterId: newChapter.id,
                 itemNumber: item.itemNumber,
                 name: item.name,
-                descriptionGeneral: isTemplate ? null : item.descriptionGeneral,
+                descriptionGeneral: item.descriptionGeneral,
                 quantity: isTemplate ? 1 : item.quantity,
                 supplier: item.supplier, // preservar — proveedores son típicos
                 costDistributor: isTemplate ? 0 : item.costDistributor,

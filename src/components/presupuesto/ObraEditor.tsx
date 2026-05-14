@@ -680,47 +680,47 @@ export default function ObraEditor({
                         {chapter.index}.{itemIdx + 1}
                       </td>
                       <td className="px-3 py-0.5 align-top">
-                        <input
-                          type="text"
-                          value={item.name}
-                          onChange={(e) =>
-                            handleUpdateItem(item.id, "name", e.target.value)
-                          }
-                          className="text-force-11 w-full bg-transparent border-0 p-0 text-gray-900 focus:ring-0 outline-none uppercase"
-                        />
-                      </td>
-                      <td className="px-3 py-0.5 align-top">
-                        {/* Descripción — máx ~2 líneas en estado normal (32px).
-                            Al focus se expande hasta 200px para edición cómoda.
-                            Texto completo siempre en tooltip al hover. */}
+                        {/* PARTIDA — textarea auto-altura, sin cap. Muestra
+                            todo el nombre aunque sea largo (la fila crece). */}
                         <textarea
                           ref={(el) => {
                             if (el) {
                               el.style.height = "auto";
-                              const focused = document.activeElement === el;
-                              const cap = focused ? 200 : 32;
-                              el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
+                              el.style.height = `${el.scrollHeight}px`;
                             }
                           }}
-                          onFocus={(e) => {
+                          value={item.name}
+                          onChange={(e) => {
+                            handleUpdateItem(item.id, "name", e.target.value);
                             e.currentTarget.style.height = "auto";
-                            e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 200)}px`;
+                            e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
                           }}
-                          onBlur={(e) => {
-                            e.currentTarget.style.height = "auto";
-                            e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 32)}px`;
+                          rows={1}
+                          className="text-force-11 w-full resize-none bg-transparent border-0 p-0 text-gray-900 focus:ring-0 outline-none uppercase leading-snug overflow-hidden"
+                          style={{ minHeight: "16px" }}
+                        />
+                      </td>
+                      <td className="px-3 py-0.5 align-top">
+                        {/* DESCRIPCION — textarea auto-altura, sin cap.
+                            Muestra todo el texto, la fila crece con el contenido. */}
+                        <textarea
+                          ref={(el) => {
+                            if (el) {
+                              el.style.height = "auto";
+                              el.style.height = `${el.scrollHeight}px`;
+                            }
                           }}
                           value={item.descriptionCliente ?? ""}
                           onChange={(e) => {
                             handleUpdateItem(item.id, "descriptionCliente", e.target.value);
                             e.currentTarget.style.height = "auto";
-                            e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 200)}px`;
+                            e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
                           }}
                           title={item.descriptionCliente || ""}
                           placeholder="Descripción para el cliente (PDF)…"
-                          rows={2}
-                          className="text-force-10 w-full resize-none bg-transparent border-0 p-0 text-gray-600 placeholder:text-gray-300 focus:ring-0 outline-none leading-tight overflow-hidden"
-                          style={{ minHeight: "14px", maxHeight: "200px" }}
+                          rows={1}
+                          className="text-force-10 w-full resize-none bg-transparent border-0 p-0 text-gray-600 placeholder:text-gray-300 focus:ring-0 outline-none leading-snug overflow-hidden"
+                          style={{ minHeight: "14px" }}
                         />
                       </td>
                       <td className="px-2 py-0.5 align-top text-center">

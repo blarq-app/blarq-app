@@ -4,6 +4,18 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-13 — Sync MaterialCatalog ↔ PartidaCatalog + auditoría + edición componentes
+
+- **Bug detectado en catálogo**: las partidas guardaban un snapshot del material asociado. Cambiar precio/marca en `/catalogo/materiales` NO propagaba al catálogo de partidas — y los presupuestos creados después arrastraban precios viejos (caso real: llave de paso gas Constanza Bravo $12.269 vs material $19.319).
+- **Schema** (aditivo, aplicado en dev y prod): `ObraItemComponent.isCustomized` para marcar componentes editados manualmente. El sync masivo los respeta.
+- **Fase 0 — limpieza inicial**: `scripts/sync-partidas-with-materials.ts` aplicado en dev (305 components, 299 partidas) y prod (324 components, 317 partidas).
+- **Fase 1 — sync automático + auditoría**: `PUT /api/catalogo/materiales/[id]` ahora propaga al catálogo de partidas. Nueva página `/configuracion/auditoria-precios` lista presupuestos en borrador desactualizados + botón "Actualizar". `BudgetAuditBanner` arriba del editor del presupuesto cuando aplica.
+- **Fase 2 — edición de componentes a nivel proyecto**: `ObraItemComponentsEditor` (UI editable en el desglose expandido de cada ítem) + endpoints `/api/presupuestos/[id]/partidas/[itemId]/componentes[/compId]`. Edición marca `isCustomized=true`. Bloqueado para presupuestos no-borrador.
+- **Helpers backend reutilizables** en `src/lib/catalog/` (recalcPartida, recalcObraItem, syncMaterial).
+- PR [#4](https://github.com/blarq-app/blarq-app/pull/4) mergeado, deployado.
+
+---
+
 ## 2026-05-13 — Rediseño PDF cotización + Rosas V4 a prod
 
 - **PDF obra y muebles unificados con nueva línea editorial** (PR #1, commit `fd7705b`, mergeado a main): tipografía `#1A1A1A`, header con grilla 2 cols, tabla sin verticales y con líneas casi invisibles `0.15pt #E5E5E5`, bloque de totales sutil sin marco rectangular, sin footer, márgenes 10/12 mm. Eliminadas `buildObraFooter` y `buildMueblesFooter`. `renderPDF` ahora soporta `scale` opcional.

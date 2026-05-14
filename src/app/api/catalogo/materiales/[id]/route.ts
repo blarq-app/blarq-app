@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { syncMaterialToComponents } from "@/lib/catalog/syncMaterial";
+import { fetchPriceFromUrl } from "@/lib/catalog/fetchPrice";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function PUT(
@@ -10,14 +11,40 @@ export async function PUT(
     const { id } = await params;
     const data = await request.json();
 
+    // Estado anterior para detectar cambio de link + decidir si auto-fetch.
+    const previous = await prisma.materialCatalog.findUnique({
+      where: { id },
+      select: { referenceLink: true, netPrice: true },
+    });
+
+    const newLink = data.referenceLink || null;
+    const linkChanged =
+      newLink && newLink !== (previous?.referenceLink ?? null);
+    // MJ no modificó el precio explícitamente si el netPrice del payload
+    // coincide con el guardado. En ese caso, si el link cambió, intentamos
+    // bajar el precio nuevo del sitio automático.
+    const priceUntouched =
+      data.netPrice === undefined ||
+      Math.abs((data.netPrice ?? 0) - (previous?.netPrice ?? 0)) < 0.01;
+
+    let fetched: Awaited<ReturnType<typeof fetchPriceFromUrl>> = null;
+    let effectivePrice = data.netPrice;
+
+    if (linkChanged && priceUntouched) {
+      fetched = await fetchPriceFromUrl(newLink);
+      if (fetched) {
+        effectivePrice = fetched.netPrice;
+      }
+    }
+
     const material = await prisma.materialCatalog.update({
       where: { id },
       data: {
         name: data.name?.toUpperCase()?.trim(),
         unit: data.unit,
-        netPrice: data.netPrice,
+        netPrice: effectivePrice,
         isProvision: data.isProvision ?? undefined,
-        referenceLink: data.referenceLink || null,
+        referenceLink: newLink,
       },
     });
 
@@ -33,7 +60,19 @@ export async function PUT(
       propagateToBudgets: false,
     });
 
-    return NextResponse.json({ ...material, _sync: syncSummary });
+    return NextResponse.json({
+      ...material,
+      _sync: syncSummary,
+      _autoFetchedPrice: fetched
+        ? {
+            source: fetched.source,
+            priceIva: fetched.priceIva,
+            netPrice: fetched.netPrice,
+          }
+        : linkChanged && priceUntouched
+          ? { source: null, error: "no_se_pudo_obtener" }
+          : null,
+    });
   } catch (error) {
     console.error("Error updating material:", error);
     return NextResponse.json(

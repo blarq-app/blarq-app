@@ -117,9 +117,12 @@ export async function GET(
       filename = `BLARQ_Artefactos_${baseName}_${budget.version}.pdf`;
     }
 
-    // Obra y muebles ya usan la nueva línea editorial: sin footer +
-    // márgenes 10mm/12mm. Artefactos sigue con su formato anterior.
-    const useNewFormat = budget.type === "obra" || budget.type === "muebles";
+    // Obra, muebles y artefactos usan la nueva línea editorial: sin footer +
+    // márgenes 10mm/12mm.
+    const useNewFormat =
+      budget.type === "obra" ||
+      budget.type === "muebles" ||
+      budget.type === "artefactos";
     const pdfBuffer = await renderPDF(html, {
       format: "A4",
       displayHeaderFooter: !useNewFormat,

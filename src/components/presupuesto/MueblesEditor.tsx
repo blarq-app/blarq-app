@@ -949,6 +949,10 @@ function ItemBlock({
           <span className="text-red-900 tabular-nums">
             {formatCLP(item.clientPriceIva)} c/iva
           </span>
+          <span className="text-red-300">·</span>
+          <span className="text-green-700 font-medium tabular-nums">
+            util {formatCLP(item.clientPriceNet - item.costDistributor)}
+          </span>
           {item.quotes.length > 1 && (
             <>
               <span className="text-gray-400">·</span>

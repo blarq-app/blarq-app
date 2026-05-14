@@ -1,8 +1,27 @@
 /**
- * HTML+CSS renderer for the Artefactos budget PDF.
- * Same content shape as the legacy @react-pdf ArtefactosPDF.tsx (rooms,
- * 6-column table) — rendered via HTML/Puppeteer for fidelity and to keep
- * the PDF pipeline unified.
+ * HTML+CSS renderer del PDF de Artefactos.
+ *
+ * El formato imita el Excel que se usaba antes (referencia: planilla MK /
+ * TEKA / LedStudio), adaptado a la línea editorial BLARQ (sin colores
+ * fuertes, tipografía Montserrat, grises sutiles).
+ *
+ * Estructura:
+ *   - Header BLARQ con metadata (mandante, proyecto, dirección, profesional,
+ *     fecha, versión).
+ *   - Por cada subcategoría (Sanitarios → Cocina → Iluminación):
+ *     - Banner de subcategoría ("ARTEFACTOS SANITARIOS").
+ *     - Por cada habitación con items dentro:
+ *       - Banner gris medio ("BAÑO PRINCIPAL 1").
+ *       - Header de tabla: ITEM | DETALLE | MARCA | CANT. | P. LISTA | DCTO | TOTAL.
+ *       - Items.
+ *       - Subtotal del room ("TOTAL PRECIO ARTEFACTOS BAÑO PRINCIPAL").
+ *     - Subtotal de subcategoría ("TOTAL PRECIO ARTEFACTOS SANITARIOS").
+ *   - Total general ("TOTAL PRECIO ARTEFACTOS").
+ *   - Forma de pago.
+ *   - Observaciones.
+ *
+ * NOTA: el costo interno BLARQ (NETO MK, utilidad) NUNCA va al PDF del
+ * cliente — solo se ve en el editor.
  */
 
 import fs from "node:fs";
@@ -16,14 +35,33 @@ const DEFAULT_PAYMENT_TERMS = [
   { stage: "Saldo", percentage: 10 },
 ];
 
-const ROOMS: Record<string, string> = {
-  bano_principal: "Baño Principal",
-  bano_secundario: "Baño Secundario",
-  bano_visita: "Baño Visita",
+// Labels canónicos para rooms — coinciden con la key del modelo BD.
+const ROOM_LABELS: Record<string, string> = {
+  bano_principal: "Baño principal",
+  bano_secundario: "Baño secundario",
+  bano_visita: "Baño visita",
   cocina: "Cocina",
   lavadero: "Lavadero",
   otro: "Otro",
 };
+
+// Orden de aparición por defecto dentro de una subcategoría.
+const ROOM_ORDER = [
+  "bano_principal",
+  "bano_secundario",
+  "bano_visita",
+  "cocina",
+  "lavadero",
+  "otro",
+];
+
+// Labels y orden de subcategorías.
+const SUBCATEGORY_LABELS: Record<string, string> = {
+  sanitario: "Artefactos sanitarios",
+  cocina: "Artefactos cocina",
+  iluminacion: "Artefactos iluminación",
+};
+const SUBCATEGORY_ORDER = ["sanitario", "cocina", "iluminacion"];
 
 const OBSERVACIONES = [
   "Los artefactos cotizados están sujetos a disponibilidad de stock al momento del pago del anticipo.",
@@ -36,12 +74,14 @@ const OBSERVACIONES = [
 // ─── Types ────────────────────────────────────────────────────────────────
 export interface ArtefactoItemInput {
   room: string;
+  subcategory: string;
   name: string;
+  detail: string | null;
   brand: string | null;
   quantity: number;
   listPrice: number;
-  discountPercent: number | null;
-  clientPrice: number;
+  discountPercent: number | null; // decimal 0..1 (no porcentaje 0..100)
+  clientPrice: number; // unitario (no incluye qty)
 }
 
 export interface PaymentTermInput {
@@ -77,6 +117,12 @@ function fmtCLP(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-CL");
 }
 
+function fmtPct(d: number | null): string {
+  if (d === null || d === undefined) return "—";
+  if (d === 0) return "0%";
+  return Math.round(d * 100) + "%";
+}
+
 function fmtDate(d: string | Date): string {
   const date = typeof d === "string" ? new Date(d) : d;
   const day = String(date.getUTCDate()).padStart(2, "0");
@@ -101,8 +147,10 @@ function getLogoDataUri(): string {
 }
 
 // ─── CSS ──────────────────────────────────────────────────────────────────
+// Línea editorial BLARQ: misma base que obra/muebles — sin colores, fonts
+// Montserrat, grises sutiles, tabular-nums en numéricas.
 const CSS = `
-  @page { size: A4; margin: 12mm 14mm 16mm 14mm; }
+  @page { size: A4; }
 
   * { box-sizing: border-box; }
 
@@ -110,146 +158,196 @@ const CSS = `
     margin: 0;
     padding: 0;
     font-family: 'Montserrat', sans-serif;
-    font-size: 10pt;
+    font-size: 9pt;
     font-weight: 400;
-    color: #000;
+    color: #1A1A1A;
     -webkit-font-smoothing: antialiased;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
+  /* ── Header (logo + metadata) ───────────────────────────────────────── */
   .header {
     display: grid;
     grid-template-columns: 1fr 1fr;
     column-gap: 40px;
+    margin-bottom: 10px;
   }
   .header-left  { text-align: left; }
   .header-right { text-align: right; }
 
-  .logo { display: block; height: 44px; width: auto; margin-bottom: 6px; }
+  .logo { display: block; height: 36px; width: auto; margin-bottom: 8px; }
 
   .doc-title {
     font-family: 'Montserrat', sans-serif;
-    font-size: 14pt;
+    font-size: 13pt;
     font-weight: 500;
     color: #808080;
-    line-height: 1;
-    margin: 0 0 6px 0;
+    line-height: 1.1;
+    margin: 0 0 8px 0;
+    letter-spacing: 0.02em;
   }
 
-  .field { margin-bottom: 3px; }
-  .field .label {
+  .meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 12px;
+    row-gap: 2px;
+  }
+  .header-right .meta { grid-template-columns: 1fr auto; }
+  .meta .m-label {
     font-size: 6pt;
     font-weight: 400;
     color: #808080;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    line-height: 1.2;
+    line-height: 1.4;
   }
-  .field .value {
+  .meta .m-value {
     font-size: 7.5pt;
     font-weight: 500;
-    color: #000;
-    line-height: 1.2;
+    color: #1A1A1A;
+    line-height: 1.4;
   }
 
-  /* ── Tables ─────────────────────────────────────────────────── */
-  .partidas {
-    width: 100%;
-    margin-top: 14px;
-    border-collapse: collapse;
-    font-size: 7pt;
-  }
-  .partidas thead th {
-    background: #DBDBDB;
-    color: #000;
-    font-weight: 700;
-    font-size: 6.5pt;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 4px 6px;
-    border: 0.5pt solid #000;
-    text-align: left;
-  }
-  .partidas tbody td {
-    padding: 3px 6px;
-    border-bottom: 0.5pt solid #CCCCCC;
-    vertical-align: top;
-  }
-  .partidas .room-row td {
-    background: #F2F2F2;
-    font-weight: 700;
-    text-transform: uppercase;
-    font-size: 7pt;
-    padding: 4px 6px;
-  }
-  .partidas .subtotal-row td {
-    background: #FAFAFA;
+  /* ── Subcategoría: banner "ARTEFACTOS SANITARIOS" ──────────────────── */
+  .subcat-banner {
+    margin-top: 12px;
+    padding: 5px 8px;
+    background: #1A1A1A;
+    color: #fff;
+    font-size: 8pt;
     font-weight: 600;
-    font-size: 6.5pt;
-    border-top: 0.5pt solid #999;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── Tabla por subcategoría ────────────────────────────────────────── */
+  .artefactos {
+    width: 100%;
+    margin-top: 0;
+    border-collapse: collapse;
+    font-size: 7.5pt;
+    page-break-inside: auto;
+  }
+  .artefactos thead tr.h-room td {
+    background: #E5E5E5;
+    color: #1A1A1A;
+    font-weight: 700;
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 4px 6px;
     border-bottom: 0.5pt solid #999;
   }
-  .col-name     { width: 32%; }
-  .col-brand    { width: 16%; }
-  .col-qty      { width: 6%;  text-align: center; font-variant-numeric: tabular-nums; }
-  .col-list     { width: 14%; text-align: right; font-variant-numeric: tabular-nums; }
-  .col-discount { width: 8%;  text-align: right; font-variant-numeric: tabular-nums; }
-  .col-price    { width: 24%; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-
-  /* ── Totals ─────────────────────────────────────────────────── */
-  .totals-wrap { margin-top: 16px; display: flex; justify-content: flex-end; }
-  .totals { font-size: 8pt; border-collapse: collapse; }
-  .totals td { padding: 4px 10px; font-variant-numeric: tabular-nums; }
-  .totals .t-label {
+  .artefactos thead tr.h-cols th {
+    background: #F5F5F5;
+    color: #555;
+    font-weight: 600;
+    font-size: 6.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 3px 6px;
+    border-bottom: 0.5pt solid #999;
+    text-align: left;
+  }
+  .artefactos tbody td {
+    padding: 3px 6px;
+    border-bottom: 0.25pt solid #E5E5E5;
+    vertical-align: top;
+    line-height: 1.25;
+  }
+  .artefactos tr.subtotal-room td {
+    padding: 4px 6px;
+    border-top: 0.5pt solid #1A1A1A;
+    border-bottom: 0.5pt solid #1A1A1A;
+    font-weight: 600;
+    font-size: 7.5pt;
+  }
+  .artefactos tr.subtotal-sub td {
+    padding: 5px 6px;
+    border-top: 1pt solid #1A1A1A;
+    background: #F5F5F5;
     font-weight: 700;
     text-transform: uppercase;
-    font-size: 7.5pt;
-    letter-spacing: 0.05em;
-    text-align: right;
-  }
-  .totals .t-val { text-align: right; min-width: 80px; }
-  .totals .total td {
-    border-top: 1pt solid #000;
-    background: #DBDBDB;
-    font-size: 9pt;
-    font-weight: 700;
+    letter-spacing: 0.04em;
+    font-size: 8pt;
   }
 
-  /* ── Forma de pago ──────────────────────────────────────────── */
-  .payment-wrap { margin-top: 18px; }
+  .col-name     { width: 16%; font-weight: 600; }
+  .col-detail   { width: 38%; color: #333; }
+  .col-brand    { width: 10%; color: #555; }
+  .col-qty      { width: 5%;  text-align: center; font-variant-numeric: tabular-nums; }
+  .col-list     { width: 11%; text-align: right; font-variant-numeric: tabular-nums; }
+  .col-discount { width: 6%;  text-align: right; font-variant-numeric: tabular-nums; color: #555; }
+  .col-price    { width: 14%; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  /* Evitar que un item se parta entre páginas. */
+  .artefactos tbody tr { page-break-inside: avoid; }
+
+  /* ── Total general ─────────────────────────────────────────────────── */
+  .total-general {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
+  }
+  .total-general table {
+    border-collapse: collapse;
+    font-size: 9pt;
+  }
+  .total-general td {
+    padding: 6px 14px;
+    font-variant-numeric: tabular-nums;
+    border-top: 1.5pt solid #1A1A1A;
+    border-bottom: 1.5pt solid #1A1A1A;
+  }
+  .total-general .t-label {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 9pt;
+    text-align: right;
+  }
+  .total-general .t-val {
+    text-align: right;
+    min-width: 110px;
+    font-weight: 700;
+    font-size: 10pt;
+  }
+
+  /* ── Forma de pago ──────────────────────────────────────────────────── */
+  .payment-wrap { margin-top: 18px; page-break-inside: avoid; }
   .section-title {
     font-size: 8pt;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #000;
+    letter-spacing: 0.08em;
+    color: #1A1A1A;
     margin-bottom: 6px;
     padding-bottom: 2px;
     border-bottom: 0.5pt solid #999;
   }
-  .payment { width: 50%; border-collapse: collapse; font-size: 7pt; }
-  .payment td { padding: 3px 8px; border-bottom: 0.5pt solid #CCC; }
-  .payment .p-stage { width: 70%; text-transform: capitalize; }
+  .payment { width: 45%; border-collapse: collapse; font-size: 7.5pt; }
+  .payment td { padding: 3px 8px; border-bottom: 0.25pt solid #E5E5E5; }
+  .payment .p-stage { width: 70%; }
   .payment .p-pct   { width: 30%; text-align: right; font-variant-numeric: tabular-nums; }
 
-  /* ── Observaciones ─────────────────────────────────────────── */
+  /* ── Observaciones ──────────────────────────────────────────────────── */
   .obs-wrap { margin-top: 18px; page-break-inside: avoid; }
   .obs-item {
     display: flex;
     gap: 8px;
     margin-bottom: 4px;
     font-size: 7pt;
-    line-height: 1.4;
+    line-height: 1.45;
   }
-  .obs-num { flex: 0 0 14px; font-weight: 700; color: #555; }
+  .obs-num { flex: 0 0 14px; font-weight: 700; color: #808080; }
   .obs-text { flex: 1; color: #333; }
-
   .extra-obs {
-    margin-top: 12px;
-    padding: 8px;
-    background: #F8F8F8;
-    border-left: 2pt solid #999;
+    margin-top: 10px;
+    padding: 8px 10px;
+    background: #F5F5F5;
+    border-left: 2pt solid #808080;
     font-size: 7pt;
     line-height: 1.45;
     color: #333;
@@ -260,18 +358,75 @@ const CSS = `
 export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
   const { project, budget, items, paymentTerms } = input;
 
-  const byRoom = Object.entries(ROOMS)
-    .map(([key, label]) => ({
-      key,
-      label,
-      items: items.filter((i) => i.room === key),
-      subtotal: items
-        .filter((i) => i.room === key)
-        .reduce((sum, i) => sum + i.clientPrice, 0),
-    }))
-    .filter((r) => r.items.length > 0);
+  // Agrupar por subcategoría → room
+  type RoomGroup = {
+    key: string;
+    label: string;
+    items: ArtefactoItemInput[];
+    subtotal: number;
+  };
+  type SubcatGroup = {
+    key: string;
+    label: string;
+    rooms: RoomGroup[];
+    subtotal: number;
+  };
 
-  const totalCliente = items.reduce((sum, i) => sum + i.clientPrice, 0);
+  const subcatBuckets = new Map<string, ArtefactoItemInput[]>();
+  for (const it of items) {
+    const key = it.subcategory || "sanitario";
+    const arr = subcatBuckets.get(key) ?? [];
+    arr.push(it);
+    subcatBuckets.set(key, arr);
+  }
+
+  const orderedSubcats: SubcatGroup[] = [];
+  const subcatKeysSorted = Array.from(subcatBuckets.keys()).sort((a, b) => {
+    const ia = SUBCATEGORY_ORDER.indexOf(a);
+    const ib = SUBCATEGORY_ORDER.indexOf(b);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+
+  for (const subKey of subcatKeysSorted) {
+    const subItems = subcatBuckets.get(subKey) ?? [];
+    const roomBuckets = new Map<string, ArtefactoItemInput[]>();
+    for (const it of subItems) {
+      const k = it.room || "otro";
+      const arr = roomBuckets.get(k) ?? [];
+      arr.push(it);
+      roomBuckets.set(k, arr);
+    }
+    const roomKeysSorted = Array.from(roomBuckets.keys()).sort((a, b) => {
+      const ia = ROOM_ORDER.indexOf(a);
+      const ib = ROOM_ORDER.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+    const rooms: RoomGroup[] = roomKeysSorted.map((rkey) => {
+      const rItems = roomBuckets.get(rkey) ?? [];
+      const subtotal = rItems.reduce(
+        (s, it) => s + it.clientPrice * it.quantity,
+        0
+      );
+      return {
+        key: rkey,
+        label: ROOM_LABELS[rkey] ?? rkey,
+        items: rItems,
+        subtotal,
+      };
+    });
+    const subtotal = rooms.reduce((s, r) => s + r.subtotal, 0);
+    orderedSubcats.push({
+      key: subKey,
+      label: SUBCATEGORY_LABELS[subKey] ?? subKey,
+      rooms,
+      subtotal,
+    });
+  }
+
+  const totalCliente = items.reduce(
+    (sum, i) => sum + i.clientPrice * i.quantity,
+    0
+  );
 
   const terms = paymentTerms.length > 0 ? paymentTerms : DEFAULT_PAYMENT_TERMS;
   const logoUri = getLogoDataUri();
@@ -279,42 +434,75 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
 
   const logoHtml = logoUri
     ? `<img class="logo" src="${logoUri}" alt="BLARQ" />`
-    : `<div class="logo" style="line-height:60px;font-size:28pt;font-weight:700;letter-spacing:0.15em;">BLARQ</div>`;
+    : `<div class="logo" style="line-height:36px;font-size:22pt;font-weight:700;letter-spacing:0.15em;">BLARQ</div>`;
 
-  const tableRows = byRoom
-    .map(
-      (r) => `
-        <tr class="room-row">
-          <td class="col-name" colspan="6">${esc(r.label)}</td>
-        </tr>
-        ${r.items
-          .map(
-            (item) => `
-          <tr>
-            <td class="col-name">${esc(item.name)}</td>
-            <td class="col-brand">${esc(item.brand || "—")}</td>
-            <td class="col-qty">${item.quantity}</td>
-            <td class="col-list">${fmtCLP(item.listPrice)}</td>
-            <td class="col-discount">${
-              item.discountPercent ? item.discountPercent + "%" : "—"
-            }</td>
-            <td class="col-price">${fmtCLP(item.clientPrice)}</td>
-          </tr>`
-          )
-          .join("")}
-        <tr class="subtotal-row">
-          <td class="col-name" colspan="5">Subtotal ${esc(r.label)}</td>
-          <td class="col-price">${fmtCLP(r.subtotal)}</td>
-        </tr>
-      `
-    )
+  // Render por subcategoría. Cada room = mini-tabla con su propio thead +
+  // tbody + subtotal-row. La subcategoría termina con un subtotal-sub.
+  const subcatsHtml = orderedSubcats
+    .map((sub) => {
+      const roomsHtml = sub.rooms
+        .map(
+          (r) => `
+        <table class="artefactos">
+          <thead>
+            <tr class="h-room">
+              <td colspan="7">${esc(r.label)}</td>
+            </tr>
+            <tr class="h-cols">
+              <th class="col-name">Item</th>
+              <th class="col-detail">Detalle</th>
+              <th class="col-brand">Marca</th>
+              <th class="col-qty">Cant.</th>
+              <th class="col-list">P. lista</th>
+              <th class="col-discount">Dcto</th>
+              <th class="col-price">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${r.items
+              .map(
+                (it) => `
+              <tr>
+                <td class="col-name">${esc(it.name)}</td>
+                <td class="col-detail">${esc(it.detail || "")}</td>
+                <td class="col-brand">${esc(it.brand || "—")}</td>
+                <td class="col-qty">${it.quantity}</td>
+                <td class="col-list">${
+                  it.listPrice > 0 ? fmtCLP(it.listPrice) : "—"
+                }</td>
+                <td class="col-discount">${fmtPct(it.discountPercent)}</td>
+                <td class="col-price">${fmtCLP(it.clientPrice * it.quantity)}</td>
+              </tr>`
+              )
+              .join("")}
+            <tr class="subtotal-room">
+              <td colspan="6">Total artefactos ${esc(r.label.toLowerCase())}</td>
+              <td class="col-price">${fmtCLP(r.subtotal)}</td>
+            </tr>
+          </tbody>
+        </table>`
+        )
+        .join("");
+
+      return `
+        <div class="subcat-banner">${esc(sub.label)}</div>
+        ${roomsHtml}
+        <table class="artefactos">
+          <tbody>
+            <tr class="subtotal-sub">
+              <td colspan="6">Total ${esc(sub.label.toLowerCase())}</td>
+              <td class="col-price">${fmtCLP(sub.subtotal)}</td>
+            </tr>
+          </tbody>
+        </table>`;
+    })
     .join("");
 
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>${esc(budget.version)} COTIZACION ARTEFACTOS — ${esc(project.name)}</title>
+  <title>${esc(budget.version)} COTIZACIÓN ARTEFACTOS — ${esc(project.name)}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -325,59 +513,39 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
   <div class="header">
     <div class="header-left">
       ${logoHtml}
-      <div class="field">
-        <div class="label">Mandante</div>
-        <div class="value">${esc(project.clientName)}</div>
-      </div>
-      <div class="field">
-        <div class="label">Proyecto</div>
-        <div class="value">${esc(project.name)}</div>
-      </div>
-      <div class="field">
-        <div class="label">Dirección</div>
-        <div class="value">${esc(project.address || "—")}</div>
+      <div class="meta">
+        <div class="m-label">Mandante</div>
+        <div class="m-value">${esc(project.clientName)}</div>
+        <div class="m-label">Proyecto</div>
+        <div class="m-value">${esc(project.name)}</div>
+        <div class="m-label">Dirección</div>
+        <div class="m-value">${esc(project.address || "—")}</div>
       </div>
     </div>
     <div class="header-right">
-      <h1 class="doc-title">${esc(budget.version)} COTIZACION ARTEFACTOS</h1>
-      <div class="field">
-        <div class="label">Profesional a cargo</div>
-        <div class="value">${esc(PROFESSIONAL)}</div>
-      </div>
-      <div class="field">
-        <div class="label">Fecha</div>
-        <div class="value">${dateStr}</div>
+      <h1 class="doc-title">${esc(budget.version)} COTIZACIÓN ARTEFACTOS</h1>
+      <div class="meta">
+        <div class="m-value">${esc(PROFESSIONAL)}</div>
+        <div class="m-label">Profesional</div>
+        <div class="m-value">${dateStr}</div>
+        <div class="m-label">Fecha</div>
       </div>
     </div>
   </div>
 
-  <table class="partidas">
-    <thead>
-      <tr>
-        <th class="col-name">ARTEFACTO</th>
-        <th class="col-brand">MARCA</th>
-        <th class="col-qty">CANT.</th>
-        <th class="col-list">P. LISTA</th>
-        <th class="col-discount">DCTO</th>
-        <th class="col-price">PRECIO</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${tableRows}
-    </tbody>
-  </table>
+  ${subcatsHtml}
 
-  <div class="totals-wrap">
-    <table class="totals">
-      <tr class="total">
-        <td class="t-label">TOTAL</td>
+  <div class="total-general">
+    <table>
+      <tr>
+        <td class="t-label">Total artefactos</td>
         <td class="t-val">${fmtCLP(totalCliente)}</td>
       </tr>
     </table>
   </div>
 
   <div class="payment-wrap">
-    <div class="section-title">FORMA DE PAGO</div>
+    <div class="section-title">Forma de pago</div>
     <table class="payment">
       ${terms
         .map(
@@ -392,7 +560,7 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
   </div>
 
   <div class="obs-wrap">
-    <div class="section-title">OBSERVACIONES</div>
+    <div class="section-title">Observaciones</div>
     ${OBSERVACIONES.map(
       (obs, i) => `
       <div class="obs-item">
@@ -411,6 +579,8 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
 </html>`;
 }
 
+// El footer se mantiene por compat — el route.tsx decide si usarlo o no
+// (con la nueva línea editorial, no se usa).
 export function buildArtefactosFooter(
   version: string,
   date: string | Date

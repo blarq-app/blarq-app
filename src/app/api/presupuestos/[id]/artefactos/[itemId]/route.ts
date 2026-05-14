@@ -9,10 +9,16 @@ export async function PUT(
     const { itemId } = await params;
     const data = await request.json();
 
-    const listPrice = data.listPrice || 0;
-    const discountPct = data.discountPercent || 0;
-    const quantity = data.quantity || 1;
-    const clientPrice = listPrice * (1 - discountPct / 100) * quantity;
+    // Convención: discountPercent es decimal (0..1) y clientPrice es
+    // unitario (no incluye qty). El editor manda valores ya calculados.
+    // Si no llega clientPrice explícito, lo recalculamos.
+    const listPrice = data.listPrice ?? 0;
+    const discountPct = data.discountPercent ?? 0;
+    const quantity = data.quantity ?? 1;
+    const clientPrice =
+      data.clientPrice !== undefined && data.clientPrice !== null
+        ? data.clientPrice
+        : listPrice * (1 - discountPct);
 
     const item = await prisma.artefactoItem.update({
       where: { id: itemId },
@@ -26,7 +32,7 @@ export async function PUT(
         listPrice,
         discountPercent: discountPct,
         clientPrice,
-        realCostBlarq: data.realCostBlarq,
+        realCostBlarq: data.realCostBlarq ?? null,
         referenceLink: data.referenceLink,
         sortOrder: data.sortOrder,
       },

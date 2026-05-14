@@ -16,10 +16,16 @@ export async function POST(
     });
     const nextSortOrder = allItems.length > 0 ? allItems[0].sortOrder + 1 : 0;
 
+    // Convención: discountPercent es decimal (0..1) y clientPrice es
+    // unitario (no incluye qty). El editor manda valores ya calculados.
+    // Si no llega clientPrice, lo calculamos: listPrice * (1 - dcto).
     const listPrice = data.listPrice || 0;
-    const discountPct = data.discountPercent || 0;
+    const discountPct = data.discountPercent ?? 0;
     const quantity = data.quantity || 1;
-    const clientPrice = listPrice * (1 - discountPct / 100) * quantity;
+    const clientPrice =
+      data.clientPrice !== undefined && data.clientPrice !== null
+        ? data.clientPrice
+        : listPrice * (1 - discountPct);
 
     const item = await prisma.artefactoItem.create({
       data: {
@@ -33,7 +39,7 @@ export async function POST(
         listPrice,
         discountPercent: discountPct,
         clientPrice,
-        realCostBlarq: data.realCostBlarq || null,
+        realCostBlarq: data.realCostBlarq ?? null,
         referenceLink: data.referenceLink || null,
         sortOrder: nextSortOrder,
       },

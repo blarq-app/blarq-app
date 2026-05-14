@@ -41,6 +41,7 @@ const OBSERVACIONES = [
 // ─── Types ────────────────────────────────────────────────────────────────
 export interface ObraItemInput {
   chapter: string;
+  subChapter?: string | null;
   itemNumber: string;
   name: string;
   descriptionCliente: string | null;
@@ -263,6 +264,19 @@ const CSS = `
     color: #1A1A1A;
   }
   .partidas tr.chapter-row td.chapter-idx { text-align: center; }
+  /* Filas de sub-chapter (COCINA, BAÑO PRINCIPAL, …) — separador suave
+     dentro de un capítulo. Más sutil que la fila de capítulo. */
+  .partidas tr.sub-chapter-row td {
+    background: #F5F5F5;
+    font-weight: 500;
+    text-transform: uppercase;
+    border-bottom: 0.15pt solid #E5E5E5;
+    font-size: 6pt;
+    vertical-align: middle;
+    padding: 1.5pt 5pt 1.5pt 15pt;
+    color: #555;
+    letter-spacing: 0.04em;
+  }
 
   /* Anchos de columna (suman 100%). TOTAL en peso regular per spec. */
   .col-item   { width: 4%;  text-align: center; white-space: nowrap; }
@@ -372,11 +386,24 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   const iva = Math.round(neto * 0.19);
   const total = neto + iva;
 
+  // Ordenar items dentro del chapter por subChapter (los sin sub-chapter
+  // primero, después agrupados alfabéticamente), después por nombre. Esto
+  // permite mostrar los separadores de sub-chapter de forma estable. Espejo
+  // del orden del editor en ObraEditor.tsx.
+  const sortItemsBySubChapter = (a: ObraItemInput, b: ObraItemInput) => {
+    const aSub = a.subChapter ?? "";
+    const bSub = b.subChapter ?? "";
+    if (aSub !== bSub) return aSub.localeCompare(bSub, "es");
+    return a.name.localeCompare(b.name, "es");
+  };
+
   const chapters = Object.entries(CHAPTERS)
     .map(([key, ch]) => ({
       key,
       ...ch,
-      items: items.filter((i) => i.chapter === key),
+      items: items
+        .filter((i) => i.chapter === key)
+        .sort(sortItemsBySubChapter),
     }))
     .filter((ch) => ch.items.length > 0);
 
@@ -406,11 +433,23 @@ export function renderObraHTML(data: ObraHTMLInput): string {
           <td class="col-total"></td>
         </tr>
         ${ch.items
-          .map(
+          .map((item, idx) => {
             // Renumeramos correlativo dentro del capítulo (ch.index.idx+1),
             // ignorando el item.itemNumber crudo de la BD — los Excel de
             // origen a veces tenían duplicados o saltos (1.3, 1.3, 1.5…).
-            (item, idx) => `
+            // Si el subChapter cambió respecto al ítem anterior, anteponemos
+            // una fila separadora con el nombre del sub-chapter.
+            const prev = idx > 0 ? ch.items[idx - 1] : null;
+            const showSub =
+              item.subChapter && (!prev || prev.subChapter !== item.subChapter);
+            return `
+          ${
+            showSub
+              ? `<tr class="sub-chapter-row">
+                  <td colspan="7">${esc(item.subChapter!)}</td>
+                </tr>`
+              : ""
+          }
           <tr>
             <td class="col-item">${ch.index}.${idx + 1}</td>
             <td class="col-name">${esc(item.name)}</td>
@@ -419,8 +458,8 @@ export function renderObraHTML(data: ObraHTMLInput): string {
             <td class="col-qty">${fmtQty(item.quantity)}</td>
             <td class="col-pu">${fmtNum(item.unitPrice)}</td>
             <td class="col-total">${fmtMoney(item.total)}</td>
-          </tr>`
-          )
+          </tr>`;
+          })
           .join("")}
       `
     )

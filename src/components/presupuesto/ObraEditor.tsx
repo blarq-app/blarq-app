@@ -10,6 +10,7 @@ import ObraItemComponentsEditor from "@/components/presupuesto/ObraItemComponent
 interface ObraItem {
   id: string;
   chapter: string;
+  subChapter: string | null;
   itemNumber: string;
   name: string;
   descriptionCliente: string | null;
@@ -195,16 +196,26 @@ export default function ObraEditor({
   // sobre los capítulos visibles (1, 2, 3...). Para "agregar" un capítulo
   // vacío de vuelta, hay un dropdown "+ Capítulo" abajo de todo. (regla
   // MJ 2026-05-08).
-  const allChaptersData = chapters.map(([key, chapter]) => ({
-    key,
-    ...chapter,
-    items: items
-      .filter((item) => item.chapter === key)
-      .sort((a, b) => a.name.localeCompare(b.name, "es")),
-    subtotal: items
-      .filter((item) => item.chapter === key)
-      .reduce((sum, item) => sum + item.total, 0),
-  }));
+  const allChaptersData = chapters.map(([key, chapter]) => {
+    const chapterItems = items.filter((item) => item.chapter === key);
+    // Ordenar dentro del chapter:
+    //   1) Primero los items sin sub-chapter, ordenados por nombre.
+    //   2) Después agrupados por sub-chapter (orden alfabético del label),
+    //      cada grupo ordenado por nombre internamente.
+    // Esto da un orden estable y permite mostrar separadores visuales.
+    const sortedItems = [...chapterItems].sort((a, b) => {
+      const aSub = a.subChapter ?? "";
+      const bSub = b.subChapter ?? "";
+      if (aSub !== bSub) return aSub.localeCompare(bSub, "es");
+      return a.name.localeCompare(b.name, "es");
+    });
+    return {
+      key,
+      ...chapter,
+      items: sortedItems,
+      subtotal: chapterItems.reduce((sum, item) => sum + item.total, 0),
+    };
+  });
   // Filtrar vacíos, EXCEPTO si el usuario está activamente agregando a uno
   // (addingChapter) — ese se muestra aunque esté vacío.
   const visibleChapters = allChaptersData.filter(
@@ -618,8 +629,23 @@ export default function ObraEditor({
                   <col className="w-6" />
                 </colgroup>
                 <tbody className="divide-y divide-gray-50">
-                  {chapter.items.map((item, itemIdx) => (
+                  {chapter.items.map((item, itemIdx) => {
+                    const prevItem = itemIdx > 0 ? chapter.items[itemIdx - 1] : null;
+                    const showSubHeader =
+                      item.subChapter &&
+                      (!prevItem || prevItem.subChapter !== item.subChapter);
+                    return (
                     <Fragment key={item.id}>
+                    {showSubHeader && (
+                      <tr className="bg-gray-100/70 border-y border-gray-200">
+                        <td
+                          colSpan={9}
+                          className="px-3 py-0.5 text-[10px] font-semibold text-gray-600 uppercase tracking-wider"
+                        >
+                          {item.subChapter}
+                        </td>
+                      </tr>
+                    )}
                     <tr className="border-b border-gray-100 hover:bg-gray-50/60 group">
                       <td className="px-3 py-1 text-gray-700 text-xs tabular-nums align-top whitespace-nowrap">
                         <button
@@ -859,7 +885,8 @@ export default function ObraEditor({
                       </tr>
                     )}
                     </Fragment>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -179,7 +179,11 @@ model ObraItem {
   budgetVersionId   String
   lineageId         String  @default(cuid()) // Identidad estable de la partida a través de versiones del presupuesto. Se preserva al duplicar la versión.
   chapter           String  // demoliciones, reparaciones, electricas, sanitarias, terminaciones, limpieza
-  itemNumber        String  // 1.1, 1.2, etc
+  // Sub-chapter opcional dentro del chapter (ej: "COCINA", "BAÑO PRINCIPAL"
+  // dentro de "INSTALACIONES SANITARIAS"). Solo se usa como separador visual
+  // en el editor y PDF — no afecta cálculos. Null = sin sub-chapter.
+  subChapter        String?
+  itemNumber        String  // 1.1, 1.2, etc (legacy — el display usa correlativo recalculado)
   name              String
   descriptionCliente String? @map("description") // Va en el PDF del presupuesto
   descriptionMaestro String? // Va al estado de pago del maestro

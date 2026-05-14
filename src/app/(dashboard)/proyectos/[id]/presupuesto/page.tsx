@@ -8,6 +8,7 @@ import BorrarBudgetButton from "@/components/presupuesto/BorrarBudgetButton";
 import EditableVersionLabel from "@/components/presupuesto/EditableVersionLabel";
 import ImportarDesdeProyectoButton, { SourceProject } from "@/components/presupuesto/ImportarDesdeProyectoButton";
 import ImportarCubicacionButton from "@/components/presupuesto/ImportarCubicacionButton";
+import ImportarArtefactosButton from "@/components/presupuesto/ImportarArtefactosButton";
 
 export default async function PresupuestoPage({
   params,
@@ -352,7 +353,10 @@ export default async function PresupuestoPage({
           <h2 className="text-lg font-semibold text-gray-900">
             Presupuesto Artefactos
           </h2>
-          <NuevaVersionButton projectId={project.id} type="artefactos" />
+          <div className="flex items-center gap-2">
+            <ImportarArtefactosButton projectId={project.id} />
+            <NuevaVersionButton projectId={project.id} type="artefactos" />
+          </div>
         </div>
         {artefactoVersions.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500">

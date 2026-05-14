@@ -545,15 +545,15 @@ export default function ObraEditor({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b-2 border-gray-900 bg-white">
-              <th className="text-center px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-12">Item</th>
-              <th className="text-left px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "22%" }}>Partida</th>
-              <th className="text-left px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "36%" }}>Descripcion</th>
-              <th className="text-center px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-14">Un.</th>
-              <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-20">Cant.</th>
-              <th className="text-right px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-24" title="Mano de obra por unidad — lo que pagás al maestro">M.O.</th>
-              <th className="text-right px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-28">P.U.</th>
-              <th className="text-right px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-28">Total</th>
-              <th className="w-8"></th>
+              <th className="text-center px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-10">Item</th>
+              <th className="text-left px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "20%" }}>Partida</th>
+              <th className="text-left px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "32%" }}>Descripcion</th>
+              <th className="text-center px-1 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-12">Un.</th>
+              <th className="text-right px-1 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-16">Cant.</th>
+              <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-20" title="Mano de obra por unidad — lo que pagás al maestro">M.O.</th>
+              <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-24">P.U.</th>
+              <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-28">Total</th>
+              <th className="w-6"></th>
             </tr>
           </thead>
         </table>
@@ -591,15 +591,15 @@ export default function ObraEditor({
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <colgroup>
+                  <col className="w-10" />
+                  <col style={{ width: "20%" }} />
+                  <col style={{ width: "32%" }} />
                   <col className="w-12" />
-                  <col style={{ width: "22%" }} />
-                  <col style={{ width: "36%" }} />
-                  <col className="w-14" />
+                  <col className="w-16" />
                   <col className="w-20" />
                   <col className="w-24" />
                   <col className="w-28" />
-                  <col className="w-28" />
-                  <col className="w-8" />
+                  <col className="w-6" />
                 </colgroup>
                 <tbody className="divide-y divide-gray-50">
                   {chapter.items.map((item, itemIdx) => (

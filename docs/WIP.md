@@ -4,9 +4,32 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-13 (cierre · ronda 15 — rediseño PDF + Rosas a prod)
+- **Última actualización**: 2026-05-13 (cierre · ronda 16 — sync MaterialCatalog ↔ PartidaCatalog + auditoría + edición componentes por proyecto)
 
-- **Ronda 15 — Rediseño completo del PDF de cotización + Rosas V4 cargado en dev y prod**:
+- **Ronda 16 — Sincronización de materiales + auditoría + edición componentes a nivel proyecto (PR #4, commit `e2f4cbb`)**:
+  - **Bug detectado**: las partidas del catálogo guardaban un snapshot del material asociado. Cuando se editaba un material en `/catalogo/materiales`, ese cambio NO se propagaba a las partidas — y todo presupuesto creado después arrastraba precios viejos. Caso concreto: Constanza Bravo V1 tenía llave de paso gas Stretto $12.269 mientras el material en /materiales era Nipsa $19.319.
+  - **Schema** (aplicado en dev y prod): `ObraItemComponent.isCustomized` (bool, default false). Marca componentes que MJ editó manualmente — el sync masivo los respeta.
+  - **Helpers backend** (`src/lib/catalog/`):
+    - `recalcPartida.ts` — recalcula `PartidaCatalog.unitPrice + cost*` desde sus componentes (espejo del `effectiveTotal()` del front).
+    - `recalcObraItem.ts` — idem para `ObraItem` desde sus `ObraItemComponent`.
+    - `syncMaterial.ts` — propaga MaterialCatalog → PartidaComponent (siempre) y opcionalmente → ObraItemComponent (solo en presupuestos `status="borrador"`, respetando `isCustomized`).
+  - **Fase 0 — limpieza inicial**: `scripts/sync-partidas-with-materials.ts`. Aplicado en dev (305 PartidaComponent actualizados, 299 partidas recalculadas) y prod (324 actualizados, 317 partidas recalculadas). El catálogo de partidas ahora coincide con el de materiales en ambos ambientes.
+  - **Fase 1 — sync automático + auditoría**:
+    - `PUT /api/catalogo/materiales/[id]` ahora invoca `syncMaterialToComponents` con `propagateToBudgets=false`. Editar un material actualiza el catálogo de partidas pero NO toca presupuestos en borrador automáticamente.
+    - `GET /api/catalogo/auditoria-precios[?budgetId=xxx]` — lista componentes desactualizados.
+    - `POST /api/catalogo/auditoria-precios/sync` — sincroniza un borrador específico o todos.
+    - Página `/configuracion/auditoria-precios` con tabla y botón "Actualizar todos". Link en Sidebar.
+    - `BudgetAuditBanner` (cartel ámbar arriba del editor de presupuesto) cuando hay componentes desactualizados.
+  - **Fase 2 — edición de componentes por proyecto**:
+    - `ObraItemComponentsEditor`: en el desglose expandido de cada ítem, tabla editable con cada componente (descripción, qty, costo, link) + botones para agregar componentes nuevos por tipo. Edición marca `isCustomized=true` en el componente y en el `ObraItem`.
+    - `GET/POST /api/presupuestos/[id]/partidas/[itemId]/componentes`
+    - `PUT/DELETE /api/presupuestos/[id]/partidas/[itemId]/componentes/[compId]`
+    - Bloqueado para presupuestos en `status != "borrador"` (congelados).
+  - **Cómo funciona ahora**: MJ edita un material en `/catalogo/materiales` → automático se actualiza el catálogo de partidas. Para propagar a presupuestos en borrador, MJ va a `/configuracion/auditoria-precios` o usa el cartelito en cada editor. Si MJ edita un componente individual desde el editor del presupuesto, queda marcado "personalizado" y los sync masivos futuros no lo pisan.
+
+
+
+- **Ronda 15 — Rediseño completo del PDF de cotización + Rosas V4 cargado en dev y prod (PR #1)**:
   - **Nueva línea editorial unificada para obra y muebles** (`src/lib/pdf/ObraPDF.html.ts` + `MueblesPDF.html.ts` + `route.tsx` + `renderPDF.ts`). Cambios visuales mergeados a main 2026-05-13 (PR #1, commit `fd7705b`):
     - Tipografía suave `#1A1A1A` (no negro absoluto). Pesos más livianos (500 en valores de header).
     - Header: logo BLARQ a 45px arriba izquierda, "V1 COTIZACION" 18pt + subtítulo (OBRA o MUEBLES Y ARTEFACTOS) + "Profesional a cargo" alineados a la derecha. Debajo: grilla 2 columnas con Mandante/Proyecto/Direccion (izq) + Celular/Fecha/Valor UF (der).

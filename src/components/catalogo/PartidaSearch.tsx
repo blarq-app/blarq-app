@@ -552,13 +552,12 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
             </div>
 
             {/* Column headers — matches PDF thead */}
-            <div className="grid grid-cols-[3rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem_2rem] items-center gap-3 px-4 py-2 border-y-2 border-gray-900 bg-white text-[11px] font-bold text-gray-900 uppercase tracking-wider">
+            <div className="grid grid-cols-[4.5rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem] items-center gap-3 px-4 py-2 border-y-2 border-gray-900 bg-white text-[11px] font-bold text-gray-900 uppercase tracking-wider">
               <div className="text-center">Nº</div>
               <div className="text-left">Partida</div>
               <div className="text-left">Descripción Cliente</div>
               <div className="text-center">Un.</div>
               <div className="text-right">P.U.</div>
-              <div></div>
             </div>
 
             {/* Filas con drag & drop */}
@@ -707,7 +706,7 @@ function PartidaRow({
   return (
     <div ref={setNodeRef} style={style}>
       <div
-        className={`grid grid-cols-[3rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem_2rem] items-center gap-3 px-4 py-1.5 border-b border-gray-100 hover:bg-gray-50/60 group ${
+        className={`grid grid-cols-[4.5rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem] items-center gap-3 px-4 py-1.5 border-b border-gray-100 hover:bg-gray-50/60 group ${
           isExpanded ? "bg-gray-50/60" : ""
         } ${savedFlash ? "bg-green-50" : ""}`}
       >
@@ -720,6 +719,13 @@ function PartidaRow({
           >
             ⋮⋮
           </span>
+          <button
+            onClick={onToggleExpand}
+            className="text-gray-400 hover:text-gray-700 text-xs"
+            title={isExpanded ? "Colapsar" : "Expandir"}
+          >
+            {isExpanded ? "▾" : "▸"}
+          </button>
           {num}
         </div>
         <button
@@ -746,13 +752,6 @@ function PartidaRow({
         <div className="text-right text-xs font-medium text-gray-900 tabular-nums">
           {formatCLP(partida.unitPrice)}
         </div>
-        <button
-          onClick={onToggleExpand}
-          className="text-gray-400 hover:text-gray-700 text-xs"
-          title={isExpanded ? "Colapsar" : "Expandir"}
-        >
-          {isExpanded ? "▾" : "▸"}
-        </button>
       </div>
 
       {/* Panel expandido */}

@@ -375,7 +375,9 @@ export default function ObraEditor({
           `Pérdida: $${item.costLoss ?? 0}\n` +
           `Subcontrato: $${item.costSubcontract ?? 0}\n` +
           `P. Unitario: $${item.unitPrice}\n\n` +
-          `Esto afectará la plantilla base para todos los proyectos futuros.`
+          `Esto afectará la plantilla base para todos los proyectos futuros\n` +
+          `Y se propagará automáticamente a las cotizaciones EN BORRADOR\n` +
+          `(no toca las enviadas/aprobadas, ni las que vos editaste a mano).`
       )
     )
       return;
@@ -394,7 +396,13 @@ export default function ObraEditor({
         }),
       });
       if (!res.ok) throw new Error("Error");
-      alert(`✓ Precios del catálogo actualizados para "${item.name}"`);
+      const result = await res.json();
+      const p = result?._propagated;
+      const extra =
+        p && p.obraItemsUpdated > 0
+          ? `\n\nAdemás se actualizaron ${p.obraItemsUpdated} ítem${p.obraItemsUpdated === 1 ? "" : "s"} en ${p.budgetVersionsAffected} cotización${p.budgetVersionsAffected === 1 ? "" : "es"} en borrador.`
+          : "";
+      alert(`✓ Precios del catálogo actualizados para "${item.name}"${extra}`);
     } catch {
       alert("Error al actualizar catálogo");
     }
@@ -409,7 +417,9 @@ export default function ObraEditor({
         `¿Actualizar las DESCRIPCIONES de "${item.name}" en el catálogo?\n\n` +
           `Cliente: "${descCli || "(vacía)"}"\n` +
           `Maestro: "${descMae || "(vacía)"}"\n\n` +
-          `Esto afectará las descripciones base para todos los proyectos futuros.`
+          `Esto afectará las descripciones base para todos los proyectos futuros\n` +
+          `Y se propagará automáticamente a las cotizaciones EN BORRADOR\n` +
+          `(no toca las enviadas/aprobadas, ni las que vos editaste a mano).`
       )
     )
       return;
@@ -423,7 +433,13 @@ export default function ObraEditor({
         }),
       });
       if (!res.ok) throw new Error("Error");
-      alert(`✓ Descripción del catálogo actualizada para "${item.name}"`);
+      const result = await res.json();
+      const p = result?._propagated;
+      const extra =
+        p && p.obraItemsUpdated > 0
+          ? `\n\nAdemás se actualizaron ${p.obraItemsUpdated} ítem${p.obraItemsUpdated === 1 ? "" : "s"} en ${p.budgetVersionsAffected} cotización${p.budgetVersionsAffected === 1 ? "" : "es"} en borrador.`
+          : "";
+      alert(`✓ Descripción del catálogo actualizada para "${item.name}"${extra}`);
     } catch {
       alert("Error al actualizar descripción del catálogo");
     }
@@ -816,16 +832,16 @@ export default function ObraEditor({
                               <button
                                 onClick={() => handleUpdateCatalogDescription(item)}
                                 className="text-xs text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-3 py-1 rounded-lg transition-colors"
-                                title="Guardar esta descripción como descripción estándar del catálogo (afecta todos los proyectos futuros)"
+                                title="Guardar esta descripción en el catálogo + propagar a cotizaciones en borrador (no toca enviadas/aprobadas ni las que editaste a mano)"
                               >
-                                ↑ Actualizar descripción en catálogo
+                                ↑ Actualizar descripción en catálogo + borradores
                               </button>
                               <button
                                 onClick={() => handleUpdateCatalog(item)}
                                 className="text-xs text-orange-600 hover:text-orange-800 border border-orange-200 hover:border-orange-400 px-3 py-1 rounded-lg transition-colors"
-                                title="Propagar estos precios al catálogo base (afecta todos los proyectos futuros)"
+                                title="Propagar estos precios al catálogo + cotizaciones en borrador (no toca enviadas/aprobadas ni las que editaste a mano)"
                               >
-                                ↑ Actualizar precios en catálogo
+                                ↑ Actualizar precios en catálogo + borradores
                               </button>
                             </div>
                           )}

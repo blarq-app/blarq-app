@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, Fragment, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { OBRA_CHAPTERS, ObraChapter, formatCLP } from "@/lib/utils";
 import MoneyInput from "@/components/ui/MoneyInput";
+import BudgetAuditBanner from "@/components/presupuesto/BudgetAuditBanner";
+import ObraItemComponentsEditor from "@/components/presupuesto/ObraItemComponentsEditor";
 
 interface ObraItem {
   id: string;
@@ -532,6 +534,11 @@ export default function ObraEditor({
 
   return (
     <div className="space-y-3">
+      <BudgetAuditBanner
+        budgetId={initialBudget.id}
+        status={initialBudget.status}
+        onSynced={() => router.refresh()}
+      />
       {/* Header de tabla — UNA sola vez arriba, después chapters y items
           forman una tabla continua estilo Excel maestro. */}
       <div className="bg-white border border-gray-200 rounded-t-xl overflow-x-auto">
@@ -822,6 +829,16 @@ export default function ObraEditor({
                               </button>
                             </div>
                           )}
+                          {/* Desglose por componente — editable si el
+                              presupuesto está en borrador. */}
+                          <div className="pt-3 border-t border-gray-200">
+                            <ObraItemComponentsEditor
+                              budgetId={initialBudget.id}
+                              itemId={item.id}
+                              canEdit={initialBudget.status === "borrador"}
+                              onChanged={() => router.refresh()}
+                            />
+                          </div>
                         </td>
                       </tr>
                     )}

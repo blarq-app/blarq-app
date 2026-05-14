@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { syncMaterialToComponents } from "@/lib/catalog/syncMaterial";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function PUT(
@@ -20,7 +21,19 @@ export async function PUT(
       },
     });
 
-    return NextResponse.json(material);
+    // Sync automático al catálogo de partidas: cuando MJ actualiza un
+    // material acá, se propaga a TODOS los PartidaComponent que lo usen
+    // (description / unit / netPrice / referenceLink) y se recalculan
+    // los totales de cada partida afectada.
+    //
+    // NO toca presupuestos automáticamente — eso es manual desde
+    // /configuracion/auditoria-precios (para evitar sorpresas en cotis
+    // que MJ todavía no entregó).
+    const syncSummary = await syncMaterialToComponents(id, {
+      propagateToBudgets: false,
+    });
+
+    return NextResponse.json({ ...material, _sync: syncSummary });
   } catch (error) {
     console.error("Error updating material:", error);
     return NextResponse.json(

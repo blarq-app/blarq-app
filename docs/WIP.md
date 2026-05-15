@@ -4,7 +4,47 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-14 (ronda 17 — fix LaunchAgent PDFs SII apuntaba a dev, ahora a prod)
+- **Última actualización**: 2026-05-14 (cierre · ronda 18 — sistema completo de artefactos: importador, editor, catálogo BLARQ, sincronización, imágenes auto-extraídas)
+
+- **Ronda 18 — Sistema completo de artefactos (PRs #14–#27)**:
+  - Sesión larga centrada en artefactos. MJ trabajaba con Excel de proveedores (MK, CHC, TEKA, LedStudio, ByP, LedConcept) y quería que la app reemplace ese workflow.
+  - **Importador de Excel** (`src/lib/import/parseArtefactos.ts` + `/api/proyectos/[id]/importar-artefactos`): parsea hojas tipo "ARTEFACTOS SANITARIOS" (con headers de habitación), "ARTEFACTOS COCINA/TEKA", "ARTEFACTOS ILUMINACION". Ignora sheets MAESTRA y *_HG (V1 vieja). Crea BudgetVersion type=artefactos status=borrador. Probado con planilla Veronica Villarreal: 37 items parseados (13 baño principal, 18 baño secundario, 3 cocina, 3 iluminación).
+  - **Editor rediseñado** (`src/components/presupuesto/ArtefactosEditor.tsx`): formato editorial BLARQ imitando el Excel de referencia. Jerarquía subcategoría → habitación → items. Columnas IMG | ITEM | DETALLE | MARCA | CANT | LISTA | DCTO | TOTAL. Toggle "Mostrar columnas internas" agrega NETO BLARQ + UTILIDAD (no van al PDF). Subtotales por habitación y subcategoría + total general.
+  - **PDF cliente rediseñado** (`src/lib/pdf/ArtefactosPDF.html.ts`): mismo formato editorial. Banner negro por subcategoría, gris claro por habitación. Imagen del producto a ~32mm (medido contra el Excel original que tenía imágenes entre 20-30mm).
+  - **Fix de convenciones**: `discountPercent` ahora es decimal (0..1) en BD (antes el editor lo trataba como 0-100, pisaba mal el clientPrice al guardar). `clientPrice` siempre unitario (antes se multiplicaba por qty al guardar — doble cuenta).
+  - **Imágenes con auto-extracción** (`src/lib/catalog/fetchArtefactoData.ts` + `/api/.../artefactos/extract`):
+    - Campo `ArtefactoItem.imageUrl` (migración aditiva aplicada en dev y prod).
+    - Click en thumbnail abre popover. MJ pega link del producto → "Extraer" trae imagen + nombre + marca + precio lista.
+    - **Scraper universal**: usa JSON-LD Product + meta tags OpenGraph + regex de price. Funciona con cualquier URL que exponga datos estándar. Probado: mk.cl, chc.cl, byp.cl, ledstudio.cl, ledconcept.cl, sodimac.cl, easy.cl. Fallback: campo manual "URL de imagen" para sitios sin scrape (Falabella, Ripley, etc.) o productos descontinuados.
+  - **Catálogo BLARQ global** (tabla `ArtefactoCatalog` + página `/catalogo/artefactos` + entry en Sidebar):
+    - Items reutilizables entre proyectos. Campos: name, detail, brand, subcategory, tag, supplier, referenceLink, imageUrl, listPrice, discountPercent, isStandard, lastPriceCheck.
+    - Página con buscador full-text, filtros por subcategoría/paleta estándar, edición inline, creación con atajo "pegar link + extraer".
+    - En el editor del presupuesto, el "+ agregar artefacto" abre un buscador del catálogo. Click en item → se copia al budget con el `catalogId` linkeado. Botón "Crear nuevo" sigue disponible.
+    - Estrella ★ en cada fila del editor para promover items al catálogo.
+  - **Sincronización entre copias del mismo catalogId**:
+    - Cuando MJ edita un campo en una copia del item, se propaga a:
+      1. Otras copias del mismo catalogId en el mismo budget (mismo WC en baño principal y secundario quedan iguales).
+      2. El catálogo BLARQ global (próximos proyectos arrancan con dato actualizado).
+    - Scope por campo:
+      - name, detail, brand, listPrice, discountPercent, clientPrice, referenceLink, imageUrl → propaga a budget + catálogo.
+      - **realCostBlarq** (cotización privada de su vendedora) → propaga solo dentro del budget. NO sube al catálogo porque varía proyecto a proyecto.
+      - quantity, room, subcategory → no se sincronizan (específicos de cada copia).
+  - **Bug de sync SII arreglado de paso** (PR #23, `src/app/api/sii/sync/route.ts`):
+    - Síntoma reportado por MJ: facturas de Maxi Mobility apareciendo sin catalogar aunque ya había regla activa para el RUT.
+    - Causa: `applyInvoiceRule` solo se llamaba en creación. Si una factura llegaba al sync ANTES de que existiera la regla y después el SII la enviaba de nuevo, el branch de "existing" actualizaba montos pero nunca aplicaba la regla. Quedaba huérfana para siempre.
+    - Fix: cuando una factura existente vuelve a entrar al sync y tiene `categoryId` o `projectId` vacío, se llama `applyInvoiceRule`. Respeta lo manual.
+    - Recovery histórico: corrí applyInvoiceRule sobre todas las facturas existentes con campo vacío + regla activa. 1 factura afectada (folio 281571 Maxi Mobility), ya corregida en prod.
+
+Pendientes de esta sesión (próximas iteraciones de artefactos):
+- **Botón "Revisar precios actuales" en bulk**: recorrer items del budget, abrir cada link, traer precio actual, mostrar tabla con diferencias para que MJ apruebe cambios en bulk. Soluciona "cotizar con precios viejos". (Sesión 3 del plan)
+- **Templates de espacio**: guardar "Baño con tina 120 + ducha en obra" como receta reutilizable (lista de itemRefs del catálogo). Al armar un baño nuevo, elegir plantilla → trae todos los items pre-cargados. (Sesión 4)
+- **Agente conversacional** (ambicioso, lejos): input tipo "baño principal con tina 120, mueble vanitorio 80, ducha en obra" → LLM genera el setup. Requiere catálogo + templates ya funcionando. (Sesión 5)
+- **Romper vínculo con catálogo en un item específico**: hoy si MJ edita un item con catalogId, se propaga. Si quiere que un item específico se desvincule (cambio puntual no quiere afectar otros), no hay UI para hacerlo. Falta botón "desvincular del catálogo BLARQ" en el item.
+- **Auto-extraer imagen en bulk para items importados del Excel**: hoy MJ tiene que abrir item por item y apretar Extraer. Si los links del Excel original están vigentes, podríamos hacerlo en bulk. MJ dijo "los links los actualizo yo".
+
+Tareas operacionales para MJ después del deploy:
+- Cargar 10-15 items "paleta estándar BLARQ" en el catálogo (los WCs / griferías / accesorios que usa siempre).
+- Probar en Paseo del Sena Veronica V1: actualizar los links de productos descontinuados, ir extrayendo imagen por item, promover al catálogo con ★ los que sean estándar.
 
 - **Ronda 17 — LaunchAgent de PDFs SII apuntaba a dev, no a prod (fix sin commit, solo cambio en plist local)**:
   - **Síntoma reportado por MJ**: en `/facturas` (Vercel) las flechas de descarga PDF salen grises (no verde con ✓) incluso en facturas de hace varios días. Al hacer click, abre el PDF resumen feo en vez del oficial.
@@ -17,8 +57,6 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
   - **Doc actualizada**: `docs/SETUP_SII_pdf-oficial.md` ahora explica que el LaunchAgent apunta a prod via `EnvironmentVariables`, y cómo regenerar la URL si se rota el password.
   - **Backup del plist anterior**: `~/Library/LaunchAgents/com.blarq.sii-sync-pdfs.plist.bak-20260514-220725` (por si hay que revertir).
   - **No hubo commit** — esta ronda es config local de la mac de MJ. El repo no cambió excepto por `docs/WIP.md` + `docs/SETUP_SII_pdf-oficial.md`.
-
-
 
 - **Ronda 16 — Sincronización de materiales + auditoría + edición componentes a nivel proyecto (PR #4, commit `e2f4cbb`)**:
   - **Bug detectado**: las partidas del catálogo guardaban un snapshot del material asociado. Cuando se editaba un material en `/catalogo/materiales`, ese cambio NO se propagaba a las partidas — y todo presupuesto creado después arrastraba precios viejos. Caso concreto: Constanza Bravo V1 tenía llave de paso gas Stretto $12.269 mientras el material en /materiales era Nipsa $19.319.

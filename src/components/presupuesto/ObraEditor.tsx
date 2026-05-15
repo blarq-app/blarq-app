@@ -6,6 +6,18 @@ import { OBRA_CHAPTERS, ObraChapter, formatCLP } from "@/lib/utils";
 import MoneyInput from "@/components/ui/MoneyInput";
 import BudgetAuditBanner from "@/components/presupuesto/BudgetAuditBanner";
 import ObraItemComponentsEditor from "@/components/presupuesto/ObraItemComponentsEditor";
+import CostoDirectoDetalle from "@/components/presupuesto/CostoDirectoDetalle";
+
+interface ObraItemComponent {
+  id: string;
+  type: string;
+  description: string;
+  unit: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  materialId: string | null;
+}
 
 interface ObraItem {
   id: string;
@@ -27,6 +39,7 @@ interface ObraItem {
   costLoss: number | null;
   sortOrder: number;
   catalogPartidaId: string | null;
+  components?: ObraItemComponent[];
 }
 
 interface PaymentTerm {
@@ -1404,6 +1417,19 @@ export default function ObraEditor({
           </div>
         </div>
       </div>
+
+      {/* Detalle por costo directo — qué hay dentro de cada bolsa
+          (Materiales, MO, etc). Cada componente proviene del snapshot
+          ObraItemComponent de las partidas. */}
+      <CostoDirectoDetalle
+        items={items.map((it) => ({
+          id: it.id,
+          itemNumber: it.itemNumber,
+          name: it.name,
+          quantity: it.quantity,
+          components: it.components ?? [],
+        }))}
+      />
 
       {/* Forma de pago */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">

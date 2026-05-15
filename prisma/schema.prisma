@@ -204,6 +204,7 @@ model ObraItem {
 
   budgetVersion     BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)
   components        ObraItemComponent[]
+  discardedCatalogComponents ObraItemDiscardedCatalogComponent[]
 
   @@index([budgetVersionId])
   @@index([catalogPartidaId])
@@ -230,6 +231,12 @@ model ObraItemComponent {
   totalCost     Float    @default(0)
   referenceLink String?
   materialId    String?  // referencia al catálogo de materiales
+  // FK al PartidaComponent original del catálogo de donde se copió este
+  // componente. Null si: (a) el componente lo creó MJ manualmente en la
+  // cotización, (b) la partida no vino de catálogo, o (c) es data vieja
+  // anterior al 2026-05-15. Habilita el "diff" del sync con el catálogo:
+  // agregar faltantes, borrar los que ya no están, sin matching frágil.
+  originComponentId String?
   // Marca true cuando MJ edita este componente manualmente desde el editor
   // del presupuesto. El sync automático con MaterialCatalog respeta este
   // flag — no pisa componentes personalizados para ese proyecto.
@@ -243,6 +250,24 @@ model ObraItemComponent {
 
   @@index([obraItemId])
   @@index([materialId])
+  @@index([originComponentId])
+}
+
+// Registro de componentes del catálogo que MJ borró intencionalmente del
+// editor de una cotización. Cuando el sync corre, NO recrea componentes
+// del catálogo cuyo id figure acá — respetando la decisión local para
+// ese proyecto. Si MJ después agrega ese mismo componente a mano vuelve
+// a aparecer, pero el sync masivo no lo reintroduce solo.
+model ObraItemDiscardedCatalogComponent {
+  id                 String   @id @default(cuid())
+  obraItemId         String
+  partidaComponentId String   // id de PartidaComponent (no es FK real porque el componente del catálogo puede haber sido borrado posteriormente)
+  createdAt          DateTime @default(now())
+
+  obraItem           ObraItem @relation(fields: [obraItemId], references: [id], onDelete: Cascade)
+
+  @@unique([obraItemId, partidaComponentId])
+  @@index([obraItemId])
 }
 
 // Capítulos de muebles. Un proyecto puede tener varios:

@@ -83,6 +83,11 @@ export async function POST(
             materialId: c.materialId,
             sortOrder: c.sortOrder,
             appliedToType: c.appliedToType,
+            // Guardamos el origen para que el sync diferencial sepa qué
+            // componente del catálogo corresponde a qué componente del
+            // proyecto. Permite agregar faltantes y borrar los huérfanos
+            // sin matching por descripción/tipo.
+            originComponentId: c.id,
           },
         });
         idMap.set(c.id, newComp.id);

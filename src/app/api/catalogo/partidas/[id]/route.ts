@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { getFrozenLineageIds } from "@/lib/catalog/frozenLineage";
 
 // Campos de costo agregado de la partida (los que muestra el desglose).
 const COST_FIELDS = [
@@ -81,19 +82,32 @@ export async function PUT(
     let propagated = { obraItemsUpdated: 0, budgetVersionsAffected: 0 };
 
     if (Object.keys(propagatePayload).length > 0) {
-      // Identificar todos los ObraItem candidatos (borradores, no customizados)
+      // Identificar todos los ObraItem candidatos (borradores, no customizados,
+      // y cuyo lineageId NO esté congelado por una versión enviada/aprobada).
       const candidates = await prisma.obraItem.findMany({
         where: {
           catalogPartidaId: id,
           isCustomized: false,
           budgetVersion: { status: "borrador" },
         },
-        select: { id: true, quantity: true, budgetVersionId: true },
+        select: {
+          id: true,
+          quantity: true,
+          budgetVersionId: true,
+          lineageId: true,
+          budgetVersion: { select: { projectId: true, type: true } },
+        },
       });
 
       const newUnitPrice = (payload.unitPrice as number | undefined) ?? null;
       const budgetVersionIds = new Set<string>();
+      let updatedCount = 0;
       for (const it of candidates) {
+        const frozen = await getFrozenLineageIds(
+          it.budgetVersion.projectId,
+          it.budgetVersion.type
+        );
+        if (frozen.has(it.lineageId)) continue; // partida con lineage congelado
         const itemPayload = { ...propagatePayload };
         // Recalcular total si cambió unitPrice
         if (newUnitPrice !== null) {
@@ -105,9 +119,10 @@ export async function PUT(
           data: itemPayload,
         });
         budgetVersionIds.add(it.budgetVersionId);
+        updatedCount++;
       }
       propagated = {
-        obraItemsUpdated: candidates.length,
+        obraItemsUpdated: updatedCount,
         budgetVersionsAffected: budgetVersionIds.size,
       };
     }

@@ -68,9 +68,9 @@ export default function BudgetAuditBanner({
     <div className="mb-3 flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
       <div className="text-xs text-amber-900">
         <span className="font-medium">
-          {count} componente{count === 1 ? "" : "s"} con precio desactualizado
+          {count} diferencia{count === 1 ? "" : "s"} con el catálogo
         </span>{" "}
-        respecto al catálogo de materiales.
+        — precios, materiales nuevos o eliminados.
       </div>
       <button
         type="button"

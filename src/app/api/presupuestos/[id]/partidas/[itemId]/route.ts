@@ -18,6 +18,13 @@ export async function PUT(
       select: { costLabor: true },
     });
 
+    // subChapter es opcional — si no viene en el body, no se toca. Si viene
+    // como string vacío o null, se guarda null (= "sin subgrupo").
+    const subChapterPatch =
+      "subChapter" in data
+        ? { subChapter: data.subChapter === "" || data.subChapter == null ? null : data.subChapter }
+        : {};
+
     const item = await prisma.obraItem.update({
       where: { id: itemId },
       data: {
@@ -36,6 +43,7 @@ export async function PUT(
         costLoss: data.costLoss,
         sortOrder: data.sortOrder,
         isCustomized: true,
+        ...subChapterPatch,
       },
     });
 

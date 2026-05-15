@@ -209,10 +209,21 @@ export default function ObraEditor({
       if (aSub !== bSub) return aSub.localeCompare(bSub, "es");
       return a.name.localeCompare(b.name, "es");
     });
+    // Lista de subgrupos existentes en este capítulo (orden alfabético,
+    // únicos, sin nulls/vacíos). Se usa para el selector de subgrupo en
+    // el panel expandido de cada partida.
+    const subChaptersInChapter = Array.from(
+      new Set(
+        chapterItems
+          .map((it) => it.subChapter)
+          .filter((s): s is string => !!s && s.trim().length > 0)
+      )
+    ).sort((a, b) => a.localeCompare(b, "es"));
     return {
       key,
       ...chapter,
       items: sortedItems,
+      subChaptersInChapter,
       subtotal: chapterItems.reduce((sum, item) => sum + item.total, 0),
     };
   });
@@ -790,6 +801,43 @@ export default function ObraEditor({
                     {expandedItems[item.id] && (
                       <tr className="bg-gray-50">
                         <td colSpan={9} className="px-4 py-3 space-y-3">
+                          {/* Subgrupo — agrupador visual dentro del capítulo
+                              (ej. BAÑOS / COCINA dentro de Sanitarias). No
+                              afecta cálculos, solo organiza la lista. */}
+                          <div>
+                            <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
+                              Subgrupo
+                              <span className="ml-2 text-gray-400 normal-case font-normal italic">
+                                — agrupa visualmente dentro de {chapter.label}
+                              </span>
+                            </label>
+                            <select
+                              value={item.subChapter ?? ""}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (v === "__NEW__") {
+                                  const nombre = window.prompt(
+                                    "Nombre del nuevo subgrupo (ej. COCINA, BAÑO PRINCIPAL):"
+                                  );
+                                  if (nombre && nombre.trim()) {
+                                    handleUpdateItem(item.id, "subChapter", nombre.trim().toUpperCase());
+                                  }
+                                  return;
+                                }
+                                handleUpdateItem(item.id, "subChapter", v);
+                              }}
+                              className="border border-gray-300 rounded px-2 py-1 text-xs bg-white focus:ring-1 focus:ring-gray-900 outline-none"
+                            >
+                              <option value="">(sin subgrupo)</option>
+                              {chapter.subChaptersInChapter.map((s) => (
+                                <option key={s} value={s}>
+                                  {s}
+                                </option>
+                              ))}
+                              <option value="__NEW__">+ Crear nuevo subgrupo…</option>
+                            </select>
+                          </div>
+
                           {/* Descripción para el maestro (no aparece en PDF cliente) */}
                           <div>
                             <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">

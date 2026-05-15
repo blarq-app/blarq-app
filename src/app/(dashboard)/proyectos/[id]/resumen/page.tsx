@@ -244,6 +244,14 @@ export default async function ResultadosPage({
   const totalPresupuesto = sectionTotals.reduce((a, t) => a + t.presupuesto, 0);
   const totalReal = sectionTotals.reduce((a, t) => a + t.real, 0);
 
+  // "Gastos generales" no tiene presupuesto (no hay contraparte en
+  // obraItems), pero el real existe y hoy quedaba fuera de la tabla —
+  // generando un mismatch visual entre el subtotal y el card "Gastado".
+  // Lo agregamos como fila suelta antes del total general, solo si hay
+  // gasto.
+  const gastosGeneralesReal = realByTop["Gastos generales"] || 0;
+  const totalRealConGastosGen = totalReal + gastosGeneralesReal;
+
   // ==================== Avance por Capítulo (desde EPs) ====================
   // Último % por lineageId de cualquier EP (estable a través de versiones)
   const latestPctByLineage = new Map<string, number>();
@@ -325,15 +333,25 @@ export default async function ResultadosPage({
     include: { children: true },
     orderBy: { sortOrder: "asc" },
   });
+  // Desglose en neto (consistente con la tabla y los cards de arriba) y
+  // c/IVA mostrado como leyenda secundaria. Mismo signo de NCs que en
+  // metrics.ts (tipoDoc=61 resta).
+  const signGasto = (i: { tipoDoc: number | null }) => (i.tipoDoc === 61 ? -1 : 1);
   const gastosPorCategoria = categories
     .map((cat) => {
       const catIds = [cat.id, ...cat.children.map((c) => c.id)];
-      const total = facturasRecibidas
-        .filter((i) => i.categoryId && catIds.includes(i.categoryId))
-        .reduce((sum, i) => sum + i.totalAmount, 0);
-      return { name: cat.name, total };
+      const facturasCat = facturasRecibidas.filter(
+        (i) => i.categoryId && catIds.includes(i.categoryId)
+      );
+      const total = facturasCat.reduce((s, i) => s + signGasto(i) * i.netAmount, 0);
+      const totalConIva = facturasCat.reduce(
+        (s, i) => s + signGasto(i) * i.totalAmount,
+        0
+      );
+      return { name: cat.name, total, totalConIva };
     })
     .filter((c) => c.total > 0);
+  const totalConIvaGastos = gastosPorCategoria.reduce((s, c) => s + c.totalConIva, 0);
 
   // ==================== Estado de Cobros al cliente ====================
   // Forma de pago del presupuesto aprobado de obra
@@ -649,9 +667,24 @@ export default async function ResultadosPage({
                   </React.Fragment>
                 );
               })}
+              {/* Fila suelta: Gastos generales (sin sección porque no tiene
+                  presupuesto y sería raro mostrar una sección con una sola
+                  fila sin contraparte). Se renderiza solo si hay gasto. */}
+              {gastosGeneralesReal > 0 && (
+                <tr className="border-t border-gray-100">
+                  <td className="py-2 pl-4 text-gray-900">Gastos generales</td>
+                  <td className="py-2 text-right tabular-nums text-gray-400">—</td>
+                  <td className="py-2 text-right tabular-nums font-medium text-gray-900">
+                    {formatCLP(gastosGeneralesReal)}
+                  </td>
+                  <td className="py-2 text-right tabular-nums text-gray-400">—</td>
+                  <td className="py-2 text-right text-gray-400">—</td>
+                  <td></td>
+                </tr>
+              )}
               {/* Total general */}
               {(() => {
-                const totalDiff = totalPresupuesto - totalReal;
+                const totalDiff = totalPresupuesto - totalRealConGastosGen;
                 return (
                   <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold text-gray-900">
                     <td className="py-2.5 pl-2 uppercase tracking-wider text-xs">Total general</td>
@@ -659,11 +692,11 @@ export default async function ResultadosPage({
                       {formatCLP(totalPresupuesto)}
                     </td>
                     <td className="py-2.5 text-right tabular-nums">
-                      {formatCLP(totalReal)}
+                      {formatCLP(totalRealConGastosGen)}
                     </td>
                     <td
                       className={`py-2.5 text-right tabular-nums ${
-                        totalReal === 0
+                        totalRealConGastosGen === 0
                           ? "text-gray-300"
                           : totalDiff > 0
                             ? "text-green-600"
@@ -672,13 +705,13 @@ export default async function ResultadosPage({
                               : "text-gray-400"
                       }`}
                     >
-                      {totalReal > 0
+                      {totalRealConGastosGen > 0
                         ? `${totalDiff > 0 ? "+" : ""}${formatCLP(totalDiff)}`
                         : "—"}
                     </td>
                     <td className="py-2.5 text-right">
                       {totalPresupuesto > 0
-                        ? `${((totalReal / totalPresupuesto) * 100).toFixed(0)}%`
+                        ? `${((totalRealConGastosGen / totalPresupuesto) * 100).toFixed(0)}%`
                         : "—"}
                     </td>
                     <td></td>
@@ -740,7 +773,7 @@ export default async function ResultadosPage({
       {/* Desglose de gastos por categoría */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Desglose de Gastos Reales (facturas recibidas)
+          Desglose de Gastos Reales (facturas recibidas, neto)
         </h2>
         {gastosPorCategoria.length === 0 ? (
           <p className="text-gray-500 text-sm">
@@ -766,15 +799,25 @@ export default async function ResultadosPage({
                       }}
                     />
                   </div>
-                  <span className="text-sm font-medium text-gray-900 w-28 text-right">
-                    {formatCLP(cat.total)}
-                  </span>
+                  <div className="w-32 text-right">
+                    <div className="text-sm font-medium text-gray-900 tabular-nums">
+                      {formatCLP(cat.total)}
+                    </div>
+                    <div className="text-[10px] text-gray-400 tabular-nums">
+                      c/IVA {formatCLP(cat.totalConIva)}
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
             <div className="flex items-center justify-between py-2 font-bold">
               <span>Total</span>
-              <span>{formatCLP(totalGastado)}</span>
+              <div className="text-right">
+                <div className="tabular-nums">{formatCLP(totalGastado)}</div>
+                <div className="text-[10px] text-gray-400 font-normal tabular-nums">
+                  c/IVA {formatCLP(totalConIvaGastos)}
+                </div>
+              </div>
             </div>
           </div>
         )}

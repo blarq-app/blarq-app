@@ -4,6 +4,17 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-15 — Sync diferencial cotización ↔ catálogo + regla contractual
+
+- **Qué cambió**: el sync entre catálogo de partidas y cotizaciones en borrador ahora detecta y aplica componentes agregados o eliminados desde el catálogo, no solo cambios de precio. El flag `ObraItem.isCustomized` pasa a ser granular: editar/agregar un componente blinda solo ese componente (no la partida entera). Borrar un componente registra el descarte para que el sync no lo recree. Schema aditivo: `ObraItemComponent.originComponentId` + tabla `ObraItemDiscardedCatalogComponent`. Aplicado en dev y prod.
+- **Regla contractual nueva (MJ 2026-05-15)**: partidas con `lineageId` presente en una versión enviada/aprobada del mismo proyecto+tipo quedan blindadas — el sync no las toca aunque la versión actual sea borrador. Las partidas con `lineageId` propio de la nueva versión sí se sincronizan. Helper compartido en `src/lib/catalog/frozenLineage.ts`.
+- **Backfill**: `scripts/backfill-origin-component-id.ts` mapeó 1562/1625 componentes en prod (96%); 63 sin match están protegidos contra duplicación por guarda defensiva.
+- **Por qué**: caso real disparador — MJ agrega "FLEXIBLE GAS 1MT" al catálogo de "INSTALACION ENCIMERA GAS", refresca la cotización Paseo del Sena, no pasa nada. Además: la granularidad gruesa del flag `isCustomized` bloqueaba demasiado, y faltaba blindar contractualmente partidas ya enviadas al cliente.
+- **Impacto**: cierra el flujo "modifico catálogo → recargo presupuesto en borrador → Actualizar → cambios bajan". Deuda menor: 63 componentes sin `originComponentId` en prod no participan del sync diferencial (funcionan como antes).
+- **Referencias**: commit `d28fe6d`, PR [#31](https://github.com/blarq-app/blarq-app/pull/31), ADR [docs/decisions/2026-05-15-sync-diferencial-cotizacion-catalogo.md](decisions/2026-05-15-sync-diferencial-cotizacion-catalogo.md).
+
+---
+
 ## 2026-05-14 — Reglas de proveedor: separar toggle categoría/proyecto
 
 - **Bug**: el bulk-assign de `/facturas` mostraba un solo toggle "Guardar regla" que aparecía únicamente cuando había categoría asignada, pero el backend aprendía categoría **y** proyecto siempre (default ON). Cambios solo de proyecto → toggle invisible → MJ no sabía que estaba creando regla. La edición inline (PATCH) tampoco tenía toggle. Como `upsertInvoiceRule` dispara `updateMany` retroactivo sobre todas las facturas del mismo RUT sin proyecto, proveedores transversales (Easy/Sodimac/MK) terminaban con facturas históricas mal asignadas.

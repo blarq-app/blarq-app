@@ -204,22 +204,36 @@ async function fetchHtml(url: string): Promise<string | null> {
 }
 
 /**
- * Determina la tienda por el dominio y extrae los datos.
+ * Extrae datos de cualquier URL de producto.
+ *
+ * Estrategia: el scraper es universal. Para cualquier URL, baja el HTML
+ * e intenta JSON-LD Product → og:image/og:title → regex de price. Si el
+ * sitio expone alguno de esos (que es lo más común hoy en e-commerce),
+ * funciona automáticamente. Si no, devuelve null y la UI cae al fallback
+ * manual.
+ *
+ * Probados y funcionando:
+ *   - mk.cl, sodimac.cl, easy.cl
+ *   - chc.cl, byp.cl, ledstudio.cl (VTEX/JSON-LD)
+ *   - ledconcept.cl (WooCommerce/JSON-LD)
+ *
+ * El "source" se infiere del hostname solo para metadata informativa.
  */
+function inferSource(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.hostname.replace(/^www\./, "").split(".")[0];
+  } catch {
+    return "unknown";
+  }
+}
+
 export async function fetchArtefactoData(
   url: string
 ): Promise<ArtefactoExtracted | null> {
   if (!url) return null;
-  const lower = url.toLowerCase();
-
-  let source: string;
-  if (lower.includes("mk.cl")) source = "mk";
-  else if (lower.includes("sodimac")) source = "sodimac";
-  else if (lower.includes("easy.cl")) source = "easy";
-  else return null;
-
+  const source = inferSource(url);
   const html = await fetchHtml(url);
   if (!html) return null;
-
   return extractGenericProductData(url, html, source);
 }

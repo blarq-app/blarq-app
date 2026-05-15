@@ -991,7 +991,7 @@ function ItemImageCell({
             <div className="space-y-3">
               <div>
                 <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                  Link del producto (mk.cl, sodimac, easy)
+                  Link del producto (mk.cl, chc.cl, byp.cl, ledstudio, ledconcept, sodimac, easy…)
                 </label>
                 <div className="flex gap-2">
                   <input

@@ -4,7 +4,24 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-14 (ronda 19 — fix regla de proveedor guardaba proyecto sin consentimiento)
+- **Última actualización**: 2026-05-15 (ronda 20 — sync diferencial cotización ↔ catálogo + regla contractual de partidas heredadas)
+
+- **Ronda 20 — Sync diferencial cotización ↔ catálogo (PR #31, mergeado y deployado)**:
+  - **Síntoma reportado por MJ**: agregó el material "FLEXIBLE GAS 1MT HI-HI1/2" a la partida "INSTALACION ENCIMERA GAS" en el catálogo. Abrió la cotización Paseo del Sena, apretó "Actualizar" en el banner amarillo. No pasaba nada.
+  - **Causa raíz**: el sync existente solo actualizaba precios de componentes ya presentes en el `ObraItem`. Si el catálogo tenía un componente nuevo, nadie lo agregaba al presupuesto. Y al revés: si MJ borraba un componente del catálogo, los presupuestos seguían con el componente viejo.
+  - **Cambio mayor implementado** (`syncBudgetWithCatalog`): diff completo entre `PartidaCatalog` y los `ObraItem` derivados en borrador. Agrega faltantes, actualiza stale, borra huérfanos. Respeta componentes customizados individualmente y descartes intencionales (tabla `ObraItemDiscardedCatalogComponent`).
+  - **Granularidad fina de `isCustomized`**: ahora editar/agregar un componente puntual blinda solo ese componente, no la partida entera. Antes cualquier toque marcaba la partida toda como custom y la bloqueaba del sync.
+  - **Regla contractual nueva (MJ 2026-05-15)**: partidas con `lineageId` heredado de una versión enviada/aprobada quedan blindadas — el sync no las toca aunque la versión actual sea borrador. La explicación de MJ: "no le voy a cambiar el costo de una partida a un cliente por actualización". Las partidas nuevas en V2 sí se sincronizan.
+  - **Schema** (aditivo, aplicado en dev y prod): `ObraItemComponent.originComponentId String?` + tabla nueva `ObraItemDiscardedCatalogComponent`.
+  - **Backfill aplicado en prod**: `scripts/backfill-origin-component-id.ts` mapeó 1562/1625 componentes (96%). 63 quedan sin map (38 ambiguos + 25 sin coincidencia) — protegidos por guarda anti-duplicados.
+  - **Detalle de infra detectado**: el `.env` del repo apunta a `ep-solitary-mud` (dev/staging), no a prod. La BD que usa Vercel es `ep-shy-morning` (la mencionada en CLAUDE.md). MJ accede a través de Neon directo, no Vercel CLI — Vercel marca el DATABASE_URL como "Sensitive" y la CLI no decrypta.
+  - **Estado**: deployado y en prod. MJ va a probar a su ritmo. **Paseo del Sena V1 obra está en estado "enviado"** — para probar el sync nuevo hay que usar otro proyecto en borrador o devolver Paseo del Sena a borrador.
+  - **Referencias**: commit `d28fe6d`, PR [#31](https://github.com/blarq-app/blarq-app/pull/31), ADR `docs/decisions/2026-05-15-sync-diferencial-cotizacion-catalogo.md`.
+
+- **Próximos pasos pendientes (ronda 20)**:
+  - MJ prueba el flujo end-to-end en un proyecto en borrador (no Paseo del Sena V1, está enviado).
+  - Si el sync se siente bien: dejar el script de backfill en `scripts/` para correr si en el futuro hace falta. Es idempotente y no toca datos sensibles (solo escribe `originComponentId`).
+  - Eventualmente: limpiar branches `claude/funny-edison-455814` y `claude/docs-sync-diferencial` en GitHub (ya mergeadas).
 
 - **Ronda 19 — Fix: las reglas de proveedor guardaban centro de costo sin consentimiento**:
   - **Síntoma**: MJ ve en `/facturas` que TODAS las facturas nuevas de Easy entran a Portofino, aunque históricamente Easy compra para muchas obras (Cocina Farellones, Ampliación Casa Arrau, Quincho La Llaveria, Francisco de Aguirre). Al cambiar una a "Ampliación Casa Arrau", el toaster avisa "1 regla cambiada" — sin que MJ haya pedido crear regla.
@@ -62,6 +79,8 @@ Pendientes de esta sesión (próximas iteraciones de artefactos):
 Tareas operacionales para MJ después del deploy:
 - Cargar 10-15 items "paleta estándar BLARQ" en el catálogo (los WCs / griferías / accesorios que usa siempre).
 - Probar en Paseo del Sena Veronica V1: actualizar los links de productos descontinuados, ir extrayendo imagen por item, promover al catálogo con ★ los que sean estándar.
+
+---
 
 - **Ronda 17 — LaunchAgent de PDFs SII apuntaba a dev, no a prod (fix sin commit, solo cambio en plist local)**:
   - **Síntoma reportado por MJ**: en `/facturas` (Vercel) las flechas de descarga PDF salen grises (no verde con ✓) incluso en facturas de hace varios días. Al hacer click, abre el PDF resumen feo en vez del oficial.

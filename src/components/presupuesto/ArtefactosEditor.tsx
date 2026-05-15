@@ -248,25 +248,61 @@ export default function ArtefactosEditor({
     }
   }
 
+  // Campos que se sincronizan entre todas las copias del mismo catalogId
+  // dentro del budget (mismo WC en baño principal y baño secundario =
+  // datos idénticos). NO sincronizamos: quantity, room, subcategory,
+  // realCostBlarq, sortOrder.
+  const SYNC_FIELDS: Array<keyof ArtefactoItem> = [
+    "name",
+    "detail",
+    "brand",
+    "listPrice",
+    "discountPercent",
+    "clientPrice",
+    "referenceLink",
+    "imageUrl",
+  ];
+
   function updateItem(itemId: string, patch: Partial<ArtefactoItem>) {
-    setItems((prev) =>
-      prev.map((it) => {
-        if (it.id !== itemId) return it;
-        const merged = { ...it, ...patch };
-        // Si cambiaron lista o descuento → recalcular clientPrice unitario.
-        if (
-          patch.listPrice !== undefined ||
-          patch.discountPercent !== undefined
-        ) {
-          merged.clientPrice = calcClientPrice(
-            merged.listPrice,
-            merged.discountPercent
-          );
+    setItems((prev) => {
+      const target = prev.find((i) => i.id === itemId);
+      if (!target) return prev;
+      const merged = { ...target, ...patch };
+      if (
+        patch.listPrice !== undefined ||
+        patch.discountPercent !== undefined
+      ) {
+        merged.clientPrice = calcClientPrice(
+          merged.listPrice,
+          merged.discountPercent
+        );
+      }
+      persistItem(merged);
+
+      // Si el item tiene catalogId, propagamos los SYNC_FIELDS a las
+      // otras copias del mismo catalogId localmente (el backend ya hace
+      // lo mismo en BD — esto solo evita esperar al refresh).
+      const sharedPatch: Partial<ArtefactoItem> = {};
+      let hasShared = false;
+      for (const k of SYNC_FIELDS) {
+        if (k in patch || (k === "clientPrice" && (patch.listPrice !== undefined || patch.discountPercent !== undefined))) {
+          (sharedPatch as Record<string, unknown>)[k] = merged[k];
+          hasShared = true;
         }
-        persistItem(merged);
-        return merged;
-      })
-    );
+      }
+
+      return prev.map((it) => {
+        if (it.id === itemId) return merged;
+        if (
+          hasShared &&
+          merged.catalogId &&
+          it.catalogId === merged.catalogId
+        ) {
+          return { ...it, ...sharedPatch };
+        }
+        return it;
+      });
+    });
   }
 
   async function deleteItem(itemId: string) {
@@ -389,9 +425,9 @@ export default function ArtefactosEditor({
   // para que el tree-shaking las detecte. Por eso las defino como strings
   // constantes y no las interpolo.
   const gridColsCost =
-    "grid grid-cols-[3rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_5.5rem_5rem_2rem]";
+    "grid grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_5.5rem_5rem_2rem]";
   const gridColsClean =
-    "grid grid-cols-[3rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_2rem]";
+    "grid grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_2rem]";
   const gridCls = showCost ? gridColsCost : gridColsClean;
 
   return (
@@ -906,7 +942,7 @@ function ItemImageCell({
       <button
         type="button"
         onClick={openPopover}
-        className="w-10 h-10 mx-auto rounded border border-gray-200 hover:border-gray-500 bg-white flex items-center justify-center overflow-hidden transition-colors"
+        className="w-20 h-20 mx-auto rounded border border-gray-200 hover:border-gray-500 bg-white flex items-center justify-center overflow-hidden transition-colors"
         title={item.imageUrl ? "Editar imagen" : "Agregar imagen"}
       >
         {item.imageUrl ? (

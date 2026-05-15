@@ -275,10 +275,14 @@ const CSS = `
     font-size: 8pt;
   }
 
-  .col-img      { width: 14%; text-align: center; padding: 6px 4px; vertical-align: middle; }
-  .col-img img  { max-width: 78px; max-height: 78px; object-fit: contain; display: block; margin: 0 auto; }
+  /* Imagen del producto: tamaño visualizable, no como icono. El Excel de
+     referencia renderiza imágenes entre 20mm y 30mm — apuntamos al
+     extremo superior (~32mm = ~120px) para que el cliente identifique
+     el producto sin tener que abrir el link. */
+  .col-img      { width: 18%; text-align: center; padding: 8px 4px; vertical-align: middle; }
+  .col-img img  { max-width: 120px; max-height: 120px; object-fit: contain; display: block; margin: 0 auto; }
   .col-name     { width: 13%; font-weight: 600; }
-  .col-detail   { width: 27%; color: #333; }
+  .col-detail   { width: 23%; color: #333; }
   .col-brand    { width: 8%; color: #555; }
   .col-qty      { width: 5%;  text-align: center; font-variant-numeric: tabular-nums; }
   .col-list     { width: 10%; text-align: right; font-variant-numeric: tabular-nums; }

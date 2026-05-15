@@ -4,7 +4,19 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-14 (ronda 19 — fix regla de proveedor guardaba proyecto sin consentimiento)
+- **Última actualización**: 2026-05-15 (ronda 20 — fix encimera de gas Paseo del Sena + selector de subgrupo en editor)
+
+- **Ronda 20 — Mover partidas entre subgrupos desde el editor (PR #32, branch `claude/gallant-blackwell-3859c2`)**:
+  - **Síntoma reportado por MJ**: en la cotización V1 de Paseo del Sena (Verónica Villarreal), agregó la partida "INSTALACION ENCIMERA GAS" desde el catálogo y le quedó como 3.1, "suelta" arriba del subgrupo BAÑOS, en vez de adentro de COCINA. No había forma desde la UI de moverla.
+  - **Causa**: cuando se agrega una partida desde catálogo queda con `subChapter = null`. El editor agrupa por subChapter alfabético (nulls primero), entonces aparece arriba del primer subgrupo. No existía UI para cambiar `subChapter` después de creada.
+  - **Fix puntual** (script `move-encimera-gas-to-cocina.ts` corrido contra prod con `--apply`, no commiteado — one-off): `UPDATE ObraItem SET subChapter='COCINA' WHERE id='cmp6daczb0002jm04kv3ce58j'`. Item resuelto en prod.
+  - **Fix permanente** (PR #32):
+    - `src/app/api/presupuestos/[id]/partidas/[itemId]/route.ts`: el `PUT` ahora acepta `subChapter`. Si no viene en el body no se toca; `""` se normaliza a `null` ("sin subgrupo"). Resto del endpoint sin cambios.
+    - `src/components/presupuesto/ObraEditor.tsx`: en el panel expandido de cada partida (al apretar ▸), nuevo select **Subgrupo** con opciones `(sin subgrupo)`, los subgrupos existentes del capítulo (alfabético), y `+ Crear nuevo subgrupo…` (prompt; nombre se guarda en MAYÚSCULAS para no mezclar "Cocina"/"COCINA"). Usa el mismo auto-save debounced que el resto de los campos.
+  - **Verificación**: `tsc --noEmit` limpio + `next build` OK. No verificado en navegador desde el agente (preview headless sin sesión). MJ verifica post-merge.
+  - **Pendiente para MJ después del deploy**:
+    1. Confirmar visualmente en `/proyectos/<paseo-del-sena>/presupuesto/<v1>` que la encimera quedó dentro de COCINA y que al expandir una partida aparece el select Subgrupo.
+    2. (Opcional) Si alguna partida quedó suelta en otros proyectos, ahora se mueve desde la UI sin pedirme.
 
 - **Ronda 19 — Fix: las reglas de proveedor guardaban centro de costo sin consentimiento**:
   - **Síntoma**: MJ ve en `/facturas` que TODAS las facturas nuevas de Easy entran a Portofino, aunque históricamente Easy compra para muchas obras (Cocina Farellones, Ampliación Casa Arrau, Quincho La Llaveria, Francisco de Aguirre). Al cambiar una a "Ampliación Casa Arrau", el toaster avisa "1 regla cambiada" — sin que MJ haya pedido crear regla.

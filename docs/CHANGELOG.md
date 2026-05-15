@@ -4,6 +4,19 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-14 — Sistema completo de artefactos (importador + editor + catálogo + sincronización)
+
+- **Importador de Excel de proveedores** (`src/lib/import/parseArtefactos.ts` + endpoint + botón en la página de presupuesto). Soporta hojas tipo "ARTEFACTOS SANITARIOS" (agrupado por habitación), "ARTEFACTOS COCINA / TEKA", "ARTEFACTOS ILUMINACION". Ignora MAESTRA y *_HG (V1 vieja).
+- **Editor y PDF rediseñados** matcheando el Excel de referencia: jerarquía subcategoría → habitación → items, columnas IMG | ITEM | DETALLE | MARCA | CANT | LISTA | DCTO | TOTAL, subtotales por nivel, total general. Toggle "Mostrar columnas internas" agrega NETO BLARQ + UTILIDAD (no van al PDF cliente).
+- **Imágenes con auto-extracción** desde el link del producto. Scraper universal (JSON-LD + OpenGraph + regex) — funciona con mk.cl, chc.cl, byp.cl, ledstudio.cl, ledconcept.cl, sodimac.cl, easy.cl y cualquier sitio que exponga metadata estándar. Campo manual fallback para sitios sin scrape. Imagen a ~32mm en PDF (medido contra Excel original).
+- **Catálogo BLARQ global** (`ArtefactoCatalog`, página `/catalogo/artefactos`, entry en Sidebar). Items reutilizables entre proyectos: name, detail, brand, subcategory, tag, supplier, link, imagen, listPrice, discountPercent, isStandard, lastPriceCheck. Buscador full-text + filtros. Atajo "pegar link + extraer" en creación.
+- **Sincronización entre copias del mismo catalogId**: campos del producto se propagan a otras copias del budget + al catálogo global. `realCostBlarq` se sincroniza solo dentro del budget (cotización privada varía proyecto a proyecto).
+- **Fix de convenciones en BD** (decimal 0..1 para discountPercent, clientPrice unitario) — el editor anterior pisaba mal el precio al guardar.
+- **Bug bonus**: sync SII ahora aplica regla de categorización también a facturas existentes (no solo nuevas). Síntoma original: Maxi Mobility aparecía sin catalogar aunque tenía regla. 1 factura recuperada en prod (folio 281571).
+- PRs #14–#27 mergeados a main, deployados. Migraciones aplicadas en dev y prod antes del deploy del PR final del catálogo (para evitar 500 durante la propagación).
+
+---
+
 ## 2026-05-13 — Sync MaterialCatalog ↔ PartidaCatalog + auditoría + edición componentes
 
 - **Bug detectado en catálogo**: las partidas guardaban un snapshot del material asociado. Cambiar precio/marca en `/catalogo/materiales` NO propagaba al catálogo de partidas — y los presupuestos creados después arrastraban precios viejos (caso real: llave de paso gas Constanza Bravo $12.269 vs material $19.319).

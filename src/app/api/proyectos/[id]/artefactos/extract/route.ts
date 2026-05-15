@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Sitio no soportado (solo mk.cl, sodimac.cl, easy.cl) o producto sin datos públicos. Cargá los campos manualmente.",
+            "No se pudo abrir el link o el sitio no expone datos del producto. Pegá la URL de imagen manualmente.",
         },
         { status: 404 }
       );

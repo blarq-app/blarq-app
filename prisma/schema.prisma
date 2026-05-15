@@ -323,6 +323,45 @@ model MuebleDetail {
   @@index([itemId])
 }
 
+// Catálogo BLARQ de artefactos — fuente reutilizable entre proyectos.
+//
+// La idea: MJ usa los mismos WC / muebles vanitorios / griferías en
+// múltiples proyectos. En lugar de tipearlos cada vez, los promueve al
+// catálogo y los agrega a cada presupuesto buscándolos.
+//
+// "isStandard" marca los items que forman parte de la paleta base
+// BLARQ (los WCs favoritos, las griferías de siempre). Funciona como
+// un filtro rápido en la UI: "mostrar solo mis estándares".
+//
+// "tag" es una key opcional para agrupar items por función (ej.
+// "wc-piso", "wc-suspendido", "griferia-9cm", "mueble-vanitorio-80").
+// La usaremos cuando armemos templates de espacio (sesión 5).
+//
+// "lastPriceCheck" se actualiza cuando MJ aprieta "Revisar precios"
+// (sesión 4) — sirve para ordenar items por precio más viejo y avisar
+// "este precio tiene 3 meses, revisalo".
+model ArtefactoCatalog {
+  id                String   @id @default(cuid())
+  name              String   // "WC ATENAS"
+  detail            String?  // Modelo completo
+  brand             String?
+  subcategory       String   // sanitario | cocina | iluminacion
+  tag               String?  // wc-piso, griferia-9cm, mueble-vanitorio-80, etc.
+  supplier          String?  // MK, CHC, Kitchen House, LED Studio, etc.
+  referenceLink     String?  // URL del producto en la tienda
+  imageUrl          String?  // URL de la imagen
+  listPrice         Float    @default(0) // Precio lista
+  discountPercent   Float?   // % descuento típico (decimal 0..1)
+  isStandard        Boolean  @default(false) // Parte de la paleta base BLARQ
+  lastPriceCheck    DateTime? // Última vez que se verificó el precio
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([subcategory])
+  @@index([tag])
+  @@index([isStandard])
+}
+
 // Items de artefactos
 model ArtefactoItem {
   id                String  @id @default(cuid())
@@ -340,11 +379,17 @@ model ArtefactoItem {
   realCostBlarq     Float?  // Lo que realmente paga BLARQ
   referenceLink     String? // URL del producto en la tienda (mk.cl, sodimac, etc)
   imageUrl          String? // URL de la imagen — auto-extraída del referenceLink o pegada manual
+  // Si este item viene del catálogo, guardamos el id para poder:
+  //  - mostrar "este item está en catálogo" en la UI
+  //  - en el futuro sincronizar cambios de precio del catálogo a items
+  //    de presupuestos en borrador.
+  catalogId         String?
   sortOrder         Int     @default(0)
 
   budgetVersion     BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)
 
   @@index([budgetVersionId])
+  @@index([catalogId])
 }
 
 // Formas de pago por presupuesto

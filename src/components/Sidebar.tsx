@@ -12,6 +12,7 @@ const navigation = [
   { name: "Banco", href: "/banco", icon: "🏦" },
   { name: "Partidas", href: "/catalogo/partidas", icon: "📋" },
   { name: "Materiales", href: "/catalogo/materiales", icon: "🧱" },
+  { name: "Artefactos", href: "/catalogo/artefactos", icon: "🚿" },
   { name: "Reembolsadores", href: "/configuracion/reembolsadores", icon: "🔄" },
   { name: "Auditoría precios", href: "/configuracion/auditoria-precios", icon: "🔍" },
 ];

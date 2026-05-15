@@ -33,7 +33,8 @@ export async function PUT(
         discountPercent: discountPct,
         clientPrice,
         realCostBlarq: data.realCostBlarq ?? null,
-        referenceLink: data.referenceLink,
+        referenceLink: data.referenceLink ?? null,
+        imageUrl: data.imageUrl ?? null,
         sortOrder: data.sortOrder,
       },
     });

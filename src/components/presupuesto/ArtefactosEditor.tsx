@@ -54,7 +54,8 @@ interface ArtefactoItem {
   discountPercent: number | null; // decimal 0..1 (BD)
   clientPrice: number; // unitario neto del cliente (lista x (1 - dcto))
   realCostBlarq: number | null; // unitario, costo real BLARQ
-  referenceLink: string | null;
+  referenceLink: string | null; // URL del producto en la tienda (mk.cl, sodimac, easy)
+  imageUrl: string | null; // URL de imagen (auto-extraída o pegada manual)
   sortOrder: number;
 }
 
@@ -111,7 +112,7 @@ function calcClientPrice(listPrice: number, discount: number | null): number {
 
 export default function ArtefactosEditor({
   budget: initialBudget,
-  projectId: _projectId,
+  projectId,
 }: {
   budget: Budget;
   projectId: string;
@@ -361,9 +362,9 @@ export default function ArtefactosEditor({
   // para que el tree-shaking las detecte. Por eso las defino como strings
   // constantes y no las interpolo.
   const gridColsCost =
-    "grid grid-cols-[minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_5.5rem_5rem_2rem]";
+    "grid grid-cols-[3rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_5.5rem_5rem_2rem]";
   const gridColsClean =
-    "grid grid-cols-[minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_2rem]";
+    "grid grid-cols-[3rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_2rem]";
   const gridCls = showCost ? gridColsCost : gridColsClean;
 
   return (
@@ -410,6 +411,7 @@ export default function ArtefactosEditor({
               <div
                 className={`${gridCls} items-center gap-3 px-4 py-2 border-b border-gray-200 bg-white text-[10px] font-semibold text-gray-500 uppercase tracking-wider`}
               >
+                <div className="text-center">Img</div>
                 <div>Item</div>
                 <div>Detalle</div>
                 <div>Marca</div>
@@ -437,6 +439,11 @@ export default function ArtefactosEditor({
                     key={item.id}
                     className={`${gridCls} items-center gap-3 px-4 py-1.5 border-b border-gray-100 last:border-b-0 text-xs hover:bg-gray-50`}
                   >
+                    <ItemImageCell
+                      projectId={projectId}
+                      item={item}
+                      onUpdate={(patch) => updateItem(item.id, patch)}
+                    />
                     <input
                       type="text"
                       value={item.name}
@@ -535,7 +542,7 @@ export default function ArtefactosEditor({
               <div
                 className={`${gridCls} items-center gap-3 px-4 py-2 bg-gray-50 border-t border-gray-900 text-xs font-semibold`}
               >
-                <div className="col-span-6 text-gray-600 uppercase tracking-wider text-[10px]">
+                <div className="col-span-7 text-gray-600 uppercase tracking-wider text-[10px]">
                   Total artefactos {room.label.toLowerCase()}
                 </div>
                 <div className="text-right tabular-nums text-gray-900">
@@ -688,7 +695,7 @@ export default function ArtefactosEditor({
           <div
             className={`${gridCls} items-center gap-3 px-4 py-2.5 bg-gray-100 border-t-2 border-gray-900 text-xs font-bold uppercase tracking-wider`}
           >
-            <div className="col-span-6 text-gray-900">Total {sub.label.toLowerCase()}</div>
+            <div className="col-span-7 text-gray-900">Total {sub.label.toLowerCase()}</div>
             <div className="text-right tabular-nums text-gray-900 text-sm">
               {formatCLP(sub.subtotal)}
             </div>
@@ -851,5 +858,229 @@ export default function ArtefactosEditor({
         />
       </div>
     </div>
+  );
+}
+
+// ─── Componente: celda de imagen del item ────────────────────────────────
+//
+// Muestra un thumbnail si hay imageUrl, o un placeholder "+ foto". Click
+// abre un popover sencillo donde MJ puede:
+//   - Pegar URL del producto (referenceLink) → click "Extraer" → auto-fetch
+//     trae imagen + nombre + marca + precio lista del sitio (mk.cl / sodimac
+//     / easy).
+//   - Pegar URL de imagen manual (fallback cuando el sitio no es soportado
+//     o el producto está descontinuado).
+//
+// El popover NO va al PDF — esto es solo edición.
+
+function ItemImageCell({
+  projectId,
+  item,
+  onUpdate,
+}: {
+  projectId: string;
+  item: ArtefactoItem;
+  onUpdate: (patch: Partial<ArtefactoItem>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [linkDraft, setLinkDraft] = useState(item.referenceLink ?? "");
+  const [imgDraft, setImgDraft] = useState(item.imageUrl ?? "");
+  const [extracting, setExtracting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Si el item cambió (otro item se renderizó), reset drafts.
+  // Esto es importante porque ItemImageCell se re-monta por item (key),
+  // pero como precaución leemos también del item.
+  function openPopover() {
+    setLinkDraft(item.referenceLink ?? "");
+    setImgDraft(item.imageUrl ?? "");
+    setError(null);
+    setOpen(true);
+  }
+
+  async function handleExtract() {
+    if (!linkDraft) {
+      setError("Pegá primero el link del producto.");
+      return;
+    }
+    setExtracting(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/proyectos/${projectId}/artefactos/extract?url=${encodeURIComponent(
+          linkDraft
+        )}`
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setError(
+          data.error ||
+            "No se pudo extraer. Probá pegar la URL de imagen manualmente."
+        );
+        return;
+      }
+      // Aplicamos lo que vino del scraper. Si vienen vacíos algunos campos
+      // (común en productos parcialmente catalogados), respetamos lo que
+      // MJ ya tenía cargado.
+      if (data.imageUrl) setImgDraft(data.imageUrl);
+      const patch: Partial<ArtefactoItem> = {
+        referenceLink: linkDraft,
+        imageUrl: data.imageUrl ?? item.imageUrl ?? null,
+      };
+      if (data.name && !item.detail) patch.detail = data.name;
+      if (data.brand && !item.brand) patch.brand = data.brand;
+      if (data.listPrice && data.listPrice > 0 && !item.listPrice) {
+        patch.listPrice = data.listPrice;
+      }
+      onUpdate(patch);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error inesperado");
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  function handleSave() {
+    onUpdate({
+      referenceLink: linkDraft || null,
+      imageUrl: imgDraft || null,
+    });
+    setOpen(false);
+  }
+
+  function handleClear() {
+    setLinkDraft("");
+    setImgDraft("");
+    onUpdate({ referenceLink: null, imageUrl: null });
+    setOpen(false);
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={openPopover}
+        className="w-10 h-10 mx-auto rounded border border-gray-200 hover:border-gray-500 bg-white flex items-center justify-center overflow-hidden transition-colors"
+        title={item.imageUrl ? "Editar imagen" : "Agregar imagen"}
+      >
+        {item.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={item.imageUrl}
+            alt={item.name}
+            className="w-full h-full object-contain"
+          />
+        ) : (
+          <span className="text-gray-300 text-lg">+</span>
+        )}
+      </button>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-md w-full p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">
+              Imagen del artefacto
+            </h3>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
+                  Link del producto (mk.cl, sodimac, easy)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={linkDraft}
+                    onChange={(e) => setLinkDraft(e.target.value)}
+                    placeholder="https://www.mk.cl/…"
+                    className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs outline-none focus:border-gray-500"
+                  />
+                  <button
+                    onClick={handleExtract}
+                    disabled={extracting || !linkDraft}
+                    className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded hover:bg-gray-800 disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {extracting ? "Buscando…" : "Extraer"}
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1">
+                  La app intentará traer imagen + nombre + marca + precio
+                  lista. Si el producto está descontinuado, usá el campo de
+                  abajo.
+                </p>
+              </div>
+
+              {error && (
+                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                  {error}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
+                  URL de imagen (manual, fallback)
+                </label>
+                <input
+                  type="url"
+                  value={imgDraft}
+                  onChange={(e) => setImgDraft(e.target.value)}
+                  placeholder="https://…/imagen.jpg"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs outline-none focus:border-gray-500"
+                />
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Pegá un link directo a una foto (.jpg / .png / .webp).
+                </p>
+              </div>
+
+              {imgDraft && (
+                <div className="border border-gray-200 rounded p-2 bg-gray-50">
+                  <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1.5">
+                    Vista previa
+                  </div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={imgDraft}
+                    alt="preview"
+                    className="max-h-40 mx-auto object-contain"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.opacity = "0.3";
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between mt-5 pt-4 border-t border-gray-100">
+              <button
+                onClick={handleClear}
+                className="text-xs text-gray-500 hover:text-red-600"
+              >
+                Borrar imagen
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setOpen(false)}
+                  className="text-xs text-gray-600 px-3 py-1.5 hover:text-gray-900"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="text-xs bg-gray-900 text-white px-4 py-1.5 rounded hover:bg-gray-800"
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

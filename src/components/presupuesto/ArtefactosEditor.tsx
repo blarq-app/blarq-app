@@ -250,8 +250,12 @@ export default function ArtefactosEditor({
 
   // Campos que se sincronizan entre todas las copias del mismo catalogId
   // dentro del budget (mismo WC en baño principal y baño secundario =
-  // datos idénticos). NO sincronizamos: quantity, room, subcategory,
-  // realCostBlarq, sortOrder.
+  // datos idénticos). Incluye realCostBlarq porque la cotización de la
+  // vendedora se hace por proyecto — si MJ carga el costo en una copia,
+  // debe aplicarse al WC ATENAS en todos los baños del mismo proyecto.
+  // (Al catálogo BLARQ global solo sube name/precio web/imagen — eso lo
+  // maneja el backend, acá solo nos importa la propagación local.)
+  // NO sincronizamos: quantity, room, subcategory, sortOrder.
   const SYNC_FIELDS: Array<keyof ArtefactoItem> = [
     "name",
     "detail",
@@ -261,6 +265,7 @@ export default function ArtefactosEditor({
     "clientPrice",
     "referenceLink",
     "imageUrl",
+    "realCostBlarq",
   ];
 
   function updateItem(itemId: string, patch: Partial<ArtefactoItem>) {

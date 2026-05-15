@@ -42,23 +42,26 @@ export async function PUT(
 
     // ── Sincronización entre instancias del mismo catalogId ─────────────
     //
-    // Si el item pertenece al catálogo BLARQ (tiene catalogId), propagar
-    // los campos "del producto" (name, detail, brand, listPrice,
-    // discountPercent, clientPrice, referenceLink, imageUrl) a:
-    //   1. Las otras copias del mismo catalogId en este budget — para que
-    //      el WC del baño principal y el del baño secundario queden
-    //      iguales sin que MJ tenga que actualizar uno por uno.
-    //   2. El catálogo BLARQ global — para que la próxima cotización ya
-    //      arranque con el dato actualizado.
+    // Si el item pertenece al catálogo BLARQ (tiene catalogId), tenemos
+    // dos scopes distintos según el campo:
     //
-    // Lo que NO se sincroniza:
-    //   - quantity (es por baño)
-    //   - room, subcategory, sortOrder (ubicación dentro del budget)
-    //   - realCostBlarq (puede variar caso a caso si negociás un
-    //     descuento extra para un proyecto)
-    //   - catalogId (obvio)
+    //   ALL SCOPES (web — sirve para próximos proyectos también):
+    //     name, detail, brand, listPrice, discountPercent, clientPrice,
+    //     referenceLink, imageUrl.
+    //     → propaga a otras copias del mismo budget Y al catálogo global.
+    //
+    //   BUDGET ONLY (cotización privada de tu vendedora, varía por proyecto):
+    //     realCostBlarq.
+    //     → propaga solo a otras copias del mismo budget.
+    //     NO sube al catálogo global (la cotización de un proyecto no
+    //     debe pisar el costo registrado para los demás).
+    //
+    // NUNCA se sincroniza:
+    //   - quantity, room, subcategory, sortOrder (específicos del item
+    //     dentro del budget).
+    //   - catalogId (obvio).
     if (item.catalogId) {
-      const shared = {
+      const sharedAllScopes = {
         name: item.name,
         detail: item.detail,
         brand: item.brand,
@@ -69,28 +72,25 @@ export async function PUT(
         imageUrl: item.imageUrl,
       };
 
-      // Otras copias en el mismo budget
+      // Otras copias en el mismo budget — incluye también realCostBlarq.
       await prisma.artefactoItem.updateMany({
         where: {
           budgetVersionId,
           catalogId: item.catalogId,
           id: { not: itemId },
         },
-        data: shared,
+        data: {
+          ...sharedAllScopes,
+          realCostBlarq: item.realCostBlarq,
+        },
       });
 
-      // Catálogo BLARQ
+      // Catálogo BLARQ — solo los campos que valen para próximos proyectos.
       await prisma.artefactoCatalog
         .update({
           where: { id: item.catalogId },
           data: {
-            name: shared.name,
-            detail: shared.detail,
-            brand: shared.brand,
-            listPrice: shared.listPrice,
-            discountPercent: shared.discountPercent,
-            referenceLink: shared.referenceLink,
-            imageUrl: shared.imageUrl,
+            ...sharedAllScopes,
             lastPriceCheck: new Date(),
           },
         })

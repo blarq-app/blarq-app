@@ -4,7 +4,21 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-13 (cierre · ronda 16 — sync MaterialCatalog ↔ PartidaCatalog + auditoría + edición componentes por proyecto)
+- **Última actualización**: 2026-05-14 (ronda 17 — fix LaunchAgent PDFs SII apuntaba a dev, ahora a prod)
+
+- **Ronda 17 — LaunchAgent de PDFs SII apuntaba a dev, no a prod (fix sin commit, solo cambio en plist local)**:
+  - **Síntoma reportado por MJ**: en `/facturas` (Vercel) las flechas de descarga PDF salen grises (no verde con ✓) incluso en facturas de hace varios días. Al hacer click, abre el PDF resumen feo en vez del oficial.
+  - **Causa raíz**: el LaunchAgent `com.blarq.sii-sync-pdfs` (en mac de MJ) corría `npm run sii:sync-pdfs` con el `.env` del repo, que apunta a **dev** (`ep-solitary-mud`). Cada hora el sync entraba al SII, buscaba pendientes en dev, no encontraba nada (dev casi vacía), decía "0 pendientes" y se iba. Mientras tanto, la app en Vercel (que lee prod `ep-shy-morning`) tenía 174 facturas recibidas con `pdfContent = null` desde el sync inicial del 2026-05-04.
+  - **Fix aplicado en mac local** (no es un commit — es cambio en `~/Library/LaunchAgents/com.blarq.sii-sync-pdfs.plist`):
+    - Agregado bloque `EnvironmentVariables` con `DATABASE_URL = <url prod>`. Eso pisa al `.env` solo para el LaunchAgent — el dev server sigue leyendo `.env` (dev) sin cambio.
+    - Recargado con `launchctl unload` + `load`.
+    - Disparado run manual: bajó **126 PDFs OK**, 48 son intercambios directos que no aparecen en MIPE (caen al resumen interno), 0 errores.
+    - Conteo prod post-run: 599 facturas recibidas con PDF oficial (473 → 599, +126). Pendientes nunca intentadas: 0.
+  - **Doc actualizada**: `docs/SETUP_SII_pdf-oficial.md` ahora explica que el LaunchAgent apunta a prod via `EnvironmentVariables`, y cómo regenerar la URL si se rota el password.
+  - **Backup del plist anterior**: `~/Library/LaunchAgents/com.blarq.sii-sync-pdfs.plist.bak-20260514-220725` (por si hay que revertir).
+  - **No hubo commit** — esta ronda es config local de la mac de MJ. El repo no cambió excepto por `docs/WIP.md` + `docs/SETUP_SII_pdf-oficial.md`.
+
+
 
 - **Ronda 16 — Sincronización de materiales + auditoría + edición componentes a nivel proyecto (PR #4, commit `e2f4cbb`)**:
   - **Bug detectado**: las partidas del catálogo guardaban un snapshot del material asociado. Cuando se editaba un material en `/catalogo/materiales`, ese cambio NO se propagaba a las partidas — y todo presupuesto creado después arrastraba precios viejos. Caso concreto: Constanza Bravo V1 tenía llave de paso gas Stretto $12.269 mientras el material en /materiales era Nipsa $19.319.

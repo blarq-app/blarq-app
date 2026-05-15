@@ -45,11 +45,15 @@ export default function BulkAssignBar({
   const router = useRouter();
   const [projectId, setProjectId] = useState<string>("");
   const [categoryId, setCategoryId] = useState<string>("");
-  // Por default se guarda regla automática (RUT → categoría). MJ apaga
-  // este toggle para proveedores cuya categoría varía (caso MK que a veces
-  // es Materiales, a veces Artefactos). Si está apagado, esta asignación
-  // no toca la regla existente del proveedor (ni la crea si no había).
-  const [learnRule, setLearnRule] = useState(true);
+  // Dos reglas independientes:
+  //   - Categoría: default ON. Easy = Materiales casi siempre — conviene
+  //     que se contagie a futuras facturas del mismo proveedor.
+  //   - Proyecto:  default OFF. La mayoría de los proveedores son
+  //     transversales a varias obras (Easy/Sodimac/MK). Solo prender
+  //     cuando el proveedor identifica unívocamente al proyecto
+  //     (Autopistas/Bencina/Patente → BLARQ siempre).
+  const [learnCategoryRule, setLearnCategoryRule] = useState(true);
+  const [learnProjectRule, setLearnProjectRule] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{
     message: string;
@@ -88,7 +92,10 @@ export default function BulkAssignBar({
       else if (projectId) body.projectId = projectId;
       if (categoryId === "__none__") body.categoryId = null;
       else if (categoryId) body.categoryId = categoryId;
-      if (!learnRule) body.learnRule = false;
+      // Toggles separados — solo se mandan cuando difieren del default
+      // del endpoint (categoría=true, proyecto=false).
+      if (!learnCategoryRule) body.learnCategoryRule = false;
+      if (learnProjectRule) body.learnProjectRule = true;
 
       const res = await fetch("/api/facturas/bulk-assign", {
         method: "POST",
@@ -202,18 +209,36 @@ export default function BulkAssignBar({
             ))}
           </select>
 
-          {/* Solo mostramos el toggle cuando se asignó categoría (no aplica
-              para proyecto — el proyecto nunca se aprende como regla). */}
+          {/* Dos toggles independientes — solo aparecen si el campo
+              correspondiente fue elegido (y no es "sin asignar"). */}
           {categoryId && categoryId !== "__none__" && (
-            <label className="text-xs flex items-center gap-1 text-gray-300 hover:text-white cursor-pointer select-none" title="Si lo apagás, no se crea ni actualiza la regla automática del proveedor (útil para MK u otros donde la categoría varía)">
+            <label
+              className="text-xs flex items-center gap-1 text-gray-300 hover:text-white cursor-pointer select-none"
+              title="Si lo apagás, no se crea/actualiza la regla automática del proveedor. Útil para proveedores cuya categoría varía (caso MK)."
+            >
               <input
                 type="checkbox"
-                checked={learnRule}
-                onChange={(e) => setLearnRule(e.target.checked)}
+                checked={learnCategoryRule}
+                onChange={(e) => setLearnCategoryRule(e.target.checked)}
                 disabled={busy}
                 className="accent-emerald-600"
               />
-              Guardar regla
+              Guardar categoría en regla
+            </label>
+          )}
+          {projectId && projectId !== "__none__" && (
+            <label
+              className="text-xs flex items-center gap-1 text-gray-300 hover:text-white cursor-pointer select-none"
+              title="Solo prendelo cuando el proveedor SIEMPRE va al mismo centro de costo (Autopistas/Bencina/Patente → BLARQ). Para proveedores transversales como Easy, Sodimac o MK, dejalo apagado: las facturas se asignan a esta obra pero no se contagia a futuras."
+            >
+              <input
+                type="checkbox"
+                checked={learnProjectRule}
+                onChange={(e) => setLearnProjectRule(e.target.checked)}
+                disabled={busy}
+                className="accent-emerald-600"
+              />
+              Guardar centro de costo en regla
             </label>
           )}
           <button

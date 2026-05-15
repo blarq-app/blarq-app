@@ -4,7 +4,24 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-14 (cierre · ronda 18 — sistema completo de artefactos: importador, editor, catálogo BLARQ, sincronización, imágenes auto-extraídas)
+- **Última actualización**: 2026-05-14 (ronda 19 — fix regla de proveedor guardaba proyecto sin consentimiento)
+
+- **Ronda 19 — Fix: las reglas de proveedor guardaban centro de costo sin consentimiento**:
+  - **Síntoma**: MJ ve en `/facturas` que TODAS las facturas nuevas de Easy entran a Portofino, aunque históricamente Easy compra para muchas obras (Cocina Farellones, Ampliación Casa Arrau, Quincho La Llaveria, Francisco de Aguirre). Al cambiar una a "Ampliación Casa Arrau", el toaster avisa "1 regla cambiada" — sin que MJ haya pedido crear regla.
+  - **Causa raíz**: el toggle "Guardar regla" en `BulkAssignBar` solo se mostraba cuando MJ asignaba categoría, pero el backend lo aprendía para categoría Y proyecto siempre (default ON). Cuando solo cambiaba proyecto, el toggle no aparecía → MJ no sabía que estaba guardando regla. La edición inline (PATCH) tampoco tenía toggle. Cada cambio de proyecto reescribía la regla del RUT, y `upsertInvoiceRule` dispara `updateMany` retroactivo (todas las facturas del mismo RUT con `projectId=null` se asignan al proyecto nuevo). Para proveedores transversales como Easy, eso es destructivo.
+  - **Fix** (PR #28, branch `claude/gracious-banzai-f595ab`):
+    - `src/app/api/facturas/bulk-assign/route.ts`: body acepta `learnCategoryRule` (default true) y `learnProjectRule` (default **false**), por separado. Reemplaza al campo único `learnRule`.
+    - `src/app/api/facturas/[id]/route.ts` (PUT y PATCH): nunca pasan `projectId` a `upsertInvoiceRule`. Solo aprenden categoría.
+    - `src/components/facturas/BulkAssignBar.tsx`: dos toggles independientes — "Guardar categoría en regla" (ON default, visible cuando hay categoría) y "Guardar centro de costo en regla" (OFF default, visible cuando hay proyecto). Tooltips explican cuándo prender cada uno.
+    - `CLAUDE.md` §4.5 actualizado con el nuevo comportamiento.
+  - **Verificación**: `scripts/test-rules.ts` corre igual antes y después (los fallos pre-existentes son del test desactualizado, no de mis cambios). TypeScript limpio.
+  - **Pendiente para MJ después del deploy**:
+    1. Verificar visualmente los dos toggles en `/facturas` (no pude testear UI sin sesión).
+    2. Revisar la regla actual de Easy en prod — si quedó apuntando a Arrau o Cocina Farellones, decidir si borrarla manualmente.
+    3. Revisar facturas de Easy de mayo en prod y corregir las mal asignadas a Portofino. Con el fix desplegado, esos cambios ya no contagian al resto.
+  - **Nota técnica**: `scripts/test-rules.ts` tiene firmas desactualizadas de `upsertInvoiceRule` (pasa string en lugar de objeto). Pre-existe, no introducido por mí — vale la pena arreglarlo en una ronda futura.
+
+
 
 - **Ronda 18 — Sistema completo de artefactos (PRs #14–#27)**:
   - Sesión larga centrada en artefactos. MJ trabajaba con Excel de proveedores (MK, CHC, TEKA, LedStudio, ByP, LedConcept) y quería que la app reemplace ese workflow.

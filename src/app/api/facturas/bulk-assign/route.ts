@@ -8,9 +8,14 @@ import { upsertInvoiceRule } from "@/lib/facturas/categorizationRules";
 // Body:
 //   {
 //     invoiceIds: string[],
-//     projectId?: string | null,    // null para sin asignar; undefined para no tocar
-//     categoryId?: string | null,   // idem
-//     learnRule?: boolean           // default true: si se asigna categoría a recibidas, crea/actualiza regla por RUT
+//     projectId?: string | null,         // null para sin asignar; undefined para no tocar
+//     categoryId?: string | null,        // idem
+//     learnCategoryRule?: boolean,       // default true: guarda categoría en la regla del RUT
+//     learnProjectRule?: boolean,        // default FALSE: solo guardar proyecto en regla
+//                                        // cuando el proveedor SIEMPRE va al mismo proyecto
+//                                        // (Autopistas/Bencina/Patente = BLARQ). Para
+//                                        // proveedores transversales (Easy/Sodimac/MK)
+//                                        // dejar apagado.
 //   }
 //
 // Responde con stats: cuántas se actualizaron + reglas creadas/actualizadas.
@@ -20,7 +25,8 @@ export async function POST(request: NextRequest) {
       invoiceIds: string[];
       projectId?: string | null;
       categoryId?: string | null;
-      learnRule?: boolean;
+      learnCategoryRule?: boolean;
+      learnProjectRule?: boolean;
     };
 
     if (!Array.isArray(body.invoiceIds) || body.invoiceIds.length === 0) {
@@ -46,9 +52,6 @@ export async function POST(request: NextRequest) {
       data,
     });
 
-    // Si asignó categoría y learnRule=true (default), crear/actualizar reglas
-    // por cada RUT distinto entre las facturas RECIBIDAS asignadas. Cada RUT
-    // genera 1 regla; si hay 12 facturas de Sodimac, se crea 1 regla.
     const learnedRules: Array<{
       ruleId: string;
       created: boolean;
@@ -57,14 +60,23 @@ export async function POST(request: NextRequest) {
       businessName: string | null;
     }> = [];
 
-    // Aprender reglas: tanto categoría como proyecto si fueron asignados.
-    // body.learnRule controla ambos (default true). Aplica a facturas con
-    // rutIssuer (cualquier tipo — las emitidas también pueden tener regla
-    // por RUT receptor, aunque hoy la regla usa rutIssuer del proveedor).
-    if (
-      body.learnRule !== false &&
-      (body.categoryId || body.projectId)
-    ) {
+    // Aprender reglas — dos toggles independientes:
+    //   - categoría: default ON. Easy = Materiales casi siempre, conviene
+    //     que se contagie a futuras facturas del mismo proveedor.
+    //   - proyecto: default OFF. La mayoría de los proveedores son
+    //     transversales (Easy compra para muchas obras). Solo prendelo
+    //     cuando el proveedor identifica unívocamente al proyecto
+    //     (ej. Autopistas → BLARQ siempre).
+    const learnCat =
+      body.learnCategoryRule !== false &&
+      typeof body.categoryId === "string" &&
+      body.categoryId.length > 0;
+    const learnProj =
+      body.learnProjectRule === true &&
+      typeof body.projectId === "string" &&
+      body.projectId.length > 0;
+
+    if (learnCat || learnProj) {
       const facturas = await prisma.invoice.findMany({
         where: {
           id: { in: body.invoiceIds },
@@ -82,8 +94,8 @@ export async function POST(request: NextRequest) {
             inv.rutIssuer,
             inv.businessName ?? null,
             {
-              ...(body.categoryId && { categoryId: body.categoryId }),
-              ...(body.projectId && { projectId: body.projectId }),
+              ...(learnCat && { categoryId: body.categoryId as string }),
+              ...(learnProj && { projectId: body.projectId as string }),
             }
           );
           learnedRules.push({

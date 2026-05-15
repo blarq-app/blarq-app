@@ -4,6 +4,15 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-14 — Reglas de proveedor: separar toggle categoría/proyecto
+
+- **Bug**: el bulk-assign de `/facturas` mostraba un solo toggle "Guardar regla" que aparecía únicamente cuando había categoría asignada, pero el backend aprendía categoría **y** proyecto siempre (default ON). Cambios solo de proyecto → toggle invisible → MJ no sabía que estaba creando regla. La edición inline (PATCH) tampoco tenía toggle. Como `upsertInvoiceRule` dispara `updateMany` retroactivo sobre todas las facturas del mismo RUT sin proyecto, proveedores transversales (Easy/Sodimac/MK) terminaban con facturas históricas mal asignadas.
+- **Fix**: dos toggles independientes. **Categoría default ON** (visible cuando hay categoría), **proyecto default OFF** (visible cuando hay proyecto, para casos "siempre BLARQ" como Autopistas/Bencina). PUT y PATCH de `/api/facturas/[id]` solo aprenden categoría — nunca proyecto.
+- Archivos: `src/app/api/facturas/bulk-assign/route.ts`, `src/app/api/facturas/[id]/route.ts`, `src/components/facturas/BulkAssignBar.tsx`, `CLAUDE.md` §4.5.
+- Sin migración de schema. No toca facturas ni reglas existentes — solo cambia el comportamiento futuro.
+
+---
+
 ## 2026-05-14 — Sistema completo de artefactos (importador + editor + catálogo + sincronización)
 
 - **Importador de Excel de proveedores** (`src/lib/import/parseArtefactos.ts` + endpoint + botón en la página de presupuesto). Soporta hojas tipo "ARTEFACTOS SANITARIOS" (agrupado por habitación), "ARTEFACTOS COCINA / TEKA", "ARTEFACTOS ILUMINACION". Ignora MAESTRA y *_HG (V1 vieja).

@@ -60,11 +60,20 @@ Si una decisión razonable tiene 2+ opciones (estructura de datos, UX, naming), 
 
 ### 4.5 Auto-asignación por regla de proveedor
 
-Las facturas que llegan del SII por sync **se auto-asignan** a categoría y/o proyecto **si existe una regla activa** para el `rutIssuer` (modelo `InvoiceCategorizationRule`). Las reglas se crean automáticamente cuando MJ asigna manualmente categoría y/o proyecto en `/facturas` (bulk o edición inline) — siempre que el toggle "Guardar regla" esté activo en el bulk-assign (default ON).
+Las facturas que llegan del SII por sync **se auto-asignan** a categoría y/o proyecto **si existe una regla activa** para el `rutIssuer` (modelo `InvoiceCategorizationRule`).
 
-Una regla puede tener categoría, proyecto, o ambos. Al aplicarse, solo completa los campos vacíos en la factura — no pisa asignaciones manuales previas. Si MJ no quiere regla para un proveedor (caso MK que varía caso a caso), apaga el toggle al asignar.
+**Cómo se aprenden las reglas (cambio 2026-05-14):**
 
-Histórico (regla anterior, hasta 2026-05-09): el sync nunca auto-asignaba nada — todo quedaba `null` esperando catalogación manual. Cambió con la introducción del motor de reglas + project rules.
+- **Categoría — default ON.** Cuando MJ asigna categoría a una factura (bulk-assign o edición inline), se crea/actualiza la regla del proveedor con esa categoría. Útil: Easy = Materiales siempre, Sodimac = Materiales siempre. El toggle "Guardar categoría en regla" en el bulk-assign permite apagarlo caso a caso (ej. MK que a veces es Materiales, a veces Artefactos).
+- **Centro de costo (proyecto) — default OFF.** Las reglas NO guardan proyecto por default. La mayoría de los proveedores son transversales (Easy/Sodimac/MK compran para muchas obras), y guardar proyecto como regla arrastra retroactivamente facturas a obras equivocadas. Solo se guarda proyecto en la regla cuando MJ explícitamente prende el toggle "Guardar centro de costo en regla" en el bulk-assign. Caso de uso real: Autopistas/Bencina/Patente → BLARQ siempre.
+- **Edición inline (click en la celda de proyecto/categoría desde la lista)**: nunca aprende proyecto como regla. Solo aprende categoría. Para crear regla de "proveedor X → siempre obra Y" hay que ir al bulk-assign y prender el toggle.
+
+Una regla puede tener categoría, proyecto, o ambos. Al aplicarse (sync SII o asignación manual), solo completa los campos vacíos en la factura — no pisa asignaciones manuales previas. Al crear/actualizar regla con proyecto, hay aplicación retroactiva al RUT (facturas viejas sin proyecto se asignan al de la regla) — por eso el default OFF para proyecto.
+
+**Historial:**
+- Hasta 2026-05-09: sync nunca auto-asignaba nada — todo quedaba `null` esperando catalogación manual.
+- 2026-05-09: introducción del motor de reglas + project rules. Toggle único "Guardar regla" cubría categoría y proyecto.
+- 2026-05-14: separados en dos toggles (categoría default ON, proyecto default OFF). Inline edit deja de aprender proyecto como regla. Motivo: facturas de Easy se contagiaban a Portofino por arrastre retroactivo.
 
 ### 4.6 Placeholders ↔ null
 

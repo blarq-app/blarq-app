@@ -338,7 +338,8 @@ model ArtefactoItem {
   clientPrice       Float   // Precio final al cliente
   // Interno (no visible al cliente)
   realCostBlarq     Float?  // Lo que realmente paga BLARQ
-  referenceLink     String?
+  referenceLink     String? // URL del producto en la tienda (mk.cl, sodimac, etc)
+  imageUrl          String? // URL de la imagen — auto-extraída del referenceLink o pegada manual
   sortOrder         Int     @default(0)
 
   budgetVersion     BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)

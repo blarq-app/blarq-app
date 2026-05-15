@@ -82,6 +82,7 @@ export interface ArtefactoItemInput {
   listPrice: number;
   discountPercent: number | null; // decimal 0..1 (no porcentaje 0..100)
   clientPrice: number; // unitario (no incluye qty)
+  imageUrl: string | null; // URL de la imagen del producto
 }
 
 export interface PaymentTermInput {
@@ -274,11 +275,13 @@ const CSS = `
     font-size: 8pt;
   }
 
-  .col-name     { width: 16%; font-weight: 600; }
-  .col-detail   { width: 38%; color: #333; }
-  .col-brand    { width: 10%; color: #555; }
+  .col-img      { width: 7%; text-align: center; padding: 4px; }
+  .col-img img  { max-width: 32px; max-height: 32px; object-fit: contain; display: block; margin: 0 auto; }
+  .col-name     { width: 14%; font-weight: 600; }
+  .col-detail   { width: 33%; color: #333; }
+  .col-brand    { width: 9%; color: #555; }
   .col-qty      { width: 5%;  text-align: center; font-variant-numeric: tabular-nums; }
-  .col-list     { width: 11%; text-align: right; font-variant-numeric: tabular-nums; }
+  .col-list     { width: 10%; text-align: right; font-variant-numeric: tabular-nums; }
   .col-discount { width: 6%;  text-align: right; font-variant-numeric: tabular-nums; color: #555; }
   .col-price    { width: 14%; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 
@@ -446,9 +449,10 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
         <table class="artefactos">
           <thead>
             <tr class="h-room">
-              <td colspan="7">${esc(r.label)}</td>
+              <td colspan="8">${esc(r.label)}</td>
             </tr>
             <tr class="h-cols">
+              <th class="col-img"></th>
               <th class="col-name">Item</th>
               <th class="col-detail">Detalle</th>
               <th class="col-brand">Marca</th>
@@ -463,6 +467,11 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
               .map(
                 (it) => `
               <tr>
+                <td class="col-img">${
+                  it.imageUrl
+                    ? `<img src="${esc(it.imageUrl)}" alt="" />`
+                    : ""
+                }</td>
                 <td class="col-name">${esc(it.name)}</td>
                 <td class="col-detail">${esc(it.detail || "")}</td>
                 <td class="col-brand">${esc(it.brand || "—")}</td>
@@ -476,7 +485,7 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
               )
               .join("")}
             <tr class="subtotal-room">
-              <td colspan="6">Total artefactos ${esc(r.label.toLowerCase())}</td>
+              <td colspan="7">Total artefactos ${esc(r.label.toLowerCase())}</td>
               <td class="col-price">${fmtCLP(r.subtotal)}</td>
             </tr>
           </tbody>
@@ -490,7 +499,7 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
         <table class="artefactos">
           <tbody>
             <tr class="subtotal-sub">
-              <td colspan="6">Total ${esc(sub.label.toLowerCase())}</td>
+              <td colspan="7">Total ${esc(sub.label.toLowerCase())}</td>
               <td class="col-price">${fmtCLP(sub.subtotal)}</td>
             </tr>
           </tbody>

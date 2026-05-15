@@ -74,10 +74,9 @@ export async function PUT(
     });
 
     await recalcObraItemFromComponents(itemId);
-    await prisma.obraItem.update({
-      where: { id: itemId },
-      data: { isCustomized: true },
-    });
+    // No marcamos isCustomized en la partida entera — solo este componente
+    // queda blindado (su flag se setea arriba). Los demás componentes de
+    // la partida siguen siendo refrescables desde el catálogo.
 
     return NextResponse.json(component);
   } catch (error) {
@@ -99,12 +98,36 @@ export async function DELETE(
       return NextResponse.json({ error: guard.msg }, { status: guard.status });
     }
 
-    await prisma.obraItemComponent.delete({ where: { id: compId } });
-    await recalcObraItemFromComponents(itemId);
-    await prisma.obraItem.update({
-      where: { id: itemId },
-      data: { isCustomized: true },
+    // Si el componente venía del catálogo (originComponentId != null),
+    // dejamos un registro de "descartado intencionalmente" para que el
+    // sync masivo no lo recree. Sin esto, el próximo sync con el catálogo
+    // volvería a traer ese componente porque sigue ahí en el catálogo.
+    const existing = await prisma.obraItemComponent.findUnique({
+      where: { id: compId },
+      select: { originComponentId: true },
     });
+
+    await prisma.obraItemComponent.delete({ where: { id: compId } });
+
+    if (existing?.originComponentId) {
+      await prisma.obraItemDiscardedCatalogComponent.upsert({
+        where: {
+          obraItemId_partidaComponentId: {
+            obraItemId: itemId,
+            partidaComponentId: existing.originComponentId,
+          },
+        },
+        create: {
+          obraItemId: itemId,
+          partidaComponentId: existing.originComponentId,
+        },
+        update: {},
+      });
+    }
+
+    await recalcObraItemFromComponents(itemId);
+    // No marcamos isCustomized en la partida entera — el descarte queda
+    // registrado por componente. La partida sigue siendo refrescable.
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Error eliminando componente:", error);

@@ -91,12 +91,15 @@ export default function CuadroResumen({ invoices, budgets }: Props) {
   const lastArtefactos = lastUpdated(artefactosAprobados);
 
   // ── Acordado por concepto (suma de versiones aprobadas) ─────────────
-  // OBRA: por cada versión aprobada, CD × (1+GG) × (1+Util) × 1.19.
+  // OBRA: por cada versión aprobada, CD × (1 + GG + Util) × 1.19.
+  // GG y Utilidad se aplican ADITIVOS sobre el costo directo, NO
+  // encadenados — fórmula confirmada con MJ contra el Excel (ver
+  // metrics.ts y docs/WIP.md ronda 7).
   const obraAcordado = obrasAprobadas.reduce((s, b) => {
     const cd = (b.obraItems ?? []).reduce((ss, it) => ss + it.total, 0);
     const gg = (b.ggPercentage ?? 0) / 100;
     const util = (b.utilityPercentage ?? 0) / 100;
-    return s + cd * (1 + gg) * (1 + util) * 1.19;
+    return s + cd * (1 + gg + util) * 1.19;
   }, 0);
 
   // MUEBLES: suma de clientPriceIva × qty de todas las versiones aprobadas.

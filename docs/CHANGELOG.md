@@ -4,6 +4,18 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-15 — Zonas (subChapter) en partidas de obra — UI completa + subtotal por zona
+
+- **Qué cambió**: el campo `ObraItem.subChapter` (que ya existía en el modelo) ahora es editable desde el editor de presupuesto. Permite agrupar partidas por zona (ej. COCINA / BAÑOS) dentro de un mismo presupuesto, con subtotal por zona visible en el editor y en el PDF cliente.
+- **Por qué**: V2 Paseo del Sena — clienta pidió separar cocina y baños dentro del mismo presupuesto (un solo contrato). Hasta hoy `subChapter` solo entraba vía Importar Cubicación; no había manera de escribirlo desde la app.
+- **UI**: link "+ zona" / "↻ zona" inline al hover de cada fila con autocompletado, bandita gris clickeable para renombrar grupo entero, botón ⎘ duplicar partida (con snapshot de componentes) para partir mixtas. Selección múltiple con checkbox + barra flotante para asignar zona a varias a la vez.
+- **Subtotal por zona**: en la misma fila de la bandita, alineado bajo Total — lee como titular `BAÑO ........ $ 662.866`. Solo se muestra si el capítulo tiene 2+ zonas distintas.
+- **API**: PUT y POST de `/api/presupuestos/[id]/partidas` aceptan `subChapter`. Nuevo `POST .../partidas/[itemId]/duplicate`.
+- **No toca**: `metrics.ts` ni cálculos contables. La zona es separador visual, no afecta totales ni GG/utilidad. Schema sin cambios.
+- **Referencias**: PRs [#35](https://github.com/blarq-app/blarq-app/pull/35) (API + edición inline), [#36](https://github.com/blarq-app/blarq-app/pull/36) (bulk select), [#37](https://github.com/blarq-app/blarq-app/pull/37) (suavizar subtotal), [#38](https://github.com/blarq-app/blarq-app/pull/38) (subtotal en bandita).
+
+---
+
 ## 2026-05-15 — Sync diferencial cotización ↔ catálogo + regla contractual
 
 - **Qué cambió**: el sync entre catálogo de partidas y cotizaciones en borrador ahora detecta y aplica componentes agregados o eliminados desde el catálogo, no solo cambios de precio. El flag `ObraItem.isCustomized` pasa a ser granular: editar/agregar un componente blinda solo ese componente (no la partida entera). Borrar un componente registra el descarte para que el sync no lo recree. Schema aditivo: `ObraItemComponent.originComponentId` + tabla `ObraItemDiscardedCatalogComponent`. Aplicado en dev y prod.

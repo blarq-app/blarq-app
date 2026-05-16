@@ -277,6 +277,22 @@ const CSS = `
     color: #555;
     letter-spacing: 0.04em;
   }
+  /* Subtotal por zona — cierra el grupo (COCINA / BAÑOS / …). Solo
+     aparece si el capítulo tiene 2+ zonas distintas. Alineado a la
+     derecha para que el total coincida con la columna Total. */
+  .partidas tr.zone-subtotal-row td {
+    background: #FAFAFA;
+    font-weight: 600;
+    text-transform: uppercase;
+    border-bottom: 0.15pt solid #E5E5E5;
+    border-top: 0.15pt solid #E5E5E5;
+    font-size: 6pt;
+    vertical-align: middle;
+    padding: 1.5pt 5pt;
+    color: #1A1A1A;
+    text-align: right;
+    letter-spacing: 0.04em;
+  }
 
   /* Anchos de columna (suman 100%). TOTAL en peso regular per spec. */
   .col-item   { width: 4%;  text-align: center; white-space: nowrap; }
@@ -421,8 +437,19 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   const fmtMoney = (n: number) => "$ " + Math.round(n).toLocaleString("es-CL");
 
   const tableRows = chapters
-    .map(
-      (ch) => `
+    .map((ch) => {
+      // Subtotales por zona dentro del capítulo, para mostrar al cierre
+      // de cada grupo. Solo se renderizan si hay más de una zona distinta
+      // en el capítulo (sino el subtotal de zona == subtotal del capítulo
+      // y solo agrega ruido visual).
+      const zoneSubtotals = new Map<string, number>();
+      for (const it of ch.items) {
+        const k = it.subChapter ?? "";
+        zoneSubtotals.set(k, (zoneSubtotals.get(k) ?? 0) + it.total);
+      }
+      const distinctZones = new Set(ch.items.map((i) => i.subChapter ?? ""));
+      const showZoneSubtotals = distinctZones.size > 1;
+      return `
         <tr class="chapter-row">
           <td class="col-item">${ch.index}</td>
           <td class="col-name">${esc(ch.label)}</td>
@@ -440,8 +467,13 @@ export function renderObraHTML(data: ObraHTMLInput): string {
             // Si el subChapter cambió respecto al ítem anterior, anteponemos
             // una fila separadora con el nombre del sub-chapter.
             const prev = idx > 0 ? ch.items[idx - 1] : null;
+            const next = idx < ch.items.length - 1 ? ch.items[idx + 1] : null;
             const showSub =
               item.subChapter && (!prev || prev.subChapter !== item.subChapter);
+            const showZoneSub =
+              showZoneSubtotals &&
+              item.subChapter &&
+              (!next || next.subChapter !== item.subChapter);
             return `
           ${
             showSub
@@ -458,11 +490,19 @@ export function renderObraHTML(data: ObraHTMLInput): string {
             <td class="col-qty">${fmtQty(item.quantity)}</td>
             <td class="col-pu">${fmtNum(item.unitPrice)}</td>
             <td class="col-total">${fmtMoney(item.total)}</td>
-          </tr>`;
+          </tr>
+          ${
+            showZoneSub
+              ? `<tr class="zone-subtotal-row">
+                  <td colspan="6">Subtotal ${esc(item.subChapter!)}</td>
+                  <td class="col-total">${fmtMoney(zoneSubtotals.get(item.subChapter!) ?? 0)}</td>
+                </tr>`
+              : ""
+          }`;
           })
           .join("")}
-      `
-    )
+      `;
+    })
     .join("");
 
   return `<!DOCTYPE html>

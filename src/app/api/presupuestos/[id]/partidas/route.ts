@@ -38,6 +38,7 @@ export async function POST(
       data: {
         budgetVersionId,
         chapter: data.chapter,
+        subChapter: data.subChapter || null,
         itemNumber,
         name: data.name,
         descriptionCliente: data.descriptionCliente ?? data.description ?? null,

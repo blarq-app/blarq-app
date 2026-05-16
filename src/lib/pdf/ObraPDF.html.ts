@@ -277,19 +277,20 @@ const CSS = `
     color: #555;
     letter-spacing: 0.04em;
   }
-  /* Subtotal por zona — cierra el grupo (COCINA / BAÑOS / …). Solo
-     aparece si el capítulo tiene 2+ zonas distintas. Alineado a la
-     derecha para que el total coincida con la columna Total. */
+  /* Subtotal por zona — cierra el grupo (COCINA / BAÑOS / …). Tiene
+     que pasar piola: información secundaria que se lee si la buscás,
+     pero no compite con el subtotal del capítulo ni con la línea de
+     total del PDF. Por eso: sin fondo, gris medio, peso normal,
+     borde apenas visible arriba como separador del último item. */
   .partidas tr.zone-subtotal-row td {
-    background: #FAFAFA;
-    font-weight: 600;
+    background: transparent;
+    font-weight: 400;
     text-transform: uppercase;
-    border-bottom: 0.15pt solid #E5E5E5;
-    border-top: 0.15pt solid #E5E5E5;
+    border-top: 0.15pt solid #EEE;
     font-size: 6pt;
     vertical-align: middle;
-    padding: 1.5pt 5pt;
-    color: #1A1A1A;
+    padding: 1pt 5pt;
+    color: #888;
     text-align: right;
     letter-spacing: 0.04em;
   }

@@ -4,6 +4,38 @@ import { parseCartolaSantander } from "@/lib/banco/santanderParser";
 import { recomputeInvoiceStatus } from "@/lib/banco/invoicePayments";
 import { applyRulesToMovement } from "@/lib/banco/categorizationRules";
 
+// Detecta si un movimiento ya está en la BD.
+//
+// Regla: el identificador único real de una transacción es el n° de
+// documento del banco (`externalRef`). DOS transferencias del mismo
+// monto el mismo día con distinto documento son movimientos REALES
+// distintos — NO duplicados. Antes el check usaba solo
+// (cuenta, fecha, monto, descripción) y descartaba la segunda como
+// duplicado, perdiendo plata (bug cartola Carolina Ovalle, 2026-05-16).
+//
+// Si el movimiento NO trae externalRef (cartolas viejas, algunos
+// cargos) caemos al criterio histórico — sin un identificador único
+// no hay forma de distinguir, es una limitación irreducible.
+async function findExistingMovement(
+  bankAccountId: string,
+  mov: { date: Date; amount: number; description: string; externalRef: string | null }
+) {
+  if (mov.externalRef) {
+    return prisma.bankMovement.findFirst({
+      where: { bankAccountId, externalRef: mov.externalRef },
+    });
+  }
+  return prisma.bankMovement.findFirst({
+    where: {
+      bankAccountId,
+      date: mov.date,
+      amount: mov.amount,
+      description: mov.description,
+      externalRef: null,
+    },
+  });
+}
+
 // POST /api/banco/import
 //   body: form-data con `file` (Excel cartola Santander)
 //   query: ?dryRun=1 para preview sin guardar
@@ -78,14 +110,7 @@ export async function POST(request: NextRequest) {
     if (dryRun) {
       // Preview sin tocar DB. Igual contamos cuántos serían duplicados.
       for (const mov of cartola.movements) {
-        const exists = await prisma.bankMovement.findFirst({
-          where: {
-            bankAccountId: bankAccount.id,
-            date: mov.date,
-            amount: mov.amount,
-            description: mov.description,
-          },
-        });
+        const exists = await findExistingMovement(bankAccount.id, mov);
         if (exists) stats.duplicates++;
         else stats.created++;
         if (mov.suggestedCategory) stats.categorized++;
@@ -93,9 +118,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, stats, sample: cartola.movements.slice(0, 5) });
     }
 
-    // 3. Insertar movimientos (skip duplicates)
+    // 3. Insertar movimientos (skip duplicates). El check de duplicado es
+    // EXPLÍCITO (findExistingMovement) — no se delega al constraint de la
+    // BD, porque externalRef es nullable y los NULLs no colisionan en un
+    // unique de Postgres.
     const insertedIds: string[] = [];
     for (const mov of cartola.movements) {
+      const exists = await findExistingMovement(bankAccount.id, mov);
+      if (exists) {
+        stats.duplicates++;
+        continue;
+      }
       try {
         const created = await prisma.bankMovement.create({
           data: {
@@ -115,7 +148,9 @@ export async function POST(request: NextRequest) {
         stats.created++;
         if (mov.suggestedCategory) stats.categorized++;
       } catch (e) {
-        // P2002 = unique violation = duplicado. Esperado al reimportar.
+        // P2002 = unique violation. Con el check explícito de arriba esto
+        // casi no debería pasar — solo si dos movimientos de la MISMA
+        // cartola coinciden en (cuenta,fecha,monto,desc,externalRef).
         if (typeof e === "object" && e !== null && "code" in e && (e as { code?: string }).code === "P2002") {
           stats.duplicates++;
         } else {

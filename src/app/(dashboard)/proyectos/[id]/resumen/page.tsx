@@ -356,9 +356,6 @@ export default async function ResultadosPage({
     .filter((c) => c.total > 0);
   const totalConIvaGastos = gastosPorCategoria.reduce((s, c) => s + c.totalConIva, 0);
 
-  // ==================== Estado de Cobros al cliente ====================
-  // Forma de pago del presupuesto aprobado de obra
-  const paymentTerms = lastObra?.paymentTerms || [];
   // (totalAcordado y pctCobrado vienen de computeProjectMetrics arriba —
   // expuesto como `totalVendido` en este page para conservar el nombre antiguo.)
   const totalAcordado = totalVendido;
@@ -464,69 +461,9 @@ export default async function ResultadosPage({
         </div>
       </div>
 
-      {/* Estado de cobros */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Estado de Cobros al Cliente</h2>
-        <p className="text-xs text-gray-400 mb-4">Montos c/IVA — lo que el cliente paga</p>
-
-        {/* Barra de progreso cobro */}
-        <div className="mb-5">
-          <div className="flex justify-between text-sm mb-1">
-            <span className="text-gray-600">Cobrado: <span className="font-medium text-gray-900">{formatCLP(totalCobrado)}</span></span>
-            <span className="text-gray-400">Por cobrar: <span className="font-medium text-orange-600">{formatCLP(porCobrar)}</span></span>
-          </div>
-          <div className="w-full bg-gray-100 rounded-full h-3">
-            <div
-              className="bg-blue-500 h-3 rounded-full transition-all"
-              style={{ width: `${Math.min(pctCobrado, 100)}%` }}
-            />
-          </div>
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
-            <span>0%</span>
-            <span>{pctCobrado.toFixed(0)}% cobrado</span>
-            <span>100%</span>
-          </div>
-        </div>
-
-        {/* Forma de pago */}
-        {paymentTerms.length > 0 ? (
-          <div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Forma de pago acordada</p>
-            <div className="space-y-2">
-              {paymentTerms.map((term, i) => {
-                const amount = term.amount ?? (totalAcordado * term.percentage) / 100;
-                // Estimamos si ya fue cobrado basándonos en cuánto se ha cobrado acumulado
-                const cobradoAcumulado = paymentTerms.slice(0, i + 1).reduce((s, t) => {
-                  return s + (t.amount ?? (totalAcordado * t.percentage) / 100);
-                }, 0);
-                const pagado = totalCobrado >= cobradoAcumulado;
-                const parcial = !pagado && totalCobrado > (cobradoAcumulado - amount);
-                return (
-                  <div key={term.id} className="flex items-center gap-3">
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs flex-shrink-0 ${pagado ? "bg-green-500 text-white" : parcial ? "bg-yellow-400 text-white" : "bg-gray-200 text-gray-400"}`}>
-                      {pagado ? "✓" : i + 1}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-900">{term.stage}</span>
-                        <span className="text-sm font-medium text-gray-900">{formatCLP(amount)}</span>
-                      </div>
-                      <div className="text-xs text-gray-400">{term.percentage}% del total</div>
-                    </div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${pagado ? "bg-green-100 text-green-700" : parcial ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-500"}`}>
-                      {pagado ? "cobrado" : parcial ? "parcial" : "pendiente"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-gray-400">
-            No hay forma de pago definida en el presupuesto aprobado.
-          </p>
-        )}
-      </div>
+      {/* Bloque "Estado de Cobros al Cliente" eliminado 2026-05-15 — la
+          info estaba duplicada con los cards arriba (Cobrado / Por cobrar)
+          y con el Cuadro Resumen abajo (desglose por concepto + pagos). */}
 
       {/* Presupuesto vs Real — tabla jerárquica con 3 secciones + total */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">

@@ -4,7 +4,59 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-15 (ronda 20 — sync diferencial cotización ↔ catálogo + regla contractual de partidas heredadas)
+- **Última actualización**: 2026-05-15 (ronda 21 — bloque "Detalle por costo directo" en editor + scripts de import/diagnóstico para arreglar drift de snapshots ObraItemComponent)
+
+- **Ronda 21 — Bloque "Detalle por costo directo" en editor + scripts de import/diagnóstico**:
+  - **Mergeado antes en esta misma sesión (PR #21, commit `e02dee3`)** — fix presentación `/resumen`:
+    - `/proyectos/[id]/resumen` — "Desglose de Gastos Reales" pasa a neto (era c/IVA sin indicarlo), aplica signo de NC (tipoDoc=61) igual que metrics.ts. Antes el desglose no aplicaba signo a NCs y eso desalineaba con la tabla "Presupuesto vs Real".
+    - Agrega fila "Gastos generales" a la tabla "Presupuesto vs Real" para que el subtotal cierre con el card "Gastado".
+    - Script efímero `scripts/investigate-rosas-materiales.ts` para diagnosticar facturas sospechosas en Materiales (resultado: ninguna, era el bug del signo).
+  - **EN LOCAL — sin pushear todavía (working tree del worktree `claude/wizardly-aryabhata-978e1b`)**:
+    - `src/components/presupuesto/CostoDirectoDetalle.tsx` — bloque nuevo en el editor del presupuesto que muestra "Detalle por costo directo": agrupa los `ObraItemComponent` por tipo (Materiales / MO / Herramientas / Subcontrato / Pérdidas / Margen) y dentro de cada tipo muestra una fila por componente (agrupado por materialId si existe, sino por descripción normalizada). Cada fila se expande para mostrar en qué partidas aparece.
+    - `src/app/(dashboard)/proyectos/[id]/presupuesto/[budgetId]/page.tsx` — agrega `include: { components: ... }` a obraItems del query.
+    - `src/components/presupuesto/ObraEditor.tsx` — renderiza el bloque nuevo después del "Resumen Presupuesto".
+  - **Investigación drift de snapshots `cost*` del ObraItem vs sum de `ObraItemComponent`**:
+    - `scripts/investigate-cost-snapshot-drift.ts` — reporta drift por presupuesto en todos los proyectos.
+    - `scripts/quick-drift-check.ts` — versión filtrada por proyectos específicos.
+    - **Hallazgo principal**: drift sistémico en proyectos importados desde Excel viejos. Caso peor: Aguirre V7 ítem 3.1 "PROYECTO ELECTRICO" con snapshot $748k (correcto del Excel firmado) vs components actuales $16.833.420 (catálogo contaminado con un subcontrato Daniel Beltrán mal asignado).
+    - **Causa raíz** (Aguirre 3.1): la PartidaCatalog del catálogo BLARQ tiene cargado un subcontrato Daniel Beltrán a $15.586.500. En el Excel V7 BASE DATOS la misma partida vale $480.000 + AUMENTO EMPALME $200.000 = $748.000 (lo firmado con la cliente). Alguien (probablemente JT) editó esa partida del catálogo en algún momento, contaminando el snapshot del proyecto.
+    - **Conclusión**: para proyectos viejos (importados desde Excel), la verdad de los componentes vive en la hoja BASE DATOS del Excel original, NO en el catálogo BLARQ actual.
+  - **Decisión arquitectónica (MJ 2026-05-15)**:
+    - **Proyectos viejos** (importados desde Excel): los components reales se cargan desde la hoja BASE DATOS del Excel original. Script `scripts/import-base-datos-excel.ts` (dry-run por defecto, `--apply`).
+    - **Proyectos nuevos** (a futuro): NO van a venir de Excel. Se importa solo cubicación de JP (partidas + cantidades). El resto (precios, componentes) vive en la app, matcheando contra el catálogo BLARQ.
+    - **La regla "presupuesto aprobado no se toca por cambios al catálogo"** ya existe desde la ronda 12 (snapshot `ObraItemComponent` por proyecto). Hay que verificar que no tenga agujeros.
+  - **Scripts nuevos disponibles para próxima sesión**:
+    - `scripts/import-base-datos-excel.ts --project X --version V --excel /path/to.xlsx [--apply]` — importa hoja BASE DATOS del Excel y popula ObraItemComponent del proyecto, pisando lo que vino del catálogo. NO toca `cost*` del item ni `total`.
+    - `scripts/snapshot-components-from-catalog.ts --project X [--version V] [--apply]` — para proyectos creados en la app sin components copiados (caso Depto Colon), copia desde el catálogo HOY al snapshot del proyecto. Replica la lógica del endpoint POST partidas.
+    - `scripts/investigate-cost-snapshot-drift.ts` y `scripts/quick-drift-check.ts` — diagnóstico read-only.
+
+  - **Aplicado en DEV (no en prod todavía)**:
+    - Aguirre V7 → import BASE DATOS Excel. 60/70 items matched (los 10 sin match son cabeceras tipo "4.1 BAÑOS" y ajustes globales). 270 components creados. Total componentes pasa de $49.5M (contaminado) a $39.7M (calza con sum de snapshot cost* de items matched).
+    - Lefevre V5 → import BASE DATOS Excel. 51/51 match perfecto. 251 components creados. Total componentes calza con snapshot cost* al peso (diff $26 redondeo).
+    - Constanza Bravo (V1_Sin y V1_Con) → snapshot retroactivo desde catálogo + revertido después (MJ confirmó que la versión que vale está en prod, no en dev; el script `revert-constanza-snapshot.ts` fue ad-hoc, ya borrado).
+
+  - **Estado de PROD al cierre (verificado read-only el 2026-05-15)**:
+    - **Paseo del Sena V1** (= "Veronica" en jerga MJ): enviado, 40/40 items con components. Drift +$549k (4%). ✅ NO requiere acción.
+    - **Depto Colon V1_Sin ampliación** (= "Constanza" V1_Sin): enviado, 27 items, **solo 7 con components**. Drift -$3.7M. ⚠️ Pendiente snapshot retroactivo desde catálogo.
+    - **Depto Colon V1_Con ampliación**: enviado, 33 items, **solo 7 con components**. Drift -$6.4M. ⚠️ Pendiente snapshot retroactivo.
+    - **Francisco de Aguirre V7**: aprobado, 60/70 con components. Drift +$7.3M. ⚠️ Pendiente import BASE DATOS Excel.
+    - **Aguirre V4-BAÑO-VISITAS**: 16/16, drift -$1k. ✅ OK.
+    - **Lefevre V5**: aprobado, 51/51 con components. Drift +$848k (chico). ⚠️ Pendiente import BASE DATOS Excel.
+    - **Lefevre V4 borrador**: 49/49, drift +$664k. Decidir si arreglar.
+    - **Lefevre V1 borrador**: 2/0, snap $312k. Probablemente abandonado.
+    - **Rosas / Portofino / Arrau / Cocina Farellones**: MJ decidió DEJARLOS — no aplicar import.
+
+  - **PENDIENTE para próxima sesión** (en este orden recomendado):
+    1. **Pushear el bloque "Detalle por costo directo"** a prod (PR aparte, presentacional, no toca datos). Cambios locales en `CostoDirectoDetalle.tsx`, `ObraEditor.tsx`, `presupuesto/[budgetId]/page.tsx`.
+    2. **Snapshot retroactivo en prod** sobre **Depto Colon V1_Sin + V1_Con**: correr `scripts/snapshot-components-from-catalog.ts --project "Depto Colon" --apply` apuntando a prod (env DATABASE_URL de Neon `ep-shy-morning`).
+    3. **Import BASE DATOS Excel a prod** sobre **Aguirre V7 y Lefevre V5**: el Excel de Aguirre está en `/Users/mjblanco/Library/CloudStorage/GoogleDrive-mjblanco@blarq.cl/Unidades compartidas/BLARQ-SOCIOS/2- PROYECTOS/54_CAMILA DECOMBE/OBRA/5- PRESUPUESTO/V7_Entrega/V7_ OBRA_ FCO DE AGUIRRE.xlsx`, el de Lefevre en `/Users/mjblanco/Library/CloudStorage/GoogleDrive-mjblanco@blarq.cl/Unidades compartidas/BLARQ-SOCIOS/2- PROYECTOS/63_CRISTIAN LEFEVRE/1- Presupuesto/V5/V5_ OBRA_CRISTIAN LEFEVRE_08.04.26.xlsx`.
+    4. **Pendientes menores**: decidir qué hacer con Lefevre V4 borrador y V1 borrador.
+
+  - **Notas para no olvidar al retomar**:
+    - El DATABASE_URL de prod lo conseguimos vía Neon Console (https://console.neon.tech/) → branch `production` → Connect → "Copy snippet" (Vercel oculta el valor de variables Sensitive, no se puede leer desde ahí). Guardar en `.env.prod` local (gitignored) — la usuaria debe regenerarlo cuando se retome la sesión.
+    - **Constanza Bravo (en dev)** ≠ Depto Colon (prod). MJ dijo "yo ya entregué la version que esta en prod, esa es la que vale". Dev tiene 0 components para Constanza (revertido al estado pre-script).
+    - **Veronica (en dev) no existe**. En prod se llama Paseo del Sena.
+    - El bloque "Detalle por costo directo" está implementado pero MJ todavía no decidió si reemplazar el desglose granular por uno agregado simple (Materiales total / MO total / etc) cuando el granular sea inconsistente con el snapshot. Decisión postergada — los proyectos que importemos desde BASE DATOS van a tener granular fiel, así que probablemente no haga falta.
 
 - **Ronda 20 — Sync diferencial cotización ↔ catálogo (PR #31, mergeado y deployado)**:
   - **Síntoma reportado por MJ**: agregó el material "FLEXIBLE GAS 1MT HI-HI1/2" a la partida "INSTALACION ENCIMERA GAS" en el catálogo. Abrió la cotización Paseo del Sena, apretó "Actualizar" en el banner amarillo. No pasaba nada.

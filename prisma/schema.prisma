@@ -831,9 +831,15 @@ model BankMovement {
   internalTransferTo BankMovement? @relation("InternalTransfer", fields: [internalTransferToId], references: [id])
   internalTransferFrom BankMovement? @relation("InternalTransfer")
 
-  // Idempotencia del import: misma cuenta + fecha + monto + descripción
-  // + ref no se duplica si MJ vuelve a importar la misma cartola.
-  @@unique([bankAccountId, date, amount, description], name: "movement_unique")
+  // Idempotencia del import. El identificador real de cada transacción es
+  // el n° de documento del banco (externalRef) — DOS transferencias del
+  // mismo monto el mismo día son movimientos REALES distintos, no
+  // duplicados. Por eso externalRef entra al constraint: sin él, la
+  // segunda transferencia idéntica se descartaba como duplicado y se
+  // perdía plata (bug detectado 2026-05-16, cartola Carolina Ovalle).
+  // Para movimientos sin externalRef se cae al criterio histórico vía
+  // el check explícito en /api/banco/import.
+  @@unique([bankAccountId, date, amount, description, externalRef], name: "movement_unique")
   @@index([bankAccountId])
   @@index([date])
   @@index([status])

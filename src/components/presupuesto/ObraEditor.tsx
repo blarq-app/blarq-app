@@ -134,6 +134,11 @@ export default function ObraEditor({
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   // Provision price overrides: componentId → precio c/IVA ingresado por usuario
   const [provisionPrices, setProvisionPrices] = useState<Record<string, number>>({});
+  // Edición inline de zona (subChapter) — por fila individual o por grupo
+  // (renombrar la "bandita" gris renombra todas las partidas del grupo).
+  const [editingZoneItemId, setEditingZoneItemId] = useState<string | null>(null);
+  const [editingZoneGroup, setEditingZoneGroup] = useState<{ chapter: string; name: string } | null>(null);
+  const [zoneDraft, setZoneDraft] = useState("");
 
   // Catalog search state
   const [catalogQuery, setCatalogQuery] = useState("");
@@ -222,13 +227,30 @@ export default function ObraEditor({
       if (aSub !== bSub) return aSub.localeCompare(bSub, "es");
       return a.name.localeCompare(b.name, "es");
     });
+    // Subtotales por zona (subChapter) dentro de este capítulo. Se muestran
+    // como fila al cierre de cada grupo. La key "" agrupa los items sin zona.
+    const subChapterSubtotals = new Map<string, number>();
+    for (const it of chapterItems) {
+      const k = it.subChapter ?? "";
+      subChapterSubtotals.set(k, (subChapterSubtotals.get(k) ?? 0) + it.total);
+    }
+    const distinctZones = new Set(chapterItems.map((i) => i.subChapter ?? ""));
+    const showZoneSubtotals = distinctZones.size > 1;
     return {
       key,
       ...chapter,
       items: sortedItems,
       subtotal: chapterItems.reduce((sum, item) => sum + item.total, 0),
+      subChapterSubtotals,
+      showZoneSubtotals,
     };
   });
+
+  // Sugerencias para autocompletar zona: todas las zonas existentes
+  // en el presupuesto, únicas y ordenadas.
+  const zoneSuggestions = Array.from(
+    new Set(items.map((i) => i.subChapter).filter((s): s is string => !!s))
+  ).sort((a, b) => a.localeCompare(b, "es"));
   // Filtrar vacíos, EXCEPTO si el usuario está activamente agregando a uno
   // (addingChapter) — ese se muestra aunque esté vacío.
   const visibleChapters = allChaptersData.filter(
@@ -384,6 +406,90 @@ export default function ObraEditor({
       setItems(items.filter((i) => i.id !== itemId));
     } catch {
       alert("Error al eliminar partida");
+    }
+  }
+
+  // Duplica una partida (con snapshot de componentes). Útil para partir
+  // mixtas en dos zonas: MJ duplica, ajusta cantidades de cada lado y le
+  // pone subChapter distinto a cada copia.
+  async function handleDuplicateItem(itemId: string) {
+    try {
+      const res = await fetch(
+        `/api/presupuestos/${initialBudget.id}/partidas/${itemId}/duplicate`,
+        { method: "POST" }
+      );
+      if (!res.ok) throw new Error("Error");
+      const created = await res.json();
+      setItems((curr) => [...curr, created]);
+    } catch {
+      alert("Error al duplicar partida");
+    }
+  }
+
+  // Guardar zona (subChapter) de una partida individual. Persiste vía PUT
+  // y actualiza el state local sin esperar refresh.
+  async function handleSetZone(itemId: string, zone: string | null) {
+    const normalized = zone && zone.trim() ? zone.trim() : null;
+    // Optimista: actualizar UI primero
+    setItems((curr) =>
+      curr.map((i) => (i.id === itemId ? { ...i, subChapter: normalized } : i))
+    );
+    const item = items.find((i) => i.id === itemId);
+    if (!item) return;
+    setSaveStatus("saving");
+    try {
+      await fetch(
+        `/api/presupuestos/${initialBudget.id}/partidas/${itemId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...item, subChapter: normalized ?? "" }),
+        }
+      );
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 1500);
+    } catch {
+      setSaveStatus("idle");
+    }
+  }
+
+  // Renombrar TODA una zona dentro de un capítulo (ej: "Cocina" → "Cocina 1").
+  // Hace bulk: actualiza state local + persiste cada item afectado.
+  async function handleRenameZoneGroup(
+    chapter: string,
+    oldName: string,
+    newName: string
+  ) {
+    const normalized = newName.trim();
+    if (!normalized || normalized === oldName) return;
+    const affected = items.filter(
+      (i) => i.chapter === chapter && i.subChapter === oldName
+    );
+    setItems((curr) =>
+      curr.map((i) =>
+        i.chapter === chapter && i.subChapter === oldName
+          ? { ...i, subChapter: normalized }
+          : i
+      )
+    );
+    setSaveStatus("saving");
+    try {
+      await Promise.all(
+        affected.map((it) =>
+          fetch(
+            `/api/presupuestos/${initialBudget.id}/partidas/${it.id}`,
+            {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...it, subChapter: normalized }),
+            }
+          )
+        )
+      );
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 1500);
+    } catch {
+      setSaveStatus("idle");
     }
   }
 
@@ -644,9 +750,21 @@ export default function ObraEditor({
                 <tbody className="divide-y divide-gray-50">
                   {chapter.items.map((item, itemIdx) => {
                     const prevItem = itemIdx > 0 ? chapter.items[itemIdx - 1] : null;
+                    const nextItem =
+                      itemIdx < chapter.items.length - 1
+                        ? chapter.items[itemIdx + 1]
+                        : null;
                     const showSubHeader =
                       item.subChapter &&
                       (!prevItem || prevItem.subChapter !== item.subChapter);
+                    // Subtotal de zona: cierra el grupo justo después del
+                    // último item de esa zona. Solo si hay al menos 2 zonas
+                    // distintas en el capítulo (sino el subtotal de zona =
+                    // subtotal del capítulo y agrega ruido visual).
+                    const showZoneSubtotal =
+                      chapter.showZoneSubtotals &&
+                      item.subChapter &&
+                      (!nextItem || nextItem.subChapter !== item.subChapter);
                     return (
                     <Fragment key={item.id}>
                     {showSubHeader && (
@@ -655,7 +773,46 @@ export default function ObraEditor({
                           colSpan={9}
                           className="px-3 py-0.5 text-[10px] font-semibold text-gray-600 uppercase tracking-wider"
                         >
-                          {item.subChapter}
+                          {editingZoneGroup &&
+                          editingZoneGroup.chapter === chapter.key &&
+                          editingZoneGroup.name === item.subChapter ? (
+                            <input
+                              autoFocus
+                              value={zoneDraft}
+                              onChange={(e) => setZoneDraft(e.target.value)}
+                              onBlur={() => {
+                                handleRenameZoneGroup(
+                                  chapter.key,
+                                  item.subChapter!,
+                                  zoneDraft
+                                );
+                                setEditingZoneGroup(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.currentTarget.blur();
+                                } else if (e.key === "Escape") {
+                                  setEditingZoneGroup(null);
+                                }
+                              }}
+                              className="bg-white border border-gray-300 rounded px-1 py-0 text-[10px] font-semibold uppercase tracking-wider text-gray-700 focus:outline-none focus:border-gray-900"
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setZoneDraft(item.subChapter ?? "");
+                                setEditingZoneGroup({
+                                  chapter: chapter.key,
+                                  name: item.subChapter!,
+                                });
+                              }}
+                              className="hover:text-gray-900"
+                              title="Renombrar zona (afecta todas las partidas de este grupo)"
+                            >
+                              {item.subChapter}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     )}
@@ -691,6 +848,57 @@ export default function ObraEditor({
                           {expandedItems[item.id] ? "▾" : "▸"}
                         </button>
                         {chapter.index}.{itemIdx + 1}
+                        {/* Zona (subChapter) — selector inline. Si la partida
+                            no tiene zona, muestra "+ zona" muy discreto al
+                            hover de la fila. Si la tiene, no se muestra acá
+                            (ya está la bandita gris arriba del grupo).
+                            Click = inline input con datalist de zonas usadas. */}
+                        {editingZoneItemId === item.id ? (
+                          <div className="mt-0.5">
+                            <input
+                              autoFocus
+                              list={`zonas-${initialBudget.id}`}
+                              value={zoneDraft}
+                              onChange={(e) => setZoneDraft(e.target.value)}
+                              onBlur={() => {
+                                handleSetZone(item.id, zoneDraft);
+                                setEditingZoneItemId(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") e.currentTarget.blur();
+                                else if (e.key === "Escape") {
+                                  setEditingZoneItemId(null);
+                                }
+                              }}
+                              placeholder="Cocina, Baños…"
+                              className="bg-white border border-gray-300 rounded px-1 py-0 text-[10px] uppercase tracking-wider text-gray-700 focus:outline-none focus:border-gray-900 w-20"
+                            />
+                          </div>
+                        ) : !item.subChapter ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setZoneDraft("");
+                              setEditingZoneItemId(item.id);
+                            }}
+                            className="mt-0.5 block text-[9px] uppercase tracking-wider text-gray-300 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Asignar zona"
+                          >
+                            + zona
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setZoneDraft(item.subChapter!);
+                              setEditingZoneItemId(item.id);
+                            }}
+                            className="mt-0.5 block text-[9px] uppercase tracking-wider text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Cambiar zona"
+                          >
+                            ↻ zona
+                          </button>
+                        )}
                       </td>
                       <td className="px-3 py-0.5 align-top">
                         {/* PARTIDA — textarea auto-altura, sin cap. Muestra
@@ -790,7 +998,14 @@ export default function ObraEditor({
                           {formatCLP(item.total)}
                         </div>
                       </td>
-                      <td className="px-2 py-0.5 align-top">
+                      <td className="px-2 py-0.5 align-top whitespace-nowrap">
+                        <button
+                          onClick={() => handleDuplicateItem(item.id)}
+                          className="text-gray-300 opacity-0 group-hover:opacity-100 hover:text-gray-900 transition-all text-xs mr-1"
+                          title="Duplicar partida (para partir en dos zonas)"
+                        >
+                          ⎘
+                        </button>
                         <button
                           onClick={() => handleDeleteItem(item.id)}
                           className="text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all text-xs"
@@ -895,6 +1110,17 @@ export default function ObraEditor({
                             />
                           </div>
                         </td>
+                      </tr>
+                    )}
+                    {showZoneSubtotal && (
+                      <tr className="bg-gray-50/80 border-y border-gray-100">
+                        <td colSpan={7} className="px-3 py-0.5 text-right text-[10px] uppercase tracking-wider text-gray-500">
+                          Subtotal {item.subChapter}
+                        </td>
+                        <td className="px-3 py-0.5 text-right text-xs font-semibold text-gray-900 tabular-nums whitespace-nowrap">
+                          {formatCLP(chapter.subChapterSubtotals.get(item.subChapter ?? "") ?? 0)}
+                        </td>
+                        <td></td>
                       </tr>
                     )}
                     </Fragment>
@@ -1570,6 +1796,13 @@ export default function ObraEditor({
           </div>
         </div>
       </div>
+      {/* Datalist global de zonas usadas en este presupuesto.
+          Sirve como autocompletado para todos los inputs de zona. */}
+      <datalist id={`zonas-${initialBudget.id}`}>
+        {zoneSuggestions.map((z) => (
+          <option key={z} value={z} />
+        ))}
+      </datalist>
     </div>
   );
 }

@@ -18,6 +18,13 @@ export async function PUT(
       select: { costLabor: true },
     });
 
+    // subChapter (zona) es opcional: solo lo escribimos si vino en el payload.
+    // `undefined` → no tocar el campo; `null` o `""` → limpiar.
+    const subChapterUpdate =
+      data.subChapter === undefined
+        ? {}
+        : { subChapter: data.subChapter === "" ? null : data.subChapter };
+
     const item = await prisma.obraItem.update({
       where: { id: itemId },
       data: {
@@ -35,6 +42,7 @@ export async function PUT(
         costTools: data.costTools,
         costLoss: data.costLoss,
         sortOrder: data.sortOrder,
+        ...subChapterUpdate,
         isCustomized: true,
       },
     });

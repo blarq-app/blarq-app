@@ -4,7 +4,23 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-16 (ronda 24 — multi-select + acciones masivas en `/banco/movimientos`, Fase 1.)
+- **Última actualización**: 2026-05-16 (ronda 25 — cotización de artefactos: revisar precios online, duplicar de otra cotización, desvincular del catálogo)
+
+- **Ronda 25 — Pendientes de artefactos (ronda 18) retomados**:
+  - **Contexto**: MJ pidió retomar los pendientes de la cotización de artefactos. Estado al cerrar:
+  - **"Revisar precios online"** — botón nuevo en el editor de artefactos. Recorre los items que tienen link cargado, baja la página de cada producto y abre un modal con el diff: precio actual vs. precio del momento, imagen actual vs. imagen del sitio. MJ marca con checkbox qué cambios aplicar. Cubre también el pendiente "auto-extraer imagen en bulk" — el mismo modal trae imágenes faltantes.
+  - **"Traer de otra cotización"** — botón nuevo. MJ elige una cotización de artefactos de otro proyecto (o de otra versión), se duplica entera dentro de la actual. Al duplicar, los precios se refrescan online automáticamente (el descuento pactado se mantiene; el precio cliente se recalcula). Los items sin link o con link caído quedan reportados como "revisá a mano". **Esto reemplazó la idea de "templates de espacio"** — MJ aclaró que no quiere armar recetas, quiere duplicar cotizaciones viejas y que los precios se actualicen solos.
+  - **Desvincular del catálogo** — la estrella ★ de cada item ahora es toggle: si el item está catalogado (verde), click lo desvincula (`catalogId → null`). Desvincular toca solo ESE item; las otras copias del mismo `catalogId` en la cotización quedan como estaban. Resuelve el caso "quiero editar este item sin que el cambio se propague".
+  - **PDF de artefactos** — el pendiente de la ronda 15 ("aplicar línea editorial al PDF de artefactos") **ya estaba hecho** desde la ronda 18. El WIP estaba desactualizado. Sin acción.
+  - **Sin cambios de schema.** Sin tocar `metrics.ts`.
+  - **Archivos**: `src/lib/catalog/revisarArtefactos.ts` (scraping masivo, concurrencia 5), endpoints `revisar-precios` / `fuentes` / `importar-de` bajo `/api/presupuestos/[id]/artefactos/`, componentes `RevisarPreciosArtefactos.tsx` + `DuplicarArtefactos.tsx`, editor `ArtefactosEditor.tsx`.
+  - **Verificado**: `tsc`, `eslint` y `npm run build` pasan limpio. **No probado en navegador con datos reales** — falta que MJ lo pruebe en una cotización de artefactos de verdad.
+  - **Limitación conocida**: el scraping masivo puede tardar. En cotizaciones grandes (~37 items) puede acercarse al límite de tiempo de función de Vercel. Si pasa, la UI muestra error y se reintenta. `maxDuration` puesto en 120s (Vercel lo capa según el plan contratado — verificar si molesta).
+  - **Pendiente para MJ después del deploy**:
+    1. Probar "Revisar precios online" en una cotización con varios links cargados.
+    2. Probar "Traer de otra cotización" duplicando una cotización vieja.
+    3. Probar el toggle de desvincular (★ verde → click).
+  - **Pendientes de artefactos que NO se tocaron** (siguen abiertos, ver ronda 18): el "agente conversacional" (ambicioso, lejos) y las tareas operacionales de MJ (cargar paleta estándar en el catálogo, etc.).
 
 - **Ronda 24 — Multi-select + acciones masivas en `/banco/movimientos` (Fase 1)**:
   - Checkbox por fila + "seleccionar todo" en la cabecera. Las transferencias internas no son seleccionables (no se imputan).

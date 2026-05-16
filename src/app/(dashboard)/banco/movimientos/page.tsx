@@ -577,7 +577,10 @@ function StatCard({
   egresos: number;
   tone: "default" | "ok" | "warn";
 }) {
-  const countColor =
+  // Protagonista del card: el monto neto (ingresos − egresos). La cantidad
+  // de movimientos pasa a leyenda secundaria — MJ prefiere ver plata.
+  const neto = ingresos - egresos;
+  const amountColor =
     tone === "ok"
       ? "text-emerald-700"
       : tone === "warn"
@@ -586,7 +589,12 @@ function StatCard({
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4">
       <p className="text-[10px] uppercase tracking-wider text-gray-500">{label}</p>
-      <p className={`text-xl font-semibold tabular-nums mt-0.5 ${countColor}`}>{count}</p>
+      <p className={`text-xl font-semibold tabular-nums mt-0.5 ${amountColor}`}>
+        {formatCLP(neto)}
+      </p>
+      <p className="text-[11px] text-gray-400 tabular-nums mt-0.5">
+        {count} {count === 1 ? "movimiento" : "movimientos"}
+      </p>
       <div className="mt-2 grid grid-cols-2 gap-1 text-[11px]">
         <div>
           <span className="text-gray-400">↗ ingresos</span>

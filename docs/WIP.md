@@ -4,7 +4,26 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-15 (ronda 21 — bloque "Detalle por costo directo" en editor + scripts de import/diagnóstico para arreglar drift de snapshots ObraItemComponent)
+- **Última actualización**: 2026-05-15 (ronda 22 — zonas en partidas: editar `subChapter` desde la app, bulk-select, subtotal por zona en bandita)
+
+- **Ronda 22 — Zonas (subChapter) en partidas de obra**:
+  - **Disparador**: V2 de Paseo del Sena, clienta pide separar cocina y baños dentro del mismo presupuesto (un solo contrato, una sola V2). El modelo ya tenía `ObraItem.subChapter` y el editor lo mostraba como bandita gris, pero no había forma de escribirlo desde la UI — solo entraba vía Importar Cubicación.
+  - **PR [#35](https://github.com/blarq-app/blarq-app/pull/35)** — habilitar asignación de zona desde la UI:
+    - PUT y POST de `/api/presupuestos/[id]/partidas` aceptan `subChapter` (antes lo ignoraban).
+    - Nuevo `POST .../partidas/[itemId]/duplicate` — duplica partida con snapshot de componentes, para partir mixtas en dos.
+    - Editor: link "+ zona" / "↻ zona" inline en cada fila con autocompletado, bandita gris clickeable para renombrar grupo entero (bulk update), botón ⎘ duplicar al hover.
+  - **PR [#36](https://github.com/blarq-app/blarq-app/pull/36)** — selección múltiple:
+    - Checkbox por fila + "select all" en header.
+    - Barra flotante centrada abajo aparece con selección: contador, input zona, Aplicar, Quitar zona, Limpiar. Mucho más rápido que ir fila por fila.
+  - **PR [#37](https://github.com/blarq-app/blarq-app/pull/37) + [#38](https://github.com/blarq-app/blarq-app/pull/38)** — subtotal por zona prolijo:
+    - Subtotal por zona en la misma fila gris donde dice COCINA/BAÑO, alineado bajo Total. Lee como titular: `BAÑO ........ $ 662.866`. Aplica al editor y al PDF cliente.
+    - Una fila menos por grupo, más editorial. Solo se muestra si el capítulo tiene 2+ zonas distintas (sino == subtotal del capítulo).
+  - **No toca**: `metrics.ts` ni cálculos contables — la zona es separador visual, no afecta totales ni GG/utilidad.
+
+- **PENDIENTES previos de ronda 21** (sin tocar en esta sesión, siguen vigentes):
+  1. Pushear "Detalle por costo directo" en `CostoDirectoDetalle.tsx` (queda en otro worktree).
+  2. Snapshot retroactivo Depto Colon V1_Sin / V1_Con en prod.
+  3. Import BASE DATOS Excel para Aguirre V7 y Lefevre V5 en prod.
 
 - **Ronda 21 — Bloque "Detalle por costo directo" en editor + scripts de import/diagnóstico**:
   - **Mergeado antes en esta misma sesión (PR #21, commit `e02dee3`)** — fix presentación `/resumen`:

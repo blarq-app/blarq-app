@@ -275,15 +275,22 @@ const CSS = `
     font-size: 8pt;
   }
 
-  .col-img      { width: 7%; text-align: center; padding: 4px; }
-  .col-img img  { max-width: 32px; max-height: 32px; object-fit: contain; display: block; margin: 0 auto; }
-  .col-name     { width: 14%; font-weight: 600; }
-  .col-detail   { width: 33%; color: #333; }
-  .col-brand    { width: 9%; color: #555; }
+  /* Imagen del producto: tamaño visualizable, no como icono. El Excel de
+     referencia renderiza imágenes entre 20mm y 30mm — apuntamos al
+     extremo superior (~32mm = ~120px) para que el cliente identifique
+     el producto sin tener que abrir el link. */
+  .col-img      { width: 18%; text-align: center; padding: 8px 4px; vertical-align: middle; }
+  .col-img img  { max-width: 120px; max-height: 120px; object-fit: contain; display: block; margin: 0 auto; }
+  .col-name     { width: 13%; font-weight: 600; }
+  .col-detail   { width: 23%; color: #333; }
+  .col-brand    { width: 8%; color: #555; }
   .col-qty      { width: 5%;  text-align: center; font-variant-numeric: tabular-nums; }
   .col-list     { width: 10%; text-align: right; font-variant-numeric: tabular-nums; }
   .col-discount { width: 6%;  text-align: right; font-variant-numeric: tabular-nums; color: #555; }
-  .col-price    { width: 14%; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .col-price    { width: 13%; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  /* Las filas con imagen son más altas — alineamos verticalmente al medio
+     todas las celdas para que el texto quede centrado contra la foto. */
+  .artefactos tbody td { vertical-align: middle; }
 
   /* Evitar que un item se parta entre páginas. */
   .artefactos tbody tr { page-break-inside: avoid; }

@@ -17,6 +17,7 @@
 import { prisma } from "@/lib/prisma";
 import { recalcPartidaTotals } from "./recalcPartida";
 import { recalcObraItemFromComponents } from "./recalcObraItem";
+import { getFrozenLineageIds } from "./frozenLineage";
 
 interface SyncSummary {
   materialId: string;
@@ -87,12 +88,34 @@ export async function syncMaterialToComponents(
         id: true,
         obraItemId: true,
         isCustomized: true,
-        obraItem: { select: { budgetVersionId: true } },
+        obraItem: {
+          select: {
+            budgetVersionId: true,
+            lineageId: true,
+            isCustomized: true,
+            budgetVersion: { select: { projectId: true, type: true } },
+          },
+        },
       },
     });
 
     for (const c of candidates) {
       if (c.isCustomized) {
+        obraItemCompsSkipped++;
+        continue;
+      }
+      // Regla contractual: si la partida del proyecto está marcada como
+      // customizada O su lineageId aparece en una versión enviada/aprobada,
+      // no la pisamos aunque cambie el material en el catálogo.
+      if (c.obraItem.isCustomized) {
+        obraItemCompsSkipped++;
+        continue;
+      }
+      const frozen = await getFrozenLineageIds(
+        c.obraItem.budgetVersion.projectId,
+        c.obraItem.budgetVersion.type
+      );
+      if (frozen.has(c.obraItem.lineageId)) {
         obraItemCompsSkipped++;
         continue;
       }

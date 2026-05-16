@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
+import AddArtefactoFromCatalog, {
+  type ArtefactoFromCatalog,
+} from "./AddArtefactoFromCatalog";
 
 // Input numérico con separadores de miles. Sin foco muestra "5.488.460",
 // con foco muestra "5488460" para edición. onChange devuelve el número crudo.
@@ -56,6 +59,7 @@ interface ArtefactoItem {
   realCostBlarq: number | null; // unitario, costo real BLARQ
   referenceLink: string | null; // URL del producto en la tienda (mk.cl, sodimac, easy)
   imageUrl: string | null; // URL de imagen (auto-extraída o pegada manual)
+  catalogId: string | null; // si fue agregado desde el catálogo BLARQ
   sortOrder: number;
 }
 
@@ -137,14 +141,6 @@ export default function ArtefactosEditor({
   const [addingTo, setAddingTo] = useState<
     null | { subcategory: string; room: string }
   >(null);
-  const [newItem, setNewItem] = useState({
-    name: "",
-    detail: "",
-    brand: "",
-    quantity: 1,
-    listPrice: 0,
-    discountPercent: 0, // 0..1 decimal en BD; el input lo trata como porcentaje 0..100
-  });
 
   // ── Totales globales ─────────────────────────────────────────────────
   const totalCliente = items.reduce(
@@ -252,25 +248,66 @@ export default function ArtefactosEditor({
     }
   }
 
+  // Campos que se sincronizan entre todas las copias del mismo catalogId
+  // dentro del budget (mismo WC en baño principal y baño secundario =
+  // datos idénticos). Incluye realCostBlarq porque la cotización de la
+  // vendedora se hace por proyecto — si MJ carga el costo en una copia,
+  // debe aplicarse al WC ATENAS en todos los baños del mismo proyecto.
+  // (Al catálogo BLARQ global solo sube name/precio web/imagen — eso lo
+  // maneja el backend, acá solo nos importa la propagación local.)
+  // NO sincronizamos: quantity, room, subcategory, sortOrder.
+  const SYNC_FIELDS: Array<keyof ArtefactoItem> = [
+    "name",
+    "detail",
+    "brand",
+    "listPrice",
+    "discountPercent",
+    "clientPrice",
+    "referenceLink",
+    "imageUrl",
+    "realCostBlarq",
+  ];
+
   function updateItem(itemId: string, patch: Partial<ArtefactoItem>) {
-    setItems((prev) =>
-      prev.map((it) => {
-        if (it.id !== itemId) return it;
-        const merged = { ...it, ...patch };
-        // Si cambiaron lista o descuento → recalcular clientPrice unitario.
-        if (
-          patch.listPrice !== undefined ||
-          patch.discountPercent !== undefined
-        ) {
-          merged.clientPrice = calcClientPrice(
-            merged.listPrice,
-            merged.discountPercent
-          );
+    setItems((prev) => {
+      const target = prev.find((i) => i.id === itemId);
+      if (!target) return prev;
+      const merged = { ...target, ...patch };
+      if (
+        patch.listPrice !== undefined ||
+        patch.discountPercent !== undefined
+      ) {
+        merged.clientPrice = calcClientPrice(
+          merged.listPrice,
+          merged.discountPercent
+        );
+      }
+      persistItem(merged);
+
+      // Si el item tiene catalogId, propagamos los SYNC_FIELDS a las
+      // otras copias del mismo catalogId localmente (el backend ya hace
+      // lo mismo en BD — esto solo evita esperar al refresh).
+      const sharedPatch: Partial<ArtefactoItem> = {};
+      let hasShared = false;
+      for (const k of SYNC_FIELDS) {
+        if (k in patch || (k === "clientPrice" && (patch.listPrice !== undefined || patch.discountPercent !== undefined))) {
+          (sharedPatch as Record<string, unknown>)[k] = merged[k];
+          hasShared = true;
         }
-        persistItem(merged);
-        return merged;
-      })
-    );
+      }
+
+      return prev.map((it) => {
+        if (it.id === itemId) return merged;
+        if (
+          hasShared &&
+          merged.catalogId &&
+          it.catalogId === merged.catalogId
+        ) {
+          return { ...it, ...sharedPatch };
+        }
+        return it;
+      });
+    });
   }
 
   async function deleteItem(itemId: string) {
@@ -285,11 +322,16 @@ export default function ArtefactosEditor({
     }
   }
 
-  async function addItem(subcategory: string, room: string) {
-    if (!newItem.name) return;
+  // Agrega un item al budget desde el payload del componente
+  // AddArtefactoFromCatalog (puede venir del catálogo o tipeado manual).
+  async function addItemFromPayload(
+    subcategory: string,
+    room: string,
+    payload: ArtefactoFromCatalog
+  ) {
     const clientPrice = calcClientPrice(
-      newItem.listPrice,
-      newItem.discountPercent
+      payload.listPrice,
+      payload.discountPercent
     );
     try {
       const res = await fetch(
@@ -300,31 +342,57 @@ export default function ArtefactosEditor({
           body: JSON.stringify({
             subcategory,
             room,
-            name: newItem.name,
-            detail: newItem.detail || null,
-            brand: newItem.brand || null,
-            quantity: newItem.quantity,
-            listPrice: newItem.listPrice,
-            discountPercent: newItem.discountPercent,
+            name: payload.name,
+            detail: payload.detail,
+            brand: payload.brand,
+            quantity: payload.quantity,
+            listPrice: payload.listPrice,
+            discountPercent: payload.discountPercent,
             clientPrice,
             realCostBlarq: null,
+            referenceLink: payload.referenceLink,
+            imageUrl: payload.imageUrl,
+            catalogId: payload.catalogId,
           }),
         }
       );
       if (!res.ok) throw new Error("Error");
       const created = await res.json();
       setItems((prev) => [...prev, created]);
-      setNewItem({
-        name: "",
-        detail: "",
-        brand: "",
-        quantity: 1,
-        listPrice: 0,
-        discountPercent: 0,
-      });
-      setAddingTo(null);
     } catch {
       alert("Error al agregar artefacto");
+    }
+  }
+
+  // Promueve un item existente del budget al catálogo BLARQ. Si el item
+  // ya viene del catálogo, no hace nada.
+  async function saveToCatalog(item: ArtefactoItem) {
+    if (item.catalogId) {
+      alert("Este item ya está en el catálogo.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/catalogo/artefactos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: item.name,
+          detail: item.detail,
+          brand: item.brand,
+          subcategory: item.subcategory,
+          referenceLink: item.referenceLink,
+          imageUrl: item.imageUrl,
+          listPrice: item.listPrice,
+          discountPercent: item.discountPercent,
+        }),
+      });
+      if (!res.ok) throw new Error("Error");
+      const created = await res.json();
+      // Linkeamos el item del budget al recién creado del catálogo
+      updateItem(item.id, { catalogId: created.id });
+      alert(`"${item.name}" guardado en el catálogo BLARQ.`);
+    } catch {
+      alert("Error al guardar en catálogo.");
     }
   }
 
@@ -362,9 +430,9 @@ export default function ArtefactosEditor({
   // para que el tree-shaking las detecte. Por eso las defino como strings
   // constantes y no las interpolo.
   const gridColsCost =
-    "grid grid-cols-[3rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_5.5rem_5rem_2rem]";
+    "grid grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_5.5rem_5rem_2rem]";
   const gridColsClean =
-    "grid grid-cols-[3rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_2rem]";
+    "grid grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_2rem]";
   const gridCls = showCost ? gridColsCost : gridColsClean;
 
   return (
@@ -527,13 +595,31 @@ export default function ArtefactosEditor({
                         </div>
                       </>
                     )}
-                    <button
-                      onClick={() => deleteItem(item.id)}
-                      className="text-gray-300 hover:text-red-600 text-xs"
-                      title="Eliminar"
-                    >
-                      ×
-                    </button>
+                    <div className="flex items-center gap-1 justify-end">
+                      <button
+                        onClick={() => saveToCatalog(item)}
+                        disabled={!!item.catalogId}
+                        className={`text-xs leading-none ${
+                          item.catalogId
+                            ? "text-green-600"
+                            : "text-gray-300 hover:text-gray-900"
+                        }`}
+                        title={
+                          item.catalogId
+                            ? "Ya está en catálogo BLARQ"
+                            : "Guardar en catálogo BLARQ"
+                        }
+                      >
+                        ★
+                      </button>
+                      <button
+                        onClick={() => deleteItem(item.id)}
+                        className="text-gray-300 hover:text-red-600 text-xs"
+                        title="Eliminar"
+                      >
+                        ×
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -567,117 +653,18 @@ export default function ArtefactosEditor({
                 <div></div>
               </div>
 
-              {/* Botón agregar item dentro del room */}
+              {/* Botón agregar item dentro del room — usa el catálogo BLARQ */}
               {addingTo?.subcategory === sub.key &&
               addingTo?.room === room.key ? (
-                <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 flex flex-wrap items-end gap-3">
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
-                      Item
-                    </label>
-                    <input
-                      autoFocus
-                      type="text"
-                      value={newItem.name}
-                      onChange={(e) =>
-                        setNewItem({ ...newItem, name: e.target.value })
-                      }
-                      className="w-32 bg-white border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-gray-500"
-                    />
-                  </div>
-                  <div className="flex-1 min-w-[160px]">
-                    <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
-                      Detalle / modelo
-                    </label>
-                    <input
-                      type="text"
-                      value={newItem.detail}
-                      onChange={(e) =>
-                        setNewItem({ ...newItem, detail: e.target.value })
-                      }
-                      className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-gray-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
-                      Marca
-                    </label>
-                    <input
-                      type="text"
-                      value={newItem.brand}
-                      onChange={(e) =>
-                        setNewItem({ ...newItem, brand: e.target.value })
-                      }
-                      className="w-24 bg-white border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-gray-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
-                      Cant.
-                    </label>
-                    <input
-                      type="number"
-                      value={newItem.quantity}
-                      onChange={(e) =>
-                        setNewItem({
-                          ...newItem,
-                          quantity: parseInt(e.target.value) || 1,
-                        })
-                      }
-                      className="w-12 bg-white border border-gray-300 rounded px-2 py-1 text-xs outline-none text-center"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
-                      P. lista
-                    </label>
-                    <ThousandsInput
-                      value={newItem.listPrice}
-                      onChange={(v) =>
-                        setNewItem({ ...newItem, listPrice: v })
-                      }
-                      placeholder="0"
-                      className="w-24 bg-white border border-gray-300 rounded px-2 py-1 text-xs tabular-nums text-right outline-none focus:border-gray-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
-                      % desc.
-                    </label>
-                    <input
-                      type="number"
-                      value={
-                        newItem.discountPercent
-                          ? Math.round(newItem.discountPercent * 100)
-                          : ""
-                      }
-                      onChange={(e) =>
-                        setNewItem({
-                          ...newItem,
-                          discountPercent:
-                            (parseFloat(e.target.value) || 0) / 100,
-                        })
-                      }
-                      placeholder="0"
-                      className="w-12 bg-white border border-gray-300 rounded px-2 py-1 text-xs tabular-nums text-right outline-none focus:border-gray-500"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => addItem(sub.key, room.key)}
-                      disabled={!newItem.name}
-                      className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded hover:bg-gray-800 disabled:opacity-50"
-                    >
-                      Agregar
-                    </button>
-                    <button
-                      onClick={() => setAddingTo(null)}
-                      className="text-xs text-gray-500 px-2 py-1.5 hover:text-gray-900"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
+                <AddArtefactoFromCatalog
+                  roomLabel={room.label}
+                  defaultSubcategory={sub.key}
+                  onAdd={async (payload) => {
+                    await addItemFromPayload(sub.key, room.key, payload);
+                    setAddingTo(null);
+                  }}
+                  onCancel={() => setAddingTo(null)}
+                />
               ) : (
                 <button
                   onClick={() =>
@@ -960,7 +947,7 @@ function ItemImageCell({
       <button
         type="button"
         onClick={openPopover}
-        className="w-10 h-10 mx-auto rounded border border-gray-200 hover:border-gray-500 bg-white flex items-center justify-center overflow-hidden transition-colors"
+        className="w-20 h-20 mx-auto rounded border border-gray-200 hover:border-gray-500 bg-white flex items-center justify-center overflow-hidden transition-colors"
         title={item.imageUrl ? "Editar imagen" : "Agregar imagen"}
       >
         {item.imageUrl ? (
@@ -991,7 +978,7 @@ function ItemImageCell({
             <div className="space-y-3">
               <div>
                 <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                  Link del producto (mk.cl, sodimac, easy)
+                  Link del producto (mk.cl, chc.cl, byp.cl, ledstudio, ledconcept, sodimac, easy…)
                 </label>
                 <div className="flex gap-2">
                   <input

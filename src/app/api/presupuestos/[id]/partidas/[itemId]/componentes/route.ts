@@ -83,12 +83,9 @@ export async function POST(
     });
 
     await recalcObraItemFromComponents(itemId);
-    // Marcamos el ítem como customizado para que un sync masivo posterior
-    // no recalcule sus totales agregados desde el catálogo.
-    await prisma.obraItem.update({
-      where: { id: itemId },
-      data: { isCustomized: true },
-    });
+    // No marcamos isCustomized en la partida entera — solo el componente
+    // queda blindado. Permite seguir refrescando precios/descripciones de
+    // la partida y los demás componentes desde el catálogo.
 
     return NextResponse.json(component);
   } catch (error) {

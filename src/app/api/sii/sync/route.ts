@@ -131,8 +131,18 @@ async function upsertInvoice(
     return "created";
   }
 
-  // Si ya existía: solo actualizar si cambió algún monto. Preservamos
-  // projectId / categoryId / status (lo que MJ haya asignado manualmente).
+  // Si ya existía: aplicar regla si quedó con categoría o proyecto
+  // vacío. Esto cubre el caso donde la factura entró al sync ANTES de
+  // que existiera la regla del proveedor, y después MJ creó la regla
+  // — la factura existente quedaba sin completar para siempre porque
+  // este branch no la tocaba. applyInvoiceRule respeta lo manual (no
+  // pisa lo ya asignado), así que es seguro llamarla siempre.
+  if (!existing.categoryId || !existing.projectId) {
+    await applyInvoiceRule(existing.id).catch(() => ({ applied: false }));
+  }
+
+  // Después actualizar montos si cambiaron. Preservamos projectId /
+  // categoryId / status (lo que MJ haya asignado manualmente).
   const changed =
     existing.netAmount !== dte.netAmount ||
     existing.iva !== dte.iva ||

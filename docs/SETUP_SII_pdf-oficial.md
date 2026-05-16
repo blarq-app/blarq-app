@@ -74,7 +74,7 @@ DATABASE_URL="<url-prod>" npm run sii:sync-pdfs
 
 ### Automático
 
-LaunchAgent `com.blarq.sii-sync-pdfs` corre todos los días a las **9:00 AM**. Logs en `~/Library/Logs/blarq-sii-sync-pdfs.log`. Plist instalada en `~/Library/LaunchAgents/`.
+LaunchAgent `com.blarq.sii-sync-pdfs` corre **cada hora en punto entre 9 AM y 8 PM** (12 corridas/día). Logs en `~/Library/Logs/blarq-sii-sync-pdfs.log`. Plist instalada en `~/Library/LaunchAgents/`.
 
 ```bash
 # Estado:
@@ -84,6 +84,20 @@ launchctl list | grep blarq
 bash scripts/launchd/install.sh
 bash scripts/launchd/uninstall.sh
 ```
+
+#### El LaunchAgent apunta a PROD, no a dev
+
+Desde 2026-05-14 el plist incluye un override `EnvironmentVariables.DATABASE_URL` con la URL de prod (Neon `ep-shy-morning`). Eso pisa al `.env` del repo (que sigue apuntando a dev para el dev server). Razón: el script tiene que llenar `pdfContent` en la BD que sirve la app de Vercel — si apunta a dev, los PDFs nunca llegan a producción y la UI cae al PDF resumen interno.
+
+Para ver/cambiar la URL del plist sin echo:
+```bash
+# Ver longitud + host (sin imprimir password):
+python3 -c "import plistlib; d=plistlib.load(open('/Users/mjblanco/Library/LaunchAgents/com.blarq.sii-sync-pdfs.plist','rb')); u=d['EnvironmentVariables']['DATABASE_URL']; print('len=', len(u), 'host=', 'ep-shy-morning' in u)"
+```
+
+Si hay que regenerar el password de la BD prod (Neon → Reset password), actualizar:
+1. La variable `DATABASE_URL` en Vercel (Settings → Environment Variables → Production).
+2. El plist local con plistlib (NO commitear, NO pegar la URL en chat). Después `launchctl unload` + `load`.
 
 ## Flow descubierto del portal MIPE (validado vivo)
 

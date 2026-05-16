@@ -63,12 +63,16 @@ export async function PUT(
       },
     });
 
-    // Si MJ guardó una factura RECIBIDA con categoría asignada, asegurar
-    // que exista una regla por RUT y aplicarla retroactivamente a las
-    // demás facturas del mismo proveedor sin categoría. No exigimos que
-    // "haya cambiado" — si la categoría coincide con la regla existente,
-    // upsertInvoiceRule solo incrementa hits + dispara la retroactividad
-    // (que es lo que MJ esperaba: "si le enseño a 1, contagia a los otros").
+    // Si la factura tiene categoría asignada, asegurar que exista una
+    // regla por RUT y aplicarla retroactivamente a las demás facturas del
+    // mismo proveedor sin categoría.
+    //
+    // IMPORTANTE: desde acá nunca se guarda PROYECTO como regla. La mayoría
+    // de los proveedores son transversales a varias obras (Easy/Sodimac/MK),
+    // y guardar proyecto como regla arrastra retroactivamente facturas a
+    // proyectos equivocados. Para los proveedores que sí van siempre al
+    // mismo proyecto (Autopistas/Bencina = BLARQ), MJ lo hace explícito
+    // desde el bulk-assign con el toggle "Guardar centro de costo en regla".
     let rule:
       | {
           ruleId: string;
@@ -77,14 +81,11 @@ export async function PUT(
           appliedRetroactively: number;
         }
       | null = null;
-    if (invoice.rutIssuer && (invoice.categoryId || invoice.projectId)) {
+    if (invoice.rutIssuer && invoice.categoryId) {
       const r = await upsertInvoiceRule(
         invoice.rutIssuer,
         invoice.businessName ?? null,
-        {
-          ...(invoice.categoryId && { categoryId: invoice.categoryId }),
-          ...(invoice.projectId && { projectId: invoice.projectId }),
-        }
+        { categoryId: invoice.categoryId }
       ).catch(() => null);
       if (r && (r.created || r.updated || r.appliedRetroactively > 0)) rule = r;
     }
@@ -130,8 +131,10 @@ export async function PATCH(
       },
     });
 
-    // Si MJ asignó categoría a una recibida, reusar el motor de reglas
-    // (mismo comportamiento que PUT) — propaga retroactivamente al RUT.
+    // Edición inline: solo se aprende CATEGORÍA como regla, nunca proyecto.
+    // El proyecto desde inline es siempre puntual — para crear regla de
+    // "proveedor X siempre a obra Y" hay que ir al bulk-assign y prender
+    // el toggle "Guardar centro de costo en regla".
     let rule:
       | {
           ruleId: string;
@@ -142,16 +145,13 @@ export async function PATCH(
       | null = null;
     if (
       invoice.rutIssuer &&
-      ((("categoryId" in updates) && invoice.categoryId) ||
-        (("projectId" in updates) && invoice.projectId))
+      "categoryId" in updates &&
+      invoice.categoryId
     ) {
       const r = await upsertInvoiceRule(
         invoice.rutIssuer,
         invoice.businessName ?? null,
-        {
-          ...("categoryId" in updates && invoice.categoryId && { categoryId: invoice.categoryId }),
-          ...("projectId" in updates && invoice.projectId && { projectId: invoice.projectId }),
-        }
+        { categoryId: invoice.categoryId }
       ).catch(() => null);
       if (r && (r.created || r.updated || r.appliedRetroactively > 0)) rule = r;
     }

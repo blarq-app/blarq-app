@@ -11,6 +11,8 @@ import { prisma } from "@/lib/prisma";
 import { syncMaterialToComponents } from "@/lib/catalog/syncMaterial";
 import { NextRequest, NextResponse } from "next/server";
 import { recalcObraItemFromComponents } from "@/lib/catalog/recalcObraItem";
+import { syncBudgetWithCatalog } from "@/lib/catalog/syncBudgetWithCatalog";
+import { getFrozenLineageIds } from "@/lib/catalog/frozenLineage";
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,13 +37,32 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Primera pasada: diff completo del budget contra el catálogo de
+      // partidas (agregar nuevos / actualizar / borrar huérfanos según
+      // originComponentId). Esto cubre el caso "MJ agregó un material a
+      // la partida del catálogo" y "MJ borró un material de la partida
+      // del catálogo".
+      const diff = await syncBudgetWithCatalog(body.budgetVersionId);
+
+      // Segunda pasada: para componentes vinculados a MaterialCatalog que
+      // todavía estén stale (caso típico: data vieja sin originComponentId
+      // o componentes que mutaron desde el material, no desde la partida).
       const components = await prisma.obraItemComponent.findMany({
         where: {
           materialId: { not: null },
           isCustomized: false,
           obraItem: { budgetVersionId: body.budgetVersionId },
         },
-        include: { material: true },
+        include: {
+          material: true,
+          obraItem: {
+            select: {
+              isCustomized: true,
+              lineageId: true,
+              budgetVersion: { select: { projectId: true, type: true } },
+            },
+          },
+        },
       });
 
       const obraItemIdsAffected = new Set<string>();
@@ -49,6 +70,14 @@ export async function POST(request: NextRequest) {
       let skipped = 0;
       for (const c of components) {
         if (!c.material) continue;
+        // Saltamos partidas customizadas o con lineage congelado.
+        if (c.obraItem.isCustomized) { skipped++; continue; }
+        const frozen = await getFrozenLineageIds(
+          c.obraItem.budgetVersion.projectId,
+          c.obraItem.budgetVersion.type
+        );
+        if (frozen.has(c.obraItem.lineageId)) { skipped++; continue; }
+
         const isStale =
           c.description !== c.material.name ||
           Math.abs(c.unitCost - c.material.netPrice) > 0.01 ||
@@ -75,9 +104,16 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         budgetVersionId: body.budgetVersionId,
+        // Diff con catálogo de partidas
+        componentsAdded: diff.componentsAdded,
+        componentsRemoved: diff.componentsRemoved,
+        componentsUpdatedFromCatalog: diff.componentsUpdated,
+        obraItemsSkippedCustomized: diff.obraItemsSkippedCustomized,
+        // Sync con catálogo de materiales (segunda pasada)
         componentsUpdated: updated,
         componentsSkipped: skipped,
-        obraItemsRecalculated: obraItemIdsAffected.size,
+        obraItemsRecalculated:
+          diff.obraItemsRecalculated + obraItemIdsAffected.size,
       });
     }
 

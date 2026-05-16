@@ -42,6 +42,7 @@ export async function POST(
         realCostBlarq: data.realCostBlarq ?? null,
         referenceLink: data.referenceLink || null,
         imageUrl: data.imageUrl || null,
+        catalogId: data.catalogId || null,
         sortOrder: nextSortOrder,
       },
     });

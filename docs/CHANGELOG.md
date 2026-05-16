@@ -4,6 +4,39 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-15 — Sync diferencial cotización ↔ catálogo + regla contractual
+
+- **Qué cambió**: el sync entre catálogo de partidas y cotizaciones en borrador ahora detecta y aplica componentes agregados o eliminados desde el catálogo, no solo cambios de precio. El flag `ObraItem.isCustomized` pasa a ser granular: editar/agregar un componente blinda solo ese componente (no la partida entera). Borrar un componente registra el descarte para que el sync no lo recree. Schema aditivo: `ObraItemComponent.originComponentId` + tabla `ObraItemDiscardedCatalogComponent`. Aplicado en dev y prod.
+- **Regla contractual nueva (MJ 2026-05-15)**: partidas con `lineageId` presente en una versión enviada/aprobada del mismo proyecto+tipo quedan blindadas — el sync no las toca aunque la versión actual sea borrador. Las partidas con `lineageId` propio de la nueva versión sí se sincronizan. Helper compartido en `src/lib/catalog/frozenLineage.ts`.
+- **Backfill**: `scripts/backfill-origin-component-id.ts` mapeó 1562/1625 componentes en prod (96%); 63 sin match están protegidos contra duplicación por guarda defensiva.
+- **Por qué**: caso real disparador — MJ agrega "FLEXIBLE GAS 1MT" al catálogo de "INSTALACION ENCIMERA GAS", refresca la cotización Paseo del Sena, no pasa nada. Además: la granularidad gruesa del flag `isCustomized` bloqueaba demasiado, y faltaba blindar contractualmente partidas ya enviadas al cliente.
+- **Impacto**: cierra el flujo "modifico catálogo → recargo presupuesto en borrador → Actualizar → cambios bajan". Deuda menor: 63 componentes sin `originComponentId` en prod no participan del sync diferencial (funcionan como antes).
+- **Referencias**: commit `d28fe6d`, PR [#31](https://github.com/blarq-app/blarq-app/pull/31), ADR [docs/decisions/2026-05-15-sync-diferencial-cotizacion-catalogo.md](decisions/2026-05-15-sync-diferencial-cotizacion-catalogo.md).
+
+---
+
+## 2026-05-14 — Reglas de proveedor: separar toggle categoría/proyecto
+
+- **Bug**: el bulk-assign de `/facturas` mostraba un solo toggle "Guardar regla" que aparecía únicamente cuando había categoría asignada, pero el backend aprendía categoría **y** proyecto siempre (default ON). Cambios solo de proyecto → toggle invisible → MJ no sabía que estaba creando regla. La edición inline (PATCH) tampoco tenía toggle. Como `upsertInvoiceRule` dispara `updateMany` retroactivo sobre todas las facturas del mismo RUT sin proyecto, proveedores transversales (Easy/Sodimac/MK) terminaban con facturas históricas mal asignadas.
+- **Fix**: dos toggles independientes. **Categoría default ON** (visible cuando hay categoría), **proyecto default OFF** (visible cuando hay proyecto, para casos "siempre BLARQ" como Autopistas/Bencina). PUT y PATCH de `/api/facturas/[id]` solo aprenden categoría — nunca proyecto.
+- Archivos: `src/app/api/facturas/bulk-assign/route.ts`, `src/app/api/facturas/[id]/route.ts`, `src/components/facturas/BulkAssignBar.tsx`, `CLAUDE.md` §4.5.
+- Sin migración de schema. No toca facturas ni reglas existentes — solo cambia el comportamiento futuro.
+
+---
+
+## 2026-05-14 — Sistema completo de artefactos (importador + editor + catálogo + sincronización)
+
+- **Importador de Excel de proveedores** (`src/lib/import/parseArtefactos.ts` + endpoint + botón en la página de presupuesto). Soporta hojas tipo "ARTEFACTOS SANITARIOS" (agrupado por habitación), "ARTEFACTOS COCINA / TEKA", "ARTEFACTOS ILUMINACION". Ignora MAESTRA y *_HG (V1 vieja).
+- **Editor y PDF rediseñados** matcheando el Excel de referencia: jerarquía subcategoría → habitación → items, columnas IMG | ITEM | DETALLE | MARCA | CANT | LISTA | DCTO | TOTAL, subtotales por nivel, total general. Toggle "Mostrar columnas internas" agrega NETO BLARQ + UTILIDAD (no van al PDF cliente).
+- **Imágenes con auto-extracción** desde el link del producto. Scraper universal (JSON-LD + OpenGraph + regex) — funciona con mk.cl, chc.cl, byp.cl, ledstudio.cl, ledconcept.cl, sodimac.cl, easy.cl y cualquier sitio que exponga metadata estándar. Campo manual fallback para sitios sin scrape. Imagen a ~32mm en PDF (medido contra Excel original).
+- **Catálogo BLARQ global** (`ArtefactoCatalog`, página `/catalogo/artefactos`, entry en Sidebar). Items reutilizables entre proyectos: name, detail, brand, subcategory, tag, supplier, link, imagen, listPrice, discountPercent, isStandard, lastPriceCheck. Buscador full-text + filtros. Atajo "pegar link + extraer" en creación.
+- **Sincronización entre copias del mismo catalogId**: campos del producto se propagan a otras copias del budget + al catálogo global. `realCostBlarq` se sincroniza solo dentro del budget (cotización privada varía proyecto a proyecto).
+- **Fix de convenciones en BD** (decimal 0..1 para discountPercent, clientPrice unitario) — el editor anterior pisaba mal el precio al guardar.
+- **Bug bonus**: sync SII ahora aplica regla de categorización también a facturas existentes (no solo nuevas). Síntoma original: Maxi Mobility aparecía sin catalogar aunque tenía regla. 1 factura recuperada en prod (folio 281571).
+- PRs #14–#27 mergeados a main, deployados. Migraciones aplicadas en dev y prod antes del deploy del PR final del catálogo (para evitar 500 durante la propagación).
+
+---
+
 ## 2026-05-13 — Sync MaterialCatalog ↔ PartidaCatalog + auditoría + edición componentes
 
 - **Bug detectado en catálogo**: las partidas guardaban un snapshot del material asociado. Cambiar precio/marca en `/catalogo/materiales` NO propagaba al catálogo de partidas — y los presupuestos creados después arrastraban precios viejos (caso real: llave de paso gas Constanza Bravo $12.269 vs material $19.319).

@@ -7,6 +7,7 @@ import CentroCostoView from "@/components/proyecto/CentroCostoView";
 import { computeProjectMetrics } from "@/lib/projects/metrics";
 import { computeFondoSueldos, type ProjectWithFondo } from "@/lib/banco/fondoSueldos";
 import FondoSueldosCard from "@/components/proyecto/FondoSueldosCard";
+import CuadroResumen from "@/components/proyecto/CuadroResumen";
 
 // Mapa: nombre de CostCategory -> campo de desglose en ObraItem.
 // Margen NO está acá — es un componente del costo directo presupuestado
@@ -42,7 +43,9 @@ export default async function ResultadosPage({
       invoices: {
         include: {
           category: { include: { parent: true } },
-          payments: { select: { amountApplied: true } },
+          payments: {
+            include: { bankMovement: { select: { date: true } } },
+          },
         },
       },
       budgetVersions: {
@@ -726,6 +729,13 @@ export default async function ResultadosPage({
           obra&quot; + pagos acumulados en EPs pagados.
         </p>
       </div>
+
+      {/* Cuadro Resumen: acordado por concepto + transferencias conciliadas
+          con facturas. Réplica del cuadro Excel que MJ lleva a mano. */}
+      <CuadroResumen
+        invoices={project.invoices}
+        budgets={project.budgetVersions}
+      />
 
       {/* Fondo Sueldos generado por este proyecto */}
       <FondoSueldosCard fondo={computeFondoSueldos(project as unknown as ProjectWithFondo)} />

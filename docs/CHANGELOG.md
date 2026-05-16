@@ -4,6 +4,17 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-16 — Cotización de artefactos: revisar precios online, duplicar de otra cotización, desvincular del catálogo
+
+- **Qué cambió**: tres funciones nuevas en el editor de artefactos (`ArtefactosEditor`). (1) "Revisar precios online" — botón que recorre los items con link cargado, baja la página de cada producto y muestra un modal con el diff precio/imagen actual vs. del momento; MJ marca qué aplicar. (2) "Traer de otra cotización" — duplica los artefactos de otra cotización dentro de la actual, refrescando los precios online automáticamente (el descuento se mantiene, el precio cliente se recalcula). (3) La estrella ★ ahora también desvincula: click en un item ya catalogado lo suelta del catálogo BLARQ (`catalogId → null`) sin tocar otras copias.
+- **Por qué**: pendientes de la ronda 18 (sistema de artefactos). MJ cotiza con precios que envejecen — los productos cambian de precio seguido online. Y suele partir de una cotización vieja como base. Duplicar + refrescar resuelve ese flujo. Desvincular faltaba: hasta hoy un item con `catalogId` propagaba toda edición y no había forma de cortarlo.
+- **Schema**: sin cambios. (La idea original de "templates de espacio" se descartó: MJ pidió duplicar cotizaciones, no armar recetas.)
+- **Archivos nuevos**: `src/lib/catalog/revisarArtefactos.ts` (scraping masivo con concurrencia 5), endpoints `revisar-precios`, `fuentes`, `importar-de` bajo `/api/presupuestos/[id]/artefactos/`, componentes `RevisarPreciosArtefactos.tsx` y `DuplicarArtefactos.tsx`.
+- **Limitación conocida**: el scraping masivo puede tardar; en cotizaciones grandes (~37 items) puede acercarse al límite de tiempo de función de Vercel. Si pasa, la UI muestra error y MJ reintenta. `maxDuration` está en 120s (Vercel lo capa según plan).
+- **Nota**: el PDF de artefactos ya tenía la línea editorial nueva (se aplicó en ronda 18) — ese pendiente de la ronda 15 estaba desactualizado en el WIP.
+
+---
+
 ## 2026-05-15 — Zonas (subChapter) en partidas de obra — UI completa + subtotal por zona
 
 - **Qué cambió**: el campo `ObraItem.subChapter` (que ya existía en el modelo) ahora es editable desde el editor de presupuesto. Permite agrupar partidas por zona (ej. COCINA / BAÑOS) dentro de un mismo presupuesto, con subtotal por zona visible en el editor y en el PDF cliente.

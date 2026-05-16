@@ -6,6 +6,10 @@ import { formatCLP, formatNumber } from "@/lib/utils";
 import AddArtefactoFromCatalog, {
   type ArtefactoFromCatalog,
 } from "./AddArtefactoFromCatalog";
+import RevisarPreciosArtefactos, {
+  type ArtefactoPricePatch,
+} from "./RevisarPreciosArtefactos";
+import DuplicarArtefactos from "./DuplicarArtefactos";
 
 // Input numérico con separadores de miles. Sin foco muestra "5.488.460",
 // con foco muestra "5488460" para edición. onChange devuelve el número crudo.
@@ -141,6 +145,8 @@ export default function ArtefactosEditor({
   const [addingTo, setAddingTo] = useState<
     null | { subcategory: string; room: string }
   >(null);
+  const [showRevisar, setShowRevisar] = useState(false);
+  const [showDuplicar, setShowDuplicar] = useState(false);
 
   // ── Totales globales ─────────────────────────────────────────────────
   const totalCliente = items.reduce(
@@ -310,6 +316,35 @@ export default function ArtefactosEditor({
     });
   }
 
+  // Aplica los cambios de precio/imagen que vienen del modal "Revisar
+  // online". Reutiliza updateItem para que cada cambio se persista en BD
+  // y se propague a las copias del mismo catalogId, igual que una edición
+  // manual de la celda.
+  async function applyPricePatches(patches: ArtefactoPricePatch[]) {
+    for (const p of patches) {
+      const patch: Partial<ArtefactoItem> = {};
+      if (p.listPrice !== undefined) patch.listPrice = p.listPrice;
+      if (p.imageUrl !== undefined) patch.imageUrl = p.imageUrl;
+      if (Object.keys(patch).length > 0) updateItem(p.itemId, patch);
+    }
+  }
+
+  // Desvincula un item del catálogo BLARQ (catalogId → null). Después de
+  // esto, editarlo NO afecta a otras copias ni al catálogo global — es un
+  // item suelto de esta cotización. Solo toca ESTE item; las otras copias
+  // del mismo catalogId quedan linkeadas como estaban.
+  function unlinkFromCatalog(item: ArtefactoItem) {
+    if (!item.catalogId) return;
+    const ok = confirm(
+      `¿Desvincular "${item.name}" del catálogo BLARQ?\n\n` +
+        "Vas a poder editarlo sin que el cambio se propague a otras " +
+        "cotizaciones ni al catálogo. Las otras copias de esta misma " +
+        "cotización no se tocan."
+    );
+    if (!ok) return;
+    updateItem(item.id, { catalogId: null });
+  }
+
   async function deleteItem(itemId: string) {
     try {
       await fetch(
@@ -448,13 +483,27 @@ export default function ArtefactosEditor({
           />
           Mostrar columnas internas (costo BLARQ, utilidad) — no van al PDF cliente
         </label>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="text-sm bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
-        >
-          {saving ? "Guardando…" : "Guardar"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowDuplicar(true)}
+            className="text-sm border border-gray-300 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-50"
+          >
+            Traer de otra cotización
+          </button>
+          <button
+            onClick={() => setShowRevisar(true)}
+            className="text-sm border border-gray-300 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-50"
+          >
+            Revisar precios online
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="text-sm bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
+          >
+            {saving ? "Guardando…" : "Guardar"}
+          </button>
+        </div>
       </div>
 
       {/* Cada subcategoría es un bloque editorial cerrado */}
@@ -597,16 +646,19 @@ export default function ArtefactosEditor({
                     )}
                     <div className="flex items-center gap-1 justify-end">
                       <button
-                        onClick={() => saveToCatalog(item)}
-                        disabled={!!item.catalogId}
+                        onClick={() =>
+                          item.catalogId
+                            ? unlinkFromCatalog(item)
+                            : saveToCatalog(item)
+                        }
                         className={`text-xs leading-none ${
                           item.catalogId
-                            ? "text-green-600"
+                            ? "text-green-600 hover:text-gray-400"
                             : "text-gray-300 hover:text-gray-900"
                         }`}
                         title={
                           item.catalogId
-                            ? "Ya está en catálogo BLARQ"
+                            ? "En catálogo BLARQ — click para desvincular"
                             : "Guardar en catálogo BLARQ"
                         }
                       >
@@ -844,6 +896,30 @@ export default function ArtefactosEditor({
           placeholder="Notas adicionales que se incluirán en el PDF cliente…"
         />
       </div>
+
+      {/* Modal: revisar precios e imágenes online */}
+      {showRevisar && (
+        <RevisarPreciosArtefactos
+          budgetId={initialBudget.id}
+          onApply={applyPricePatches}
+          onClose={() => setShowRevisar(false)}
+        />
+      )}
+
+      {/* Modal: traer artefactos de otra cotización */}
+      {showDuplicar && (
+        <DuplicarArtefactos
+          budgetId={initialBudget.id}
+          onClose={() => setShowDuplicar(false)}
+          onDone={(newItems) => {
+            // Los items duplicados ya están en BD — los agregamos al
+            // estado local sin recargar (router.refresh no reinicializa
+            // el useState del editor).
+            setItems((prev) => [...prev, ...newItems]);
+            setShowDuplicar(false);
+          }}
+        />
+      )}
     </div>
   );
 }

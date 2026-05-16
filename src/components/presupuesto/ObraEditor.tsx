@@ -139,6 +139,10 @@ export default function ObraEditor({
   const [editingZoneItemId, setEditingZoneItemId] = useState<string | null>(null);
   const [editingZoneGroup, setEditingZoneGroup] = useState<{ chapter: string; name: string } | null>(null);
   const [zoneDraft, setZoneDraft] = useState("");
+  // Selección múltiple para asignar zona en bulk. MJ habilita checkbox por
+  // fila, selecciona varias y aplica una zona desde la barra flotante.
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [bulkZoneDraft, setBulkZoneDraft] = useState("");
 
   // Catalog search state
   const [catalogQuery, setCatalogQuery] = useState("");
@@ -453,6 +457,49 @@ export default function ObraEditor({
     }
   }
 
+  // Asignar (o quitar) zona en bulk a todas las partidas seleccionadas.
+  // Llama al PUT individual en paralelo. Pasar `null` quita la zona.
+  async function handleBulkSetZone(zone: string | null) {
+    const normalized = zone && zone.trim() ? zone.trim() : null;
+    const targets = items.filter((i) => selectedItemIds.has(i.id));
+    if (targets.length === 0) return;
+    setItems((curr) =>
+      curr.map((i) =>
+        selectedItemIds.has(i.id) ? { ...i, subChapter: normalized } : i
+      )
+    );
+    setSaveStatus("saving");
+    try {
+      await Promise.all(
+        targets.map((it) =>
+          fetch(
+            `/api/presupuestos/${initialBudget.id}/partidas/${it.id}`,
+            {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...it, subChapter: normalized ?? "" }),
+            }
+          )
+        )
+      );
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 1500);
+    } catch {
+      setSaveStatus("idle");
+    }
+    setSelectedItemIds(new Set());
+    setBulkZoneDraft("");
+  }
+
+  function toggleSelected(itemId: string) {
+    setSelectedItemIds((curr) => {
+      const next = new Set(curr);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  }
+
   // Renombrar TODA una zona dentro de un capítulo (ej: "Cocina" → "Cocina 1").
   // Hace bulk: actualiza state local + persiste cada item afectado.
   async function handleRenameZoneGroup(
@@ -691,6 +738,32 @@ export default function ObraEditor({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b-2 border-gray-900 bg-white">
+              <th className="px-2 py-0.5 w-8 text-center">
+                {/* Select all / deselect all visible partidas. Indeterminado
+                    cuando hay selección parcial. */}
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 align-middle accent-gray-900"
+                  checked={
+                    items.length > 0 && selectedItemIds.size === items.length
+                  }
+                  ref={(el) => {
+                    if (el) {
+                      el.indeterminate =
+                        selectedItemIds.size > 0 &&
+                        selectedItemIds.size < items.length;
+                    }
+                  }}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedItemIds(new Set(items.map((i) => i.id)));
+                    } else {
+                      setSelectedItemIds(new Set());
+                    }
+                  }}
+                  title="Seleccionar todas"
+                />
+              </th>
               <th className="text-center px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-10">Item</th>
               <th className="text-left px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "20%" }}>Partida</th>
               <th className="text-left px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "32%" }}>Descripcion</th>
@@ -737,6 +810,7 @@ export default function ObraEditor({
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <colgroup>
+                  <col className="w-8" />
                   <col className="w-10" />
                   <col style={{ width: "20%" }} />
                   <col style={{ width: "32%" }} />
@@ -770,7 +844,7 @@ export default function ObraEditor({
                     {showSubHeader && (
                       <tr className="bg-gray-100/70 border-y border-gray-200">
                         <td
-                          colSpan={9}
+                          colSpan={10}
                           className="px-3 py-0.5 text-[10px] font-semibold text-gray-600 uppercase tracking-wider"
                         >
                           {editingZoneGroup &&
@@ -816,7 +890,19 @@ export default function ObraEditor({
                         </td>
                       </tr>
                     )}
-                    <tr className="border-b border-gray-100 hover:bg-gray-50/60 group">
+                    <tr
+                      className={`border-b border-gray-100 hover:bg-gray-50/60 group ${
+                        selectedItemIds.has(item.id) ? "bg-gray-50" : ""
+                      }`}
+                    >
+                      <td className="px-2 py-1 align-top text-center">
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 align-middle accent-gray-900"
+                          checked={selectedItemIds.has(item.id)}
+                          onChange={() => toggleSelected(item.id)}
+                        />
+                      </td>
                       <td className="px-3 py-1 text-gray-700 text-xs tabular-nums align-top whitespace-nowrap">
                         <button
                           type="button"
@@ -1017,7 +1103,7 @@ export default function ObraEditor({
                     </tr>
                     {expandedItems[item.id] && (
                       <tr className="bg-gray-50">
-                        <td colSpan={9} className="px-4 py-3 space-y-3">
+                        <td colSpan={10} className="px-4 py-3 space-y-3">
                           {/* Descripción para el maestro (no aparece en PDF cliente) */}
                           <div>
                             <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
@@ -1114,7 +1200,7 @@ export default function ObraEditor({
                     )}
                     {showZoneSubtotal && (
                       <tr className="bg-gray-50/80 border-y border-gray-100">
-                        <td colSpan={7} className="px-3 py-0.5 text-right text-[10px] uppercase tracking-wider text-gray-500">
+                        <td colSpan={8} className="px-3 py-0.5 text-right text-[10px] uppercase tracking-wider text-gray-500">
                           Subtotal {item.subChapter}
                         </td>
                         <td className="px-3 py-0.5 text-right text-xs font-semibold text-gray-900 tabular-nums whitespace-nowrap">
@@ -1803,6 +1889,55 @@ export default function ObraEditor({
           <option key={z} value={z} />
         ))}
       </datalist>
+      {/* Barra flotante de acción bulk — aparece cuando hay selección.
+          Centrada abajo, estilo editorial (blanco, borde fino). */}
+      {selectedItemIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white border border-gray-300 rounded-xl shadow-sm px-4 py-2.5 flex items-center gap-3">
+          <span className="text-xs font-medium text-gray-700 tabular-nums whitespace-nowrap">
+            {selectedItemIds.size}{" "}
+            {selectedItemIds.size === 1 ? "partida" : "partidas"}
+          </span>
+          <span className="h-4 w-px bg-gray-200" />
+          <input
+            list={`zonas-${initialBudget.id}`}
+            value={bulkZoneDraft}
+            onChange={(e) => setBulkZoneDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleBulkSetZone(bulkZoneDraft);
+            }}
+            placeholder="Asignar zona (Cocina, Baños…)"
+            className="border border-gray-300 rounded px-2 py-1 text-xs uppercase tracking-wider text-gray-700 focus:outline-none focus:border-gray-900 w-44"
+          />
+          <button
+            type="button"
+            onClick={() => handleBulkSetZone(bulkZoneDraft)}
+            disabled={!bulkZoneDraft.trim()}
+            className="text-xs font-semibold uppercase tracking-wide text-gray-900 hover:text-black disabled:text-gray-300 disabled:cursor-not-allowed"
+          >
+            Aplicar
+          </button>
+          <span className="h-4 w-px bg-gray-200" />
+          <button
+            type="button"
+            onClick={() => handleBulkSetZone(null)}
+            className="text-xs font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-900"
+            title="Dejar las partidas seleccionadas sin zona"
+          >
+            Quitar zona
+          </button>
+          <span className="h-4 w-px bg-gray-200" />
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedItemIds(new Set());
+              setBulkZoneDraft("");
+            }}
+            className="text-xs uppercase tracking-wide text-gray-400 hover:text-gray-700"
+          >
+            Limpiar
+          </button>
+        </div>
+      )}
     </div>
   );
 }

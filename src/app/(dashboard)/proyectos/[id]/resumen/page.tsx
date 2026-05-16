@@ -465,6 +465,15 @@ export default async function ResultadosPage({
           info estaba duplicada con los cards arriba (Cobrado / Por cobrar)
           y con el Cuadro Resumen abajo (desglose por concepto + pagos). */}
 
+      {/* Cuadro Resumen: acordado por concepto + transferencias conciliadas
+          con facturas. Réplica del cuadro Excel que MJ lleva a mano.
+          Va inmediatamente debajo de los cards porque es la vista
+          "macro" del proyecto. */}
+      <CuadroResumen
+        invoices={project.invoices}
+        budgets={project.budgetVersions}
+      />
+
       {/* Presupuesto vs Real — tabla jerárquica con 3 secciones + total */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
@@ -666,13 +675,6 @@ export default async function ResultadosPage({
           obra&quot; + pagos acumulados en EPs pagados.
         </p>
       </div>
-
-      {/* Cuadro Resumen: acordado por concepto + transferencias conciliadas
-          con facturas. Réplica del cuadro Excel que MJ lleva a mano. */}
-      <CuadroResumen
-        invoices={project.invoices}
-        budgets={project.budgetVersions}
-      />
 
       {/* Fondo Sueldos generado por este proyecto */}
       <FondoSueldosCard fondo={computeFondoSueldos(project as unknown as ProjectWithFondo)} />

@@ -265,7 +265,10 @@ const CSS = `
   }
   .partidas tr.chapter-row td.chapter-idx { text-align: center; }
   /* Filas de sub-chapter (COCINA, BAÑO PRINCIPAL, …) — separador suave
-     dentro de un capítulo. Más sutil que la fila de capítulo. */
+     dentro de un capítulo. Más sutil que la fila de capítulo. El
+     subtotal de la zona va en la última celda alineado a la derecha,
+     con el mismo peso/tamaño que el nombre de la zona para que se lean
+     como un solo titular: "COCINA ........ $ 972.188". */
   .partidas tr.sub-chapter-row td {
     background: #F5F5F5;
     font-weight: 500;
@@ -277,22 +280,11 @@ const CSS = `
     color: #555;
     letter-spacing: 0.04em;
   }
-  /* Subtotal por zona — cierra el grupo (COCINA / BAÑOS / …). Tiene
-     que pasar piola: información secundaria que se lee si la buscás,
-     pero no compite con el subtotal del capítulo ni con la línea de
-     total del PDF. Por eso: sin fondo, gris medio, peso normal,
-     borde apenas visible arriba como separador del último item. */
-  .partidas tr.zone-subtotal-row td {
-    background: transparent;
-    font-weight: 400;
-    text-transform: uppercase;
-    border-top: 0.15pt solid #EEE;
-    font-size: 6pt;
-    vertical-align: middle;
-    padding: 1pt 5pt;
-    color: #888;
+  .partidas tr.sub-chapter-row td.col-total {
     text-align: right;
-    letter-spacing: 0.04em;
+    padding: 1.5pt 5pt;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   /* Anchos de columna (suman 100%). TOTAL en peso regular per spec. */
@@ -466,20 +458,20 @@ export function renderObraHTML(data: ObraHTMLInput): string {
             // ignorando el item.itemNumber crudo de la BD — los Excel de
             // origen a veces tenían duplicados o saltos (1.3, 1.3, 1.5…).
             // Si el subChapter cambió respecto al ítem anterior, anteponemos
-            // una fila separadora con el nombre del sub-chapter.
+            // una fila separadora con el nombre del sub-chapter Y el subtotal
+            // de la zona alineado a la derecha bajo la col Total.
             const prev = idx > 0 ? ch.items[idx - 1] : null;
-            const next = idx < ch.items.length - 1 ? ch.items[idx + 1] : null;
             const showSub =
               item.subChapter && (!prev || prev.subChapter !== item.subChapter);
-            const showZoneSub =
-              showZoneSubtotals &&
-              item.subChapter &&
-              (!next || next.subChapter !== item.subChapter);
+            const subValue = showZoneSubtotals
+              ? fmtMoney(zoneSubtotals.get(item.subChapter ?? "") ?? 0)
+              : "";
             return `
           ${
             showSub
               ? `<tr class="sub-chapter-row">
-                  <td colspan="7">${esc(item.subChapter!)}</td>
+                  <td colspan="6">${esc(item.subChapter!)}</td>
+                  <td class="col-total">${subValue}</td>
                 </tr>`
               : ""
           }
@@ -491,15 +483,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
             <td class="col-qty">${fmtQty(item.quantity)}</td>
             <td class="col-pu">${fmtNum(item.unitPrice)}</td>
             <td class="col-total">${fmtMoney(item.total)}</td>
-          </tr>
-          ${
-            showZoneSub
-              ? `<tr class="zone-subtotal-row">
-                  <td colspan="6">Subtotal ${esc(item.subChapter!)}</td>
-                  <td class="col-total">${fmtMoney(zoneSubtotals.get(item.subChapter!) ?? 0)}</td>
-                </tr>`
-              : ""
-          }`;
+          </tr>`;
           })
           .join("")}
       `;

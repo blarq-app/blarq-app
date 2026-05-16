@@ -824,27 +824,15 @@ export default function ObraEditor({
                 <tbody className="divide-y divide-gray-50">
                   {chapter.items.map((item, itemIdx) => {
                     const prevItem = itemIdx > 0 ? chapter.items[itemIdx - 1] : null;
-                    const nextItem =
-                      itemIdx < chapter.items.length - 1
-                        ? chapter.items[itemIdx + 1]
-                        : null;
                     const showSubHeader =
                       item.subChapter &&
                       (!prevItem || prevItem.subChapter !== item.subChapter);
-                    // Subtotal de zona: cierra el grupo justo después del
-                    // último item de esa zona. Solo si hay al menos 2 zonas
-                    // distintas en el capítulo (sino el subtotal de zona =
-                    // subtotal del capítulo y agrega ruido visual).
-                    const showZoneSubtotal =
-                      chapter.showZoneSubtotals &&
-                      item.subChapter &&
-                      (!nextItem || nextItem.subChapter !== item.subChapter);
                     return (
                     <Fragment key={item.id}>
                     {showSubHeader && (
                       <tr className="bg-gray-100/70 border-y border-gray-200">
                         <td
-                          colSpan={10}
+                          colSpan={8}
                           className="px-3 py-0.5 text-[10px] font-semibold text-gray-600 uppercase tracking-wider"
                         >
                           {editingZoneGroup &&
@@ -888,6 +876,20 @@ export default function ObraEditor({
                             </button>
                           )}
                         </td>
+                        {/* Subtotal de zona en la misma fila de la bandita,
+                            alineado a la derecha bajo la columna Total. Solo
+                            si el capítulo tiene 2+ zonas (sino == subtotal
+                            del capítulo). */}
+                        <td className="px-3 py-0.5 text-right text-[10px] font-semibold text-gray-600 uppercase tracking-wider tabular-nums whitespace-nowrap">
+                          {chapter.showZoneSubtotals
+                            ? formatCLP(
+                                chapter.subChapterSubtotals.get(
+                                  item.subChapter ?? ""
+                                ) ?? 0
+                              )
+                            : ""}
+                        </td>
+                        <td></td>
                       </tr>
                     )}
                     <tr
@@ -1196,17 +1198,6 @@ export default function ObraEditor({
                             />
                           </div>
                         </td>
-                      </tr>
-                    )}
-                    {showZoneSubtotal && (
-                      <tr className="bg-gray-50/80 border-y border-gray-100">
-                        <td colSpan={8} className="px-3 py-0.5 text-right text-[10px] uppercase tracking-wider text-gray-500">
-                          Subtotal {item.subChapter}
-                        </td>
-                        <td className="px-3 py-0.5 text-right text-xs font-semibold text-gray-900 tabular-nums whitespace-nowrap">
-                          {formatCLP(chapter.subChapterSubtotals.get(item.subChapter ?? "") ?? 0)}
-                        </td>
-                        <td></td>
                       </tr>
                     )}
                     </Fragment>

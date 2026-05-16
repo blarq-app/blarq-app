@@ -4,9 +4,9 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-16 (ronda 24 — cotización de artefactos: revisar precios online, duplicar de otra cotización, desvincular del catálogo)
+- **Última actualización**: 2026-05-16 (ronda 25 — cotización de artefactos: revisar precios online, duplicar de otra cotización, desvincular del catálogo)
 
-- **Ronda 24 — Pendientes de artefactos (ronda 18) retomados**:
+- **Ronda 25 — Pendientes de artefactos (ronda 18) retomados**:
   - **Contexto**: MJ pidió retomar los pendientes de la cotización de artefactos. Estado al cerrar:
   - **"Revisar precios online"** — botón nuevo en el editor de artefactos. Recorre los items que tienen link cargado, baja la página de cada producto y abre un modal con el diff: precio actual vs. precio del momento, imagen actual vs. imagen del sitio. MJ marca con checkbox qué cambios aplicar. Cubre también el pendiente "auto-extraer imagen en bulk" — el mismo modal trae imágenes faltantes.
   - **"Traer de otra cotización"** — botón nuevo. MJ elige una cotización de artefactos de otro proyecto (o de otra versión), se duplica entera dentro de la actual. Al duplicar, los precios se refrescan online automáticamente (el descuento pactado se mantiene; el precio cliente se recalcula). Los items sin link o con link caído quedan reportados como "revisá a mano". **Esto reemplazó la idea de "templates de espacio"** — MJ aclaró que no quiere armar recetas, quiere duplicar cotizaciones viejas y que los precios se actualicen solos.
@@ -21,6 +21,15 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
     2. Probar "Traer de otra cotización" duplicando una cotización vieja.
     3. Probar el toggle de desvincular (★ verde → click).
   - **Pendientes de artefactos que NO se tocaron** (siguen abiertos, ver ronda 18): el "agente conversacional" (ambicioso, lejos) y las tareas operacionales de MJ (cargar paleta estándar en el catálogo, etc.).
+
+- **Ronda 24 — Multi-select + acciones masivas en `/banco/movimientos` (Fase 1)**:
+  - Checkbox por fila + "seleccionar todo" en la cabecera. Las transferencias internas no son seleccionables (no se imputan).
+  - Barra flotante abajo-centro cuando hay selección, con dos acciones:
+    - **Desasignar** — borra los `InvoicePayment` de los movs elegidos, status → `sin_asignar`. Pide confirmación. El botón se deshabilita si ninguno tiene imputaciones.
+    - **Asignar a factura** — abre un buscador de facturas **emitidas** (reusa `/api/facturas/search`); cada mov elegido se imputa por su monto completo (`|amount|`) como un pago. Reemplaza imputaciones previas del mov. status → `conciliado`.
+  - En ambas acciones las facturas afectadas recalculan status vía `recomputeInvoiceStatus`.
+  - **Implementación**: endpoint nuevo `POST /api/banco/movimientos/bulk`. La tabla de `/banco/movimientos/page.tsx` pasó a componente client (`MovementsTable.tsx`) para compartir estado de selección; barra en `MovementsBulkBar.tsx`. No toca schema.
+  - **PENDIENTE — Fase 2 "cliente del proyecto"** (no se hizo, sigue siendo decisión abierta): `BankMovement` no tiene `projectId` ni `conceptoCobro`; enseñarle a la app quién transfiere de cada proyecto (Carolina Ovalle → Portofino) y que el Cuadro Resumen lea transferencias asignadas directo a proyecto+concepto, con o sin factura. Las 2 transferencias negativas de Carolina (−$2.912.199 total) son devolución al cliente y deben restar del cobrado.
 
 - **Ronda 23 — Sesión larga con MJ (2026-05-15/16). Varios PRs mergeados a prod**:
   - **PR #34 — bloque "Detalle por costo directo"** en el editor del presupuesto de obra (`CostoDirectoDetalle.tsx`): agrupa `ObraItemComponent` por tipo, fila por componente con expand a las partidas donde aparece. + scripts `import-base-datos-excel.ts`, `snapshot-components-from-catalog.ts`, `investigate-cost-snapshot-drift.ts`, `quick-drift-check.ts`.

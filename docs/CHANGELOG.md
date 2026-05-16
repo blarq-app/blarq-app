@@ -15,6 +15,16 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-16 — Multi-select + acciones masivas en `/banco/movimientos` (Fase 1)
+
+- **Qué cambió**: la lista de movimientos bancarios tiene checkbox por fila + "seleccionar todo", y una barra flotante de acciones masivas con dos operaciones: **Desasignar** (quita las imputaciones de los movs elegidos, vuelven a `sin_asignar`) y **Asignar a factura** (imputa cada mov a una factura emitida elegida, por su monto completo).
+- **Por qué**: MJ necesitaba poder desasignar facturas en masa y rehacer la conciliación; ir mov por mov era inviable tras detectar la pérdida de transferencias en Carolina Ovalle (ronda 23).
+- **Implementación**: endpoint nuevo `POST /api/banco/movimientos/bulk`. La tabla de `/banco/movimientos` pasó a componente client (`MovementsTable.tsx`) para compartir estado de selección; barra y buscador de factura en `MovementsBulkBar.tsx`. En ambas acciones las facturas afectadas recalculan status vía `recomputeInvoiceStatus`.
+- **No toca**: schema (sin migración). `metrics.ts` ni cálculos contables.
+- **Pendiente — Fase 2**: "cliente del proyecto" (transferencias asignadas directo a proyecto+concepto, con o sin factura) — sigue siendo decisión abierta, requiere `projectId`/`conceptoCobro` en `BankMovement`.
+
+---
+
 ## 2026-05-15 — Zonas (subChapter) en partidas de obra — UI completa + subtotal por zona
 
 - **Qué cambió**: el campo `ObraItem.subChapter` (que ya existía en el modelo) ahora es editable desde el editor de presupuesto. Permite agrupar partidas por zona (ej. COCINA / BAÑOS) dentro de un mismo presupuesto, con subtotal por zona visible en el editor y en el PDF cliente.

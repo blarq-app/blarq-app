@@ -4,7 +4,16 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-16 (ronda 23 — sesión larga MJ: cuadro resumen + import Lefevre/Portofino V6 + bug grave importador de cartolas. Multi-select de movimientos quedó pendiente.)
+- **Última actualización**: 2026-05-16 (ronda 24 — multi-select + acciones masivas en `/banco/movimientos`, Fase 1.)
+
+- **Ronda 24 — Multi-select + acciones masivas en `/banco/movimientos` (Fase 1)**:
+  - Checkbox por fila + "seleccionar todo" en la cabecera. Las transferencias internas no son seleccionables (no se imputan).
+  - Barra flotante abajo-centro cuando hay selección, con dos acciones:
+    - **Desasignar** — borra los `InvoicePayment` de los movs elegidos, status → `sin_asignar`. Pide confirmación. El botón se deshabilita si ninguno tiene imputaciones.
+    - **Asignar a factura** — abre un buscador de facturas **emitidas** (reusa `/api/facturas/search`); cada mov elegido se imputa por su monto completo (`|amount|`) como un pago. Reemplaza imputaciones previas del mov. status → `conciliado`.
+  - En ambas acciones las facturas afectadas recalculan status vía `recomputeInvoiceStatus`.
+  - **Implementación**: endpoint nuevo `POST /api/banco/movimientos/bulk`. La tabla de `/banco/movimientos/page.tsx` pasó a componente client (`MovementsTable.tsx`) para compartir estado de selección; barra en `MovementsBulkBar.tsx`. No toca schema.
+  - **PENDIENTE — Fase 2 "cliente del proyecto"** (no se hizo, sigue siendo decisión abierta): `BankMovement` no tiene `projectId` ni `conceptoCobro`; enseñarle a la app quién transfiere de cada proyecto (Carolina Ovalle → Portofino) y que el Cuadro Resumen lea transferencias asignadas directo a proyecto+concepto, con o sin factura. Las 2 transferencias negativas de Carolina (−$2.912.199 total) son devolución al cliente y deben restar del cobrado.
 
 - **Ronda 23 — Sesión larga con MJ (2026-05-15/16). Varios PRs mergeados a prod**:
   - **PR #34 — bloque "Detalle por costo directo"** en el editor del presupuesto de obra (`CostoDirectoDetalle.tsx`): agrupa `ObraItemComponent` por tipo, fila por componente con expand a las partidas donde aparece. + scripts `import-base-datos-excel.ts`, `snapshot-components-from-catalog.ts`, `investigate-cost-snapshot-drift.ts`, `quick-drift-check.ts`.

@@ -45,12 +45,16 @@ export default function MovementsTable({
   statusLabels,
   categoryLabels,
   blarqRutDigits,
+  projects,
+  categories,
 }: {
   movements: MovementRow[];
   matchHints: Record<string, MatchHint>;
   statusLabels: Record<string, { label: string; tone: string }>;
   categoryLabels: Record<string, string>;
   blarqRutDigits: string;
+  projects: { id: string; name: string }[];
+  categories: { id: string; label: string }[];
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -274,7 +278,12 @@ export default function MovementsTable({
         )}
       </div>
 
-      <MovementsBulkBar selected={selected} onClear={clear} />
+      <MovementsBulkBar
+        selected={selected}
+        onClear={clear}
+        projects={projects}
+        categories={categories}
+      />
     </>
   );
 }

@@ -4,7 +4,17 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-16 (ronda 25 — cotización de artefactos: revisar precios online, duplicar de otra cotización, desvincular del catálogo)
+- **Última actualización**: 2026-05-16 (ronda 26 — pago a maestro sin factura desde el banco + sync de artefactos por nombre)
+
+- **Ronda 26 — "Pago sin factura" desde movimientos del banco**:
+  - **Problema**: hay transferencias bancarias que son pagos a maestros que NO emiten factura (caso disparador: Daniel Ignacio Santibáñez, 11 transferencias). Quedaban como movimientos "pendientes" sin entrar como costo de ningún proyecto. No había forma desde la UI de decirle a la app "esta transferencia es un costo del proyecto X, categoría Y".
+  - **Solución**: nueva acción masiva **"Pago sin factura"** en la barra de selección de `/banco/movimientos`. MJ selecciona uno o varios egresos, elige proyecto + categoría, y la app crea por cada movimiento un registro de costo `Invoice` con `origin="sin_respaldo"` (type=recibida, tipoDoc=1043, iva=0, monto = el de la transferencia, nombre/RUT de la contraparte del movimiento), lo deja `pagada` y conciliado contra el movimiento vía `InvoicePayment`. Eso entra solo en `totalGastado` / `realByCategory` del proyecto (metrics.ts no filtra por origin).
+  - **Limpieza de huérfanos**: la acción "Desasignar" ahora, si la factura que pierde su imputación es un `origin="sin_respaldo"` y queda sin pagos, **borra esa factura** — era un registro auto-creado, sin el movimiento no significa nada. Evita registros de costo huérfanos.
+  - **Sin cambios de schema. Sin tocar metrics.ts.** El `folioNumber` del registro sin respaldo se genera como `SR-<externalRef|id del movimiento>` para respetar el unique `dte_unique`.
+  - **Archivos**: `src/app/api/banco/movimientos/bulk/route.ts` (acción `pago_sin_factura` + limpieza en `desasignar`), `banco/movimientos/page.tsx` (pasa proyectos + categorías), `MovementsTable.tsx`, `MovementsBulkBar.tsx` (botón + modal `PagoSinFacturaModal`).
+  - **UI**: para un solo movimiento, MJ marca su checkbox y usa la barra (la barra ya funciona con 1+). No se tocó el modal de conciliación per-fila.
+  - **DECISIÓN CONTABLE PENDIENTE (planteada por MJ esta ronda)**: MJ dijo *"la contabilidad no debe salir de los EP, sino de las facturas o mov sin respaldo"*. Los Estados de Pago son una herramienta de **cálculo** (cuánto pagar al maestro según avance), NO una fuente de costo. Hoy `metrics.ts` SÍ suma los EP cerrados como costo (`totalPagadoMaestros`). Hoy no causa problema porque ningún proyecto tiene EP cerrados en la app (los de Daniel se hicieron en Excel). Pero **cuando MJ empiece a usar EP en la app**, sumar EP + mov sin respaldo del mismo dinero contaría doble. Hay que sacar el EP del cálculo de `metrics.ts` ANTES de ese momento. Es un cambio al archivo contable → requiere snapshot pre/post (§4.1). No se hizo esta ronda.
+  - **Pendiente para MJ**: probar "Pago sin factura" con las transferencias de Daniel (a los proyectos que le pase JT). Recordar: el masivo asigna todo al MISMO proyecto+categoría, así que agrupá por proyecto.
 
 - **Ronda 25 — Pendientes de artefactos (ronda 18) retomados**:
   - **Contexto**: MJ pidió retomar los pendientes de la cotización de artefactos. Estado al cerrar:

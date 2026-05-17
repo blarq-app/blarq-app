@@ -155,7 +155,7 @@ export default async function MovimientosPage({
   if (q) statsWhere.OR = where.OR;
   if (andFilters.length > 0) statsWhere.AND = andFilters;
 
-  const [movements, accounts, statusCounts, ingresos, egresos] = await Promise.all([
+  const [movements, accounts, statusCounts, ingresos, egresos, projects, categories] = await Promise.all([
     prisma.bankMovement.findMany({
       where,
       orderBy: { date: "desc" },
@@ -187,7 +187,28 @@ export default async function MovimientosPage({
       where: { ...statsWhere, amount: { lt: 0 } },
       _sum: { amount: true },
     }),
+    // Proyectos y categorías para el modal "pago sin factura" (asignar un
+    // movimiento a un costo de proyecto sin que exista factura).
+    prisma.project.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.costCategory.findMany({
+      where: { appliesTo: { in: ["recibida", "both"] } },
+      select: {
+        id: true,
+        name: true,
+        parent: { select: { name: true } },
+      },
+      orderBy: { sortOrder: "asc" },
+    }),
   ]);
+
+  // Categorías aplanadas con etiqueta "Padre / Hijo" para el selector.
+  const categoryOptions = categories.map((c) => ({
+    id: c.id,
+    label: c.parent ? `${c.parent.name} / ${c.name}` : c.name,
+  }));
 
   const totalCount = statusCounts.reduce((s, x) => s + x._count._all, 0);
   const countByStatus: Record<string, number> = {};
@@ -396,6 +417,8 @@ export default async function MovimientosPage({
         statusLabels={STATUS_LABEL}
         categoryLabels={CATEGORY_LABEL}
         blarqRutDigits={BLARQ_RUT_DIGITS}
+        projects={projects}
+        categories={categoryOptions}
       />
     </div>
   );

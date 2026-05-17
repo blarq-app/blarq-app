@@ -16,6 +16,36 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-16 — Catálogo de artefactos auto-construido
+
+- **Qué cambió**: el catálogo BLARQ de artefactos se construye solo. Cada producto que se agrega a una cotización (alta individual o importación de Excel) entra al catálogo; si ya hay una entrada con el mismo nombre se reutiliza, si no se crea. Cada `ArtefactoItem` queda vinculado por `catalogId`. Helper compartido `src/lib/catalog/ensureArtefactoCatalog.ts`.
+- **Por qué**: pedido de MJ — quiere el catálogo como el listado de materiales: una lista grande con toda la variedad cotizada, no solo "los más usados".
+- **Backfill**: `scripts/backfill-artefacto-catalog.ts` (dry-run por defecto, `--apply`) vincula los items históricos. Dedup por nombre case-insensitive. Pendiente correrlo en prod.
+- **Sin cambios de schema** (la tabla `ArtefactoCatalog` ya existía). Archivos: `ensureArtefactoCatalog.ts`, `api/presupuestos/[id]/artefactos/route.ts`, `api/proyectos/[id]/importar-artefactos/route.ts`.
+
+---
+
+## 2026-05-16 — Cálculo de costos: los Estados de Pago salen del costo contable
+
+- **Qué cambió**: `metrics.ts` ya no cuenta los Estados de Pago cerrados como costo del proyecto. `totalGastado` y `totalGastadoConIva` ahora salen 100% de facturas recibidas (incluidos los "pagos sin respaldo", que son `Invoice` recibida). Se eliminó el campo `totalPagadoMaestros` de `ProjectMetrics` y su uso en `conceptDeviations` y en `/proyectos/[id]/resumen`.
+- **Por qué**: decisión de MJ — *"la contabilidad no debe salir de los EP, sino de las facturas o mov sin respaldo"*. El EP es una herramienta de cálculo (cuánto pagar al maestro según avance), no la huella contable del gasto. Sumar EP + el pago registrado contaría doble.
+- **`project.estadosPago` se sigue usando** para el avance de obra (% ponderado por MO) — eso no es costo, no cambió.
+- **Verificación (§4.1)**: snapshot pre/post de los 17 proyectos en dev → diff vacío, ningún total se movió (ningún proyecto tiene EP cerrados en la app todavía). `test-metrics.ts` corre con 2 fallas pre-existentes ajenas al cambio.
+- **Archivos**: `src/lib/projects/metrics.ts`, `proyectos/[id]/resumen/page.tsx`, `scripts/test-metrics.ts`.
+
+---
+
+## 2026-05-16 — "Pago sin factura": registrar pagos a maestros sin documento desde el banco
+
+- **Qué cambió**: nueva acción masiva "Pago sin factura" en la barra de selección de `/banco/movimientos`. Para egresos a maestros/proveedores que no emiten documento, MJ selecciona uno o varios movimientos, elige proyecto + categoría, y la app crea por cada uno un registro de costo `Invoice` con `origin="sin_respaldo"` (recibida, tipoDoc=1043, sin IVA, monto y contraparte tomados del movimiento), lo deja conciliado contra el movimiento. El gasto entra automáticamente en los costos del proyecto.
+- **Por qué**: las transferencias a maestros que no facturan (caso Daniel Ignacio Santibáñez) quedaban como movimientos "pendientes" sin entrar como costo de ningún proyecto, y no había forma de imputarlas desde la UI.
+- **Limpieza de huérfanos**: la acción "Desasignar" ahora borra la factura `origin="sin_respaldo"` que quede sin imputaciones — sin el movimiento, ese registro auto-creado no significa nada.
+- **Sin cambios de schema. Sin tocar `metrics.ts`** (que ya cuenta cualquier `Invoice` recibida por proyecto, sin filtrar por origin).
+- **Archivos**: `src/app/api/banco/movimientos/bulk/route.ts`, `banco/movimientos/page.tsx`, `MovementsTable.tsx`, `MovementsBulkBar.tsx`.
+- **Decisión contable pendiente (MJ)**: "la contabilidad no debe salir de los EP, sino de las facturas o mov sin respaldo". Hoy `metrics.ts` suma EP cerrados como costo (`totalPagadoMaestros`); cuando se empiece a usar EP en la app habrá que sacarlos del cálculo para no contar doble. Ver `docs/WIP.md` ronda 26.
+
+---
+
 ## 2026-05-16 — Cotización de artefactos: revisar precios online, duplicar de otra cotización, desvincular del catálogo
 
 - **Qué cambió**: tres funciones nuevas en el editor de artefactos (`ArtefactosEditor`). (1) "Revisar precios online" — botón que recorre los items con link cargado, baja la página de cada producto y muestra un modal con el diff precio/imagen actual vs. del momento; MJ marca qué aplicar. (2) "Traer de otra cotización" — duplica los artefactos de otra cotización dentro de la actual, refrescando los precios online automáticamente (el descuento se mantiene, el precio cliente se recalcula). (3) La estrella ★ ahora también desvincula: click en un item ya catalogado lo suelta del catálogo BLARQ (`catalogId → null`) sin tocar otras copias.

@@ -23,20 +23,28 @@ type Factura = {
 };
 
 // Barra flotante de acciones masivas para /banco/movimientos.
-// Aparece abajo-centro cuando hay movimientos seleccionados. Dos acciones:
+// Aparece abajo-centro cuando hay movimientos seleccionados. Acciones:
 //   - Desasignar: quita las imputaciones de los movs (vuelven a pendiente).
 //   - Asignar a factura: imputa cada mov elegido a una factura emitida,
 //     cada uno como un pago por su monto completo.
+//   - Pago sin factura: para egresos a maestros/proveedores que no emiten
+//     documento. Crea un registro de costo "sin respaldo" por cada mov y
+//     lo asigna a un proyecto + categoría.
 export default function MovementsBulkBar({
   selected,
   onClear,
+  projects,
+  categories,
 }: {
   selected: SelectedMovement[];
   onClear: () => void;
+  projects: { id: string; name: string }[];
+  categories: { id: string; label: string }[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [sinFacturaOpen, setSinFacturaOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   if (selected.length === 0 && !toast) return null;
@@ -106,6 +114,43 @@ export default function MovementsBulkBar({
     }
   }
 
+  async function pagoSinFactura(projectId: string, categoryId: string) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/banco/movimientos/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "pago_sin_factura",
+          movementIds: ids,
+          projectId,
+          categoryId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error ?? "Error al registrar el pago sin factura");
+        return;
+      }
+      const partes = [
+        `${data.creados} pago${data.creados !== 1 ? "s" : ""} sin factura registrado${data.creados !== 1 ? "s" : ""}`,
+      ];
+      if (data.omitidos > 0) {
+        partes.push(
+          `${data.omitidos} omitido${data.omitidos !== 1 ? "s" : ""} (ya asignados o no son egresos)`
+        );
+      }
+      setToast(`Listo · ${partes.join(" · ")}`);
+      setSinFacturaOpen(false);
+      onClear();
+      router.refresh();
+      setTimeout(() => setToast(null), 8000);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-[calc(100vw-2rem)]">
@@ -137,6 +182,14 @@ export default function MovementsBulkBar({
               className="text-xs bg-emerald-600 text-white px-3 py-1 rounded hover:bg-emerald-700 disabled:opacity-50"
             >
               Asignar a factura…
+            </button>
+            <button
+              onClick={() => setSinFacturaOpen(true)}
+              disabled={busy}
+              title="Para pagos a maestros/proveedores que no emiten factura — crea el costo del proyecto sin documento."
+              className="text-xs bg-white text-gray-900 px-3 py-1 rounded hover:bg-gray-100 disabled:opacity-50"
+            >
+              Pago sin factura…
             </button>
             <button
               onClick={onClear}
@@ -171,7 +224,132 @@ export default function MovementsBulkBar({
           onPick={asignar}
         />
       )}
+
+      {sinFacturaOpen && (
+        <PagoSinFacturaModal
+          movementCount={selected.length}
+          totalNeto={neto}
+          busy={busy}
+          projects={projects}
+          categories={categories}
+          onClose={() => setSinFacturaOpen(false)}
+          onConfirm={pagoSinFactura}
+        />
+      )}
     </>
+  );
+}
+
+// Modal para registrar los movimientos seleccionados como "pago sin
+// factura": elige proyecto + categoría y se crea un registro de costo
+// sin respaldo por cada movimiento (egreso).
+function PagoSinFacturaModal({
+  movementCount,
+  totalNeto,
+  busy,
+  projects,
+  categories,
+  onClose,
+  onConfirm,
+}: {
+  movementCount: number;
+  totalNeto: number;
+  busy: boolean;
+  projects: { id: string; name: string }[];
+  categories: { id: string; label: string }[];
+  onClose: () => void;
+  onConfirm: (projectId: string, categoryId: string) => void;
+}) {
+  const [projectId, setProjectId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-xl w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">
+              Pago sin factura
+            </h2>
+            <p className="text-xs text-gray-500 mt-1 tabular-nums">
+              {movementCount} movimiento{movementCount !== 1 ? "s" : ""} · neto{" "}
+              {formatCLP(totalNeto)}. Cada egreso se registra como un costo
+              del proyecto, sin documento tributario.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 text-xl leading-none px-2"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Proyecto
+            </label>
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
+            >
+              <option value="">Elegí un proyecto…</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Categoría
+            </label>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
+            >
+              <option value="">Elegí una categoría…</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Para pagos a maestros suele ser Mano de obra o Subcontrato.
+            </p>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="text-xs text-gray-600 px-3 py-2 hover:text-gray-900"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => onConfirm(projectId, categoryId)}
+            disabled={busy || !projectId || !categoryId}
+            className="text-xs bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
+          >
+            {busy ? "Registrando…" : "Registrar pago sin factura"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

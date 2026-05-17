@@ -69,14 +69,13 @@ export type ProjectMetrics = {
   totalAcordadoNeto: number; // sin IVA — para utilidad
   totalCobrado: number; // c/IVA — entra a caja
   totalCobradoNeto: number; // sin IVA — para utilidad
-  totalGastado: number; // neto — facturas recibidas + pagos a maestros
-  totalGastadoConIva: number; // c/IVA — facturas recibidas (totalAmount) + pagos a maestros (sin IVA, pasan tal cual)
-  totalPagadoMaestros: number;
+  totalGastado: number; // neto — facturas recibidas (incluye pagos sin respaldo)
+  totalGastadoConIva: number; // c/IVA — facturas recibidas (totalAmount)
   utilidadReal: number; // = totalCobradoNeto − totalGastado
   // Utilidad PROYECTADA: lo que MJ se queda cuando termine de cobrar el
   // total acordado. Útil para proyectos terminados con saldo pendiente,
   // o como vista de "rentabilidad esperada" en cualquier momento.
-  // = totalAcordadoNeto − (totalGastado + totalPagadoMaestros).
+  // = totalAcordadoNeto − totalGastado.
   utilidadProyectada: number;
   pctCobrado: number; // 0..100+ (sobre c/IVA, para coherencia con la barra)
 
@@ -237,39 +236,28 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
     0
   );
 
-  // Pagos a maestros: solo de EPs cerrados.
-  // Confirmado con MJ 2026-05-05: priorizar facturas sobre EPs.
-  // - Si el maestro asignado al proyecto FACTURA (emitsInvoice=true), las
-  //   facturas recibidas ya cubren su pago — sumar EP también sería doble
-  //   conteo. En ese caso `totalPagadoMaestros = 0` y solo cuentan facturas.
-  // - Si NO factura (cuadrilla informal), los EPs son la única huella del
-  //   gasto y SÍ se suman.
-  // Caso no resuelto: maestros que no facturan a futuro — pendiente
-  // diseñar cómo evidenciar el gasto. Ver WIP.md "Tema abierto".
-  const maestroFactura = project.maestro?.emitsInvoice === true;
-  const epsCerradosTotal = project.estadosPago
-    .filter((ep) => ep.status === "cerrado")
-    .reduce(
-      (s, ep) => s + ep.items.reduce((a, i) => a + (i.amountPaid ?? 0), 0),
-      0
-    );
-  const totalPagadoMaestros = maestroFactura ? 0 : epsCerradosTotal;
-
-  const totalGastado = totalRecibidoFacturas + totalPagadoMaestros;
+  // El gasto contable del proyecto sale SOLO de facturas recibidas — y
+  // eso incluye los "pagos sin respaldo" (Invoice type=recibida,
+  // tipoDoc=1043), que es como se registran las transferencias a
+  // maestros que no emiten documento.
+  //
+  // Los Estados de Pago NO se cuentan como costo. Un EP es una
+  // herramienta de cálculo: dice cuánto pagarle al maestro según el
+  // avance de obra. La huella contable del gasto es la transferencia
+  // registrada como factura o como pago sin respaldo, no el EP.
+  // Si se sumara el EP además del pago, el costo se contaría dos veces.
+  // Decisión de MJ 2026-05-16 (ver WIP.md / CHANGELOG).
+  const totalGastado = totalRecibidoFacturas;
   // Versión c/IVA del gastado: para mostrar al lado del neto en la card.
-  // Las facturas recibidas se suman por totalAmount (con IVA); los pagos
-  // a maestros sin respaldo no llevan IVA, pero los EPs cerrados son
-  // pagos directos sin DTE — se pasan como están.
   const totalRecibidoFacturasConIva = project.invoices
     .filter((i) => i.type === "recibida")
     .reduce((s, i) => s + sign(i) * i.totalAmount, 0);
-  const totalGastadoConIva = totalRecibidoFacturasConIva + totalPagadoMaestros;
+  const totalGastadoConIva = totalRecibidoFacturasConIva;
   // Utilidad real: NETO contra NETO (antes mezclaba c/IVA y salía inflada
   // ~19%). totalCobradoNeto = ingreso real, totalGastado ya es neto.
   const utilidadReal = totalCobradoNeto - totalGastado;
   // Utilidad proyectada: lo que MJ se queda cuando termine de cobrar el
-  // total acordado, restando los gastos. totalGastado ya incluye
-  // totalPagadoMaestros (línea 257), no sumarlo dos veces.
+  // total acordado, restando los gastos.
   const utilidadProyectada = totalAcordadoNeto - totalGastado;
   const pctCobrado = totalAcordado > 0 ? (totalCobrado / totalAcordado) * 100 : 0;
 
@@ -317,8 +305,7 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   )
     .map(([catName, breakdownKey]) => {
       const presupuestado = budgetByType[breakdownKey] ?? 0;
-      let real = realByCategory[catName] ?? 0;
-      if (breakdownKey === "costLabor") real += totalPagadoMaestros;
+      const real = realByCategory[catName] ?? 0;
       const pct = presupuestado > 0 ? (real / presupuestado) * 100 : 0;
       return { name: catName, presupuestado, real, pct };
     })
@@ -424,7 +411,6 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
     totalCobradoNeto,
     totalGastado,
     totalGastadoConIva,
-    totalPagadoMaestros,
     utilidadReal,
     utilidadProyectada,
     pctCobrado,

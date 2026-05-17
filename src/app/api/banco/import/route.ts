@@ -6,32 +6,27 @@ import { applyRulesToMovement } from "@/lib/banco/categorizationRules";
 
 // Detecta si un movimiento ya está en la BD.
 //
-// Regla: el identificador único real de una transacción es el n° de
-// documento del banco (`externalRef`). DOS transferencias del mismo
-// monto el mismo día con distinto documento son movimientos REALES
-// distintos — NO duplicados. Antes el check usaba solo
-// (cuenta, fecha, monto, descripción) y descartaba la segunda como
-// duplicado, perdiendo plata (bug cartola Carolina Ovalle, 2026-05-16).
+// Regla: el identificador estable de una transacción es el saldo
+// posterior (`balanceAfter`) — el saldo de la cuenta una vez aplicado el
+// movimiento. Es un número absoluto que no depende del formato de
+// cartola. Antes el check usaba el n° de documento (`externalRef`), pero
+// la cartola Histórica lo trae y la Provisoria lo trae en cero: por eso
+// reimportar la misma cartola en el otro formato duplicaba todo (bug
+// detectado 2026-05-17).
 //
-// Si el movimiento NO trae externalRef (cartolas viejas, algunos
-// cargos) caemos al criterio histórico — sin un identificador único
-// no hay forma de distinguir, es una limitación irreducible.
+// DOS transferencias del mismo monto el mismo día NO se confunden: cada
+// una deja la cuenta en un saldo distinto, así que tienen balanceAfter
+// distinto.
 async function findExistingMovement(
   bankAccountId: string,
-  mov: { date: Date; amount: number; description: string; externalRef: string | null }
+  mov: { date: Date; amount: number; balanceAfter: number }
 ) {
-  if (mov.externalRef) {
-    return prisma.bankMovement.findFirst({
-      where: { bankAccountId, externalRef: mov.externalRef },
-    });
-  }
   return prisma.bankMovement.findFirst({
     where: {
       bankAccountId,
       date: mov.date,
       amount: mov.amount,
-      description: mov.description,
-      externalRef: null,
+      balanceAfter: mov.balanceAfter,
     },
   });
 }
@@ -45,8 +40,8 @@ async function findExistingMovement(
 //   2. Identifica la cuenta por accountNumber (tiene que estar pre-creada
 //      en BankAccount — las 2 BLARQ ya están seeded).
 //   3. Inserta los movimientos. Idempotente: el unique
-//      (bankAccountId, date, amount, description) impide duplicados al
-//      reimportar la misma cartola.
+//      (bankAccountId, date, amount, balanceAfter) impide duplicados al
+//      reimportar la misma cartola, en cualquiera de los dos formatos.
 //   4. Auto-detecta transferencias internas: para cada movimiento marcado
 //      como isInternalCandidate, busca el contraparte (mismo monto, sentido
 //      opuesto, ±1 día) en LA OTRA cuenta y los linkea.
@@ -119,9 +114,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Insertar movimientos (skip duplicates). El check de duplicado es
-    // EXPLÍCITO (findExistingMovement) — no se delega al constraint de la
-    // BD, porque externalRef es nullable y los NULLs no colisionan en un
-    // unique de Postgres.
+    // EXPLÍCITO (findExistingMovement) — el constraint de la BD queda como
+    // segunda barrera, pero la decisión real de saltar un duplicado la
+    // toma este check antes de intentar el insert.
     const insertedIds: string[] = [];
     for (const mov of cartola.movements) {
       const exists = await findExistingMovement(bankAccount.id, mov);
@@ -137,6 +132,7 @@ export async function POST(request: NextRequest) {
             description: mov.description,
             amount: mov.amount,
             type: mov.type,
+            balanceAfter: mov.balanceAfter,
             externalRef: mov.externalRef,
             counterpartyName: mov.counterpartyName,
             counterpartyRut: mov.counterpartyRut,
@@ -150,7 +146,7 @@ export async function POST(request: NextRequest) {
       } catch (e) {
         // P2002 = unique violation. Con el check explícito de arriba esto
         // casi no debería pasar — solo si dos movimientos de la MISMA
-        // cartola coinciden en (cuenta,fecha,monto,desc,externalRef).
+        // cartola coinciden en (cuenta,fecha,monto,balanceAfter).
         if (typeof e === "object" && e !== null && "code" in e && (e as { code?: string }).code === "P2002") {
           stats.duplicates++;
         } else {

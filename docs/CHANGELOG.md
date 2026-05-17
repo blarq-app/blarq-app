@@ -4,6 +4,18 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-17 — Fix importador de cartolas bancarias: deduplicación por saldo posterior
+
+- **Qué cambió**: el importador de cartolas Santander ya no deduplica por el N° de documento del banco (`externalRef`). Ahora cada movimiento se identifica por `balanceAfter` — el saldo corrido tras aplicarlo, calculado sobre un orden canónico (fecha, monto, descripción). Campo nuevo `BankMovement.balanceAfter` y `@@unique` reemplazado por `(bankAccountId, date, amount, balanceAfter)`.
+- **Por qué**: `externalRef` solo lo trae la cartola Histórica; la Provisoria lo trae en cero. Reimportar la misma cartola en el otro formato duplicaba todos los movimientos. Además el banco lista los movimientos de un mismo día en distinto orden según el formato — por eso el saldo corrido se calcula sobre un orden fijo, no en el orden de fila, para que la llave sea idéntica entre formatos.
+- **Schema**: `balanceAfter Float?` (nullable por los movimientos previos al backfill). Aplicado en dev y prod.
+- **Datos prod**: backfill de `balanceAfter` sobre 878 movimientos (período dic 2025–may 2026, cruzado contra 12 cartolas). 737 de historia previa (mar–oct 2025) quedan en null — sin cartola para cruzar. Backup completo previo: `backups/blarq-prod-2026-05-17T18-13.json.gz`.
+- **Archivos**: `santanderParser.ts`, `/api/banco/import/route.ts`, `schema.prisma`; scripts nuevos `reconcile-cartolas.ts` (compara BD vs cartolas, read-only) y `backfill-balance-after.ts`.
+- **Verificado**: reimport en dev (Histórica, reimport mismo formato, Provisoria del mismo período) → 0 duplicados. Simulación read-only contra prod → 0 se crearían.
+- **Limitación conocida**: si se exporta una Provisoria con su último día incompleto y luego se importa la Histórica de ese mes, los pocos movimientos de ese día parcial podrían duplicarse (su `balanceAfter` cambia al completarse el día).
+
+---
+
 ## 2026-05-16 — Cotización de artefactos: revisar precios online, duplicar de otra cotización, desvincular del catálogo
 
 - **Qué cambió**: tres funciones nuevas en el editor de artefactos (`ArtefactosEditor`). (1) "Revisar precios online" — botón que recorre los items con link cargado, baja la página de cada producto y muestra un modal con el diff precio/imagen actual vs. del momento; MJ marca qué aplicar. (2) "Traer de otra cotización" — duplica los artefactos de otra cotización dentro de la actual, refrescando los precios online automáticamente (el descuento se mantiene, el precio cliente se recalcula). (3) La estrella ★ ahora también desvincula: click en un item ya catalogado lo suelta del catálogo BLARQ (`catalogId → null`) sin tocar otras copias.

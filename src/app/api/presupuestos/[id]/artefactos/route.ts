@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { ensureArtefactoCatalog } from "@/lib/catalog/ensureArtefactoCatalog";
 
 export async function POST(
   request: NextRequest,
@@ -27,6 +28,23 @@ export async function POST(
         ? data.clientPrice
         : listPrice * (1 - discountPct);
 
+    // El catálogo BLARQ de artefactos se construye solo: cada producto que
+    // se agrega a una cotización entra al catálogo. Si el item ya viene
+    // del catálogo usamos su catalogId; si no, buscamos/creamos la entrada
+    // por nombre. (Pedido de MJ 2026-05-16.)
+    const catalogId =
+      data.catalogId ||
+      (await ensureArtefactoCatalog(prisma, {
+        name: data.name,
+        detail: data.detail,
+        brand: data.brand,
+        subcategory: data.subcategory,
+        referenceLink: data.referenceLink,
+        imageUrl: data.imageUrl,
+        listPrice,
+        discountPercent: discountPct,
+      }));
+
     const item = await prisma.artefactoItem.create({
       data: {
         budgetVersionId,
@@ -42,7 +60,7 @@ export async function POST(
         realCostBlarq: data.realCostBlarq ?? null,
         referenceLink: data.referenceLink || null,
         imageUrl: data.imageUrl || null,
-        catalogId: data.catalogId || null,
+        catalogId,
         sortOrder: nextSortOrder,
       },
     });

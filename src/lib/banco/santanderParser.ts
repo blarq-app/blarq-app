@@ -16,6 +16,11 @@ export interface ParsedMovement {
   description: string;
   amount: number; // signed: negativo = cargo, positivo = abono
   type: "cargo" | "abono";
+  // Saldo corrido tras aplicar este movimiento, calculado sobre un orden
+  // canónico (fecha, monto, descripción) — ver el bloque de cálculo abajo.
+  // Es el identificador estable para deduplicar el import: no depende del
+  // formato de cartola, a diferencia de externalRef.
+  balanceAfter: number;
   externalRef: string | null;
   counterpartyName: string | null;
   counterpartyRut: string | null;
@@ -120,7 +125,10 @@ export function parseCartolaSantander(buffer: Buffer): ParsedCartola {
     throw new Error("No se encontró el header de columnas en la cartola");
   }
 
-  // Saldo inicial / final: la fila inmediata después de "SALDO INICIAL"
+  // Saldo inicial / final: la fila inmediata después de "SALDO INICIAL".
+  // foundSaldos distingue "no se encontró el bloque" de "los saldos son 0":
+  // sin él no podríamos verificar el saldo acumulado más abajo.
+  let foundSaldos = false;
   for (let i = 0; i < headerRow; i++) {
     const row = rows[i];
     if (!row) continue;
@@ -136,12 +144,15 @@ export function parseCartolaSantander(buffer: Buffer): ParsedCartola {
             break;
           }
         }
+        foundSaldos = true;
       }
       break;
     }
   }
 
   // ── Movimientos: desde headerRow+1 hasta una fila vacía o "Resumen" ──
+  // El saldo posterior (balanceAfter) se calcula DESPUÉS de leer todo,
+  // sobre un orden canónico — ver el bloque más abajo.
   const movements: ParsedMovement[] = [];
   for (let i = headerRow + 1; i < rows.length; i++) {
     const row = rows[i];
@@ -198,12 +209,52 @@ export function parseCartolaSantander(buffer: Buffer): ParsedCartola {
       description,
       amount,
       type,
+      balanceAfter: 0, // se calcula abajo, sobre el orden canónico
       externalRef: typeof docRef === "number" && docRef > 0 ? String(docRef) : null,
       counterpartyName: parsed.counterpartyName,
       counterpartyRut: parsed.counterpartyRut,
       suggestedCategory,
       isInternalCandidate,
     });
+  }
+
+  // ── Saldo posterior (balanceAfter) sobre un orden CANÓNICO ──────────
+  // El banco lista los movimientos de un mismo día en distinto orden según
+  // el formato de cartola (Histórica vs Provisoria). Si calculáramos el
+  // saldo corrido en el orden en que vienen las filas, el mismo movimiento
+  // tendría balanceAfter distinto en cada formato y la deduplicación del
+  // import fallaría. Por eso ordenamos por (fecha, monto, descripción) —
+  // un orden determinístico e idéntico entre formatos — antes de acumular.
+  // El conjunto de movimientos de un día sí es idéntico entre formatos;
+  // solo cambia el orden, así que este orden canónico estabiliza la llave.
+  // balanceAfter no es entonces el saldo intradía real del banco, pero el
+  // saldo de cierre de cada día y del total sí lo es (la suma no depende
+  // del orden) — y como llave de deduplicación es lo que necesitamos.
+  movements.sort((a, b) => {
+    const da = a.date.getTime() - b.date.getTime();
+    if (da !== 0) return da;
+    if (a.amount !== b.amount) return a.amount - b.amount;
+    return a.description.localeCompare(b.description);
+  });
+  let running = saldoInicial;
+  for (const m of movements) {
+    running += m.amount;
+    m.balanceAfter = running;
+  }
+
+  // Verificación de integridad: el saldo corrido final tiene que coincidir
+  // con el saldo final declarado en la cabecera de la cartola. Si no
+  // coincide, el parseo se comió o duplicó algún movimiento — abortamos en
+  // vez de importar, porque balanceAfter es la llave de deduplicación y un
+  // saldo corrido mal generaría duplicados al reimportar.
+  // Montos en CLP son enteros, así que la igualdad es exacta (sin tolerancia).
+  if (foundSaldos && movements.length > 0 && Math.round(running) !== Math.round(saldoFinal)) {
+    throw new Error(
+      `La cartola no cuadra: el saldo posterior calculado (${Math.round(running)}) ` +
+        `no coincide con el saldo final declarado (${Math.round(saldoFinal)}). ` +
+        `Diferencia ${Math.round(running - saldoFinal)}. ` +
+        `No se importa para no generar duplicados — revisar el archivo de cartola.`
+    );
   }
 
   return {

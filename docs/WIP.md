@@ -4,7 +4,18 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-16 (ronda 27 — EP fuera del cálculo de costo + catálogo de artefactos auto-construido)
+- **Última actualización**: 2026-05-17 (ronda 28 — fix importador de cartolas bancarias: deduplicación por saldo posterior)
+
+- **Ronda 28 — Fix importador de cartolas bancarias**:
+  - **Problema**: el importador deduplicaba por el N° de documento del banco (`externalRef`). Ese número solo lo trae la cartola Histórica; la Provisoria lo trae en cero. Reimportar una cartola en el otro formato duplicaba todos los movimientos.
+  - **Arreglo**: campo nuevo `BankMovement.balanceAfter` (saldo corrido tras aplicar cada movimiento). El importador ahora deduplica por `(bankAccountId, date, amount, balanceAfter)`. El `@@unique` se reemplazó por esa tupla.
+  - **Detalle no obvio**: el banco lista los movimientos de un mismo día en distinto orden según el formato. Si el saldo corrido se calcula en orden de fila, el mismo movimiento da `balanceAfter` distinto en cada formato. Por eso `santanderParser.ts` ordena por (fecha, monto, descripción) antes de acumular — el conjunto de un día es idéntico entre formatos, solo cambia el orden.
+  - **Schema**: aplicado en dev y prod (`balanceAfter Float?`, nullable).
+  - **Prod**: backup completo previo (`backups/blarq-prod-2026-05-17T18-13.json.gz`). Backfill de `balanceAfter` sobre 878 movimientos (dic 2025–may 2026, cruzado contra 12 cartolas). Reconcile antes/después: Operativa y Sueldos calzan exacto. **737 movimientos de Operativa (historia mar–oct 2025) quedan con `balanceAfter` en null** — no hay cartola de ese período. No molesta salvo que se reimporte una cartola de 2025: ahí sí duplicaría. Si aparece, conseguir las cartolas Operativa 30–35 y volver a correr el backfill.
+  - **Verificado**: reimport en dev por el endpoint real (Histórica, reimport mismo formato, Provisoria del mismo período) → 0 duplicados. Simulación read-only contra prod → 0 se crearían.
+  - **Limitación conocida**: si se exporta una Provisoria con su último día incompleto y después se importa la Histórica de ese mes, los pocos movimientos de ese día parcial podrían duplicarse.
+  - **Archivos**: `prisma/schema.prisma`, `src/lib/banco/santanderParser.ts`, `src/app/api/banco/import/route.ts`; scripts nuevos `scripts/reconcile-cartolas.ts` (read-only, compara BD vs cartolas) y `scripts/backfill-balance-after.ts`.
+  - **PR**: [#50](https://github.com/blarq-app/blarq-app/pull/50). Sin tocar `metrics.ts`.
 
 - **Ronda 27 — Cálculo: EP fuera del costo · Catálogo de artefactos auto-construido**:
   - **EP fuera del cálculo de costo (`metrics.ts`)** — decisión de MJ formalizada: *"la contabilidad no debe salir de los EP, sino de las facturas o mov sin respaldo"*. El EP es una herramienta de cálculo (cuánto pagarle al maestro según avance), NO una fuente de costo. Cambio: `totalGastado` y `totalGastadoConIva` ya no suman `totalPagadoMaestros` (EPs cerrados). Se eliminó el campo `totalPagadoMaestros` del `ProjectMetrics` y del `conceptDeviations` (costLabor). El costo del proyecto ahora sale 100% de facturas recibidas (incluidos los pagos sin respaldo, que son `Invoice` recibida). `project.estadosPago` se sigue usando para el avance de obra (% ponderado) — eso no es costo.

@@ -4,7 +4,16 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-16 (ronda 26 — pago a maestro sin factura desde el banco + sync de artefactos por nombre)
+- **Última actualización**: 2026-05-16 (ronda 27 — EP fuera del cálculo de costo + catálogo de artefactos auto-construido)
+
+- **Ronda 27 — Cálculo: EP fuera del costo · Catálogo de artefactos auto-construido**:
+  - **EP fuera del cálculo de costo (`metrics.ts`)** — decisión de MJ formalizada: *"la contabilidad no debe salir de los EP, sino de las facturas o mov sin respaldo"*. El EP es una herramienta de cálculo (cuánto pagarle al maestro según avance), NO una fuente de costo. Cambio: `totalGastado` y `totalGastadoConIva` ya no suman `totalPagadoMaestros` (EPs cerrados). Se eliminó el campo `totalPagadoMaestros` del `ProjectMetrics` y del `conceptDeviations` (costLabor). El costo del proyecto ahora sale 100% de facturas recibidas (incluidos los pagos sin respaldo, que son `Invoice` recibida). `project.estadosPago` se sigue usando para el avance de obra (% ponderado) — eso no es costo.
+    - **Verificación (§4.1)**: snapshot pre/post de los 17 proyectos en dev → **diff vacío, ningún total se movió** (ningún proyecto tiene EP cerrados cargados en la app, justo como se esperaba). `scripts/test-metrics.ts` corre con 2 fallas **pre-existentes** (sobre `totalAcordado`, fixture desactualizado — verificado que ya fallaban antes del cambio); se eliminó la única assertion sobre `totalPagadoMaestros`.
+    - **`scripts/compare-metrics.ts`** quedó desactualizado (su cálculo "legacy" todavía resta EPs) — es un comparador ad-hoc obsoleto, no se tocó. Si se vuelve a usar, hay que actualizarlo.
+  - **Catálogo de artefactos auto-construido** — pedido de MJ: el catálogo no es una lista curada de "los más usados"; se construye solo con cada producto que se agrega a cualquier cotización (como el listado de materiales). Helper nuevo `src/lib/catalog/ensureArtefactoCatalog.ts`: busca una entrada por nombre (case-insensitive) y la reutiliza, o la crea. Se llama desde el POST de artefactos y desde el importador de Excel. Cada `ArtefactoItem` queda con `catalogId`.
+    - **Backfill**: `scripts/backfill-artefacto-catalog.ts` (dry-run por defecto, `--apply`) vincula los items históricos sin `catalogId`. En dev: 72 items → 43 entradas nuevas + 29 reusadas (dedup por nombre OK). **Falta correrlo en prod** (`--apply` con DATABASE_URL de prod) para poblar el catálogo con la variedad histórica.
+  - **Archivos**: `src/lib/projects/metrics.ts`, `proyectos/[id]/resumen/page.tsx`, `scripts/test-metrics.ts`, `src/lib/catalog/ensureArtefactoCatalog.ts`, `src/app/api/presupuestos/[id]/artefactos/route.ts`, `src/app/api/proyectos/[id]/importar-artefactos/route.ts`, `scripts/backfill-artefacto-catalog.ts`.
+  - **Pendiente**: (1) correr el backfill del catálogo en prod. (2) Las 2 fallas pre-existentes de `test-metrics.ts` (`totalAcordado` 1499400 vs 1487500) — fixture desactualizado, conviene revisarlo en una ronda futura.
 
 - **Ronda 26 — "Pago sin factura" desde movimientos del banco**:
   - **Problema**: hay transferencias bancarias que son pagos a maestros que NO emiten factura (caso disparador: Daniel Ignacio Santibáñez, 11 transferencias). Quedaban como movimientos "pendientes" sin entrar como costo de ningún proyecto. No había forma desde la UI de decirle a la app "esta transferencia es un costo del proyecto X, categoría Y".

@@ -234,7 +234,6 @@ console.log("\nTest 4: Proyecto vacío — debe devolver 0, no explotar");
   assertEq(m.totalCobrado, 0, "totalCobrado = 0");
   assertEq(m.totalCobradoNeto, 0, "totalCobradoNeto = 0");
   assertEq(m.totalGastado, 0, "totalGastado = 0");
-  assertEq(m.totalPagadoMaestros, 0, "totalPagadoMaestros = 0");
   assertEq(m.utilidadReal, 0, "utilidadReal = 0");
   assertEq(m.pctCobrado, 0, "pctCobrado = 0 (sin division by zero)");
   assertEq(m.avanceObraPct, 0, "avanceObraPct = 0");

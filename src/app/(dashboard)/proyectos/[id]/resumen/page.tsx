@@ -85,7 +85,6 @@ export default async function ResultadosPage({
     totalCobradoNeto,
     totalGastado,
     totalGastadoConIva,
-    totalPagadoMaestros,
     utilidadReal,
     utilidadProyectada,
     pctCobrado,
@@ -139,7 +138,7 @@ export default async function ResultadosPage({
       {
         label: "Mano de obra",
         presupuesto: budgetByType.costLabor,
-        real: (realByTop["Mano de obra"] || 0) + totalPagadoMaestros,
+        real: realByTop["Mano de obra"] || 0,
       },
       { label: "Herramientas", presupuesto: budgetByType.costTools, real: realByTop["Herramientas"] || 0 },
       { label: "Subcontrato", presupuesto: budgetByType.costSubcontract, real: realByTop["Subcontrato"] || 0 },
@@ -447,7 +446,6 @@ export default async function ResultadosPage({
           <p className="text-2xl font-bold text-red-600 mt-1">{formatCLP(totalGastado)}</p>
           <p className="text-xs text-gray-400 mt-0.5">
             neto · {formatCLP(totalGastadoConIva)} c/IVA
-            {totalPagadoMaestros > 0 && ` · incl. ${formatCLP(totalPagadoMaestros)} EPs`}
           </p>
         </div>
         <div className={`bg-white rounded-xl border p-5 ${utilidadProyectada >= 0 ? "border-green-100" : "border-red-100"}`}>

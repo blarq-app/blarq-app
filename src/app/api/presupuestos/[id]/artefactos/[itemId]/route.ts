@@ -99,6 +99,38 @@ export async function PUT(
         });
     }
 
+    // ── Sincronización entre artefactos con el MISMO NOMBRE ─────────────
+    //
+    // Aunque dos artefactos no vengan del catálogo (caso típico: WC
+    // importados de un Excel), si se llaman igual dentro de la misma
+    // cotización son el mismo producto. Cuando MJ edita uno, copiamos
+    // link / foto / precio / marca / detalle a los demás con ese nombre.
+    // Así carga el link de un "WC ATENAS" una vez y se completa en todos
+    // los baños.
+    //
+    // NO se copia: name (es la clave que los agrupa), realCostBlarq
+    // (costo interno, puede variar por item), quantity / room /
+    // subcategory (propios de cada copia).
+    const nombre = item.name?.trim();
+    if (nombre) {
+      await prisma.artefactoItem.updateMany({
+        where: {
+          budgetVersionId,
+          id: { not: itemId },
+          name: { equals: nombre, mode: "insensitive" },
+        },
+        data: {
+          detail: item.detail,
+          brand: item.brand,
+          listPrice: item.listPrice,
+          discountPercent: item.discountPercent,
+          clientPrice: item.clientPrice,
+          referenceLink: item.referenceLink,
+          imageUrl: item.imageUrl,
+        },
+      });
+    }
+
     return NextResponse.json(item);
   } catch (error) {
     console.error("Error updating artefacto item:", error);

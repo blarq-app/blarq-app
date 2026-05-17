@@ -12,26 +12,49 @@
  * (cada alta nueva ya entra automáticamente).
  *
  * Uso:
- *   npx tsx scripts/backfill-artefacto-catalog.ts            (dry-run)
- *   npx tsx scripts/backfill-artefacto-catalog.ts --apply    (escribe)
+ *   npx tsx scripts/backfill-artefacto-catalog.ts            (dry-run, todos)
+ *   npx tsx scripts/backfill-artefacto-catalog.ts --apply    (escribe, todos)
+ *   npx tsx scripts/backfill-artefacto-catalog.ts --project "Paseo del Sena"
+ *       → solo los artefactos de los proyectos cuyo nombre contenga ese texto.
  *
  * Idempotente: correrlo de nuevo no duplica nada.
  */
 
 import "dotenv/config";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
+
+// Lee un argumento con valor: --project "X" o --project=X.
+function getArg(name: string): string | null {
+  const i = process.argv.indexOf(name);
+  if (i !== -1 && process.argv[i + 1] && !process.argv[i + 1].startsWith("--")) {
+    return process.argv[i + 1];
+  }
+  const eq = process.argv.find((a) => a.startsWith(`${name}=`));
+  return eq ? eq.slice(name.length + 1) : null;
+}
 
 async function main() {
   const apply = process.argv.includes("--apply");
+  const projectFilter = getArg("--project");
   console.log(
     apply
       ? "=== BACKFILL CATÁLOGO ARTEFACTOS — APLICANDO CAMBIOS ==="
       : "=== BACKFILL CATÁLOGO ARTEFACTOS — DRY-RUN (sin --apply) ==="
   );
+  if (projectFilter) {
+    console.log(`Filtrado a proyectos que contienen: "${projectFilter}"`);
+  }
 
-  // Items sin vincular al catálogo.
+  // Items sin vincular al catálogo (opcionalmente acotado a un proyecto).
+  const where: Prisma.ArtefactoItemWhereInput = { catalogId: null };
+  if (projectFilter) {
+    where.budgetVersion = {
+      project: { name: { contains: projectFilter, mode: "insensitive" } },
+    };
+  }
   const items = await prisma.artefactoItem.findMany({
-    where: { catalogId: null },
+    where,
     orderBy: { id: "asc" },
   });
   console.log(`Items sin catalogId: ${items.length}`);

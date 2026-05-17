@@ -274,6 +274,22 @@ export default function ArtefactosEditor({
     "realCostBlarq",
   ];
 
+  // Campos que se copian a otros artefactos con el MISMO NOMBRE dentro
+  // de la cotización (mismo producto aunque NO vengan del catálogo —
+  // caso típico: WC importados de un Excel). Así MJ carga el link de un
+  // "WC ATENAS" una sola vez y se completa en todos los baños.
+  // NO incluye `name` (es la clave que los agrupa) ni `realCostBlarq`
+  // (costo interno, puede variar por item).
+  const NAME_SYNC_FIELDS: Array<keyof ArtefactoItem> = [
+    "detail",
+    "brand",
+    "listPrice",
+    "discountPercent",
+    "clientPrice",
+    "referenceLink",
+    "imageUrl",
+  ];
+
   function updateItem(itemId: string, patch: Partial<ArtefactoItem>) {
     setItems((prev) => {
       const target = prev.find((i) => i.id === itemId);
@@ -290,26 +306,48 @@ export default function ArtefactosEditor({
       }
       persistItem(merged);
 
-      // Si el item tiene catalogId, propagamos los SYNC_FIELDS a las
-      // otras copias del mismo catalogId localmente (el backend ya hace
-      // lo mismo en BD — esto solo evita esperar al refresh).
-      const sharedPatch: Partial<ArtefactoItem> = {};
-      let hasShared = false;
+      const priceRecalced =
+        patch.listPrice !== undefined || patch.discountPercent !== undefined;
+
+      // Propagación a las copias del mismo catalogId (SYNC_FIELDS).
+      const catalogPatch: Partial<ArtefactoItem> = {};
+      let hasCatalog = false;
       for (const k of SYNC_FIELDS) {
-        if (k in patch || (k === "clientPrice" && (patch.listPrice !== undefined || patch.discountPercent !== undefined))) {
-          (sharedPatch as Record<string, unknown>)[k] = merged[k];
-          hasShared = true;
+        if (k in patch || (k === "clientPrice" && priceRecalced)) {
+          (catalogPatch as Record<string, unknown>)[k] = merged[k];
+          hasCatalog = true;
         }
       }
 
+      // Propagación a los artefactos con el mismo nombre (NAME_SYNC_FIELDS).
+      const namePatch: Partial<ArtefactoItem> = {};
+      let hasName = false;
+      for (const k of NAME_SYNC_FIELDS) {
+        if (k in patch || (k === "clientPrice" && priceRecalced)) {
+          (namePatch as Record<string, unknown>)[k] = merged[k];
+          hasName = true;
+        }
+      }
+
+      const mergedName = merged.name.trim().toLowerCase();
+
       return prev.map((it) => {
         if (it.id === itemId) return merged;
+        // Mismo catalogId — gana sobre el match por nombre.
         if (
-          hasShared &&
+          hasCatalog &&
           merged.catalogId &&
           it.catalogId === merged.catalogId
         ) {
-          return { ...it, ...sharedPatch };
+          return { ...it, ...catalogPatch };
+        }
+        // Mismo nombre dentro de la cotización.
+        if (
+          hasName &&
+          mergedName &&
+          it.name.trim().toLowerCase() === mergedName
+        ) {
+          return { ...it, ...namePatch };
         }
         return it;
       });

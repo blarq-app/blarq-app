@@ -4,6 +4,16 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-16 — Cuadro Resumen con columnas dinámicas + fix cantidad en artefactos
+
+- **Qué cambió**: (1) `CuadroResumen.tsx` reescrito con columnas dinámicas — arma una columna por cada concepto con monto acordado > 0 (Obra, Muebles, y una por subcategoría de artefactos presente: Cocina / Sanitarios / Iluminación). Antes tenía columnas fijas y no incluía Iluminación. (2) `metrics.ts`: `artefactosTotal` ahora multiplica `clientPrice × quantity` (antes sumaba solo `clientPrice`, subcontando artefactos con cantidad > 1). (3) El Cuadro Resumen ahora aplica el descuento global de muebles, que antes ignoraba.
+- **Por qué**: MJ detectó que el card "Total Acordado" de Aguirre no calzaba con el total del Cuadro Resumen ($309.801 de diferencia) — eran los artefactos de iluminación, que el cuadro no tenía columna para mostrar.
+- **Verificación (§4.1)**: snapshot pre/post de metrics — 3 proyectos suben (Cocina Farellones, Aguirre, Portofino), justificado: el acordado de artefactos con cantidad > 1 estaba subcontado.
+- **Deuda conocida**: el cálculo de "acordado" está duplicado en `metrics.ts` y `CuadroResumen.tsx`. Para proyectos con una versión aprobada por tipo calzan; con múltiples versiones aprobadas podrían diferir. Conviene unificar a futuro.
+- **Sin cambios de schema.** Archivos: `src/lib/projects/metrics.ts`, `src/components/proyecto/CuadroResumen.tsx`.
+
+---
+
 ## 2026-05-16 — Catálogo de artefactos auto-construido
 
 - **Qué cambió**: el catálogo BLARQ de artefactos se construye solo. Cada producto que se agrega a una cotización (alta individual o importación de Excel) entra al catálogo; si ya hay una entrada con el mismo nombre se reutiliza, si no se crea. Cada `ArtefactoItem` queda vinculado por `catalogId`. Helper compartido `src/lib/catalog/ensureArtefactoCatalog.ts`.

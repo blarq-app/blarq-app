@@ -4,7 +4,17 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-16 (ronda 27 — EP fuera del cálculo de costo + catálogo de artefactos auto-construido)
+- **Última actualización**: 2026-05-16 (ronda 28 — Cuadro Resumen columnas dinámicas + fix cantidad en artefactos)
+
+- **Ronda 28 — Cuadro Resumen dinámico · fix cantidad en artefactos**:
+  - **Síntoma reportado por MJ**: en Aguirre, el card "Total Acordado" ($84.577.305 c/IVA) no calzaba con el total del Cuadro Resumen ($84.267.504) — diferencia $309.801.
+  - **Causa**: dos cálculos distintos del "acordado". El Cuadro Resumen tenía columnas fijas (Obra / Art. Cocina / Art. Sanitarios / Muebles) — **sin columna de Iluminación**. Aguirre tiene artefactos de iluminación, que el card contaba y el cuadro no.
+  - **Bug aparte detectado**: `metrics.ts` sumaba `artefactosTotal` como `Σ clientPrice` **sin multiplicar por `quantity`** (clientPrice es unitario). Subcontaba artefactos con cantidad > 1. Corregido a `Σ clientPrice × quantity`.
+  - **Cambios**:
+    - `metrics.ts`: `artefactosTotal` ahora `× quantity`. **Snapshot pre/post (§4.1)**: 3 proyectos se movieron — Cocina Farellones (+$76k), Aguirre (+$1.048k), Portofino (+$2.708k). Todos hacia arriba, justificado: el acordado de artefactos estaba subcontado. (test-metrics: 2 fallas pre-existentes ajenas, verificado.)
+    - `CuadroResumen.tsx`: reescrito con **columnas dinámicas**. Arma una columna por cada concepto con acordado > 0 — Obra, Muebles, y una por subcategoría de artefactos presente (Cocina / Sanitarios / Iluminación). Si el proyecto no cotizó iluminación, no aparece esa columna; si la cotizó, aparece sola. El split de pagos `conceptoCobro=artefactos` se reparte proporcional entre las subcategorías presentes. Además ahora aplica el descuento global de muebles (`discountPercentage`), que antes el cuadro ignoraba.
+  - **Diferencia residual conocida**: el cuadro usa TODAS las versiones aprobadas de artefactos/muebles; `metrics.ts` usa `bestVersion` (una) para muebles y artefactos. Si un proyecto tuviera 2+ versiones aprobadas del mismo tipo, podrían diferir. Para proyectos normales (una aprobada por tipo) ahora calzan.
+  - **Pendiente**: idealmente unificar — que el Cuadro Resumen y `metrics.ts` compartan el cálculo de "acordado" en vez de tenerlo duplicado. No se hizo esta ronda.
 
 - **Ronda 27 — Cálculo: EP fuera del costo · Catálogo de artefactos auto-construido**:
   - **EP fuera del cálculo de costo (`metrics.ts`)** — decisión de MJ formalizada: *"la contabilidad no debe salir de los EP, sino de las facturas o mov sin respaldo"*. El EP es una herramienta de cálculo (cuánto pagarle al maestro según avance), NO una fuente de costo. Cambio: `totalGastado` y `totalGastadoConIva` ya no suman `totalPagadoMaestros` (EPs cerrados). Se eliminó el campo `totalPagadoMaestros` del `ProjectMetrics` y del `conceptDeviations` (costLabor). El costo del proyecto ahora sale 100% de facturas recibidas (incluidos los pagos sin respaldo, que son `Invoice` recibida). `project.estadosPago` se sigue usando para el avance de obra (% ponderado) — eso no es costo.

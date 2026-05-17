@@ -196,11 +196,14 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   const mueblesTotalNeto = mueblesSubtotalNeto * (1 - mueblesDiscount);
 
   const artefactosTotal = artefactos
-    ? artefactos.artefactoItems.reduce((s, i) => s + i.clientPrice, 0)
+    ? artefactos.artefactoItems.reduce(
+        (s, i) => s + i.clientPrice * i.quantity,
+        0
+      )
     : 0;
-  // Artefactos: clientPrice está cargado como precio final al cliente
-  // (c/IVA). El neto es / 1.19. Si en el futuro se decide cargar neto,
-  // ajustar acá y en mueblesTotalNeto.
+  // Artefactos: clientPrice es el precio UNITARIO final al cliente (c/IVA);
+  // se multiplica por quantity. El neto es / 1.19. Si en el futuro se
+  // decide cargar neto, ajustar acá y en mueblesTotalNeto.
   const artefactosTotalNeto = artefactosTotal / 1.19;
 
   const totalAcordado = obraTotal + mueblesTotal + artefactosTotal;

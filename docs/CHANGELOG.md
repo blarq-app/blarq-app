@@ -4,6 +4,16 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-22 — Artefactos se multiplican por cantidad · Cuadro Resumen dinámico
+
+- **Qué cambió**: `metrics.ts` ahora calcula el total de artefactos como `clientPrice × quantity` (antes sumaba `clientPrice` sin multiplicar). El Cuadro Resumen del proyecto pasó a tener columnas dinámicas: muestra solo los conceptos cargados con monto > 0 (obra / cocina / sanitarios / iluminación / muebles), no 4 columnas fijas.
+- **Por qué**: el cuadro de Aguirre no mostraba la iluminación. La causa raíz era que el cálculo no multiplicaba por cantidad — y "funcionaba" solo porque varios proyectos venían mal cargados con el total de línea en `clientPrice`. Convención correcta confirmada con MJ: `clientPrice` es precio unitario.
+- **Datos**: `scripts/fix-artefactos-precio-unitario.ts` corrigió 17 ítems mal cargados en prod (Aguirre V7, Cocina Farellones V4, JNC-Vitacura V5, Portofino V1) a precio unitario. Paseo del Sena V1 y Portofino V6 quedaron fuera por estar bien cargados.
+- **Verificación (§4.1)**: snapshot prod pre/post — 16 de 18 proyectos sin cambios; Portofino y Paseo del Sena subieron al corregirse su subestimación previa. Sin cambios de schema.
+- **Archivos**: `src/lib/projects/metrics.ts`, `src/components/proyecto/CuadroResumen.tsx`, `scripts/fix-artefactos-precio-unitario.ts`.
+
+---
+
 ## 2026-05-22 — Botón "Nueva partida" en el catálogo
 
 - **Qué cambió**: la sección Catálogo de Partidas (`/catalogo/partidas`) ahora tiene un botón "+ Nueva partida" junto a la barra de búsqueda. Abre un formulario corto (nombre, categoría con datalist de las existentes o una nueva, unidad) y al confirmar crea la partida y la abre directo en modo edición para cargar descripciones y componentes.

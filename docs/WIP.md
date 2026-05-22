@@ -4,7 +4,18 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-22 (ronda 29 — botón "Nueva partida" en el catálogo)
+- **Última actualización**: 2026-05-22 (ronda 30 — artefactos × cantidad + cuadro resumen dinámico)
+
+- **Ronda 30 — Artefactos se multiplican por cantidad · Cuadro Resumen dinámico**:
+  - **Disparador**: MJ notó que el Cuadro Resumen de Francisco de Aguirre no mostraba la columna de artefactos de iluminación.
+  - **Bug de fondo en `metrics.ts`**: el `artefactosTotal` sumaba `clientPrice` SIN multiplicar por `quantity`. Quedaba "ok" solo porque varios proyectos venían mal cargados con el TOTAL de línea metido en `clientPrice` (y `quantity` decorativa). Convención correcta confirmada con MJ 2026-05-22: `clientPrice` es precio UNITARIO y se multiplica por `quantity`, igual que muebles.
+  - **Datos corregidos en prod** (`scripts/fix-artefactos-precio-unitario.ts`, lista blanca específica): 17 ítems de 4 versiones mal cargadas → precio unitario (`clientPrice / quantity`). Proyectos: Aguirre V7, Cocina Farellones V4, JNC-Vitacura V5, Portofino V1 (borrador). Quedaron FUERA por estar bien cargados: **Paseo del Sena V1** (cargado a mano en la app por MJ) y **Portofino V6** (vigente — calza con multiplicar contra su cuadro al cliente).
+  - **Cómo se decidió cada proyecto**: comparando la suma de artefactos contra el cuadro resumen entregado al cliente. Aguirre suma $2.464.558 sin multiplicar = cuadro → mal cargado. Portofino V6 ~$2.912.200 multiplicando = cuadro → bien cargado. Farellones y JNC validados igual con sus cuadros.
+  - **Cuadro Resumen → columnas dinámicas** (`CuadroResumen.tsx` reescrito): cada proyecto muestra solo los conceptos con acordado > 0 (obra / cocina / sanitarios / iluminación / muebles). Antes tenía 4 columnas fijas y no mostraba iluminación. Regla MJ: las columnas son las del presupuesto entregado al cliente. Pagos `conceptoCobro=artefactos` se reparten a 3 vías (cocina/sanitarios/iluminación) proporcional al acordado.
+  - **Validación (§4.1)**: snapshot prod pre (código viejo) vs post (código nuevo + datos corregidos). 16 de 18 proyectos sin cambios; solo Portofino (+$21.906) y Paseo del Sena (+$172.595) se movieron al alza — corrección de una subestimación previa de los proyectos bien cargados. Portofino quedó en $76.182.019 (cuadro al cliente $76.182.011).
+  - **Hallazgo lateral**: dev está desactualizado respecto a prod (le faltan proyectos: Portofino V6, JNC y Paseo del Sena con artefactos). La validación de esta ronda se hizo contra prod directamente. Conviene "reset to parent" de la branch dev en Neon.
+  - **Archivos**: `src/lib/projects/metrics.ts`, `src/components/proyecto/CuadroResumen.tsx`, `scripts/fix-artefactos-precio-unitario.ts` (nuevo). Commit `773deb5` en `main`.
+  - **Pendiente**: (1) **Cargar Lefevre V5** (obra+artefactos+muebles) — MJ pasó los Excel; en la app solo está la obra. (2) **Actualizar Pauline Dumay V4** — MJ pasó los Excel. (3) Error de tipos pre-existente en `MovementReconcileModal.tsx:121` (falta `_rutIssuer`).
 
 - **Ronda 29 — Botón "Nueva partida" en el catálogo**:
   - **Qué se hizo**: la sección `/catalogo/partidas` no tenía forma de crear una partida desde cero — solo nacían desde un presupuesto o duplicando otra. Se agregó un botón "+ Nueva partida" junto a la barra de búsqueda, con un formulario corto (nombre, categoría, unidad) que crea la partida y la abre directo en modo edición.

@@ -67,7 +67,18 @@ export default function MovementReconcileModal({
   // apaga "mismo proveedor" automáticamente y prioriza facturas con monto
   // match. Se carga una vez al abrir.
   const [reembolsadores, setReembolsadores] = useState<
-    { id: string; nombre: string; glosa: string; rutAlias?: string | null; businessName?: string | null }[]
+    {
+      id: string;
+      nombre: string;
+      glosa: string;
+      // Legacy single-alias (todavia viene del backend; lo dejamos para
+      // que codigo otro no se rompa, pero la fuente de verdad es `aliases`).
+      rutAlias?: string | null;
+      businessName?: string | null;
+      // Multi-alias: cada empresa que puede emitir facturas asociadas a
+      // este reembolsador (caso Cristobal → Paula Johanna + Sodimac).
+      aliases?: { id: string; rut: string; businessName: string | null }[];
+    }[]
   >([]);
   const [results, setResults] = useState<Factura[]>([]);
   const [loading, setLoading] = useState(false);
@@ -155,11 +166,20 @@ export default function MovementReconcileModal({
       const params = new URLSearchParams();
       if (q.trim()) params.set("q", q.trim());
       params.set("type", targetType);
-      // Si el Reembolsador detectado tiene rutAlias, lo usamos como RUT
-      // de búsqueda (caso "Jose Perez" → facturas de "JPB SpA"). Si no,
+      // Si el Reembolsador detectado tiene aliases (uno o varios), mandamos
+      // la lista al endpoint para que busque facturas de cualquiera de esos
+      // RUTs (caso "Cristobal" → Paula Johanna O Sodimac). Si no hay aliases
       // y "Mismo proveedor" está marcado, usamos el RUT contraparte normal.
-      if (detectedReembolsador?.rutAlias) {
-        params.set("counterpartyRut", detectedReembolsador.rutAlias);
+      const aliasRuts = (detectedReembolsador?.aliases ?? [])
+        .map((a) => a.rut)
+        .filter((r) => r && r.trim().length > 0);
+      // Fallback: si el backend nuevo aun no devolvio `aliases` (cache o
+      // build viejo), caemos al rutAlias legacy.
+      if (aliasRuts.length === 0 && detectedReembolsador?.rutAlias) {
+        aliasRuts.push(detectedReembolsador.rutAlias);
+      }
+      if (aliasRuts.length > 0) {
+        params.set("counterpartyRuts", aliasRuts.join(","));
       } else if (filterSameClient && movement.counterpartyRut) {
         params.set("counterpartyRut", movement.counterpartyRut);
       }
@@ -373,28 +393,50 @@ export default function MovementReconcileModal({
           )}
 
           {/* Banner reembolsador / alias de proveedor */}
-          {remaining > 0 && detectedReembolsador && (
-            <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-lg px-3 py-2 text-xs leading-relaxed">
-              {detectedReembolsador.rutAlias ? (
-                <>
-                  Movimiento detectado para <span className="font-medium">{detectedReembolsador.nombre}</span>.
-                  Se está buscando facturas de{" "}
-                  <span className="font-medium">
-                    {detectedReembolsador.businessName ?? detectedReembolsador.rutAlias}
-                  </span>{" "}
-                  (RUT {detectedReembolsador.rutAlias}).
-                </>
-              ) : (
-                <>
-                  <span className="font-medium">{detectedReembolsador.nombre}</span> es
-                  reembolsador. La factura puede ser de cualquier proveedor (compra
-                  que él pagó con su tarjeta) o de Paula Johanna (flete). El filtro
-                  &quot;Mismo proveedor&quot; se apagó automáticamente y las facturas con
-                  monto exacto match aparecen primero.
-                </>
-              )}
-            </div>
-          )}
+          {remaining > 0 && detectedReembolsador && (() => {
+            // Aliases efectivos: la lista nueva si esta poblada, sino el
+            // legacy rutAlias como fallback.
+            const aliases = detectedReembolsador.aliases ?? [];
+            const hasAliases = aliases.length > 0;
+            const legacyAlias = detectedReembolsador.rutAlias
+              ? [
+                  {
+                    rut: detectedReembolsador.rutAlias,
+                    businessName: detectedReembolsador.businessName ?? null,
+                  },
+                ]
+              : [];
+            const list = hasAliases ? aliases : legacyAlias;
+            return (
+              <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-lg px-3 py-2 text-xs leading-relaxed">
+                {list.length > 0 ? (
+                  <>
+                    Movimiento detectado para{" "}
+                    <span className="font-medium">
+                      {detectedReembolsador.nombre}
+                    </span>
+                    . Se están buscando facturas de{" "}
+                    <span className="font-medium">
+                      {list
+                        .map((a) => a.businessName ?? a.rut)
+                        .join(" o ")}
+                    </span>
+                    {list.length === 1 ? ` (RUT ${list[0].rut})` : ""}.
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium">
+                      {detectedReembolsador.nombre}
+                    </span>{" "}
+                    es reembolsador. La factura puede ser de cualquier
+                    proveedor (compra que él pagó con su tarjeta). El filtro
+                    &quot;Mismo proveedor&quot; se apagó automáticamente y las
+                    facturas con monto exacto match aparecen primero.
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Search — fila 1: búsqueda libre + filtros tipo toggle.
               Fila 2: filtro de monto exacto separado, con label visible y

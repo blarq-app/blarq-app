@@ -871,18 +871,44 @@ model Reembolsador {
   id        String   @id @default(cuid())
   nombre    String   // Nombre legible — "Cristobal", "Elias", "JP", "MJ"
   glosa     String   // Texto que se busca (case-insensitive) en BankMovement.description
-  // Alias de proveedor: si el movimiento bancario va al RUT de una
-  // persona (ej "Jose Perez") pero las facturas las emite una empresa
-  // suya (ej "JPB SpA", RUT 77...), seteá aquí el RUT de la empresa.
-  // Cuando matchea la glosa, el modal de conciliación filtra facturas
-  // por este RUT en vez de buscar por contraparte. Si está vacío, el
-  // Reembolsador funciona como antes (compras personales reembolsables).
-  rutAlias     String?
-  businessName String?  // nombre legible de la empresa alias (informativo)
+
+  // Aliases de proveedor (uno-a-muchos). Cuando un movimiento bancario
+  // va a una persona pero esa persona compra a nombre de varias empresas
+  // (ej. Cristobal compra a veces a Paula Johanna, a veces a Sodimac),
+  // cada empresa se registra como un alias. El modal de conciliación
+  // busca facturas que pertenezcan a CUALQUIERA de los RUTs listados.
+  // Si la lista está vacía, el Reembolsador funciona como "compras
+  // personales reembolsables" — la factura puede ser de cualquier RUT.
+  aliases   ReembolsadorAlias[]
+
+  // Campos legacy (un solo alias). Mantenidos para no perder data
+  // durante la migración — el código nuevo lee de `aliases`. Una vez
+  // que la migración terminó en prod, se pueden droppear.
+  rutAlias     String?  // @deprecated — usar aliases[]
+  businessName String?  // @deprecated — usar aliases[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([glosa])
   @@index([glosa])
   @@index([rutAlias])
+}
+
+model ReembolsadorAlias {
+  id              String       @id @default(cuid())
+  reembolsadorId  String
+  // RUT de la empresa que emite facturas que se imputan a este
+  // reembolsador. Guardado sin formato (solo dígitos) o con guion,
+  // el matching se hace por substring de los últimos 8 dígitos.
+  rut             String
+  // Nombre legible de la empresa (ej "Paula Johanna", "Sodimac"). Solo
+  // informativo — para mostrar en el banner del modal y en la UI.
+  businessName    String?
+  createdAt       DateTime     @default(now())
+
+  reembolsador    Reembolsador @relation(fields: [reembolsadorId], references: [id], onDelete: Cascade)
+
+  @@index([reembolsadorId])
+  @@index([rut])
 }

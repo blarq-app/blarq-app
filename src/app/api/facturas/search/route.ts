@@ -10,6 +10,8 @@ import { NextRequest, NextResponse } from "next/server";
 //   q                : texto libre — match en folioNumber, businessName, rutIssuer, rutReceiver
 //   type             : "emitida" | "recibida" (filtra al lado correcto del mov)
 //   counterpartyRut  : RUT contraparte del mov para "Mismo cliente/proveedor"
+//   counterpartyRuts : Lista de RUTs separados por coma (multi-alias de
+//                      reembolsador). Si vienen ambos, gana counterpartyRuts.
 //   projectId        : "Mismo proyecto"
 //   onlyWithBalance  : "1" para excluir facturas pagadas (default: 1)
 //   amount           : monto exacto del mov, para preferir match con saldo cercano
@@ -23,6 +25,17 @@ export async function GET(request: NextRequest) {
     const q = (url.searchParams.get("q") ?? "").trim();
     const type = url.searchParams.get("type");
     const counterpartyRut = url.searchParams.get("counterpartyRut");
+    const counterpartyRutsParam = url.searchParams.get("counterpartyRuts");
+    // Lista de RUTs (multi-alias del reembolsador). Cada uno se reduce a
+    // sus ultimos 8 digitos para matchear con `contains`. Si viene esta
+    // lista, IGNORAMOS counterpartyRut individual (el modal manda una u
+    // otra segun haya alias o no).
+    const counterpartyRuts: string[] = counterpartyRutsParam
+      ? counterpartyRutsParam
+          .split(",")
+          .map((r) => r.replace(/\D/g, "").slice(-8))
+          .filter((r) => r.length > 0)
+      : [];
     const projectId = url.searchParams.get("projectId");
     const onlyWithBalance = url.searchParams.get("onlyWithBalance") !== "0";
     const amount = url.searchParams.get("amount")
@@ -50,15 +63,30 @@ export async function GET(request: NextRequest) {
       where.OR = orFilters;
     }
 
-    if (counterpartyRut) {
-      // counterpartyRut viene tipo "0795239502" del banco. Probamos por
-      // contains en ambos lados (rutIssuer si type=recibida, rutReceiver si emitida).
-      const digits = counterpartyRut.replace(/\D/g, "");
+    if (counterpartyRuts.length > 0 || counterpartyRut) {
       // Si type=recibida, el emisor es el proveedor (== contraparte).
       // Si type=emitida, el receptor es el cliente (== contraparte).
       const counterpartyField = type === "emitida" ? "rutReceiver" : "rutIssuer";
+
+      // Si hay multi-alias, construimos un OR sobre todos los RUTs.
+      // Sino, fallback al unico counterpartyRut (compat con codigo viejo).
+      const rutsToMatch =
+        counterpartyRuts.length > 0
+          ? counterpartyRuts
+          : [counterpartyRut!.replace(/\D/g, "").slice(-8)].filter(
+              (r) => r.length > 0
+            );
+
+      const rutFilter =
+        rutsToMatch.length === 1
+          ? { [counterpartyField]: { contains: rutsToMatch[0] } }
+          : {
+              OR: rutsToMatch.map((r) => ({
+                [counterpartyField]: { contains: r },
+              })),
+            };
+
       const existingOr = (where.OR as Record<string, unknown>[]) ?? null;
-      const rutFilter = { [counterpartyField]: { contains: digits.slice(-8) } };
       // Si ya hay OR (de q), AND con el rutFilter; sino aplicar directo.
       if (existingOr) {
         where.AND = [{ OR: existingOr }, rutFilter];

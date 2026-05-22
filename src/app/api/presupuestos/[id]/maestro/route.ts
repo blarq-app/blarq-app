@@ -75,7 +75,7 @@ export async function GET(
     }));
 
     if (format === "xlsx") {
-      const buffer = buildObraMaestroXLSX({
+      const buffer = await buildObraMaestroXLSX({
         project: projectInput,
         budget: budgetInput,
         maestro: maestroInput,

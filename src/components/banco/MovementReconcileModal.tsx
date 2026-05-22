@@ -258,10 +258,14 @@ export default function MovementReconcileModal({
   }
 
   // ─── Idea B: sugerir match por monto exacto sin alias ──────────────────
-  // Cuando NO hay reembolsador detectado, NO hay drafts aun, y entre los
-  // resultados hay exactamente UNA factura con saldo ±$10 del monto del
-  // mov, mostramos un banner verde sugiriendo agregarla a imputaciones.
-  // Si hay varias, MJ tiene que decidir cual.
+  // Cuando NO hay reembolsador detectado y NO hay drafts aun, miramos
+  // los candidatos con saldo ±$10 del mov. La logica de sugerencia:
+  //   - 1 candidata        → sugerirla.
+  //   - N candidatas, todas del mismo proveedor (mismo rutIssuer/rutReceiver
+  //     segun el lado) → sugerir la MAS VIEJA por fecha (FIFO contable —
+  //     no importa cual asignamos, son todas del mismo proveedor con el
+  //     mismo monto).
+  //   - N candidatas, distintos proveedores → no sugerir (MJ decide).
   const exactMatchSuggestion = (() => {
     if (drafts.length > 0) return null;
     if (detectedReembolsador) return null; // ya hay otro banner
@@ -269,7 +273,38 @@ export default function MovementReconcileModal({
     const matches = results.filter(
       (f) => !draftIds.has(f.id) && Math.abs(f.remaining - absAmount) <= 10
     );
-    return matches.length === 1 ? matches[0] : null;
+    if (matches.length === 0) return null;
+    if (matches.length === 1) return matches[0];
+    // Multi-match: solo sugerimos si todas son del mismo proveedor/cliente.
+    // El campo a comparar depende del lado del movimiento (cargo → rutIssuer
+    // del proveedor; abono → rutReceiver del cliente).
+    const partyField: "rutIssuer" | "rutReceiver" =
+      targetType === "emitida" ? "rutReceiver" : "rutIssuer";
+    const distinctRuts = new Set(
+      matches
+        .map((f) => (f[partyField] ?? "").replace(/\D/g, "").slice(-8))
+        .filter((r) => r.length > 0)
+    );
+    if (distinctRuts.size !== 1) return null;
+    // Todas mismo proveedor → la mas vieja por issueDate.
+    const sorted = [...matches].sort(
+      (a, b) =>
+        new Date(a.issueDate).getTime() - new Date(b.issueDate).getTime()
+    );
+    return sorted[0];
+  })();
+
+  // Si hay N matches del mismo proveedor, queremos avisarle a MJ que hay
+  // otras del mismo monto/proveedor disponibles (no asumir que esta es la
+  // unica) — para que pueda elegir otra si esta no calza.
+  const exactMatchSiblings = (() => {
+    if (!exactMatchSuggestion) return 0;
+    if (drafts.length > 0) return 0;
+    const draftIds = new Set(drafts.map((d) => d.invoiceId));
+    const matches = results.filter(
+      (f) => !draftIds.has(f.id) && Math.abs(f.remaining - absAmount) <= 10
+    );
+    return Math.max(0, matches.length - 1);
   })();
 
   const search = useCallback(async () => {
@@ -622,6 +657,14 @@ export default function MovementReconcileModal({
                     tiene saldo {formatCLP(exactMatchSuggestion.remaining)}, que
                     coincide con este movimiento.
                   </p>
+                  {exactMatchSiblings > 0 && (
+                    <p className="mt-1 text-[11px] text-emerald-700">
+                      Hay {exactMatchSiblings}{" "}
+                      {exactMatchSiblings === 1 ? "otra factura" : "otras facturas"}{" "}
+                      del mismo proveedor con el mismo saldo. Ésta es la más
+                      antigua sin pagar. Si querés otra, cancelá y elegí en la lista.
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"

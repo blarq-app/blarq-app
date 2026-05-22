@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 export default async function ReembolsadoresPage() {
   const items = await prisma.reembolsador.findMany({
     orderBy: { nombre: "asc" },
+    include: { aliases: { orderBy: { createdAt: "asc" } } },
   });
 
   return (

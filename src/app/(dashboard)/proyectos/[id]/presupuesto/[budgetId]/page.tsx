@@ -60,13 +60,34 @@ export default async function PresupuestoDetailPage({
             {budget.version}
           </span>
         </div>
-        <a
-          href={`/api/presupuestos/${budget.id}/pdf`}
-          target="_blank"
-          className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-700"
-        >
-          Descargar PDF
-        </a>
+        <div className="flex items-center gap-2">
+          {budget.type === "obra" && (
+            <>
+              <a
+                href={`/api/presupuestos/${budget.id}/maestro?format=pdf`}
+                target="_blank"
+                className="border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+                title="PDF con las partidas y cantidades, sin precios — para que el maestro cotice"
+              >
+                PDF maestro
+              </a>
+              <a
+                href={`/api/presupuestos/${budget.id}/maestro?format=xlsx`}
+                className="border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+                title="Excel editable con fórmulas — el maestro completa P.U. y el TOTAL se calcula solo"
+              >
+                Excel maestro
+              </a>
+            </>
+          )}
+          <a
+            href={`/api/presupuestos/${budget.id}/pdf`}
+            target="_blank"
+            className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-700"
+          >
+            Descargar PDF
+          </a>
+        </div>
       </div>
 
       {budget.type === "obra" && (

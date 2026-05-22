@@ -348,11 +348,13 @@ export default function MovementReconcileModal({
         ? Number(String(montoExacto).replace(/[.\s]/g, "").replace(",", "."))
         : null;
       // Ordenar candidatos:
-      //   1) Si hay reembolsador detectado: monto match ±$10 arriba (caso
-      //      reembolso de compra o flete con monto conocido).
+      //   1) SIEMPRE primero las que matchean el monto del mov ±$10 — es
+      //      la señal más fuerte de "esta factura es la del pago", haya o
+      //      no reembolsador detectado. Antes esto solo aplicaba cuando
+      //      había reembolsador y las facturas match se perdían en medio
+      //      de la lista.
       //   2) Después por proximidad de fecha (lo más cercano al mov).
       const movTime = new Date(movement.date).getTime();
-      const isReembolso = !!detectedReembolsador;
       const matchesAmount = (f: Factura) =>
         Math.abs(f.remaining - absAmount) <= 10;
       const filtered = (data.facturas as Factura[])
@@ -364,11 +366,9 @@ export default function MovementReconcileModal({
             : true
         )
         .sort((a, b) => {
-          if (isReembolso) {
-            const ma = matchesAmount(a) ? 0 : 1;
-            const mb = matchesAmount(b) ? 0 : 1;
-            if (ma !== mb) return ma - mb;
-          }
+          const ma = matchesAmount(a) ? 0 : 1;
+          const mb = matchesAmount(b) ? 0 : 1;
+          if (ma !== mb) return ma - mb;
           const da = Math.abs(new Date(a.issueDate).getTime() - movTime);
           const db = Math.abs(new Date(b.issueDate).getTime() - movTime);
           return da - db;
@@ -784,7 +784,11 @@ export default function MovementReconcileModal({
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {results.map((f) => {
-                      const isExact = Math.abs(f.remaining - remaining) < 1;
+                      // Match de monto con tolerancia ±$10 (cubre redondeos
+                      // IVA). Cuando matchea, la fila se sombrea en verde
+                      // para que salte a la vista — antes solo el saldo se
+                      // pintaba de verde y se perdia en la lista.
+                      const isExact = Math.abs(f.remaining - remaining) <= 10;
                       const isLessThanRemaining = f.remaining < remaining;
                       const fTime = new Date(f.issueDate).getTime();
                       const isNear = Math.abs(fTime - movTimeRef) <= FIFTEEN_DAYS_MS;
@@ -792,7 +796,14 @@ export default function MovementReconcileModal({
                       const d = new Date(f.issueDate);
                       const fechaFmt = `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${String(d.getUTCFullYear()).slice(-2)}`;
                       return (
-                        <tr key={f.id} className="hover:bg-gray-50">
+                        <tr
+                          key={f.id}
+                          className={
+                            isExact
+                              ? "bg-emerald-50 hover:bg-emerald-100"
+                              : "hover:bg-gray-50"
+                          }
+                        >
                           <td className="px-3 py-2 tabular-nums text-gray-700 whitespace-nowrap">
                             F-{f.folioNumber}
                             {f.tipoDoc === 34 && (
@@ -832,10 +843,15 @@ export default function MovementReconcileModal({
                           <td className="px-3 py-2 text-right">
                             <button
                               onClick={() => addDraft(f)}
-                              className="text-xs bg-gray-900 text-white px-2 py-0.5 rounded hover:bg-gray-800"
+                              className={
+                                "text-xs text-white px-2 py-0.5 rounded " +
+                                (isExact
+                                  ? "bg-emerald-700 hover:bg-emerald-800"
+                                  : "bg-gray-900 hover:bg-gray-800")
+                              }
                               title={
                                 isExact
-                                  ? "Match exacto"
+                                  ? "Monto coincide con el movimiento"
                                   : isLessThanRemaining
                                     ? "Aplicar saldo factura"
                                     : "Aplicar saldo libre del mov"

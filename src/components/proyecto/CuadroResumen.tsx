@@ -1,19 +1,29 @@
 /**
  * Cuadro Resumen del proyecto — réplica del cuadro Excel que MJ lleva
- * a mano: por concepto (OBRA / ART. COCINA / ART. SANITARIOS / MUEBLES)
- * muestra el monto firmado en la versión vigente del presupuesto y, debajo,
- * cada pago (transferencia bancaria conciliada con factura emitida) con
- * su fecha y N° de folio. Cierra con TOTAL PAGOS, AVANCE y SALDO PENDIENTE.
+ * a mano. Por cada concepto (OBRA / ART. COCINA / ART. SANITARIOS /
+ * ART. ILUMINACIÓN / MUEBLES) muestra el monto firmado en la versión
+ * vigente del presupuesto y, debajo, cada pago (transferencia bancaria
+ * conciliada con factura emitida) con su fecha y N° de folio. Cierra con
+ * TOTAL PAGOS, AVANCE y SALDO PENDIENTE.
  *
- * Para artefactos no hay split granular cocina/sanitarios en la factura
- * (`conceptoCobro` solo distingue obra/muebles/artefactos), entonces los
- * pagos de facturas con `conceptoCobro=artefactos` se reparten entre cocina
- * y sanitarios de forma proporcional al presupuesto V6 aprobado. Esta
- * heurística se acordó con MJ el 2026-05-15. Si en el futuro se necesita
- * precisión exacta cuando un cobro se desvía del split presupuestado,
- * agregamos un campo manual a la factura emitida.
+ * COLUMNAS DINÁMICAS (regla confirmada con MJ 2026-05-22): el cuadro NO
+ * tiene columnas fijas. Cada proyecto muestra solo las columnas de los
+ * conceptos que efectivamente le entregó al cliente como lista/presupuesto.
+ * La app lo deduce de lo cargado: una columna aparece si su acordado > 0.
+ * Ejemplo: en Portofino la iluminación va dentro de la obra (no hay lista
+ * de artefactos de iluminación aparte) → esa columna no debe salir; en
+ * Aguirre sí se entregó listado de iluminación → la columna aparece.
+ *
+ * Para artefactos no hay split granular cocina/sanitarios/iluminación en
+ * la factura (`conceptoCobro` solo distingue obra/muebles/artefactos),
+ * entonces los pagos de facturas con `conceptoCobro=artefactos` se reparten
+ * entre las tres sub-categorías de forma proporcional al acordado de la
+ * versión aprobada. Esta heurística se acordó con MJ el 2026-05-15. Si en
+ * el futuro se necesita precisión exacta cuando un cobro se desvía del
+ * split presupuestado, agregamos un campo manual a la factura emitida.
  */
 
+import { Fragment } from "react";
 import { formatCLP } from "@/lib/utils";
 
 interface Payment {
@@ -76,6 +86,29 @@ function fmtDate(d: Date): string {
   return `${dd}-${mm}-${yy}`;
 }
 
+type Row = {
+  date: Date;
+  obra: number;
+  cocina: number;
+  sanitarios: number;
+  iluminacion: number;
+  muebles: number;
+  folioNumber: string | null;
+};
+
+// Un concepto = una columna del cuadro. Se arma dinámicamente: solo los
+// conceptos con acordado > 0 terminan renderizados (ver nota de cabecera).
+type Concepto = {
+  key: "obra" | "cocina" | "sanitarios" | "iluminacion" | "muebles";
+  label: string;
+  acordado: number;
+  fecha: string;
+  pagoDe: (r: Row) => number;
+  totPago: number;
+  avance: number;
+  saldo: number;
+};
+
 export default function CuadroResumen({ invoices, budgets }: Props) {
   // Sumamos TODAS las versiones aprobadas por tipo (caso Aguirre que
   // tiene V7 principal + V4-BANO-VISITAS como anexo, ambas aprobadas).
@@ -112,42 +145,40 @@ export default function CuadroResumen({ invoices, budgets }: Props) {
     0
   );
 
-  // ARTEFACTOS: split cocina/sanitarios.
-  const cocinaAcordado = artefactosAprobados.reduce(
-    (s, b) =>
-      s +
-      (b.artefactoItems ?? [])
-        .filter((it) => it.subcategory === "cocina")
-        .reduce((ss, it) => ss + it.clientPrice * it.quantity, 0),
-    0
-  );
-  const sanitariosAcordado = artefactosAprobados.reduce(
-    (s, b) =>
-      s +
-      (b.artefactoItems ?? [])
-        .filter((it) => it.subcategory === "sanitario")
-        .reduce((ss, it) => ss + it.clientPrice * it.quantity, 0),
-    0
-  );
+  // ARTEFACTOS: split cocina / sanitarios / iluminación.
+  // clientPrice es precio unitario → se multiplica por quantity (convención
+  // confirmada con MJ 2026-05-22, igual que metrics.ts).
+  const sumaSub = (sub: string) =>
+    artefactosAprobados.reduce(
+      (s, b) =>
+        s +
+        (b.artefactoItems ?? [])
+          .filter((it) => it.subcategory === sub)
+          .reduce((ss, it) => ss + it.clientPrice * it.quantity, 0),
+      0
+    );
+  const cocinaAcordado = sumaSub("cocina");
+  const sanitariosAcordado = sumaSub("sanitario");
+  const iluminacionAcordado = sumaSub("iluminacion");
 
   const totalAcordado =
-    obraAcordado + cocinaAcordado + sanitariosAcordado + mueblesAcordado;
+    obraAcordado +
+    cocinaAcordado +
+    sanitariosAcordado +
+    iluminacionAcordado +
+    mueblesAcordado;
 
   // ── Pagos por columna ──────────────────────────────────────────────
-  // Para conceptoCobro=artefactos hacemos split proporcional cocina/sanitarios.
-  const artefactosBase = cocinaAcordado + sanitariosAcordado;
+  // Para conceptoCobro=artefactos hacemos split proporcional entre las tres
+  // sub-categorías (cocina / sanitarios / iluminación) según el acordado.
+  const artefactosBase =
+    cocinaAcordado + sanitariosAcordado + iluminacionAcordado;
   const ratioCocina = artefactosBase > 0 ? cocinaAcordado / artefactosBase : 0;
   const ratioSanitarios =
     artefactosBase > 0 ? sanitariosAcordado / artefactosBase : 0;
+  const ratioIluminacion =
+    artefactosBase > 0 ? iluminacionAcordado / artefactosBase : 0;
 
-  type Row = {
-    date: Date;
-    obra: number;
-    cocina: number;
-    sanitarios: number;
-    muebles: number;
-    folioNumber: string | null;
-  };
   const rows: Row[] = [];
   const emitidas = invoices.filter((i) => i.type === "emitida");
   for (const inv of emitidas) {
@@ -157,6 +188,7 @@ export default function CuadroResumen({ invoices, budgets }: Props) {
         obra: 0,
         cocina: 0,
         sanitarios: 0,
+        iluminacion: 0,
         muebles: 0,
         folioNumber: inv.folioNumber,
       };
@@ -165,37 +197,101 @@ export default function CuadroResumen({ invoices, budgets }: Props) {
       else if (inv.conceptoCobro === "artefactos") {
         row.cocina = p.amountApplied * ratioCocina;
         row.sanitarios = p.amountApplied * ratioSanitarios;
+        row.iluminacion = p.amountApplied * ratioIluminacion;
       }
       // conceptoCobro mixto/null: por ahora se omite del cuadro.
-      if (row.obra || row.cocina || row.sanitarios || row.muebles) {
+      if (
+        row.obra ||
+        row.cocina ||
+        row.sanitarios ||
+        row.iluminacion ||
+        row.muebles
+      ) {
         rows.push(row);
       }
     }
   }
   rows.sort((a, b) => a.date.getTime() - b.date.getTime());
 
-  // ── Subtotales por columna ──────────────────────────────────────────
-  const totObra = rows.reduce((s, r) => s + r.obra, 0);
-  const totCocina = rows.reduce((s, r) => s + r.cocina, 0);
-  const totSanitarios = rows.reduce((s, r) => s + r.sanitarios, 0);
-  const totMuebles = rows.reduce((s, r) => s + r.muebles, 0);
-  const totPagos = totObra + totCocina + totSanitarios + totMuebles;
+  // ── Fechas de cada concepto (fecha de la versión vigente) ───────────
+  const obraDate = lastObra ? fmtDate(new Date(lastObra.updatedAt)) : "";
+  const artefactosDate = lastArtefactos
+    ? fmtDate(new Date(lastArtefactos.updatedAt))
+    : "";
+  const mueblesDate = lastMuebles
+    ? fmtDate(new Date(lastMuebles.updatedAt))
+    : "";
 
-  const avanceObra = obraAcordado > 0 ? totObra / obraAcordado : 0;
-  const avanceCocina = cocinaAcordado > 0 ? totCocina / cocinaAcordado : 0;
-  const avanceSanitarios =
-    sanitariosAcordado > 0 ? totSanitarios / sanitariosAcordado : 0;
-  const avanceMuebles = mueblesAcordado > 0 ? totMuebles / mueblesAcordado : 0;
+  // ── Conceptos presentes: solo los que tienen acordado > 0 ───────────
+  // Esta es la regla de columnas dinámicas. Un proyecto sin artefactos de
+  // iluminación (p. ej. Portofino, que la cobra dentro de la obra) no
+  // muestra esa columna.
+  const conceptosAll: Concepto[] = [
+    {
+      key: "obra",
+      label: "Obra",
+      acordado: obraAcordado,
+      fecha: obraDate,
+      pagoDe: (r) => r.obra,
+      totPago: 0,
+      avance: 0,
+      saldo: 0,
+    },
+    {
+      key: "cocina",
+      label: "Art. Cocina",
+      acordado: cocinaAcordado,
+      fecha: artefactosDate,
+      pagoDe: (r) => r.cocina,
+      totPago: 0,
+      avance: 0,
+      saldo: 0,
+    },
+    {
+      key: "sanitarios",
+      label: "Art. Sanitarios",
+      acordado: sanitariosAcordado,
+      fecha: artefactosDate,
+      pagoDe: (r) => r.sanitarios,
+      totPago: 0,
+      avance: 0,
+      saldo: 0,
+    },
+    {
+      key: "iluminacion",
+      label: "Art. Iluminación",
+      acordado: iluminacionAcordado,
+      fecha: artefactosDate,
+      pagoDe: (r) => r.iluminacion,
+      totPago: 0,
+      avance: 0,
+      saldo: 0,
+    },
+    {
+      key: "muebles",
+      label: "Muebles",
+      acordado: mueblesAcordado,
+      fecha: mueblesDate,
+      pagoDe: (r) => r.muebles,
+      totPago: 0,
+      avance: 0,
+      saldo: 0,
+    },
+  ];
+  const conceptos = conceptosAll.filter((c) => c.acordado > 0);
+
+  // Subtotales de pagos, avance y saldo por concepto.
+  for (const c of conceptos) {
+    c.totPago = rows.reduce((s, r) => s + c.pagoDe(r), 0);
+    c.avance = c.acordado > 0 ? c.totPago / c.acordado : 0;
+    c.saldo = c.acordado - c.totPago;
+  }
+  const totPagos = conceptos.reduce((s, c) => s + c.totPago, 0);
   const avanceTotal = totalAcordado > 0 ? totPagos / totalAcordado : 0;
-
-  const saldoObra = obraAcordado - totObra;
-  const saldoCocina = cocinaAcordado - totCocina;
-  const saldoSanitarios = sanitariosAcordado - totSanitarios;
-  const saldoMuebles = mueblesAcordado - totMuebles;
   const saldoTotal = totalAcordado - totPagos;
 
   // Si no hay nada que mostrar, no rendereamos el bloque
-  if (totalAcordado === 0 && rows.length === 0) return null;
+  if (conceptos.length === 0 && rows.length === 0) return null;
 
   // ── Render ──────────────────────────────────────────────────────────
   // Si hay máximo UNA versión aprobada por tipo (caso típico), mostramos
@@ -211,20 +307,8 @@ export default function CuadroResumen({ invoices, budgets }: Props) {
     maxPerType <= 1
       ? lastObra?.version ?? lastMuebles?.version ?? lastArtefactos?.version ?? "—"
       : "Acordado";
-  const obraDate = lastObra ? fmtDate(new Date(lastObra.updatedAt)) : "";
-  const cocinaDate =
-    cocinaAcordado > 0 && lastArtefactos
-      ? fmtDate(new Date(lastArtefactos.updatedAt))
-      : "";
-  const sanitariosDate =
-    sanitariosAcordado > 0 && lastArtefactos
-      ? fmtDate(new Date(lastArtefactos.updatedAt))
-      : "";
-  const mueblesDate = lastMuebles
-    ? fmtDate(new Date(lastMuebles.updatedAt))
-    : "";
 
-  // Helpers para celdas
+  // Helper de celda de monto
   const cellMonto = (v: number) =>
     v > 0 ? (
       <span className="tabular-nums">{formatCLP(v)}</span>
@@ -239,7 +323,8 @@ export default function CuadroResumen({ invoices, budgets }: Props) {
       </h2>
       <p className="text-xs text-gray-500 mb-4">
         Acordado por concepto y transferencias conciliadas con facturas
-        emitidas. Para artefactos el monto se reparte cocina/sanitarios
+        emitidas. Las columnas son las del presupuesto entregado al cliente.
+        Para artefactos el monto se reparte cocina/sanitarios/iluminación
         proporcional al presupuesto vigente.
       </p>
       <div className="overflow-x-auto">
@@ -248,56 +333,30 @@ export default function CuadroResumen({ invoices, budgets }: Props) {
           <thead>
             <tr className="text-[10px] uppercase tracking-wider text-gray-500">
               <th className="pb-1 pr-2 text-left"></th>
-              <th
-                colSpan={3}
-                className="pb-1 px-2 text-center border-l border-gray-200 font-semibold text-gray-700"
-              >
-                Obra
-              </th>
-              <th
-                colSpan={3}
-                className="pb-1 px-2 text-center border-l border-gray-200 font-semibold text-gray-700"
-              >
-                Art. Cocina
-              </th>
-              <th
-                colSpan={3}
-                className="pb-1 px-2 text-center border-l border-gray-200 font-semibold text-gray-700"
-              >
-                Art. Sanitarios
-              </th>
-              <th
-                colSpan={3}
-                className="pb-1 px-2 text-center border-l border-gray-200 font-semibold text-gray-700"
-              >
-                Muebles
-              </th>
+              {conceptos.map((c) => (
+                <th
+                  key={c.key}
+                  colSpan={3}
+                  className="pb-1 px-2 text-center border-l border-gray-200 font-semibold text-gray-700"
+                >
+                  {c.label}
+                </th>
+              ))}
               <th className="pb-1 pl-2 text-right border-l border-gray-200 font-semibold text-gray-700">
                 Total
               </th>
             </tr>
             <tr className="text-[10px] uppercase tracking-wider text-gray-400 border-b border-gray-300">
               <th></th>
-              <th className="pb-1 px-2 border-l border-gray-100 text-left font-medium">
-                Fecha
-              </th>
-              <th className="pb-1 px-2 text-right font-medium">Monto</th>
-              <th className="pb-1 px-2 text-right font-medium">Factura</th>
-              <th className="pb-1 px-2 border-l border-gray-100 text-left font-medium">
-                Fecha
-              </th>
-              <th className="pb-1 px-2 text-right font-medium">Monto</th>
-              <th className="pb-1 px-2 text-right font-medium">Factura</th>
-              <th className="pb-1 px-2 border-l border-gray-100 text-left font-medium">
-                Fecha
-              </th>
-              <th className="pb-1 px-2 text-right font-medium">Monto</th>
-              <th className="pb-1 px-2 text-right font-medium">Factura</th>
-              <th className="pb-1 px-2 border-l border-gray-100 text-left font-medium">
-                Fecha
-              </th>
-              <th className="pb-1 px-2 text-right font-medium">Monto</th>
-              <th className="pb-1 px-2 text-right font-medium">Factura</th>
+              {conceptos.map((c) => (
+                <Fragment key={c.key}>
+                  <th className="pb-1 px-2 border-l border-gray-100 text-left font-medium">
+                    Fecha
+                  </th>
+                  <th className="pb-1 px-2 text-right font-medium">Monto</th>
+                  <th className="pb-1 px-2 text-right font-medium">Factura</th>
+                </Fragment>
+              ))}
               <th className="pb-1 pl-2 border-l border-gray-200"></th>
             </tr>
           </thead>
@@ -305,34 +364,17 @@ export default function CuadroResumen({ invoices, budgets }: Props) {
             {/* Fila versión: monto firmado por concepto */}
             <tr className="bg-gray-50 border-b border-gray-200 font-semibold text-gray-900">
               <td className="py-2 pr-2 text-left">{versionLabel}</td>
-              <td className="py-2 px-2 border-l border-gray-200 text-left text-gray-600 font-normal">
-                {obraDate}
-              </td>
-              <td className="py-2 px-2 text-right tabular-nums">
-                {cellMonto(obraAcordado)}
-              </td>
-              <td className="py-2 px-2"></td>
-              <td className="py-2 px-2 border-l border-gray-200 text-left text-gray-600 font-normal">
-                {cocinaDate}
-              </td>
-              <td className="py-2 px-2 text-right tabular-nums">
-                {cellMonto(cocinaAcordado)}
-              </td>
-              <td className="py-2 px-2"></td>
-              <td className="py-2 px-2 border-l border-gray-200 text-left text-gray-600 font-normal">
-                {sanitariosDate}
-              </td>
-              <td className="py-2 px-2 text-right tabular-nums">
-                {cellMonto(sanitariosAcordado)}
-              </td>
-              <td className="py-2 px-2"></td>
-              <td className="py-2 px-2 border-l border-gray-200 text-left text-gray-600 font-normal">
-                {mueblesDate}
-              </td>
-              <td className="py-2 px-2 text-right tabular-nums">
-                {cellMonto(mueblesAcordado)}
-              </td>
-              <td className="py-2 px-2"></td>
+              {conceptos.map((c) => (
+                <Fragment key={c.key}>
+                  <td className="py-2 px-2 border-l border-gray-200 text-left text-gray-600 font-normal">
+                    {c.fecha}
+                  </td>
+                  <td className="py-2 px-2 text-right tabular-nums">
+                    {cellMonto(c.acordado)}
+                  </td>
+                  <td className="py-2 px-2"></td>
+                </Fragment>
+              ))}
               <td className="py-2 pl-2 border-l border-gray-200 text-right tabular-nums">
                 {formatCLP(totalAcordado)}
               </td>
@@ -340,45 +382,24 @@ export default function CuadroResumen({ invoices, budgets }: Props) {
 
             {/* Filas de pagos */}
             {rows.map((r, i) => (
-              <tr
-                key={i}
-                className="border-b border-gray-50 text-gray-700"
-              >
+              <tr key={i} className="border-b border-gray-50 text-gray-700">
                 <td className="py-1.5 pr-2"></td>
-                <td className="py-1.5 px-2 border-l border-gray-100 text-left">
-                  {r.obra ? fmtDate(r.date) : ""}
-                </td>
-                <td className="py-1.5 px-2 text-right">{cellMonto(r.obra)}</td>
-                <td className="py-1.5 px-2 text-right text-gray-500">
-                  {r.obra && r.folioNumber ? r.folioNumber : ""}
-                </td>
-                <td className="py-1.5 px-2 border-l border-gray-100 text-left">
-                  {r.cocina ? fmtDate(r.date) : ""}
-                </td>
-                <td className="py-1.5 px-2 text-right">
-                  {cellMonto(r.cocina)}
-                </td>
-                <td className="py-1.5 px-2 text-right text-gray-500">
-                  {r.cocina && r.folioNumber ? r.folioNumber : ""}
-                </td>
-                <td className="py-1.5 px-2 border-l border-gray-100 text-left">
-                  {r.sanitarios ? fmtDate(r.date) : ""}
-                </td>
-                <td className="py-1.5 px-2 text-right">
-                  {cellMonto(r.sanitarios)}
-                </td>
-                <td className="py-1.5 px-2 text-right text-gray-500">
-                  {r.sanitarios && r.folioNumber ? r.folioNumber : ""}
-                </td>
-                <td className="py-1.5 px-2 border-l border-gray-100 text-left">
-                  {r.muebles ? fmtDate(r.date) : ""}
-                </td>
-                <td className="py-1.5 px-2 text-right">
-                  {cellMonto(r.muebles)}
-                </td>
-                <td className="py-1.5 px-2 text-right text-gray-500">
-                  {r.muebles && r.folioNumber ? r.folioNumber : ""}
-                </td>
+                {conceptos.map((c) => {
+                  const v = c.pagoDe(r);
+                  return (
+                    <Fragment key={c.key}>
+                      <td className="py-1.5 px-2 border-l border-gray-100 text-left">
+                        {v ? fmtDate(r.date) : ""}
+                      </td>
+                      <td className="py-1.5 px-2 text-right">
+                        {cellMonto(v)}
+                      </td>
+                      <td className="py-1.5 px-2 text-right text-gray-500">
+                        {v && r.folioNumber ? r.folioNumber : ""}
+                      </td>
+                    </Fragment>
+                  );
+                })}
                 <td className="py-1.5 pl-2 border-l border-gray-200"></td>
               </tr>
             ))}
@@ -388,53 +409,27 @@ export default function CuadroResumen({ invoices, budgets }: Props) {
               <td className="py-2 pr-2 text-left uppercase text-[10px] tracking-wider">
                 Total pagos
               </td>
-              <td className="py-2 px-2 border-l border-gray-200 text-left text-gray-500 font-normal">
-                {(avanceObra * 100).toFixed(0)}%
-              </td>
-              <td
-                colSpan={2}
-                className="py-2 px-2 text-right tabular-nums"
-              >
-                {cellMonto(totObra)}
-              </td>
-              <td className="py-2 px-2 border-l border-gray-200 text-left text-gray-500 font-normal">
-                {(avanceCocina * 100).toFixed(0)}%
-              </td>
-              <td
-                colSpan={2}
-                className="py-2 px-2 text-right tabular-nums"
-              >
-                {cellMonto(totCocina)}
-              </td>
-              <td className="py-2 px-2 border-l border-gray-200 text-left text-gray-500 font-normal">
-                {(avanceSanitarios * 100).toFixed(0)}%
-              </td>
-              <td
-                colSpan={2}
-                className="py-2 px-2 text-right tabular-nums"
-              >
-                {cellMonto(totSanitarios)}
-              </td>
-              <td className="py-2 px-2 border-l border-gray-200 text-left text-gray-500 font-normal">
-                {(avanceMuebles * 100).toFixed(0)}%
-              </td>
-              <td
-                colSpan={2}
-                className="py-2 px-2 text-right tabular-nums"
-              >
-                {cellMonto(totMuebles)}
-              </td>
+              {conceptos.map((c) => (
+                <Fragment key={c.key}>
+                  <td className="py-2 px-2 border-l border-gray-200 text-left text-gray-500 font-normal">
+                    {(c.avance * 100).toFixed(0)}%
+                  </td>
+                  <td colSpan={2} className="py-2 px-2 text-right tabular-nums">
+                    {cellMonto(c.totPago)}
+                  </td>
+                </Fragment>
+              ))}
               <td className="py-2 pl-2 border-l border-gray-200 text-right tabular-nums">
                 {formatCLP(totPagos)}
               </td>
             </tr>
-            {/* AVANCE total monetario (lo no cobrado todavía / lo cobrado) */}
+            {/* AVANCE total monetario (lo cobrado sobre el acordado) */}
             <tr className="text-gray-600">
               <td className="py-1.5 pr-2 text-left uppercase text-[10px] tracking-wider">
                 Avance total
               </td>
               <td
-                colSpan={12}
+                colSpan={conceptos.length * 3}
                 className="py-1.5 px-2 border-l border-gray-200 text-right text-gray-500 tabular-nums"
               >
                 {(avanceTotal * 100).toFixed(0)}% del acordado
@@ -448,30 +443,15 @@ export default function CuadroResumen({ invoices, budgets }: Props) {
               <td className="py-2 pr-2 text-left uppercase text-[10px] tracking-wider">
                 Saldo pendiente
               </td>
-              <td
-                colSpan={3}
-                className="py-2 px-2 border-l border-gray-200 text-right tabular-nums"
-              >
-                {cellMonto(saldoObra)}
-              </td>
-              <td
-                colSpan={3}
-                className="py-2 px-2 border-l border-gray-200 text-right tabular-nums"
-              >
-                {cellMonto(saldoCocina)}
-              </td>
-              <td
-                colSpan={3}
-                className="py-2 px-2 border-l border-gray-200 text-right tabular-nums"
-              >
-                {cellMonto(saldoSanitarios)}
-              </td>
-              <td
-                colSpan={3}
-                className="py-2 px-2 border-l border-gray-200 text-right tabular-nums"
-              >
-                {cellMonto(saldoMuebles)}
-              </td>
+              {conceptos.map((c) => (
+                <td
+                  key={c.key}
+                  colSpan={3}
+                  className="py-2 px-2 border-l border-gray-200 text-right tabular-nums"
+                >
+                  {cellMonto(c.saldo)}
+                </td>
+              ))}
               <td className="py-2 pl-2 border-l border-gray-200 text-right tabular-nums">
                 {formatCLP(saldoTotal)}
               </td>

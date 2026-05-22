@@ -4,6 +4,15 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-22 — Botón "Nueva partida" en el catálogo
+
+- **Qué cambió**: la sección Catálogo de Partidas (`/catalogo/partidas`) ahora tiene un botón "+ Nueva partida" junto a la barra de búsqueda. Abre un formulario corto (nombre, categoría con datalist de las existentes o una nueva, unidad) y al confirmar crea la partida y la abre directo en modo edición para cargar descripciones y componentes.
+- **Por qué**: hasta ahora una partida solo nacía indirectamente desde un presupuesto o duplicando otra. No había forma de crear una desde cero en el catálogo.
+- **Sin cambios de schema ni de API** — el endpoint `POST /api/catalogo/partidas` ya existía. Cambio solo de UI. La lista de categorías pasó a estado local del componente para que una categoría nueva aparezca sin recargar.
+- **Archivos**: `src/components/catalogo/PartidaSearch.tsx`.
+
+---
+
 ## 2026-05-17 — Fix importador de cartolas bancarias: deduplicación por saldo posterior
 
 - **Qué cambió**: el importador de cartolas Santander ya no deduplica por el N° de documento del banco (`externalRef`). Ahora cada movimiento se identifica por `balanceAfter` — el saldo corrido tras aplicarlo, calculado sobre un orden canónico (fecha, monto, descripción). Campo nuevo `BankMovement.balanceAfter` y `@@unique` reemplazado por `(bankAccountId, date, amount, balanceAfter)`.

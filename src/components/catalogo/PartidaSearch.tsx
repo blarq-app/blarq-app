@@ -21,6 +21,9 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import MaterialAutocomplete from "./MaterialAutocomplete";
 
+// Unidades disponibles para una partida (las mismas que usa el editor inline).
+const PARTIDA_UNITS = ["M2", "ML", "UN", "GL", "M3", "KG", "DIA", "HR"];
+
 interface Component {
   id: string;
   type: string;
@@ -139,6 +142,12 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
   const [draft, setDraft] = useState<Partida | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
+
+  // Catálogo de categorías como estado (no prop): al crear una partida con
+  // una categoría nueva, la agregamos acá para que aparezca sin recargar.
+  const [allCategories, setAllCategories] = useState<string[]>(categories);
+  const [creating, setCreating] = useState(false);
+  const [newForm, setNewForm] = useState({ name: "", category: "", unit: "GL" });
 
   useEffect(() => {
     const timer = setTimeout(fetchPartidas, 300);
@@ -449,6 +458,47 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
     if (editing === id) cancelEdit();
   }
 
+  // Crea una partida en blanco en el catálogo y la abre directamente en
+  // modo edición, para que MJ cargue las descripciones y componentes.
+  async function createPartida() {
+    const name = newForm.name.trim().toUpperCase();
+    const newCategory = newForm.category.trim().toUpperCase();
+    if (!name || !newCategory) {
+      alert("Nombre y categoría son obligatorios");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/catalogo/partidas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, category: newCategory, unit: newForm.unit }),
+      });
+      if (!res.ok) {
+        alert("Error al crear partida");
+        return;
+      }
+      const created = await res.json();
+      // El POST devuelve la partida sin componentes — la completamos para
+      // que el editor (que espera components) no falle.
+      const fullPartida: Partida = { ...created, components: [] };
+      if (!allCategories.includes(newCategory)) {
+        setAllCategories((prev) => [...prev, newCategory]);
+      }
+      setPartidas((prev) => [...prev, fullPartida]);
+      setCreating(false);
+      setNewForm({ name: "", category: "", unit: "GL" });
+      // Si hay un filtro de categoría activo que no coincide, lo limpiamos
+      // para que la partida recién creada sea visible.
+      if (category && category !== newCategory) setCategory("");
+      startEdit(fullPartida);
+    } catch {
+      alert("Error al crear partida");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function duplicatePartida(id: string) {
     const res = await fetch(`/api/catalogo/partidas/${id}/duplicate`, {
       method: "POST",
@@ -462,7 +512,7 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
 
   // ── Agrupar y ordenar por categoría con index 1, 2, 3...
   const grouped = useMemo(() => {
-    const orderedCategories = categories
+    const orderedCategories = allCategories
       .filter((cat) => !category || cat === category)
       .map((cat, idx) => ({
         category: cat,
@@ -473,7 +523,7 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
       }))
       .filter((g) => g.items.length > 0);
     return orderedCategories;
-  }, [categories, category, partidas]);
+  }, [allCategories, category, partidas]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -526,13 +576,93 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
           className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-1 focus:ring-gray-900 focus:border-transparent outline-none min-w-[200px]"
         >
           <option value="">Todas las categorías</option>
-          {categories.map((cat) => (
+          {allCategories.map((cat) => (
             <option key={cat} value={cat}>
               {cat}
             </option>
           ))}
         </select>
+        <button
+          onClick={() => setCreating((v) => !v)}
+          className="px-3 py-2 bg-gray-900 text-white rounded-lg text-sm hover:bg-gray-700 whitespace-nowrap"
+        >
+          + Nueva partida
+        </button>
       </div>
+
+      {/* Formulario de creación rápida — abre la partida en modo edición */}
+      {creating && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+          <div className="text-[10px] uppercase tracking-wider text-gray-500">
+            Nueva partida
+          </div>
+          <div className="grid grid-cols-12 gap-2">
+            <div className="col-span-6">
+              <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
+                Nombre
+              </label>
+              <input
+                value={newForm.name}
+                onChange={(e) => setNewForm({ ...newForm, name: e.target.value })}
+                placeholder="Ej: PINTURA MURO INTERIOR"
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm uppercase focus:ring-1 focus:ring-gray-900 outline-none"
+              />
+            </div>
+            <div className="col-span-3">
+              <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
+                Categoría
+              </label>
+              <input
+                list="catalogo-categorias"
+                value={newForm.category}
+                onChange={(e) =>
+                  setNewForm({ ...newForm, category: e.target.value })
+                }
+                placeholder="Existente o nueva"
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm uppercase focus:ring-1 focus:ring-gray-900 outline-none"
+              />
+              <datalist id="catalogo-categorias">
+                {allCategories.map((cat) => (
+                  <option key={cat} value={cat} />
+                ))}
+              </datalist>
+            </div>
+            <div className="col-span-3">
+              <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
+                Unidad
+              </label>
+              <select
+                value={newForm.unit}
+                onChange={(e) => setNewForm({ ...newForm, unit: e.target.value })}
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:ring-1 focus:ring-gray-900 outline-none"
+              >
+                {PARTIDA_UNITS.map((u) => (
+                  <option key={u}>{u}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => {
+                setCreating(false);
+                setNewForm({ name: "", category: "", unit: "GL" });
+              }}
+              className="text-sm px-4 py-1.5 border border-gray-300 rounded hover:bg-gray-100"
+              disabled={saving}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={createPartida}
+              disabled={saving}
+              className="text-sm px-4 py-1.5 bg-gray-900 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+            >
+              {saving ? "Creando…" : "Crear y editar"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading && <p className="text-gray-500 text-sm">Buscando…</p>}
 
@@ -1056,7 +1186,7 @@ function EditPanel({
             onChange={(e) => onUpdateDraft({ unit: e.target.value })}
             className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:ring-1 focus:ring-gray-900 outline-none"
           >
-            {["M2", "ML", "UN", "GL", "M3", "KG", "DIA", "HR"].map((u) => (
+            {PARTIDA_UNITS.map((u) => (
               <option key={u}>{u}</option>
             ))}
           </select>

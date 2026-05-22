@@ -4,7 +4,14 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-17 (ronda 28 — fix importador de cartolas bancarias: deduplicación por saldo posterior)
+- **Última actualización**: 2026-05-22 (ronda 29 — botón "Nueva partida" en el catálogo)
+
+- **Ronda 29 — Botón "Nueva partida" en el catálogo**:
+  - **Qué se hizo**: la sección `/catalogo/partidas` no tenía forma de crear una partida desde cero — solo nacían desde un presupuesto o duplicando otra. Se agregó un botón "+ Nueva partida" junto a la barra de búsqueda, con un formulario corto (nombre, categoría, unidad) que crea la partida y la abre directo en modo edición.
+  - **Sin cambios de schema ni API**: el endpoint `POST /api/catalogo/partidas` ya existía. Cambio solo de UI en `src/components/catalogo/PartidaSearch.tsx`.
+  - **Detalle**: se quiso usar un icono de `lucide-react` (lo menciona CLAUDE.md §3) pero esa librería no está instalada — la app usa caracteres de texto para todo. Se usó un "+" de texto.
+  - **No verificado en navegador**: la página pide login y la BD daba timeouts de conexión a Neon durante la sesión. Compila limpio (`tsc --noEmit` sin errores en el archivo). MJ verifica al desplegar.
+  - **Archivos**: `src/components/catalogo/PartidaSearch.tsx`.
 
 - **Ronda 28 — Fix importador de cartolas bancarias**:
   - **Problema**: el importador deduplicaba por el N° de documento del banco (`externalRef`). Ese número solo lo trae la cartola Histórica; la Provisoria lo trae en cero. Reimportar una cartola en el otro formato duplicaba todos los movimientos.

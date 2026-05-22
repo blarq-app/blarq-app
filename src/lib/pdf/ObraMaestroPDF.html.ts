@@ -24,6 +24,11 @@ const CHAPTERS: Record<string, { label: string; index: number }> = {
 
 export interface ObraMaestroItemInput {
   chapter: string;
+  // Sub-chapter opcional (ej. "COCINA", "BANO") para agrupar partidas
+  // dentro del capitulo. Si esta presente, se renderiza una fila
+  // separadora antes del primer item con ese subChapter. No hay
+  // subtotales por zona porque el maestro no tiene precios.
+  subChapter: string | null;
   name: string;
   // Para el maestro mostramos la descriptionMaestro (instrucciones de
   // ejecucion) cuando existe. Si no, cae a descriptionCliente.
@@ -148,6 +153,19 @@ const CSS = `
   }
   .partidas tr.chapter-row td.chapter-idx { text-align: center; }
 
+  /* Fila separadora de sub-chapter (ej. "COCINA", "BANO"). Gris mas
+     claro que el chapter, italic, sin bordes — separador visual sutil. */
+  .partidas tr.sub-chapter-row td {
+    background: #F2F2F2;
+    font-weight: 600;
+    font-style: italic;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    font-size: 5.8pt;
+    border-bottom: 0.4pt solid #999;
+    letter-spacing: 0.02em;
+  }
+
   /* P.U. y TOTAL en blanco — ancho proporcional para que el maestro
      escriba a mano si imprime. */
   .col-item   { width: 5%;  text-align: center; white-space: nowrap; }
@@ -174,11 +192,24 @@ const CSS = `
 export function renderObraMaestroHTML(data: ObraMaestroHTMLInput): string {
   const { project, budget, maestro, items } = data;
 
+  // Ordenar items dentro del chapter por subChapter (los sin sub-chapter
+  // primero, despues agrupados alfabeticamente), despues por nombre. Espejo
+  // del orden del editor y del PDF de obra al cliente.
+  const sortItemsBySubChapter = (
+    a: ObraMaestroItemInput,
+    b: ObraMaestroItemInput
+  ) => {
+    const aSub = a.subChapter ?? "";
+    const bSub = b.subChapter ?? "";
+    if (aSub !== bSub) return aSub.localeCompare(bSub, "es");
+    return a.name.localeCompare(b.name, "es");
+  };
+
   const chapters = Object.entries(CHAPTERS)
     .map(([key, ch]) => ({
       key,
       ...ch,
-      items: items.filter((i) => i.chapter === key),
+      items: items.filter((i) => i.chapter === key).sort(sortItemsBySubChapter),
     }))
     .filter((ch) => ch.items.length > 0);
 
@@ -202,8 +233,20 @@ export function renderObraMaestroHTML(data: ObraMaestroHTMLInput): string {
           <td class="col-total"></td>
         </tr>
         ${ch.items
-          .map(
-            (item, idx) => `
+          .map((item, idx) => {
+            // Si cambia el subChapter respecto al item anterior, anteponemos
+            // una fila separadora gris clara con el nombre del sub-chapter.
+            const prev = idx > 0 ? ch.items[idx - 1] : null;
+            const showSub =
+              item.subChapter && (!prev || prev.subChapter !== item.subChapter);
+            return `
+          ${
+            showSub
+              ? `<tr class="sub-chapter-row">
+                  <td colspan="7">${esc(item.subChapter!)}</td>
+                </tr>`
+              : ""
+          }
           <tr>
             <td class="col-item">${ch.index}.${idx + 1}</td>
             <td class="col-name">${esc(item.name)}</td>
@@ -214,8 +257,8 @@ export function renderObraMaestroHTML(data: ObraMaestroHTMLInput): string {
             <td class="col-qty">${fmtQty(item.quantity)}</td>
             <td class="col-pu"></td>
             <td class="col-total"></td>
-          </tr>`
-          )
+          </tr>`;
+          })
           .join("")}
       `
     )

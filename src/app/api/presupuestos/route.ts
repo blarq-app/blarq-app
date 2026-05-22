@@ -126,6 +126,10 @@ export async function POST(request: NextRequest) {
               // de versiones del proyecto fuente.
               lineageId: isTemplateMode ? undefined : item.lineageId,
               chapter: item.chapter,
+              // En modo plantilla (importar desde otro proyecto) no tiene
+              // sentido arrastrar el sub-chapter del proyecto fuente — son
+              // zonas físicas distintas. En modo duplicar normal, sí.
+              subChapter: isTemplateMode ? null : item.subChapter,
               itemNumber: item.itemNumber,
               name: item.name,
               descriptionCliente,

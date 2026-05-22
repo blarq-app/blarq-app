@@ -21,6 +21,7 @@ const CHAPTERS: Record<string, { label: string; index: number }> = {
 
 export interface ObraMaestroXLSXItemInput {
   chapter: string;
+  subChapter: string | null;
   name: string;
   descriptionMaestro: string | null;
   descriptionCliente: string | null;
@@ -57,11 +58,23 @@ function colLetter(i: number): string {
 export function buildObraMaestroXLSX(data: ObraMaestroXLSXInput): Buffer {
   const { project, budget, maestro, items } = data;
 
+  // Ordenamos items dentro del chapter por subChapter (los sin
+  // sub-chapter primero), despues por nombre. Espejo del PDF.
+  const sortItemsBySubChapter = (
+    a: ObraMaestroXLSXItemInput,
+    b: ObraMaestroXLSXItemInput
+  ) => {
+    const aSub = a.subChapter ?? "";
+    const bSub = b.subChapter ?? "";
+    if (aSub !== bSub) return aSub.localeCompare(bSub, "es");
+    return a.name.localeCompare(b.name, "es");
+  };
+
   const chapters = Object.entries(CHAPTERS)
     .map(([key, ch]) => ({
       key,
       ...ch,
-      items: items.filter((i) => i.chapter === key),
+      items: items.filter((i) => i.chapter === key).sort(sortItemsBySubChapter),
     }))
     .filter((ch) => ch.items.length > 0);
 
@@ -99,9 +112,22 @@ export function buildObraMaestroXLSX(data: ObraMaestroXLSXInput): Buffer {
   // suma final del TOTAL.
   const itemRowIndices: number[] = []; // 0-indexed
 
+  // Rastreamos las filas que son separadoras de sub-chapter, para
+  // sombrearlas despues con un estilo distinto del header.
+  const subChapterRowIndices: number[] = []; // 0-indexed
+
   for (const ch of chapters) {
     rows.push([`${ch.index}`, ch.label, "", "", "", "", ""]);
+    let prevSub: string | null | undefined = undefined;
     ch.items.forEach((it, idx) => {
+      // Si cambia el sub-chapter respecto al item anterior, insertamos
+      // una fila separadora con el nombre del sub-chapter en col B.
+      if (it.subChapter && it.subChapter !== prevSub) {
+        rows.push(["", it.subChapter, "", "", "", "", ""]);
+        subChapterRowIndices.push(rows.length - 1);
+      }
+      prevSub = it.subChapter;
+
       rows.push([
         `${ch.index}.${idx + 1}`,
         it.name,

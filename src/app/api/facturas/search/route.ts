@@ -127,6 +127,10 @@ export async function GET(request: NextRequest) {
         tipoDoc: inv.tipoDoc,
         folioNumber: inv.folioNumber,
         businessName: inv.businessName,
+        // Devolvemos rutIssuer/rutReceiver al cliente: los necesita el
+        // modal para proponer "recordar pagador" con el RUT correcto.
+        rutIssuer: inv.rutIssuer,
+        rutReceiver: inv.rutReceiver,
         totalAmount: inv.totalAmount,
         paid,
         remaining,

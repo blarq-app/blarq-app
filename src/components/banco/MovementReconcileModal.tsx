@@ -9,6 +9,10 @@ type Factura = {
   tipoDoc: number | null;
   folioNumber: string | null;
   businessName: string | null;
+  // RUTs del emisor/receptor — necesarios para proponer "recordar pagador"
+  // (el RUT del proveedor que emite es lo que se guarda como alias).
+  rutIssuer: string | null;
+  rutReceiver: string | null;
   totalAmount: number;
   paid: number;
   remaining: number;
@@ -85,6 +89,14 @@ export default function MovementReconcileModal({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Estado de "recordar pagador frecuente" (Idea A): cuando el modal
+  // detecta drafts asignados a un mov sin reembolsador conocido, ofrece
+  // crear/extender la regla. Estado por sesion del modal — al cerrarse,
+  // se resetea.
+  const [learnDismissed, setLearnDismissed] = useState(false);
+  const [learnBusy, setLearnBusy] = useState(false);
+  const [learnDone, setLearnDone] = useState<string | null>(null); // mensaje exito
+
   // Detección de reembolsador a partir de la glosa del mov (substring
   // case-insensitive). Si matchea, devuelve el reembolsador; si no, null.
   const detectedReembolsador = (() => {
@@ -101,6 +113,10 @@ export default function MovementReconcileModal({
       _displayFolio: p.invoice.folioNumber,
       _displayName: p.invoice.businessName,
       _displayTotal: p.invoice.totalAmount,
+      // Drafts pre-existentes (existingPayments) no tienen rutIssuer
+      // — el endpoint que los provee no lo serializa. Queda en null y
+      // la propuesta "recordar pagador" se omite si no hay rutIssuer.
+      _rutIssuer: null as string | null,
     }))
   );
 
@@ -116,6 +132,7 @@ export default function MovementReconcileModal({
           _displayFolio: p.invoice.folioNumber,
           _displayName: p.invoice.businessName,
           _displayTotal: p.invoice.totalAmount,
+          _rutIssuer: null as string | null,
         }))
       );
       setQ("");
@@ -127,6 +144,9 @@ export default function MovementReconcileModal({
       setFilterProjectId("");
       setMontoExacto("");
       setError(null);
+      setLearnDismissed(false);
+      setLearnDone(null);
+      setLearnBusy(false);
     }
   }, [open, existingPayments, movement.counterpartyRut, movement.description, reembolsadores]);
 
@@ -157,6 +177,100 @@ export default function MovementReconcileModal({
 
   const isCargo = movement.amount < 0;
   const targetType = isCargo ? "recibida" : "emitida";
+
+  // ─── Idea A: "Recordar pagador frecuente" ──────────────────────────────
+  // Si MJ asigna facturas a un mov que NO tiene reembolsador detectado,
+  // proponemos crear o extender la regla (mov ↔ proveedor).
+  const learnSuggestion = (() => {
+    if (detectedReembolsador) return null; // ya hay regla
+    if (learnDismissed || learnDone) return null;
+    if (drafts.length === 0) return null;
+
+    // Tomamos el primer draft con rutIssuer poblado (facturas recibidas
+    // tienen rutIssuer = el proveedor; emitidas tienen rutReceiver = el
+    // cliente — para reembolsadores nos interesa el proveedor, asi que
+    // priorizamos recibidas).
+    const firstDraft = drafts.find((d) => d._rutIssuer);
+    if (!firstDraft) return null;
+
+    // Glosa propuesta: contraparte del mov (más limpia) o description.
+    const raw = (movement.counterpartyName ?? movement.description ?? "").trim();
+    if (!raw) return null;
+
+    // Nombre propuesto: primera palabra capitalizada de la glosa.
+    const firstWord = raw.split(/\s+/)[0] ?? "Pagador";
+    const nombre =
+      firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+
+    return {
+      glosa: raw.toLowerCase(),
+      glosaDisplay: raw,
+      aliasRut: firstDraft._rutIssuer!,
+      aliasBusinessName: firstDraft._displayName ?? null,
+      nombrePropuesto: nombre,
+    };
+  })();
+
+  async function handleLearn() {
+    if (!learnSuggestion) return;
+    setLearnBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/reembolsadores/learn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          glosa: learnSuggestion.glosa,
+          nombre: learnSuggestion.nombrePropuesto,
+          alias: {
+            rut: learnSuggestion.aliasRut,
+            businessName: learnSuggestion.aliasBusinessName,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "No se pudo guardar la regla");
+        return;
+      }
+      const name = data.reembolsador?.nombre ?? learnSuggestion.nombrePropuesto;
+      const empresa =
+        learnSuggestion.aliasBusinessName ?? learnSuggestion.aliasRut;
+      setLearnDone(
+        data.created
+          ? `Pagador "${name}" guardado → ${empresa}`
+          : data.aliasAdded
+            ? `Agregado a "${name}": ${empresa}`
+            : `Ya estaba guardado`
+      );
+      // Refrescar la lista en memoria asi futuros movs ya tienen la regla
+      // sin recargar pagina.
+      try {
+        const r2 = await fetch("/api/reembolsadores");
+        const d2 = await r2.json();
+        if (d2?.reembolsadores) setReembolsadores(d2.reembolsadores);
+      } catch {
+        // no-op: el refresh es nice-to-have, no critico
+      }
+    } finally {
+      setLearnBusy(false);
+    }
+  }
+
+  // ─── Idea B: sugerir match por monto exacto sin alias ──────────────────
+  // Cuando NO hay reembolsador detectado, NO hay drafts aun, y entre los
+  // resultados hay exactamente UNA factura con saldo ±$10 del monto del
+  // mov, mostramos un banner verde sugiriendo agregarla a imputaciones.
+  // Si hay varias, MJ tiene que decidir cual.
+  const exactMatchSuggestion = (() => {
+    if (drafts.length > 0) return null;
+    if (detectedReembolsador) return null; // ya hay otro banner
+    const draftIds = new Set(drafts.map((d) => d.invoiceId));
+    const matches = results.filter(
+      (f) => !draftIds.has(f.id) && Math.abs(f.remaining - absAmount) <= 10
+    );
+    return matches.length === 1 ? matches[0] : null;
+  })();
 
   const search = useCallback(async () => {
     if (!open) return;
@@ -255,6 +369,9 @@ export default function MovementReconcileModal({
         _displayFolio: f.folioNumber,
         _displayName: f.businessName,
         _displayTotal: f.totalAmount,
+        // Guardamos rutIssuer en el draft para que la propuesta de
+        // "recordar pagador" tenga el RUT al alcance sin volver a la BD.
+        _rutIssuer: f.rutIssuer,
       },
     ]);
   }
@@ -437,6 +554,85 @@ export default function MovementReconcileModal({
               </div>
             );
           })()}
+
+          {/* Idea A: "Recordar pagador frecuente" — solo cuando NO hay
+              reembolsador detectado y MJ ya tiene al menos 1 draft con
+              rutIssuer poblado. Aparece debajo del banner azul (que en
+              este caso no se muestra). */}
+          {remaining > 0 && learnSuggestion && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2.5 text-xs leading-relaxed">
+              <div className="flex items-start gap-2">
+                <span className="text-amber-600 mt-0.5">💡</span>
+                <div className="flex-1 space-y-2">
+                  <p>
+                    ¿Querés recordar este pagador? La próxima vez que llegue un
+                    movimiento que diga{" "}
+                    <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-300 text-[11px]">
+                      {learnSuggestion.glosaDisplay}
+                    </span>{" "}
+                    voy a mostrarte primero las facturas de{" "}
+                    <span className="font-medium">
+                      {learnSuggestion.aliasBusinessName ??
+                        learnSuggestion.aliasRut}
+                    </span>
+                    .
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleLearn}
+                      disabled={learnBusy}
+                      className="px-3 py-1 bg-amber-900 text-white text-xs rounded hover:bg-amber-800 disabled:opacity-50"
+                    >
+                      {learnBusy ? "Guardando…" : "Sí, recordar"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLearnDismissed(true)}
+                      disabled={learnBusy}
+                      className="px-3 py-1 text-xs text-amber-800 hover:text-amber-950 disabled:opacity-50"
+                    >
+                      No, fue puntual
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {learnDone && (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg px-3 py-2 text-xs">
+              ✓ {learnDone}
+            </div>
+          )}
+
+          {/* Idea B: sugerencia de match por monto exacto (sin alias) —
+              cuando hay UNA SOLA factura sin pagar con saldo ±$10 del
+              mov, ofrecemos un atajo para imputarla con un click. */}
+          {remaining > 0 && exactMatchSuggestion && (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg px-3 py-2.5 text-xs leading-relaxed">
+              <div className="flex items-start gap-2">
+                <span className="text-emerald-600 mt-0.5">✓</span>
+                <div className="flex-1">
+                  <p>
+                    Match por monto exacto:{" "}
+                    <span className="font-medium">
+                      F-{exactMatchSuggestion.folioNumber} ·{" "}
+                      {exactMatchSuggestion.businessName ?? "—"}
+                    </span>{" "}
+                    tiene saldo {formatCLP(exactMatchSuggestion.remaining)}, que
+                    coincide con este movimiento.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => addDraft(exactMatchSuggestion)}
+                  className="px-3 py-1 bg-emerald-900 text-white text-xs rounded hover:bg-emerald-800 whitespace-nowrap"
+                >
+                  Agregar
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Search — fila 1: búsqueda libre + filtros tipo toggle.
               Fila 2: filtro de monto exacto separado, con label visible y

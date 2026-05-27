@@ -374,6 +374,12 @@ function InvoicePickerModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Monto absoluto del lote — se pasa al endpoint para que ordene por
+  // proximidad de saldo. La factura cuyo saldo coincide con el total del
+  // lote queda arriba (ej. 2 movs de Camila por $6.811.589 → la factura
+  // emitida F-162 a Camila con saldo $6.811.589 sale primera).
+  const absTotal = Math.abs(totalNeto);
+
   const search = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -382,6 +388,7 @@ function InvoicePickerModal({
       params.set("type", "emitida");
       if (q.trim()) params.set("q", q.trim());
       params.set("onlyWithBalance", onlyWithBalance ? "1" : "0");
+      if (absTotal > 0) params.set("amount", String(absTotal));
       const res = await fetch(`/api/facturas/search?${params.toString()}`);
       if (!res.ok) {
         setError("Error en la búsqueda");
@@ -394,7 +401,7 @@ function InvoicePickerModal({
     } finally {
       setLoading(false);
     }
-  }, [q, onlyWithBalance]);
+  }, [q, onlyWithBalance, absTotal]);
 
   useEffect(() => {
     const t = setTimeout(search, 200);
@@ -471,41 +478,68 @@ function InvoicePickerModal({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {results.map((f) => (
-                    <tr key={f.id} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 tabular-nums text-gray-700 whitespace-nowrap">
-                        F-{f.folioNumber}
-                      </td>
-                      <td className="px-3 py-2 text-gray-700 truncate max-w-[180px]">
-                        {f.businessName ?? "—"}
-                      </td>
-                      <td className="px-3 py-2 text-gray-500 truncate max-w-[140px]">
-                        {f.projectName ?? (
-                          <span className="italic text-gray-300">sin asignar</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-600">
-                        {formatCLP(f.totalAmount)}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-900">
-                        {formatCLP(f.remaining)}
-                        {f.status === "parcial" && (
-                          <div className="text-[9px] uppercase text-blue-700">
-                            parcial
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          onClick={() => onPick(f.id)}
-                          disabled={busy}
-                          className="text-xs bg-gray-900 text-white px-2 py-0.5 rounded hover:bg-gray-800 disabled:opacity-50"
-                        >
-                          {busy ? "…" : "Elegir"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {results.map((f) => {
+                    // Match cuando el saldo de la factura es igual al total
+                    // neto del lote (±$10). La fila se resalta en verde para
+                    // que salte a la vista — es la candidata mas probable.
+                    const isMatch =
+                      absTotal > 0 && Math.abs(f.remaining - absTotal) <= 10;
+                    return (
+                      <tr
+                        key={f.id}
+                        className={
+                          isMatch
+                            ? "bg-emerald-50 hover:bg-emerald-100"
+                            : "hover:bg-gray-50"
+                        }
+                      >
+                        <td className="px-3 py-2 tabular-nums text-gray-700 whitespace-nowrap">
+                          F-{f.folioNumber}
+                        </td>
+                        <td className="px-3 py-2 text-gray-700 truncate max-w-[180px]">
+                          {f.businessName ?? "—"}
+                        </td>
+                        <td className="px-3 py-2 text-gray-500 truncate max-w-[140px]">
+                          {f.projectName ?? (
+                            <span className="italic text-gray-300">sin asignar</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-600">
+                          {formatCLP(f.totalAmount)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          <span
+                            className={
+                              isMatch
+                                ? "text-emerald-700 font-semibold"
+                                : "text-gray-900"
+                            }
+                          >
+                            {formatCLP(f.remaining)}
+                          </span>
+                          {f.status === "parcial" && (
+                            <div className="text-[9px] uppercase text-blue-700">
+                              parcial
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            onClick={() => onPick(f.id)}
+                            disabled={busy}
+                            className={
+                              "text-xs text-white px-2 py-0.5 rounded disabled:opacity-50 " +
+                              (isMatch
+                                ? "bg-emerald-700 hover:bg-emerald-800"
+                                : "bg-gray-900 hover:bg-gray-800")
+                            }
+                          >
+                            {busy ? "…" : "Elegir"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import FacturaForm from "@/components/facturas/FacturaForm";
 import CompensacionNC from "@/components/facturas/CompensacionNC";
+import RemovePaymentButton from "@/components/facturas/RemovePaymentButton";
 
 const DTE_LABEL: Record<number, string> = {
   33: "Factura",
@@ -229,7 +230,7 @@ export default async function EditFacturaPage({
                   <th className="text-left py-2 pr-3">Cuenta</th>
                   <th className="text-left py-2 pr-3">Detalle</th>
                   <th className="text-right py-2 pr-3">Monto</th>
-                  <th className="py-2 w-12"></th>
+                  <th className="py-2 w-24"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -254,13 +255,20 @@ export default async function EditFacturaPage({
                       {formatCLP(p.amountApplied)}
                     </td>
                     <td className="py-2 text-right">
-                      <Link
-                        href={`/banco/movimientos?status=todos&q=${encodeURIComponent(p.bankMovement.description.slice(0, 20))}`}
-                        className="text-xs text-gray-500 hover:text-gray-900 underline"
-                        title="Ver en /banco/movimientos"
-                      >
-                        ver
-                      </Link>
+                      <div className="flex items-center gap-3 justify-end">
+                        <Link
+                          href={`/banco/movimientos?status=todos&q=${encodeURIComponent(p.bankMovement.description.slice(0, 20))}`}
+                          className="text-xs text-gray-500 hover:text-gray-900 underline"
+                          title="Ver en /banco/movimientos"
+                        >
+                          ver
+                        </Link>
+                        <RemovePaymentButton
+                          invoiceId={invoice.id}
+                          paymentId={p.id}
+                          amount={p.amountApplied}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))}

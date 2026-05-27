@@ -8,6 +8,11 @@ type SelectedMovement = {
   id: string;
   amount: number;
   hasPayments: boolean;
+  // RUT de la contraparte (cliente que pagó / proveedor al que pagamos).
+  // Se usa en el modal "Asignar a factura emitida" para priorizar facturas
+  // del mismo cliente. Si todos los movs seleccionados comparten contraparte,
+  // el modal filtra por ese RUT.
+  counterpartyRut?: string | null;
 };
 
 type Factura = {
@@ -219,6 +224,17 @@ export default function MovementsBulkBar({
         <InvoicePickerModal
           movementCount={selected.length}
           totalNeto={neto}
+          // Si TODOS los movs seleccionados tienen la misma contraparte,
+          // se la pasamos al modal para que filtre facturas por ese RUT
+          // (caso tipico: 1 o N movs del mismo cliente).
+          sharedCounterpartyRut={(() => {
+            const ruts = selected
+              .map((m) => (m.counterpartyRut ?? "").replace(/\D/g, ""))
+              .filter((r) => r.length > 0);
+            if (ruts.length === 0) return null;
+            const unique = new Set(ruts);
+            return unique.size === 1 ? ruts[0] : null;
+          })()}
           busy={busy}
           onClose={() => setPickerOpen(false)}
           onPick={asignar}
@@ -358,18 +374,27 @@ function PagoSinFacturaModal({
 function InvoicePickerModal({
   movementCount,
   totalNeto,
+  sharedCounterpartyRut,
   busy,
   onClose,
   onPick,
 }: {
   movementCount: number;
   totalNeto: number;
+  // Si todos los movs seleccionados son de la misma contraparte (cliente
+  // o proveedor), su RUT viene aquí. El modal arranca con filtro "Mismo
+  // cliente" ENCENDIDO; MJ puede apagarlo si quiere ver todas.
+  sharedCounterpartyRut: string | null;
   busy: boolean;
   onClose: () => void;
   onPick: (invoiceId: string) => void;
 }) {
   const [q, setQ] = useState("");
   const [onlyWithBalance, setOnlyWithBalance] = useState(true);
+  // Si hay contraparte compartida, el filtro arranca prendido.
+  const [filterSameClient, setFilterSameClient] = useState(
+    !!sharedCounterpartyRut
+  );
   const [results, setResults] = useState<Factura[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -389,6 +414,9 @@ function InvoicePickerModal({
       if (q.trim()) params.set("q", q.trim());
       params.set("onlyWithBalance", onlyWithBalance ? "1" : "0");
       if (absTotal > 0) params.set("amount", String(absTotal));
+      if (filterSameClient && sharedCounterpartyRut) {
+        params.set("counterpartyRut", sharedCounterpartyRut);
+      }
       const res = await fetch(`/api/facturas/search?${params.toString()}`);
       if (!res.ok) {
         setError("Error en la búsqueda");
@@ -401,7 +429,7 @@ function InvoicePickerModal({
     } finally {
       setLoading(false);
     }
-  }, [q, onlyWithBalance, absTotal]);
+  }, [q, onlyWithBalance, absTotal, filterSameClient, sharedCounterpartyRut]);
 
   useEffect(() => {
     const t = setTimeout(search, 200);
@@ -446,6 +474,19 @@ function InvoicePickerModal({
               onChange={(e) => setQ(e.target.value)}
               className="flex-1 min-w-[240px] px-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
             />
+            {sharedCounterpartyRut && (
+              <label
+                className="text-xs text-gray-700 flex items-center gap-1.5 cursor-pointer"
+                title="Mostrar solo facturas emitidas a este cliente"
+              >
+                <input
+                  type="checkbox"
+                  checked={filterSameClient}
+                  onChange={(e) => setFilterSameClient(e.target.checked)}
+                />
+                Mismo cliente
+              </label>
+            )}
             <label className="text-xs text-gray-700 flex items-center gap-1.5 cursor-pointer">
               <input
                 type="checkbox"

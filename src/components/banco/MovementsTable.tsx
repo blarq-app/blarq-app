@@ -83,7 +83,9 @@ export default function MovementsTable({
 
   const clear = () => setSelectedIds(new Set());
 
-  // Datos que la barra necesita: monto y si tiene imputaciones.
+  // Datos que la barra necesita: monto, si tiene imputaciones, y el
+  // RUT de la contraparte (para que el modal de "Asignar a factura"
+  // priorice facturas del mismo cliente/proveedor).
   const selected = useMemo(
     () =>
       movements
@@ -92,6 +94,7 @@ export default function MovementsTable({
           id: m.id,
           amount: m.amount,
           hasPayments: m.payments.length > 0,
+          counterpartyRut: m.counterpartyRut,
         })),
     [movements, selectedIds]
   );

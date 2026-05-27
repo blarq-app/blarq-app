@@ -20,7 +20,7 @@ export default async function EditFacturaPage({
 }) {
   const { id } = await params;
 
-  const [invoice, projects, categories] = await Promise.all([
+  const [invoice, projects, categories, payments] = await Promise.all([
     // Carga todos los campos del Invoice — incluye `pdfContent` (Bytes
     // ~170KB) pero el page no lo pasa al client, solo lo accede el endpoint
     // /api/facturas/[id]/pdf. El overhead server-only es aceptable.
@@ -40,6 +40,24 @@ export default async function EditFacturaPage({
         id: true,
         name: true,
         parent: { select: { id: true, name: true } },
+      },
+    }),
+    // Pagos imputados a esta factura — vienen de conciliacion bancaria.
+    // Cada uno apunta a un BankMovement. Se renderizan en el historial.
+    prisma.invoicePayment.findMany({
+      where: { invoiceId: id },
+      orderBy: { createdAt: "desc" },
+      include: {
+        bankMovement: {
+          select: {
+            id: true,
+            date: true,
+            amount: true,
+            description: true,
+            counterpartyName: true,
+            bankAccount: { select: { alias: true } },
+          },
+        },
       },
     }),
   ]);
@@ -158,6 +176,99 @@ export default async function EditFacturaPage({
           }))}
         />
       )}
+
+      {/* Historial de pagos — solo facturas que no son NC (las NC tienen
+          su propio bloque de compensacion arriba). Si hay pagos imputados,
+          se listan con monto, mov bancario y link. Tambien se muestra el
+          total imputado vs total factura, con alerta si pasa del total. */}
+      {!isNC && payments.length > 0 && (() => {
+        const totalImputado = payments.reduce((s, p) => s + p.amountApplied, 0);
+        const totalFactura = Math.abs(invoice.totalAmount);
+        // ±$10 de tolerancia (redondeos IVA), igual que el resto del banco.
+        const sobreSaldo = totalImputado - totalFactura > 10;
+        const formatCLP = (n: number) =>
+          "$" + Math.round(n).toLocaleString("es-CL");
+        const formatDate = (d: Date) =>
+          `${String(d.getUTCDate()).padStart(2, "0")}/${String(
+            d.getUTCMonth() + 1
+          ).padStart(2, "0")}/${String(d.getUTCFullYear()).slice(-2)}`;
+        return (
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+            <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
+              <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
+                Historial de pagos
+              </h2>
+              <div className="text-xs text-gray-600 tabular-nums">
+                Imputado:{" "}
+                <span
+                  className={
+                    sobreSaldo
+                      ? "text-rose-700 font-semibold"
+                      : "text-gray-900 font-medium"
+                  }
+                >
+                  {formatCLP(totalImputado)}
+                </span>
+                <span className="text-gray-400"> / {formatCLP(totalFactura)}</span>
+              </div>
+            </div>
+            {sobreSaldo && (
+              <div className="mb-3 text-xs bg-rose-50 border border-rose-200 text-rose-800 rounded px-3 py-2">
+                ⚠ Esta factura tiene{" "}
+                <span className="font-medium">
+                  {formatCLP(totalImputado - totalFactura)}
+                </span>{" "}
+                imputados de más respecto a su monto total. Revisá las
+                imputaciones bancarias.
+              </div>
+            )}
+            <table className="w-full text-xs">
+              <thead className="text-[10px] uppercase tracking-wider text-gray-500 border-b border-gray-200">
+                <tr>
+                  <th className="text-left py-2 pr-3">Fecha</th>
+                  <th className="text-left py-2 pr-3">Cuenta</th>
+                  <th className="text-left py-2 pr-3">Detalle</th>
+                  <th className="text-right py-2 pr-3">Monto</th>
+                  <th className="py-2 w-12"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {payments.map((p) => (
+                  <tr key={p.id} className="hover:bg-gray-50">
+                    <td className="py-2 pr-3 tabular-nums text-gray-700 whitespace-nowrap">
+                      {formatDate(p.bankMovement.date)}
+                    </td>
+                    <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">
+                      {p.bankMovement.bankAccount?.alias ?? "—"}
+                    </td>
+                    <td className="py-2 pr-3 text-gray-700 truncate max-w-[420px]">
+                      {p.bankMovement.description}
+                      {p.bankMovement.counterpartyName && (
+                        <span className="text-gray-400">
+                          {" · "}
+                          {p.bankMovement.counterpartyName}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums font-medium text-gray-900">
+                      {formatCLP(p.amountApplied)}
+                    </td>
+                    <td className="py-2 text-right">
+                      <Link
+                        href={`/banco/movimientos?status=todos&q=${encodeURIComponent(p.bankMovement.description.slice(0, 20))}`}
+                        className="text-xs text-gray-500 hover:text-gray-900 underline"
+                        title="Ver en /banco/movimientos"
+                      >
+                        ver
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
 
       <FacturaForm
         mode="edit"

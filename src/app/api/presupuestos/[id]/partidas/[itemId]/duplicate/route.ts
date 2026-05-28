@@ -6,6 +6,12 @@ import { NextRequest, NextResponse } from "next/server";
 // cantidad de cada lado y le pone subChapter a cada una. La nueva partida
 // hereda todo (incluido el subChapter actual): la idea es que la copia salga
 // idéntica y MJ después edite lo que tenga que cambiar.
+//
+// IMPORTANTE: la copia recibe un lineageId NUEVO (no el del origen). Aunque
+// conceptualmente "es la misma partida repartida", el Estado de Pago exige
+// lineageId único por EP (@@unique[estadoPagoId, lineageId]); si las dos
+// mitades comparten lineageId, crear el EP revienta. Cada zona es una línea
+// propia de acá en adelante.
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> }
@@ -34,7 +40,8 @@ export async function POST(
     const dup = await prisma.obraItem.create({
       data: {
         budgetVersionId,
-        lineageId: source.lineageId, // misma identidad lógica (se reparte la qty)
+        // lineageId nuevo (default cuid): la copia es una línea separada.
+        // Ver nota arriba — compartirlo rompe la creación de Estado de Pago.
         chapter: source.chapter,
         subChapter: source.subChapter,
         itemNumber: source.itemNumber,

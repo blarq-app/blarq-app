@@ -21,6 +21,7 @@ const CHAPTERS: Record<string, { label: string; index: number }> = {
 // ─── Types ────────────────────────────────────────────────────────────────
 export interface EPItemInput {
   chapter: string;
+  subChapter?: string | null;
   itemNumber: string;
   name: string;
   descriptionMaestro: string | null;
@@ -169,6 +170,15 @@ const CSS = `
     padding-top: 2.5px;
     padding-bottom: 2.5px;
   }
+  .partidas tr.sub-chapter-row td {
+    background: #F2F2F2;
+    font-weight: 600;
+    font-style: italic;
+    text-transform: uppercase;
+    color: #404040;
+    padding: 2px 4px;
+    letter-spacing: 0.02em;
+  }
   .partidas tbody tr:first-child td { padding-top: 7px; }
   .partidas tr.chapter-row td.chapter-idx { text-align: center; }
 
@@ -316,8 +326,20 @@ export function renderEPHtml(data: EPHTMLInput): string {
     grouped[it.chapter] = grouped[it.chapter] || [];
     grouped[it.chapter].push(it);
   }
+  // Orden dentro del capítulo: por subChapter (zona) y después nombre, igual
+  // que el presupuesto, para que las separadoras COCINA/BAÑO salgan estables.
+  const sortBySub = (a: EPItemInput, b: EPItemInput) => {
+    const as = a.subChapter ?? "";
+    const bs = b.subChapter ?? "";
+    if (as !== bs) return as.localeCompare(bs, "es");
+    return a.name.localeCompare(b.name, "es");
+  };
   const chapterEntries = Object.entries(CHAPTERS)
-    .map(([key, ch]) => ({ key, ...ch, items: grouped[key] || [] }))
+    .map(([key, ch]) => ({
+      key,
+      ...ch,
+      items: (grouped[key] || []).slice().sort(sortBySub),
+    }))
     .filter((c) => c.items.length > 0);
 
   const totalAccumulatedPrior = previousEps.reduce((s, p) => s + p.totalPaid, 0);
@@ -336,7 +358,16 @@ export function renderEPHtml(data: EPHTMLInput): string {
         </tr>
         ${ch.items
           .map(
-            (item) => `
+            (item, idx) => {
+            const prev = idx > 0 ? ch.items[idx - 1] : null;
+            const showSub =
+              item.subChapter && (!prev || prev.subChapter !== item.subChapter);
+            return `
+          ${
+            showSub
+              ? `<tr class="sub-chapter-row"><td></td><td colspan="8">${esc(item.subChapter!)}</td></tr>`
+              : ""
+          }
           <tr${item.outOfScope ? ' class="out-of-scope"' : ""}>
             <td class="col-item">${esc(item.itemNumber)}</td>
             <td class="col-name">
@@ -355,7 +386,8 @@ export function renderEPHtml(data: EPHTMLInput): string {
               </div>
             </td>
             <td class="col-pagar">${item.totalAccumulated > 0 ? fmtCLP(item.totalAccumulated) : "—"}</td>
-          </tr>`
+          </tr>`;
+          }
           )
           .join("")}
       `

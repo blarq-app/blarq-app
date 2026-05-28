@@ -17,6 +17,7 @@ type Item = {
   obraItemId: string;
   lineageId: string;
   chapter: string;
+  subChapter: string | null;
   itemNumber: string;
   name: string;
   descriptionMaestro: string | null;
@@ -120,6 +121,16 @@ export default function EditorEP({
       g[i.chapter] = g[i.chapter] || [];
       g[i.chapter].push(i);
     });
+    // Orden dentro del capítulo: por subChapter (zona) y después nombre,
+    // para mostrar las separadoras COCINA/BAÑO igual que el presupuesto.
+    for (const k of Object.keys(g)) {
+      g[k].sort((a, b) => {
+        const as = a.subChapter ?? "";
+        const bs = b.subChapter ?? "";
+        if (as !== bs) return as.localeCompare(bs, "es");
+        return a.name.localeCompare(b.name, "es");
+      });
+    }
     return g;
   }, [items]);
   const chapterKeys = Object.keys(OBRA_CHAPTERS) as ObraChapter[];
@@ -393,14 +404,23 @@ export default function EditorEP({
                   Subtotal capítulo {formatCLP(chSubtotal)}
                 </span>
               </div>
-              {chItems.map((i) => {
+              {chItems.map((i, idx) => {
                 const snap = snapshotsById[i.id];
                 const c = computeEPItem(snap);
                 const mode = inputMode[i.id] ?? "pct";
                 const err = errorByItem[i.id];
+                // Fila separadora de zona (COCINA / BAÑO) cuando cambia.
+                const prevItem = idx > 0 ? chItems[idx - 1] : null;
+                const showSub =
+                  i.subChapter && (!prevItem || prevItem.subChapter !== i.subChapter);
                 return (
+                  <Fragment key={i.id}>
+                  {showSub && (
+                    <div className="px-4 py-1 bg-[#F2F2F2] text-[11px] font-semibold italic uppercase tracking-wide text-gray-600 border-b border-gray-200">
+                      {i.subChapter}
+                    </div>
+                  )}
                   <div
-                    key={i.id}
                     className={`grid grid-cols-[3rem_minmax(0,3fr)_3rem_5rem_5.5rem_6rem_8rem_6.5rem] items-center gap-2 px-4 py-1 border-b border-gray-100 ${
                       i.outOfScope ? "bg-amber-50/40" : ""
                     } ${c.warningExceedsTotal ? "bg-amber-50" : ""}`}
@@ -520,6 +540,7 @@ export default function EditorEP({
                       )}
                     </div>
                   </div>
+                  </Fragment>
                 );
               })}
             </Fragment>

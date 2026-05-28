@@ -122,6 +122,7 @@ export async function POST(
       await prisma.estadoPagoItem.create({
         data: {
           chapter: b.chapter,
+          subChapter: b.subChapter,
           itemNumber: b.itemNumber,
           name: b.name,
           descriptionMaestro: b.descriptionMaestro,
@@ -160,6 +161,7 @@ export async function POST(
           data: {
             obraItemId: b.id,
             chapter: b.chapter,
+            subChapter: b.subChapter,
             itemNumber: b.itemNumber,
             name: b.name,
             descriptionMaestro: b.descriptionMaestro,

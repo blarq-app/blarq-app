@@ -113,6 +113,9 @@ model EstadoPagoItem {
   lineageId           String   @default(cuid()) // Identidad estable de la partida a través de versiones del presupuesto.
   // Snapshot al momento del EP (se actualiza al sync)
   chapter             String
+  // Sub-chapter / zona (ej "COCINA", "BAÑO") — snapshot de ObraItem.subChapter.
+  // Permite que el EP muestre la misma separacion por zona que el presupuesto.
+  subChapter          String?
   itemNumber          String
   name                String
   descriptionMaestro  String?  @map("description") // Snapshot de ObraItem.descriptionMaestro

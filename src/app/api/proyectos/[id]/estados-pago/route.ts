@@ -57,6 +57,7 @@ export async function POST(
               obraItemId: item.id,
               lineageId: item.lineageId,
               chapter: item.chapter,
+              subChapter: item.subChapter,
               itemNumber: item.itemNumber,
               name: item.name,
               descriptionMaestro: item.descriptionMaestro,

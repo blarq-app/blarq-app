@@ -64,6 +64,7 @@ export async function GET(
       const c = computeEPItem(snap);
       return {
         chapter: i.chapter,
+        subChapter: i.subChapter,
         itemNumber: i.itemNumber,
         name: i.name,
         descriptionMaestro: i.descriptionMaestro,

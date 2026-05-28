@@ -33,6 +33,8 @@ export async function PATCH(
   if (data.nombre !== undefined) baseUpdate.nombre = String(data.nombre).trim();
   if (data.glosa !== undefined)
     baseUpdate.glosa = String(data.glosa).trim().toLowerCase();
+  if (data.personRut !== undefined)
+    baseUpdate.personRut = data.personRut ? String(data.personRut).trim() : null;
 
   // ¿Hay que reemplazar aliases? Disparado por aliases array O por los
   // campos legacy rutAlias/businessName (en este ultimo caso se convierte

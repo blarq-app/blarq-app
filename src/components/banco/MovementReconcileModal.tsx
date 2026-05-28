@@ -75,6 +75,8 @@ export default function MovementReconcileModal({
       id: string;
       nombre: string;
       glosa: string;
+      // RUT de la persona en la transferencia (señal principal de match).
+      personRut?: string | null;
       // Legacy single-alias (todavia viene del backend; lo dejamos para
       // que codigo otro no se rompa, pero la fuente de verdad es `aliases`).
       rutAlias?: string | null;
@@ -97,9 +99,20 @@ export default function MovementReconcileModal({
   const [learnBusy, setLearnBusy] = useState(false);
   const [learnDone, setLearnDone] = useState<string | null>(null); // mensaje exito
 
-  // Detección de reembolsador a partir de la glosa del mov (substring
-  // case-insensitive). Si matchea, devuelve el reembolsador; si no, null.
+  // Detección de reembolsador. Prioridad:
+  //   1) Por RUT de la persona (movement.counterpartyRut === r.personRut),
+  //      comparando solo dígitos — es lo más confiable.
+  //   2) Fallback por glosa (substring case-insensitive en la descripción),
+  //      para movs viejos sin counterpartyRut o reembolsadores sin personRut.
   const detectedReembolsador = (() => {
+    const movRut = (movement.counterpartyRut ?? "").replace(/\D/g, "");
+    if (movRut) {
+      const byRut = reembolsadores.find((r) => {
+        const pr = (r.personRut ?? "").replace(/\D/g, "");
+        return pr.length > 0 && (pr.includes(movRut) || movRut.includes(pr));
+      });
+      if (byRut) return byRut;
+    }
     const desc = (movement.description ?? "").toLowerCase();
     return reembolsadores.find((r) => desc.includes(r.glosa.toLowerCase())) ?? null;
   })();
@@ -137,9 +150,13 @@ export default function MovementReconcileModal({
       );
       setQ("");
       const desc = (movement.description ?? "").toLowerCase();
-      const isReembolso = reembolsadores.some((r) =>
-        desc.includes(r.glosa.toLowerCase())
-      );
+      const movRut = (movement.counterpartyRut ?? "").replace(/\D/g, "");
+      const isReembolso = reembolsadores.some((r) => {
+        const pr = (r.personRut ?? "").replace(/\D/g, "");
+        if (pr.length > 0 && movRut && (pr.includes(movRut) || movRut.includes(pr)))
+          return true;
+        return desc.includes(r.glosa.toLowerCase());
+      });
       setFilterSameClient(!!movement.counterpartyRut && !isReembolso);
       setFilterProjectId("");
       setMontoExacto("");
@@ -222,6 +239,8 @@ export default function MovementReconcileModal({
         body: JSON.stringify({
           glosa: learnSuggestion.glosa,
           nombre: learnSuggestion.nombrePropuesto,
+          // RUT de la persona del mov — señal principal de match a futuro.
+          personRut: movement.counterpartyRut ?? null,
           alias: {
             rut: learnSuggestion.aliasRut,
             businessName: learnSuggestion.aliasBusinessName,

@@ -260,9 +260,9 @@ function parseChileanDate(s: string): string {
 }
 
 // ─── MOCK ─────────────────────────────────────────────────────────────────
-// Datos sintéticos para probar end-to-end antes de que el plan SimpleFactura
-// tenga el adicional "Bandeja DTE recibidos" activo.
-function mockDTEs(opts: FetchOptions): RemoteDTE[] {
+// Datos sintéticos para probar end-to-end en dev sin certificado digital.
+// Se exporta para que el sync los use como fallback cuando no hay cert SII.
+export function mockDTEs(opts: FetchOptions): RemoteDTE[] {
   const seed = `${opts.type}-${opts.fromDate}`;
   const all: RemoteDTE[] = [
     {

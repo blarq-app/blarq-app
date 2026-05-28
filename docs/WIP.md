@@ -4,7 +4,25 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-22 (ronda 30 — artefactos × cantidad + cuadro resumen dinámico)
+- **Última actualización**: 2026-05-28 (ronda 31 — lectura de facturas directa del SII, sin SimpleFactura)
+
+- **Ronda 31 — Eliminar SimpleFactura: leer facturas directo del SII (RCV)**:
+  - **Disparador**: a MJ le llegó el mail de que el plan SimpleFactura vence (27-05-2026). Pregunta si se puede prescindir. Objetivo de fondo: hacer **todo en la app** (leer y emitir), con Maxxa de respaldo hasta tener confianza en la estabilidad.
+  - **Hallazgo**: SimpleFactura solo se usaba para **leer** (recibidas + emitidas). La app YA tenía acceso directo al SII con el cert digital vía el Registro de Compras y Ventas (`siiRcv.ts`), pero solo se usaba para linkear NCs. El RCV entrega exactamente la misma data que SimpleFactura, gratis.
+  - **Qué se hizo (Fase 1, recibir sin SimpleFactura)**:
+    - `siiRcv.ts`: `getRcvDetalle` ahora elige endpoint según operación — `getDetalleCompra` (recibidas) o `getDetalleVenta` (emitidas).
+    - `siiDteReader.ts` (nuevo): `fetchDTEsFromSII(opts)` — drop-in replacement de `fetchDTEs` de SimpleFactura. Expande el rango de fechas a meses (el RCV es por período YYYYMM), consulta resumen + detalle, mapea a `RemoteDTE`. RUT en formato `12345678-9` (calza con lo de SimpleFactura → idempotencia intacta).
+    - `runSiiSync.ts` (nuevo): lógica de sync extraída del route (upsert idempotente + reglas + auto-match + linkNc). La comparten el botón y el script local.
+    - `route.ts` del sync: ahora delega en `runSiiSync`. Usa cert si está configurado, si no cae a mock.
+    - `scripts/sync-sii-dtes.ts` (nuevo) + `npm run sii:sync-dtes`: sync local, gemelo del de PDFs. **Camino confiable** (la mac no tiene el bloqueo WAF de la nube).
+    - SimpleFactura quedó solo como tipos `RemoteDTE` + datos mock (dev sin cert).
+  - **Verificación**: contra el SII real (abril 2026) trae 141 recibidas (124 fact + 9 exentas + 8 NC, $74,6M) y 8 emitidas ($106M). Dry-run idempotencia contra dev: las 141+8 **matchean** registros existentes, 0 se duplicarían. Script local corrido contra dev: 0 creadas, 10 actualizadas (data del SII corrige leves diferencias que dejó SimpleFactura), 131 sin cambio, 1 NC linkeada. `tsc --noEmit` limpio.
+  - **PENDIENTE para deploy (MJ)**:
+    1. Confirmar que `SII_CERT_BASE64` + `SII_CERT_PASSWORD` están en Vercel (el cert ya vive ahí para otras cosas).
+    2. Deploy y apretar "Sincronizar SII" en prod → **verificar si Vercel alcanza al SII** (`www4`/`palena`). Si da error de red/timeout, el WAF bloquea la nube → usar el script local (sumarlo al LaunchAgent horario de PDFs).
+    3. Recién con el sync directo verificado en prod: **dejar de pagar SimpleFactura**. Como puente, no cancelar hasta confirmar.
+  - **Doc**: `docs/SETUP_SII_lectura-directa.md` (nuevo), `SETUP_SII_simplefactura.md` marcado obsoleto.
+  - **FASE 2 (emitir, reemplazar Maxxa)** — no empezada, planificada. Maxxa queda de respaldo. Ya existe `scripts/compare-vs-maxxa.ts` (compara facturas BLARQ vs export de Maxxa por centro de costo) — útil como validación cruzada durante la transición.
 
 - **Ronda 30 — Artefactos se multiplican por cantidad · Cuadro Resumen dinámico**:
   - **Disparador**: MJ notó que el Cuadro Resumen de Francisco de Aguirre no mostraba la columna de artefactos de iluminación.

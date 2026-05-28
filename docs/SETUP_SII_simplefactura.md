@@ -1,6 +1,20 @@
-# Setup integración SII (SimpleFactura)
+# Setup integración SII (SimpleFactura) — RETIRADO
 
-*2026-04-27*
+> **OBSOLETO desde 2026-05-28.** La app ya NO usa SimpleFactura para leer
+> facturas. Ahora lee **directo del Registro de Compras y Ventas (RCV) del
+> SII** con el certificado digital de BLARQ — la misma data, gratis. Ver
+> [SETUP_SII_lectura-directa.md](SETUP_SII_lectura-directa.md).
+>
+> SimpleFactura quedó en el código solo como (a) tipos compartidos `RemoteDTE`
+> y (b) datos mock para dev sin certificado. Las variables
+> `SIMPLEFACTURA_*` ya no se leen para sincronizar. Se puede **dejar de pagar
+> el plan SimpleFactura** una vez verificado el sync directo en producción.
+>
+> El texto de abajo se conserva como referencia histórica de cómo funcionaba.
+
+---
+
+*2026-04-27 (histórico)*
 
 La app sincroniza con el SII a través de **SimpleFactura.cl**. Este doc
 deja constancia de cómo está configurado y qué hay que hacer para

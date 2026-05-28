@@ -117,6 +117,11 @@ export async function getRcvResumen(
  * filtrado por tipo de documento.
  *
  * `codTipoDoc` ej "33" (factura electrónica), "61" (nota de crédito).
+ *
+ * El SII usa endpoints distintos según la operación: `getDetalleCompra` para
+ * los recibidos y `getDetalleVenta` para los emitidos. Validado en producción
+ * — getDetalleCompra con operacion=VENTA también devuelve data, pero la vía
+ * correcta para emitidos es getDetalleVenta (trae detTipoDoc poblado).
  */
 export async function getRcvDetalle(
   contribuyente: RutDv,
@@ -125,9 +130,10 @@ export async function getRcvDetalle(
   operacion: "COMPRA" | "VENTA" = "COMPRA"
 ): Promise<RcvDetalleItem[]> {
   const token = await getSiiToken();
+  const metodo = operacion === "VENTA" ? "getDetalleVenta" : "getDetalleCompra";
   const body = {
     metaData: {
-      namespace: "cl.sii.sdi.lob.diii.consdcv.data.api.interfaces.FacadeService/getDetalleCompra",
+      namespace: `cl.sii.sdi.lob.diii.consdcv.data.api.interfaces.FacadeService/${metodo}`,
       conversationId: token,
       transactionId: randomUUID(),
       page: null,
@@ -146,7 +152,7 @@ export async function getRcvDetalle(
   };
 
   const res = await fetch(
-    `${SII_BASE}/consdcvinternetui/services/data/facadeService/getDetalleCompra`,
+    `${SII_BASE}/consdcvinternetui/services/data/facadeService/${metodo}`,
     {
       method: "POST",
       headers: {
@@ -161,7 +167,7 @@ export async function getRcvDetalle(
 
   if (!res.ok) {
     const txt = await res.text();
-    throw new Error(`SII getDetalleCompra falló: ${res.status} — ${txt.slice(0, 300)}`);
+    throw new Error(`SII ${metodo} falló: ${res.status} — ${txt.slice(0, 300)}`);
   }
   const json = (await res.json()) as { data?: RcvDetalleItem[] };
   return json.data ?? [];

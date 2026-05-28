@@ -19,7 +19,10 @@ import bwipjs from "bwip-js/node";
  * imagen nítida a ~50mm de ancho en el PDF.
  */
 export async function renderTimbrePdf417(tedXml: string): Promise<string> {
-  const png = await bwipjs.toBuffer({
+  // El cast es porque los tipos de bwip-js no declaran `eclevel` (sí existe en
+  // runtime) y tipan el retorno de toBuffer de forma laxa. Validado: devuelve
+  // un Buffer PNG.
+  const opts = {
     bcid: "pdf417",
     text: tedXml,
     eclevel: 5, // nivel de corrección de error recomendado por el SII
@@ -27,6 +30,7 @@ export async function renderTimbrePdf417(tedXml: string): Promise<string> {
     scaleX: 2,
     scaleY: 2,
     padding: 2,
-  });
+  } as Parameters<typeof bwipjs.toBuffer>[0];
+  const png = (await bwipjs.toBuffer(opts)) as Buffer;
   return `data:image/png;base64,${png.toString("base64")}`;
 }

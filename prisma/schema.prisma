@@ -870,7 +870,13 @@ model BankMovement {
 model Reembolsador {
   id        String   @id @default(cuid())
   nombre    String   // Nombre legible — "Cristobal", "Elias", "JP", "MJ"
-  glosa     String   // Texto que se busca (case-insensitive) en BankMovement.description
+  glosa     String   // Texto que se busca (case-insensitive) en BankMovement.description (fallback)
+
+  // RUT de la PERSONA tal como aparece en BankMovement.counterpartyRut
+  // (formato banco, ej "0183655213"). Es la señal MÁS confiable para
+  // detectar el reembolsador — el nombre/glosa puede ser ambiguo entre
+  // personas, el RUT no. El matching prioriza personRut y cae a glosa.
+  personRut String?
 
   // Aliases de proveedor (uno-a-muchos). Cuando un movimiento bancario
   // va a una persona pero esa persona compra a nombre de varias empresas
@@ -893,6 +899,7 @@ model Reembolsador {
   @@unique([glosa])
   @@index([glosa])
   @@index([rutAlias])
+  @@index([personRut])
 }
 
 model ReembolsadorAlias {

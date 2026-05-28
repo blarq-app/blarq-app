@@ -13,6 +13,8 @@ type Reembolsador = {
   id: string;
   nombre: string;
   glosa: string;
+  // RUT de la persona en la transferencia (señal principal de match).
+  personRut?: string | null;
   // Legacy single (todavia viene poblado para back-compat).
   rutAlias?: string | null;
   businessName?: string | null;
@@ -30,6 +32,7 @@ export default function ReembolsadoresEditor({
   // Form de creacion
   const [nombre, setNombre] = useState("");
   const [glosa, setGlosa] = useState("");
+  const [personRut, setPersonRut] = useState("");
   const [newAliases, setNewAliases] = useState<Alias[]>([
     { rut: "", businessName: "" },
   ]);
@@ -40,12 +43,14 @@ export default function ReembolsadoresEditor({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editNombre, setEditNombre] = useState("");
   const [editGlosa, setEditGlosa] = useState("");
+  const [editPersonRut, setEditPersonRut] = useState("");
   const [editAliases, setEditAliases] = useState<Alias[]>([]);
 
   function startEdit(r: Reembolsador) {
     setEditingId(r.id);
     setEditNombre(r.nombre);
     setEditGlosa(r.glosa);
+    setEditPersonRut(r.personRut ?? "");
     // Si tiene aliases listados, usamos esos. Sino, intentamos backfill
     // desde el rutAlias legacy (un solo alias).
     const aliasesArr = r.aliases && r.aliases.length > 0
@@ -61,6 +66,7 @@ export default function ReembolsadoresEditor({
     setEditingId(null);
     setEditNombre("");
     setEditGlosa("");
+    setEditPersonRut("");
     setEditAliases([]);
   }
 
@@ -82,6 +88,7 @@ export default function ReembolsadoresEditor({
         body: JSON.stringify({
           nombre: nombre.trim(),
           glosa: glosa.trim(),
+          personRut: personRut.trim() || null,
           aliases: cleanAliases,
         }),
       });
@@ -95,6 +102,7 @@ export default function ReembolsadoresEditor({
       );
       setNombre("");
       setGlosa("");
+      setPersonRut("");
       setNewAliases([{ rut: "", businessName: "" }]);
       router.refresh();
     } catch {
@@ -118,6 +126,7 @@ export default function ReembolsadoresEditor({
         body: JSON.stringify({
           nombre: editNombre.trim(),
           glosa: editGlosa.trim(),
+          personRut: editPersonRut.trim() || null,
           aliases: cleanAliases,
         }),
       });
@@ -193,6 +202,22 @@ export default function ReembolsadoresEditor({
               disabled={busy}
             />
           </div>
+          <div className="md:col-span-2">
+            <label className="block text-xs text-gray-600 mb-1">
+              RUT de la persona en la transferencia{" "}
+              <span className="text-gray-400">
+                (recomendado — match más confiable que el nombre)
+              </span>
+            </label>
+            <input
+              type="text"
+              value={personRut}
+              onChange={(e) => setPersonRut(e.target.value)}
+              placeholder="0183655213"
+              className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm font-mono focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
+              disabled={busy}
+            />
+          </div>
         </div>
 
         <AliasListEditor
@@ -240,8 +265,9 @@ export default function ReembolsadoresEditor({
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500">
               <tr>
-                <th className="text-left px-4 py-2 w-44">Nombre</th>
-                <th className="text-left px-4 py-2 w-40">Glosa</th>
+                <th className="text-left px-4 py-2 w-40">Nombre</th>
+                <th className="text-left px-4 py-2 w-32">RUT persona</th>
+                <th className="text-left px-4 py-2 w-32">Glosa</th>
                 <th className="text-left px-4 py-2">Empresas alias</th>
                 <th className="px-4 py-2 w-32"></th>
               </tr>
@@ -251,7 +277,7 @@ export default function ReembolsadoresEditor({
                 if (editingId === r.id) {
                   return (
                     <tr key={r.id} className="bg-gray-50 align-top">
-                      <td className="px-4 py-3" colSpan={4}>
+                      <td className="px-4 py-3" colSpan={5}>
                         <div className="space-y-3">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
@@ -275,6 +301,20 @@ export default function ReembolsadoresEditor({
                                 value={editGlosa}
                                 onChange={(e) => setEditGlosa(e.target.value)}
                                 className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
+                                disabled={busy}
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <label className="block text-xs text-gray-600 mb-1">
+                                RUT de la persona en la transferencia{" "}
+                                <span className="text-gray-400">(recomendado)</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={editPersonRut}
+                                onChange={(e) => setEditPersonRut(e.target.value)}
+                                placeholder="0183655213"
+                                className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm font-mono focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
                                 disabled={busy}
                               />
                             </div>
@@ -326,6 +366,9 @@ export default function ReembolsadoresEditor({
                   <tr key={r.id} className="hover:bg-gray-50 align-top">
                     <td className="px-4 py-2 text-gray-900 font-medium">
                       {r.nombre}
+                    </td>
+                    <td className="px-4 py-2 text-gray-600 font-mono text-xs">
+                      {r.personRut || <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-4 py-2 text-gray-600 font-mono text-xs">
                       {r.glosa}

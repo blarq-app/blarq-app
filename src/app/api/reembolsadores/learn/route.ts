@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
     const glosa = String(data?.glosa ?? "").trim().toLowerCase();
+    const personRut = data?.personRut ? String(data.personRut).trim() : null;
     const aliasRut = String(data?.alias?.rut ?? "").trim();
     const aliasBusinessName = data?.alias?.businessName
       ? String(data.alias.businessName).trim()
@@ -59,6 +60,14 @@ export async function POST(request: NextRequest) {
           },
         });
       }
+      // Si el reembolsador no tenia personRut y ahora lo conocemos, lo
+      // completamos (no pisamos uno existente).
+      if (!existing.personRut && personRut) {
+        await prisma.reembolsador.update({
+          where: { id: existing.id },
+          data: { personRut },
+        });
+      }
       const refreshed = await prisma.reembolsador.findUnique({
         where: { id: existing.id },
         include: { aliases: { orderBy: { createdAt: "asc" } } },
@@ -75,6 +84,7 @@ export async function POST(request: NextRequest) {
       data: {
         nombre: nombrePropuesto.charAt(0).toUpperCase() + nombrePropuesto.slice(1),
         glosa,
+        personRut,
         rutAlias: aliasRut, // legacy, mantenido por compat
         businessName: aliasBusinessName,
         aliases: {

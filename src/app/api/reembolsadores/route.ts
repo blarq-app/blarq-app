@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
     const data = await request.json();
     const nombre = String(data.nombre ?? "").trim();
     const glosa = String(data.glosa ?? "").trim().toLowerCase();
+    const personRut = data.personRut ? String(data.personRut).trim() : null;
     if (!nombre || !glosa) {
       return NextResponse.json(
         { error: "Nombre y glosa son obligatorios" },
@@ -56,6 +57,7 @@ export async function POST(request: NextRequest) {
       data: {
         nombre,
         glosa,
+        personRut,
         // Mantenemos los campos legacy poblados con el primer alias si
         // existe — así código viejo que aún los lea no se rompe.
         rutAlias: aliasInputs[0]?.rut ?? null,

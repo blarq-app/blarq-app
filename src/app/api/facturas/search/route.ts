@@ -19,6 +19,17 @@ import { NextRequest, NextResponse } from "next/server";
 // Devuelve top 50 ordenadas por relevancia (saldo más cercano al monto del mov primero,
 // fecha más reciente como desempate).
 
+// Normaliza un RUT al CUERPO (sin dígito verificador, sin guion, sin
+// ceros de relleno) para hacer `contains` robusto. El banco manda
+// "0771378609" (cero + RUT) y las facturas guardan "77137860-9" (con
+// guion) — comparar por el cuerpo "77137860" matchea ambos formatos sin
+// que el guion ni el cero rompan el substring.
+function rutBody(rut: string | null | undefined): string {
+  const digits = (rut ?? "").replace(/\D/g, "").replace(/^0+/, "");
+  if (digits.length < 2) return "";
+  return digits.slice(0, -1); // saca el dígito verificador
+}
+
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
@@ -27,14 +38,14 @@ export async function GET(request: NextRequest) {
     const counterpartyRut = url.searchParams.get("counterpartyRut");
     const counterpartyRutsParam = url.searchParams.get("counterpartyRuts");
     // Lista de RUTs (multi-alias del reembolsador). Cada uno se reduce a
-    // sus ultimos 8 digitos para matchear con `contains`. Si viene esta
-    // lista, IGNORAMOS counterpartyRut individual (el modal manda una u
-    // otra segun haya alias o no).
+    // su CUERPO (sin DV/guion/ceros) para matchear con `contains`. Si viene
+    // esta lista, IGNORAMOS counterpartyRut individual (el modal manda una
+    // u otra segun haya alias o no).
     const counterpartyRuts: string[] = counterpartyRutsParam
       ? counterpartyRutsParam
           .split(",")
-          .map((r) => r.replace(/\D/g, "").slice(-8))
-          .filter((r) => r.length > 0)
+          .map((r) => rutBody(r))
+          .filter((r) => r.length >= 6)
       : [];
     const projectId = url.searchParams.get("projectId");
     const onlyWithBalance = url.searchParams.get("onlyWithBalance") !== "0";
@@ -70,12 +81,12 @@ export async function GET(request: NextRequest) {
 
       // Si hay multi-alias, construimos un OR sobre todos los RUTs.
       // Sino, fallback al unico counterpartyRut (compat con codigo viejo).
+      // En ambos casos comparamos por el CUERPO del RUT (sin DV/guion/cero)
+      // para que matchee tanto "77137860-9" como "0771378609".
       const rutsToMatch =
         counterpartyRuts.length > 0
           ? counterpartyRuts
-          : [counterpartyRut!.replace(/\D/g, "").slice(-8)].filter(
-              (r) => r.length > 0
-            );
+          : [rutBody(counterpartyRut)].filter((r) => r.length >= 6);
 
       const rutFilter =
         rutsToMatch.length === 1

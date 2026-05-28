@@ -99,6 +99,60 @@ export async function getInvoicePaidAmount(invoiceId: string): Promise<number> {
  *
  * Devuelve cuántos movs auto-vinculó (0 o 1).
  */
+/**
+ * Devuelve las glosas de reembolsador cuyos aliases incluyen el RUT dado.
+ * Caso de uso: una factura de "JPB Construcciones" (RUT empresa) puede
+ * estar pagada por transferencias a "Jose Perez" (RUT persona) — el link
+ * lo da el alias del reembolsador. Esto permite que la auto-conciliacion
+ * matchee aunque el RUT del mov no sea el de la factura.
+ *
+ * Devuelve glosas en minuscula (como se guardan) para hacer `contains`
+ * case-insensitive contra BankMovement.description.
+ */
+async function glosasForAliasRut(rutDigits: string): Promise<string[]> {
+  if (rutDigits.length < 7) return [];
+  // Buscamos aliases cuyo rut (normalizado) matchee el rut dado por
+  // substring de ultimos 8 digitos (el banco a veces prefija con 0).
+  const aliases = await prisma.reembolsadorAlias.findMany({
+    select: { rut: true, reembolsador: { select: { glosa: true } } },
+  });
+  const tail = rutDigits.slice(-8);
+  const glosas = new Set<string>();
+  for (const a of aliases) {
+    const aDigits = a.rut.replace(/\D/g, "");
+    if (aDigits.length > 0 && (aDigits.includes(tail) || tail.includes(aDigits))) {
+      glosas.add(a.reembolsador.glosa.toLowerCase());
+    }
+  }
+  return [...glosas];
+}
+
+/**
+ * Inverso de glosasForAliasRut: dado el texto de un movimiento, devuelve
+ * los RUTs (en dígitos) de los aliases de los reembolsadores cuya glosa
+ * aparece en esa descripción. Caso: mov "Transf a Jose Perez" → RUT de
+ * JPB Construcciones (el alias de "jose perez").
+ */
+async function aliasRutsForMovementDescription(
+  description: string
+): Promise<string[]> {
+  const desc = (description ?? "").toLowerCase();
+  if (!desc) return [];
+  const reembolsadores = await prisma.reembolsador.findMany({
+    select: { glosa: true, aliases: { select: { rut: true } } },
+  });
+  const ruts = new Set<string>();
+  for (const r of reembolsadores) {
+    if (desc.includes(r.glosa.toLowerCase())) {
+      for (const a of r.aliases) {
+        const d = a.rut.replace(/\D/g, "");
+        if (d.length > 0) ruts.add(d.slice(-8));
+      }
+    }
+  }
+  return [...ruts];
+}
+
 export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Promise<number> {
   const inv = await prisma.invoice.findUnique({
     where: { id: invoiceId },
@@ -126,20 +180,52 @@ export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Pr
   const counterpartyDigits = counterpartyRut.replace(/\D/g, "");
   if (counterpartyDigits.length < 7) return 0;
 
-  // Cargos para recibida (mov.amount<0), abonos para emitida (mov.amount>0).
-  // Filtramos por RUT con un substring match — el banco prefija con 0 a veces.
-  const candidates = await prisma.bankMovement.findMany({
+  // Filtro de monto según el lado del mov (cargo para recibida, abono
+  // para emitida). Se reutiliza en las dos búsquedas de candidatos.
+  const amountWhere =
+    inv.type === "emitida"
+      ? { amount: { gte: inv.totalAmount - 10, lte: inv.totalAmount + 10 } }
+      : { amount: { gte: -(inv.totalAmount + 10), lte: -(inv.totalAmount - 10) } };
+
+  // Candidatos por RUT directo: movs cuya contraparte es el mismo RUT
+  // de la factura (caso normal — pago directo al proveedor/cliente).
+  const byRut = await prisma.bankMovement.findMany({
     where: {
       status: "sin_asignar",
       counterpartyRut: { contains: counterpartyDigits.slice(-8) },
-      ...(inv.type === "emitida"
-        ? { amount: { gte: inv.totalAmount - 10, lte: inv.totalAmount + 10 } }
-        : { amount: { gte: -(inv.totalAmount + 10), lte: -(inv.totalAmount - 10) } }),
+      ...amountWhere,
     },
     select: { id: true, amount: true, date: true },
     take: 5,
   });
 
+  // Candidatos por alias de reembolsador: si la factura es de una empresa
+  // (JPB) cuyo RUT está como alias de un reembolsador (Jose Perez), también
+  // consideramos movs cuya descripción matchee la glosa de ese reembolsador,
+  // aunque su counterpartyRut sea distinto (el RUT personal).
+  const glosas = await glosasForAliasRut(counterpartyDigits);
+  let byAlias: { id: string; amount: number; date: Date }[] = [];
+  if (glosas.length > 0) {
+    byAlias = await prisma.bankMovement.findMany({
+      where: {
+        status: "sin_asignar",
+        OR: glosas.map((g) => ({
+          description: { contains: g, mode: "insensitive" as const },
+        })),
+        ...amountWhere,
+      },
+      select: { id: true, amount: true, date: true },
+      take: 5,
+    });
+  }
+
+  // Unimos por id (un mov puede caer en ambas listas).
+  const byId = new Map<string, { id: string; amount: number; date: Date }>();
+  for (const m of [...byRut, ...byAlias]) byId.set(m.id, m);
+  const candidates = [...byId.values()];
+
+  // Solo auto-conciliamos si hay UN único candidato — si hay varios, es
+  // ambiguo y lo dejamos para decisión manual.
   if (candidates.length !== 1) return 0;
 
   const mov = candidates[0];
@@ -213,19 +299,39 @@ export async function tryAutoMatchMovementWithInvoices(
 
   let match = candidates[0];
   if (candidates.length > 1) {
-    if (!mov.counterpartyRut) {
+    // RUTs alias del reembolsador que matchee la glosa de este mov (caso
+    // "Jose Perez" → facturas de JPB, RUT distinto). Los aceptamos como
+    // válidos para desambiguar igual que el RUT directo del mov.
+    const aliasRutDigits = await aliasRutsForMovementDescription(
+      mov.description
+    );
+    const movRutDigits = (mov.counterpartyRut ?? "").replace(/\D/g, "");
+    if (!movRutDigits && aliasRutDigits.length === 0) {
       return { matched: false, reason: "ambiguous_no_rut" };
     }
-    const movRutDigits = mov.counterpartyRut.replace(/\D/g, "");
     const filtered = candidates.filter((c) => {
       const cRut = (isCargo ? c.rutIssuer : c.rutReceiver) ?? "";
       const cRutDigits = cRut.replace(/\D/g, "");
-      return (
-        cRutDigits.length > 0 &&
+      if (cRutDigits.length === 0) return false;
+      // Match por RUT directo del mov...
+      if (
+        movRutDigits &&
         (movRutDigits.includes(cRutDigits) || cRutDigits.includes(movRutDigits))
+      ) {
+        return true;
+      }
+      // ...o por alias de reembolsador (RUT empresa de la factura).
+      return aliasRutDigits.some(
+        (a) => a.includes(cRutDigits) || cRutDigits.includes(a)
       );
     });
-    if (filtered.length === 0) return { matched: false, reason: "no_rut_match" };
+    if (filtered.length !== 1) {
+      // 0 = ningún candidato cuadra por RUT/alias. >1 = sigue ambiguo.
+      return {
+        matched: false,
+        reason: filtered.length === 0 ? "no_rut_match" : "ambiguous_multi",
+      };
+    }
     match = filtered[0];
   }
 

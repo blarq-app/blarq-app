@@ -2,7 +2,7 @@
 
 - **Fecha**: 2026-05-30
 - **Estado**: aceptado
-- **Autor**: MJ (criterio de negocio), implementación parcial pendiente
+- **Autor**: MJ (criterio de negocio)
 
 ## Contexto
 
@@ -25,7 +25,9 @@ El auto-match es **conservador**: solo concilia con certeza; ante la duda deja e
 2. **Compras con tarjeta (sin RUT)**: matchear por **nombre de comercio en la glosa** vs razón social de la factura. Si el comercio no calza, NO auto-conciliar.
 3. **Excepción MercadoLibre/MercadoPago**: la glosa dice "MercadoPago" pero la factura suele venir de la **tienda vendedora** (el código tras el asterisco — `*RCCE`, `*HOME`, `*FERR` — es la pista del vendedor). No auto-conciliar estos; descubrir a mano.
 
-Implementación pendiente en `src/lib/banco/invoicePayments.ts` (cambio en `/src/lib/` → respetar §4.2 de CLAUDE.md). El criterio ya se aplicó manualmente en la limpieza del 2026-05-30.
+**Implementado el 2026-05-30**: la decisión vive en la función pura `decideMovementInvoiceMatch` (en `src/lib/banco/invoicePayments.ts`), con test de regresión `scripts/test-conciliacion.ts` (7 casos). El importador de cartolas (`/api/banco/import`) tenía una copia inline con el bug "toma la primera del mismo monto" — se eliminó y ahora delega en la función compartida `tryAutoMatchMovementWithInvoices`. Así el match es único y conservador en los tres caminos (importador, sync SII, auto-conciliar pendientes).
+
+NO se implementó (decisión explícita, "manual > mal hecho"): match por nombre de comercio para compras con tarjeta sin RUT (riesgo MercadoLibre = tienda vendedora) ni desempate por fecha entre candidatas ambiguas. Esos casos quedan pendientes para revisión manual.
 
 ## Alternativas descartadas
 
@@ -36,7 +38,7 @@ Implementación pendiente en `src/lib/banco/invoicePayments.ts` (cambio en `/src
 
 - **Positivas**: menos conciliaciones falsas; los números reflejan la realidad. Lo que no se puede afirmar queda pendiente y visible.
 - **Costos / contras**: más conciliación manual (MJ lo prefiere así). Ej: 50 movimientos MercadoPago sin factura quedan pendientes hasta que MJ consiga la factura o los marque "pago sin factura".
-- **Deuda generada**: falta implementar el match por comercio en el auto-match del código (hoy solo manual).
+- **Deuda generada**: el match por comercio (compras con tarjeta) y el desempate por fecha quedan sin automatizar a propósito — son trabajo manual de MJ.
 
 ## Referencias
 

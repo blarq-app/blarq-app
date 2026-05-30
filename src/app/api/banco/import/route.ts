@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { parseCartolaSantander } from "@/lib/banco/santanderParser";
-import { recomputeInvoiceStatus } from "@/lib/banco/invoicePayments";
+import { tryAutoMatchMovementWithInvoices } from "@/lib/banco/invoicePayments";
 import { applyRulesToMovement } from "@/lib/banco/categorizationRules";
 
 // Detecta si un movimiento ya está en la BD.
@@ -198,85 +198,21 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Auto-matching contra facturas pendientes y parciales.
-    // Compara contra el SALDO restante (totalAmount − Σ payments existentes),
-    // no solo contra totalAmount. Eso cubre el caso "factura $15M cobrada en
-    // cuotas de $5M+$10M" — la segunda transferencia ($10M) matchea con el
-    // saldo restante.
+    // Usa la función compartida tryAutoMatchMovementWithInvoices (única
+    // fuente de verdad del auto-match mov→factura). Criterio conservador
+    // (ADR 2026-05-30 "conciliación conservadora: fecha flexible"):
+    //   - El match exige que el RUT de la contraparte calce con el de la
+    //     factura, directo o vía alias de reembolsador (persona→empresa).
+    //   - La fecha NO filtra ni descarta.
+    //   - Si el mov no trae RUT (compra con tarjeta) o el match es ambiguo,
+    //     NO concilia: queda sin_asignar para decisión manual.
+    // Maneja el saldo restante (cobros en cuotas) y los movs internos/ya
+    // imputados internamente. Antes acá había una copia inline con el bug
+    // "toma la primera del mismo monto" (pendiente #2 de la auditoría
+    // ronda 32) — se eliminó al unificar con la función compartida.
     for (const movId of insertedIds) {
-      const mov = await prisma.bankMovement.findUnique({
-        where: { id: movId },
-        include: { payments: true },
-      });
-      if (!mov || mov.status === "interno") continue;
-      // Si ya tiene imputación parcial o total, saltar.
-      if (mov.payments.length > 0) continue;
-
-      // Cargo → buscar factura recibida pendiente/parcial del proveedor
-      // Abono → buscar factura emitida pendiente/parcial al cliente
-      const isCargo = mov.amount < 0;
-      const targetType = isCargo ? "recibida" : "emitida";
-      const absAmount = Math.abs(mov.amount);
-
-      // Traemos candidatos cuyo totalAmount es ≥ al monto del mov (para que
-      // el saldo restante pueda matchear) y filtramos en JS por saldo.
-      const rawCandidates = await prisma.invoice.findMany({
-        where: {
-          type: targetType,
-          status: { in: ["pendiente", "parcial"] },
-          tipoDoc: { not: 61 }, // NCs no se "pagan", revierten otra factura
-          totalAmount: { gte: absAmount - 10 },
-        },
-        select: {
-          id: true,
-          rutIssuer: true,
-          rutReceiver: true,
-          businessName: true,
-          totalAmount: true,
-          payments: { select: { amountApplied: true } },
-        },
-      });
-
-      // Filtrar por saldo restante dentro de tolerancia.
-      const candidates = rawCandidates
-        .map((c) => {
-          const paid = c.payments.reduce((s, p) => s + p.amountApplied, 0);
-          return { ...c, remaining: c.totalAmount - paid };
-        })
-        .filter((c) => c.remaining >= absAmount - 10 && c.remaining <= absAmount + 10);
-
-      if (candidates.length === 0) continue;
-
-      // Si hay múltiples candidatos por monto, intentar desambiguar por RUT
-      // contraparte. counterpartyRut viene tipo "0795239502" = 079523950-2
-      // (los últimos dígitos son el RUT real, prefijado con un 0 del banco).
-      let match = candidates[0];
-      if (candidates.length > 1 && mov.counterpartyRut) {
-        const movRutDigits = mov.counterpartyRut.replace(/\D/g, "");
-        const filtered = candidates.filter((c) => {
-          const cRut = (isCargo ? c.rutIssuer : c.rutReceiver) ?? "";
-          const cRutDigits = cRut.replace(/\D/g, "");
-          return cRutDigits.length > 0 && (movRutDigits.includes(cRutDigits) || cRutDigits.includes(movRutDigits));
-        });
-        if (filtered.length === 1) match = filtered[0];
-        else if (filtered.length > 1) match = filtered[0]; // sigue ambiguo, tomamos el primero (MJ puede corregir)
-        else continue; // ningún match por RUT, dejar sin asignar
-      }
-
-      // Crear el InvoicePayment con el monto exacto del movimiento.
-      // El status de la factura lo deriva recomputeInvoiceStatus.
-      await prisma.invoicePayment.create({
-        data: {
-          bankMovementId: mov.id,
-          invoiceId: match.id,
-          amountApplied: absAmount,
-        },
-      });
-      await prisma.bankMovement.update({
-        where: { id: mov.id },
-        data: { status: "conciliado" },
-      });
-      await recomputeInvoiceStatus(match.id);
-      stats.autoMatchedInvoices++;
+      const r = await tryAutoMatchMovementWithInvoices(movId);
+      if (r.matched) stats.autoMatchedInvoices++;
     }
 
     // 5b. Reglas de auto-categorización: para cada mov que sigue

@@ -262,16 +262,67 @@ export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Pr
 }
 
 /**
+ * DECISIÓN PURA del match mov→factura (sin BD, testeable). Dadas las
+ * facturas candidatas (ya filtradas por monto/saldo) y los RUTs del
+ * movimiento, decide cuál factura corresponde validando el RUT.
+ *
+ * Criterio conservador (ADR 2026-05-30): el RUT de la contraparte DEBE
+ * calzar con el de la factura — directo o vía alias de reembolsador
+ * (persona→empresa). La fecha NO interviene (no filtra ni desempata acá).
+ * Si no hay RUT con qué validar, o el match es ambiguo, NO concilia.
+ *
+ *   - sin RUT del mov ni alias        → "no_rut_to_validate"
+ *   - ninguna candidata calza el RUT  → "no_rut_match"
+ *   - más de una calza                → "ambiguous_multi"
+ *   - exactamente una                 → { invoiceId }
+ */
+export type MovInvoiceMatchReason =
+  | "no_rut_to_validate"
+  | "no_rut_match"
+  | "ambiguous_multi";
+
+export function decideMovementInvoiceMatch(args: {
+  candidates: { id: string; rutIssuer: string | null; rutReceiver: string | null }[];
+  isCargo: boolean; // true = cargo (recibida, RUT del emisor); false = abono (emitida, RUT del receptor)
+  movRutDigits: string; // dígitos de counterpartyRut del banco ("" si no hay)
+  aliasRutDigits: string[]; // últimos 8 dígitos de los aliases de reembolsador que matchean el mov
+}): { invoiceId: string } | { reason: MovInvoiceMatchReason } {
+  const { candidates, isCargo, movRutDigits, aliasRutDigits } = args;
+
+  // Sin información de RUT (ni del mov ni vía alias), no se puede validar.
+  // Mejor dejar pendiente que adivinar.
+  if (!movRutDigits && aliasRutDigits.length === 0) {
+    return { reason: "no_rut_to_validate" };
+  }
+
+  const isRutValid = (c: { rutIssuer: string | null; rutReceiver: string | null }) => {
+    const cRut = (isCargo ? c.rutIssuer : c.rutReceiver) ?? "";
+    const cRutDigits = cRut.replace(/\D/g, "");
+    if (cRutDigits.length === 0) return false;
+    if (movRutDigits && (movRutDigits.includes(cRutDigits) || cRutDigits.includes(movRutDigits))) {
+      return true;
+    }
+    return aliasRutDigits.some((a) => a.includes(cRutDigits) || cRutDigits.includes(a));
+  };
+
+  const filtered = candidates.filter(isRutValid);
+  if (filtered.length === 0) return { reason: "no_rut_match" };
+  if (filtered.length > 1) return { reason: "ambiguous_multi" };
+  return { invoiceId: filtered[0].id };
+}
+
+/**
  * Auto-match en la dirección movimiento → factura.
  *
  * Busca facturas pendientes/parciales con saldo restante ±$10 al monto
- * del movimiento. Si hay >1 candidato, desambigua por RUT contraparte
- * del banco. Si encuentra match único, crea el InvoicePayment y actualiza
- * status. Devuelve { matched: true, invoiceId } o { matched: false, reason }.
+ * del movimiento y delega la decisión en `decideMovementInvoiceMatch`
+ * (valida RUT, no usa fecha). Si encuentra match único, crea el
+ * InvoicePayment y actualiza status. Devuelve { matched, invoiceId } o
+ * { matched: false, reason }.
  *
- * Esta es la misma lógica que corre al importar una cartola (en
- * /api/banco/import) — extraída para reusarla en el endpoint de
- * "Auto-conciliar pendientes" sobre movs ya existentes.
+ * Es la ÚNICA fuente de verdad del auto-match mov→factura: la usan el
+ * endpoint de "Auto-conciliar pendientes", el sync SII y el importador de
+ * cartolas (/api/banco/import).
  */
 export async function tryAutoMatchMovementWithInvoices(
   movId: string
@@ -317,43 +368,22 @@ export async function tryAutoMatchMovementWithInvoices(
   // VALIDACIÓN DE RUT — siempre, incluso con UN solo candidato. Antes el
   // codigo ataba si habia 1 solo candidato sin chequear RUT (caso famoso:
   // Pedro Barrera persona ↔ Vidrios Rotos empresa, montos calzaban → la
-  // app los unia ciegamente). Ahora exigimos que el RUT cuadre directo o
-  // via alias de reembolsador; si no, queda pendiente para decision manual.
+  // app los unia ciegamente). La decisión vive en decideMovementInvoiceMatch
+  // (pura, testeable): exige RUT directo o vía alias de reembolsador.
   const aliasRutDigits = await aliasRutsForMovement(
     mov.description,
     mov.counterpartyRut
   );
   const movRutDigits = (mov.counterpartyRut ?? "").replace(/\D/g, "");
 
-  const isRutValid = (c: typeof candidates[number]) => {
-    const cRut = (isCargo ? c.rutIssuer : c.rutReceiver) ?? "";
-    const cRutDigits = cRut.replace(/\D/g, "");
-    if (cRutDigits.length === 0) return false;
-    if (
-      movRutDigits &&
-      (movRutDigits.includes(cRutDigits) || cRutDigits.includes(movRutDigits))
-    ) {
-      return true;
-    }
-    return aliasRutDigits.some(
-      (a) => a.includes(cRutDigits) || cRutDigits.includes(a)
-    );
-  };
-
-  // Sin informacion de RUT (ni del mov ni via alias), no podemos validar.
-  // Mejor dejar pendiente que adivinar.
-  if (!movRutDigits && aliasRutDigits.length === 0) {
-    return { matched: false, reason: "no_rut_to_validate" };
-  }
-
-  const filtered = candidates.filter(isRutValid);
-  if (filtered.length === 0) {
-    return { matched: false, reason: "no_rut_match" };
-  }
-  if (filtered.length > 1) {
-    return { matched: false, reason: "ambiguous_multi" };
-  }
-  const match = filtered[0];
+  const decision = decideMovementInvoiceMatch({
+    candidates,
+    isCargo,
+    movRutDigits,
+    aliasRutDigits,
+  });
+  if ("reason" in decision) return { matched: false, reason: decision.reason };
+  const match = candidates.find((c) => c.id === decision.invoiceId)!;
 
   await prisma.invoicePayment.create({
     data: {

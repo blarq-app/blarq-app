@@ -314,44 +314,46 @@ export async function tryAutoMatchMovementWithInvoices(
 
   if (candidates.length === 0) return { matched: false, reason: "no_candidates" };
 
-  let match = candidates[0];
-  if (candidates.length > 1) {
-    // RUTs alias del reembolsador que matchee la glosa de este mov (caso
-    // "Jose Perez" → facturas de JPB, RUT distinto). Los aceptamos como
-    // válidos para desambiguar igual que el RUT directo del mov.
-    const aliasRutDigits = await aliasRutsForMovement(
-      mov.description,
-      mov.counterpartyRut
+  // VALIDACIÓN DE RUT — siempre, incluso con UN solo candidato. Antes el
+  // codigo ataba si habia 1 solo candidato sin chequear RUT (caso famoso:
+  // Pedro Barrera persona ↔ Vidrios Rotos empresa, montos calzaban → la
+  // app los unia ciegamente). Ahora exigimos que el RUT cuadre directo o
+  // via alias de reembolsador; si no, queda pendiente para decision manual.
+  const aliasRutDigits = await aliasRutsForMovement(
+    mov.description,
+    mov.counterpartyRut
+  );
+  const movRutDigits = (mov.counterpartyRut ?? "").replace(/\D/g, "");
+
+  const isRutValid = (c: typeof candidates[number]) => {
+    const cRut = (isCargo ? c.rutIssuer : c.rutReceiver) ?? "";
+    const cRutDigits = cRut.replace(/\D/g, "");
+    if (cRutDigits.length === 0) return false;
+    if (
+      movRutDigits &&
+      (movRutDigits.includes(cRutDigits) || cRutDigits.includes(movRutDigits))
+    ) {
+      return true;
+    }
+    return aliasRutDigits.some(
+      (a) => a.includes(cRutDigits) || cRutDigits.includes(a)
     );
-    const movRutDigits = (mov.counterpartyRut ?? "").replace(/\D/g, "");
-    if (!movRutDigits && aliasRutDigits.length === 0) {
-      return { matched: false, reason: "ambiguous_no_rut" };
-    }
-    const filtered = candidates.filter((c) => {
-      const cRut = (isCargo ? c.rutIssuer : c.rutReceiver) ?? "";
-      const cRutDigits = cRut.replace(/\D/g, "");
-      if (cRutDigits.length === 0) return false;
-      // Match por RUT directo del mov...
-      if (
-        movRutDigits &&
-        (movRutDigits.includes(cRutDigits) || cRutDigits.includes(movRutDigits))
-      ) {
-        return true;
-      }
-      // ...o por alias de reembolsador (RUT empresa de la factura).
-      return aliasRutDigits.some(
-        (a) => a.includes(cRutDigits) || cRutDigits.includes(a)
-      );
-    });
-    if (filtered.length !== 1) {
-      // 0 = ningún candidato cuadra por RUT/alias. >1 = sigue ambiguo.
-      return {
-        matched: false,
-        reason: filtered.length === 0 ? "no_rut_match" : "ambiguous_multi",
-      };
-    }
-    match = filtered[0];
+  };
+
+  // Sin informacion de RUT (ni del mov ni via alias), no podemos validar.
+  // Mejor dejar pendiente que adivinar.
+  if (!movRutDigits && aliasRutDigits.length === 0) {
+    return { matched: false, reason: "no_rut_to_validate" };
   }
+
+  const filtered = candidates.filter(isRutValid);
+  if (filtered.length === 0) {
+    return { matched: false, reason: "no_rut_match" };
+  }
+  if (filtered.length > 1) {
+    return { matched: false, reason: "ambiguous_multi" };
+  }
+  const match = filtered[0];
 
   await prisma.invoicePayment.create({
     data: {

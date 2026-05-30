@@ -4,7 +4,20 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-28 (ronda 31 — lectura de facturas directa del SII, sin SimpleFactura)
+- **Última actualización**: 2026-05-29 (ronda 32 — auditoría facturas/conciliación + rotación de credencial de prod)
+
+- **Ronda 32 — Auditoría de facturas y conciliación bancaria + rotación de credencial**:
+  - **Auditoría (solo lectura, no se tocó código ni datos)**: dump read-only de prod a JSON (`scripts/audit-dump.ts`, `findMany` con `select`, excluye `pdfContent`) + análisis offline (`scripts/audit-analyze.ts`). Reporte completo en `docs/REVIEW_facturas-conciliacion_2026-05-29.md`. Universo: 749 facturas, 1.615 movimientos, 501 imputaciones, 19 proyectos, 4 reembolsadores.
+  - **Rotación de credencial de prod — HECHA en todos lados**. Motivo: el print de debug de `audit-dump.ts` filtró la contraseña de la BD al log de la sesión. Cadena completa ejecutada: (1) Neon → reset password de `neondb_owner` branch production; (2) Vercel → `DATABASE_URL` nuevo en Production (CLI) + Preview (dashboard) + redeploy de prod (alias `blarq-app.vercel.app`, verificado: `/login` 200, `/api/auth/session` 200, sin 500); (3) LaunchAgent `com.blarq.sii-sync-pdfs.plist` → plist actualizado + recargado; (4) `.env.prod` local actualizado. La contraseña vieja quedó inválida. Backups `.plist.bak-*` con la contraseña vieja borrados. El print del script ya está parcheado (no vuelve a imprimir credenciales). ADR `docs/decisions/2026-05-29-credenciales-en-console-logs.md`. El `.env` local (dev, `ep-solitary-mud`) no se tocó.
+  - **COLA DE FIXES PENDIENTES (del audit — ninguno tocado, esperan lectura de MJ)**, por severidad:
+    1. **Auto-match sin filtro de fecha** (CRÍTICA): el "±15 días" del comentario no existe en el código (`import/route.ts:222-245`, `invoicePayments.ts` `tryAutoMatch*`). Solo matchea por monto+RUT. 59 imputaciones con gap>15d; 5 con factura alternativa más cercana. Casos Entel/Sherwin recurrentes; caso F-1891 con fecha posterior al movimiento.
+    2. **`import:261` "toma el primero"** (CRÍTICA): compras con tarjeta no traen RUT → el auto-match agarra cualquier factura del mismo monto, a veces de otro proveedor/proyecto. 43 casos reconstruidos. Ej: Compra Vespucio Oriente → factura de Jorgelina Gabriela existiendo una de Sherwin del mismo día/monto.
+    3. **1-candidato-sin-RUT** (detectado por MJ en sesión paralela): cuando hay UN solo candidato por monto y el mov no tiene RUT, igual auto-concilia sin verificar proveedor. Relacionado con #2 pero es el caso de candidato único. Revisar `tryAutoMatchMovementWithInvoices` (no exige RUT cuando `candidates.length===1`).
+    4. **Conciliación de cobros del cliente** (MEDIA-ALTA): 110 abonos ≥$1M ($414M) sin asignar; las emitidas se marcan pagada sin vínculo bancario. Es el lado donde un cobro perdido/duplicado no se detectaría (incidente PR#44). Pendiente "Fase 2 cliente del proyecto": `BankMovement.projectId` + mapear persona→proyecto.
+    5. **fondoSueldos — código + datos** (MEDIA): las 34/34 emitidas tienen `conceptoCobro=null` → el fondo no puede separar obra/muebles/artefactos. Backfill de las 34 + hacerlo obligatorio al catalogar emitida. Revisar `fondoSueldos.ts`.
+    6. **Cartola noviembre 2025** (MEDIA): 0 movimientos ese mes (hueco). Conseguir e importar; mientras tanto no reimportar cartolas 2025 (737 movs sin `balanceAfter` → riesgo de duplicado).
+    7. **64 recibidas sin proyecto** (MEDIA): $6,1M neto no atribuido a ningún proyecto. Vista que junte las `projectId IS NULL` para catalogar a mano (no auto-asignar).
+  - **Cosas SANAS verificadas** (no tocar): 0 campos nulos, 0 sobre-imputaciones, 0 splits cruzados entre proyectos, 0 doble conteo reembolsador↔sin_respaldo, NCs bien. El "112 facturas pagada sin imputar" resultó 0 problema real (legacy + redondeo).
 
 - **Ronda 31 — Eliminar SimpleFactura: leer facturas directo del SII (RCV)**:
   - **Disparador**: a MJ le llegó el mail de que el plan SimpleFactura vence (27-05-2026). Pregunta si se puede prescindir. Objetivo de fondo: hacer **todo en la app** (leer y emitir), con Maxxa de respaldo hasta tener confianza en la estabilidad.

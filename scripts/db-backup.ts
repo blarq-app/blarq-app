@@ -84,7 +84,10 @@ async function main() {
   const fullPath = join(dir, filename);
 
   console.log(`Backup BLARQ — entorno=${env}, archivo=${filename}`);
-  console.log(`(DATABASE_URL apunta a: ${(process.env.DATABASE_URL ?? "—").slice(0, 60)}…)\n`);
+  // No imprimir el DATABASE_URL: contiene la contraseña antes del '@'.
+  // Solo el host (ver ADR 2026-05-29-credenciales-en-console-logs).
+  const host = (process.env.DATABASE_URL ?? "").match(/@([^/?]+)/)?.[1] ?? "—";
+  console.log(`(BD host: ${host})\n`);
 
   const data: Record<string, unknown[]> = {};
   let totalRows = 0;

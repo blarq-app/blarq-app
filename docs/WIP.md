@@ -4,7 +4,38 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-29 (ronda 32 — auditoría facturas/conciliación + rotación de credencial de prod)
+- **Última actualización**: 2026-05-29 (ronda 33 — limpieza profunda de conciliación bancaria + features de modal)
+
+- **Ronda 33 — Limpieza profunda de conciliación bancaria + UX del modal (sesión paralela a ronda 32)**:
+  - **Contexto**: sesión larga arrancada para sacar la cotización del maestro (Paseo del Sena), terminó tocando todo el flujo de conciliación bancaria. Corrió simultánea con la auditoría de ronda 32 (sesión paralela). Atacó varios ítems de la cola pendiente de esa ronda.
+  - **Cotización Maestro (PRs #52, #53, #54)**: PDF + Excel editable con fórmulas para entregarle al maestro la lista de partidas sin precios. Excel formateado con look BLARQ (logo, headers, zonas COCINA/BAÑO). Incluye fix del bug que duplicaba `subChapter` al duplicar versión de presupuesto.
+  - **Modal de conciliación — features y fixes**:
+    - **Multi-alias por reembolsador** (PR #56): un reembolsador (Cristóbal, Elias, etc.) puede tener varios RUTs alias (Paula Johanna + Sodimac). Schema nuevo `ReembolsadorAlias`. Schema pusheado a prod, migración corrida.
+    - **Match por RUT de la persona** (PR #67): nuevo campo `Reembolsador.personRut` para detectar reembolsador por RUT del banco (más robusto que glosa). Backfilleado 10 reembolsadores existentes.
+    - **Recordar pagador + sugerencia por monto** (PR #57): banners ámbar (¿guardar regla?) y verde (match exacto sugerido) en el modal.
+    - **Modal bulk asignar** (PRs #60, #61): ordena facturas con monto match arriba + filtra por contraparte cuando todos los movs seleccionados son del mismo cliente.
+    - **Listado conciliación más visible** (PRs #58, #59): filas con match en verde + arriba siempre.
+    - **Fix RUT con guion** (PR #68): el filtro de búsqueda comparaba mal "77137860-9" vs "0771378609" → normaliza al cuerpo del RUT. Afectaba a Comercial K y a cualquier proveedor con guion.
+    - **Auto-match alias-aware** (PR #66): el auto-match usa los aliases de reembolsador para casos como Jose Pérez → JPB.
+    - **`tryAutoMatchMovementWithInvoices` valida RUT siempre** (PR #72, **resuelve ítem #3 de ronda 32**): antes con 1 solo candidato no chequeaba RUT (caso Pedro Barrera ↔ Vidrios Rotos). Ahora exige RUT match directo o vía alias; si no calza, queda pendiente.
+  - **Historial de pagos + alerta sobre-imputación + botón "quitar"** (PRs #62, #63) en el detalle de factura.
+  - **Fix-invoice-status-drift** (PR #64): 174 facturas con `status` atrasado respecto a sus InvoicePayment reales (legacy de la migración Maxxa). Subió pendiente/parcial → pagada. **NO mueve totales de plata** (metrics.ts usa montos/pagos, no status). Verificado: 0 facturas restantes con drift.
+  - **Limpiezas manuales de conciliaciones cruzadas (datos en prod)**:
+    - SANITOP 27-mar mal linkeada a Paula F-1833 → moved a F-809 SANITOP real (parcial $142.800 de $285.600). Cadena Elias 10-abr/18-may reshuffleada para que F-1833 y F-1884 queden con su pagador correcto.
+    - F-1837/F-1858 Paula sobre-imputadas (Cristóbal+Elias linkeados a las DOS) → cada uno a la suya.
+    - SODIMAC $15.801 × 2 cruzadas (movs ene/feb intercambiados).
+    - Entel × 4 PACs en desorden → cronológico (F-53531550 queda pendiente esperando PAC real).
+    - TRANSPORTES YRG 178.500 × 2 cruzadas (F-1718/F-1744).
+    - 5 conciliaciones con RUT no calzante deshechas: Muebles→F-1891 Paula, Alejandro→F-875, Christian-mar→F-536, Cristóbal→F-149 MANTENCION, Pedro Barrera→F-58 Vidrios Rotos.
+  - **6 reembolsadores nuevos creados en prod**: Maria Jose Blanco (Sodimac+Sherwin+Cavem+Iconica), Sanhueza Torres (MST), Iván Henriquez (Sherwin), Rios Gonzalez (YRG), Christian Geoffroy (su empresa), Nery Tamayo (JPB). Total ahora: 10 reembolsadores activos.
+  - **Estado de Pago — bugs + feature**:
+    - Bug bloqueante (PR #69): al duplicar partidas para zonas COCINA/BAÑO, las copias compartían `lineageId` → EP no se podía crear (`@@unique[estadoPagoId, lineageId]`). Fix: duplicador genera lineageId nuevo. Datos reasignados (8 ítems Paseo del Sena).
+    - EP muestra zonas (PR #70): nuevo `EstadoPagoItem.subChapter` + render de separadores COCINA/BAÑO en pantalla y PDF.
+  - **Auditoría de conciliación commiteada** (PRs #71, #72): `audit-conciliacion.ts` (sobre-imputaciones, RUT no calza, status drift, duplicados) y `audit-ambiguas.ts` (grupos mismo proveedor+monto, candidatos a cruzamiento). Para correr cuando MJ quiera.
+  - **Notas para MJ**: `docs/REVIEW_conciliacion_2026-05-29.md` — Carlos Patricio (dudoso, +50d) + los 5 movs que quedaron libres post-limpieza esperan su factura real.
+  - **Pendiente de la cola de ronda 32 — sigue abierto**: ítems #1 (auto-match sin filtro de fecha), #2 (import:261 toma el primero), #4 (conciliación cobros cliente), #5 (fondoSueldos), #6 (cartola nov 2025), #7 (64 recibidas sin proyecto). Item #3 resuelto en esta ronda.
+
+
 
 - **Ronda 32 — Auditoría de facturas y conciliación bancaria + rotación de credencial**:
   - **Auditoría (solo lectura, no se tocó código ni datos)**: dump read-only de prod a JSON (`scripts/audit-dump.ts`, `findMany` con `select`, excluye `pdfContent`) + análisis offline (`scripts/audit-analyze.ts`). Reporte completo en `docs/REVIEW_facturas-conciliacion_2026-05-29.md`. Universo: 749 facturas, 1.615 movimientos, 501 imputaciones, 19 proyectos, 4 reembolsadores.

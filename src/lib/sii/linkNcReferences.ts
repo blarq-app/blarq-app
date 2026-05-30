@@ -126,6 +126,11 @@ export async function linkNcReferences(opts?: {
           referenceTipoDoc: ref.dtdcCodigo,
         },
       });
+      // Auto-aplicar la compensación lógica: si encuentro la factura
+      // referenciada del MISMO proveedor (mismo type + mismo rutIssuer/
+      // rutReceiver), la marco como objetivo de la NC y actualizo su
+      // status (anulada cuando la NC la cubre completa).
+      await autoApplyNcCompensation(nc.id).catch(() => undefined);
       result.linked++;
     } catch {
       result.errors++;
@@ -133,4 +138,73 @@ export async function linkNcReferences(opts?: {
   }
 
   return result;
+}
+
+/**
+ * Dada una NC con referenceFolioNumber poblado, busca la factura
+ * referenciada del mismo proveedor (recibida) o mismo cliente (emitida)
+ * y aplica la compensación: setea appliedToInvoiceId + compensationType
+ * + actualiza status de la factura objetivo (anulada cuando la NC la
+ * cubre completa, parcial sino).
+ *
+ * Idempotente: si la NC ya tiene compensationType seteado o no encuentra
+ * la factura objetivo, no hace nada.
+ *
+ * Exportada para que el backfill script la pueda invocar también.
+ */
+export async function autoApplyNcCompensation(ncId: string): Promise<boolean> {
+  const nc = await prisma.invoice.findUnique({
+    where: { id: ncId },
+    select: {
+      id: true, tipoDoc: true, type: true, totalAmount: true,
+      rutIssuer: true, rutReceiver: true,
+      referenceFolioNumber: true, compensationType: true,
+    },
+  });
+  if (!nc || nc.tipoDoc !== 61) return false;
+  if (!nc.referenceFolioNumber) return false;
+  if (nc.compensationType) return false; // ya compensada
+
+  // Buscar factura del mismo proveedor (o cliente, si la NC es emitida)
+  // con folio = referenceFolioNumber, no NC.
+  const sameRutFilter = nc.type === "recibida"
+    ? { rutIssuer: nc.rutIssuer ?? undefined }
+    : { rutReceiver: nc.rutReceiver ?? undefined };
+  const target = await prisma.invoice.findFirst({
+    where: {
+      type: nc.type,
+      folioNumber: nc.referenceFolioNumber,
+      tipoDoc: { in: [33, 34, 39, 41, 56] }, // factura/exenta/boleta/ND
+      ...sameRutFilter,
+    },
+    select: { id: true, totalAmount: true, status: true, payments: { select: { amountApplied: true } } },
+  });
+  if (!target) return false;
+
+  // Setear la compensación lógica en la NC.
+  await prisma.invoice.update({
+    where: { id: nc.id },
+    data: {
+      compensationType: "other_invoice",
+      appliedToInvoiceId: target.id,
+      status: "pagada",
+      paidAt: new Date(),
+    },
+  });
+
+  // Actualizar status de la factura objetivo.
+  const realPaid = target.payments.reduce((s, p) => s + p.amountApplied, 0);
+  const ncAbs = Math.abs(nc.totalAmount);
+  if (realPaid + ncAbs >= target.totalAmount - 10) {
+    await prisma.invoice.update({
+      where: { id: target.id },
+      data: { status: "anulada", paidAt: new Date() },
+    });
+  } else if (realPaid <= 0 && ncAbs > 0) {
+    await prisma.invoice.update({
+      where: { id: target.id },
+      data: { status: "parcial" },
+    });
+  }
+  return true;
 }

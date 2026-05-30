@@ -281,7 +281,16 @@ export type MovInvoiceMatchReason =
   | "no_rut_match" // hay RUT pero ninguna candidata calza
   | "ambiguous_multi" // varias candidatas calzan el RUT
   | "no_merchant_match" // comercio reconocido pero ninguna factura de ese comercio
-  | "ambiguous_merchant"; // varias facturas del mismo comercio + monto
+  | "merchant_out_of_window" // hay factura del comercio+monto pero la fecha está muy lejos (¿otra compra?)
+  | "ambiguous_merchant"; // varias facturas del mismo comercio + monto dentro de la ventana
+
+// Ventana de fecha para el match por comercio (compras con tarjeta). En una
+// compra con tarjeta la boleta/factura se emite el mismo día (±unos días por
+// desfase de registro del banco). Si la única factura del mismo comercio+monto
+// está a más de esto, casi seguro es OTRA compra que coincide en monto — no se
+// concilia. OJO: esta ventana es SOLO para el camino por comercio; el camino
+// por RUT (transferencias a maestros, que facturan después) no usa fecha.
+const MERCHANT_DATE_WINDOW_DAYS = 31;
 
 // Comercios conocidos para el match de COMPRAS CON TARJETA (que no traen RUT).
 // Cada uno con un patrón para la glosa del banco y otro para la razón social
@@ -313,13 +322,14 @@ function merchantFromName(name: string | null): string | null {
 }
 
 export function decideMovementInvoiceMatch(args: {
-  candidates: { id: string; rutIssuer: string | null; rutReceiver: string | null; businessName: string | null }[];
+  candidates: { id: string; rutIssuer: string | null; rutReceiver: string | null; businessName: string | null; issueDate: Date | string }[];
   isCargo: boolean; // true = cargo (recibida, RUT del emisor); false = abono (emitida, RUT del receptor)
   movRutDigits: string; // dígitos de counterpartyRut del banco ("" si no hay)
   aliasRutDigits: string[]; // últimos 8 dígitos de los aliases de reembolsador que matchean el mov
   movDescription: string; // glosa del banco — para match por comercio cuando no hay RUT
+  movDate: Date | string; // fecha del movimiento — ventana de fecha en el camino por comercio
 }): { invoiceId: string } | { reason: MovInvoiceMatchReason } {
-  const { candidates, isCargo, movRutDigits, aliasRutDigits, movDescription } = args;
+  const { candidates, isCargo, movRutDigits, aliasRutDigits, movDescription, movDate } = args;
 
   // CAMINO A — hay RUT (del mov o vía alias de reembolsador): validar por RUT.
   // Es la señal fuerte; si hay RUT y no calza, NO se cae al match por comercio
@@ -340,15 +350,24 @@ export function decideMovementInvoiceMatch(args: {
     return { invoiceId: filtered[0].id };
   }
 
-  // CAMINO B — compra con tarjeta (sin RUT): match por nombre de comercio.
-  // Solo concilia si el comercio de la glosa es conocido y hay EXACTAMENTE
-  // una factura pendiente de ese mismo comercio (+monto, ya filtrado afuera).
+  // CAMINO B — compra con tarjeta (sin RUT): match por nombre de comercio,
+  // con ventana de fecha. Solo concilia si el comercio de la glosa es conocido,
+  // el comercio de la factura calza, la fecha está dentro de la ventana y hay
+  // EXACTAMENTE una candidata así (+monto, ya filtrado afuera).
   const merchant = merchantFromGlosa(movDescription);
   if (!merchant) return { reason: "no_rut_to_validate" }; // comercio no reconocido → manual
   const byMerchant = candidates.filter((c) => merchantFromName(c.businessName) === merchant);
   if (byMerchant.length === 0) return { reason: "no_merchant_match" };
-  if (byMerchant.length > 1) return { reason: "ambiguous_merchant" };
-  return { invoiceId: byMerchant[0].id };
+  const dayMs = 86400000;
+  const movT = new Date(movDate).getTime();
+  const withinWindow = byMerchant.filter(
+    (c) => Math.abs(movT - new Date(c.issueDate).getTime()) / dayMs <= MERCHANT_DATE_WINDOW_DAYS
+  );
+  // Hay factura del comercio+monto pero ninguna cerca en fecha → probablemente
+  // es otra compra del mismo monto. No conciliar (queda para revisión manual).
+  if (withinWindow.length === 0) return { reason: "merchant_out_of_window" };
+  if (withinWindow.length > 1) return { reason: "ambiguous_merchant" };
+  return { invoiceId: withinWindow[0].id };
 }
 
 /**
@@ -391,6 +410,7 @@ export async function tryAutoMatchMovementWithInvoices(
       rutIssuer: true,
       rutReceiver: true,
       businessName: true,
+      issueDate: true,
       totalAmount: true,
       payments: { select: { amountApplied: true } },
     },
@@ -422,6 +442,7 @@ export async function tryAutoMatchMovementWithInvoices(
     movRutDigits,
     aliasRutDigits,
     movDescription: mov.description,
+    movDate: mov.date,
   });
   if ("reason" in decision) return { matched: false, reason: decision.reason };
   const match = candidates.find((c) => c.id === decision.invoiceId)!;

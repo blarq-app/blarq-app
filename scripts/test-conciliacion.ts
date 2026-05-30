@@ -16,11 +16,13 @@ function check(nombre: string, real: unknown, esperado: unknown) {
   if (!pass) { console.log(`    esperado: ${JSON.stringify(esperado)}\n    real:     ${JSON.stringify(real)}`); fail++; } else ok++;
 }
 
-// Atajos para armar candidatas y args.
-const C = (id: string, rutIssuer: string | null, businessName: string | null = null) =>
-  ({ id, rutIssuer, rutReceiver: null, businessName });
+// Atajos para armar candidatas y args. issueDate por defecto cerca del mov
+// (2026-03-15) para que la ventana de fecha del camino por comercio no estorbe
+// en los casos que no la testean.
+const C = (id: string, rutIssuer: string | null, businessName: string | null = null, issueDate = "2026-03-15") =>
+  ({ id, rutIssuer, rutReceiver: null, businessName, issueDate });
 const cargo = (extra: Record<string, unknown>) =>
-  ({ isCargo: true, movRutDigits: "", aliasRutDigits: [] as string[], movDescription: "", ...extra });
+  ({ isCargo: true, movRutDigits: "", aliasRutDigits: [] as string[], movDescription: "", movDate: "2026-03-15", ...extra });
 
 // ── CAMINO A: con RUT ──────────────────────────────────────────────────────
 
@@ -87,6 +89,23 @@ check("VESPUCIO ORIENTE concilia con Sherwin", decideMovementInvoiceMatch(cargo(
   movDescription: "Compra VESPUCIO ORIENTE",
   candidates: [C("F1", "96803460-K", "SHERWIN WILLIAMS CHILE S A")],
 })), { invoiceId: "F1" });
+
+// 10b. Compra Sodimac pero la única factura Sodimac del monto está a MESES
+//      de la compra → NO concilia (probablemente es otra compra del monto).
+check("SODIMAC con factura a meses no concilia", decideMovementInvoiceMatch(cargo({
+  movDescription: "Compra SODIMAC PARQUE", movDate: "2026-03-15",
+  candidates: [C("F1", "96792430-K", "SODIMAC S.A.", "2025-10-22")],
+})), { reason: "merchant_out_of_window" });
+
+// 10c. Dos facturas Sodimac del monto, una lejos y una cerca → la fecha
+//      desempata: concilia con la cercana.
+check("la fecha desempata entre dos Sodimac", decideMovementInvoiceMatch(cargo({
+  movDescription: "Compra SODIMAC", movDate: "2026-03-15",
+  candidates: [
+    C("F1", "96792430-K", "SODIMAC S.A.", "2025-09-01"),
+    C("F2", "96792430-K", "SODIMAC S.A.", "2026-03-12"),
+  ],
+})), { invoiceId: "F2" });
 
 // 11. MercadoPago NO se auto-concilia aunque haya factura del monto (la
 //     factura suele ser de la tienda; comercio no reconocido) → pendiente.

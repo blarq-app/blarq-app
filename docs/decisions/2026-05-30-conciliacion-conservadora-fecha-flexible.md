@@ -21,17 +21,17 @@ MJ, textual: *"prefiero tener que hacer más trabajo manual, que trabajo mal hec
 
 El auto-match es **conservador**: solo concilia con certeza; ante la duda deja el movimiento `sin_asignar` / la factura `pendiente`.
 
-1. **RUT contraparte + monto** es la señal que define el match (más reembolsador vía alias). La **fecha NO descarta** candidatas — solo desempata cuando hay varias del mismo RUT+monto (elegir la más cercana).
-2. **Compras con tarjeta (sin RUT)**: matchear por **nombre de comercio en la glosa** vs razón social de la factura. Si el comercio no calza, NO auto-conciliar.
+1. **RUT contraparte + monto** es la señal que define el match (más reembolsador vía alias). En el camino por RUT la **fecha NO interviene** — a un maestro/proveedor se le paga y factura después.
+2. **Compras con tarjeta (sin RUT)**: matchear por **nombre de comercio en la glosa** vs razón social de la factura. Acá la boleta es del mismo día, así que SÍ hay **ventana de fecha (±31 días)**: si la única factura del comercio+monto está a más de un mes, no concilia (probablemente es otra compra del mismo monto). Si el comercio no calza, NO auto-conciliar.
 3. **Excepción MercadoLibre/MercadoPago**: la glosa dice "MercadoPago" pero la factura suele venir de la **tienda vendedora** (el código tras el asterisco — `*RCCE`, `*HOME`, `*FERR` — es la pista del vendedor). No auto-conciliar estos; descubrir a mano.
 
 **Implementado el 2026-05-30**: la decisión vive en la función pura `decideMovementInvoiceMatch` (en `src/lib/banco/invoicePayments.ts`), con test de regresión `scripts/test-conciliacion.ts` (13 casos). El importador de cartolas (`/api/banco/import`) tenía una copia inline con el bug "toma la primera del mismo monto" — se eliminó y ahora delega en la función compartida `tryAutoMatchMovementWithInvoices`. Match único y conservador en los tres caminos (importador, sync SII, auto-conciliar pendientes).
 
 Dos caminos de validación:
-- **Con RUT** (del mov o vía alias de reembolsador): el RUT debe calzar. Si hay RUT y no calza, NO cae al match por comercio.
-- **Sin RUT** (compras con tarjeta — las 775 compras del banco no traen RUT): match por **nombre de comercio** (glosa vs razón social). Whitelist `TARJETA_MERCHANTS` (Sodimac/Homecenter, Easy, Cavem, Sherwin/Vespucio Oriente, Construmart, Imperial, Tottus, Copec). Solo concilia si hay EXACTAMENTE una factura de ese comercio + monto.
+- **Con RUT** (del mov o vía alias de reembolsador): el RUT debe calzar. Si hay RUT y no calza, NO cae al match por comercio. La fecha no interviene.
+- **Sin RUT** (compras con tarjeta — las 775 compras del banco no traen RUT): match por **nombre de comercio** (glosa vs razón social). Whitelist `TARJETA_MERCHANTS` (Sodimac/Homecenter, Easy, Cavem, Sherwin/Vespucio Oriente, Construmart, Imperial, Tottus, Copec). Concilia solo si hay EXACTAMENTE una factura de ese comercio + monto **dentro de ±31 días** (`MERCHANT_DATE_WINDOW_DAYS`). Si la única candidata del comercio está a meses → `merchant_out_of_window` (pendiente). Si hay varias del mismo comercio+monto, la fecha desempata: gana la que cae dentro de la ventana.
 
-En ambos caminos la **fecha no interviene** y, ante 0 o >1 candidatas, queda pendiente.
+Ante 0 o >1 candidatas válidas, queda pendiente.
 
 NO se incluye MercadoLibre/MercadoPago en la whitelist (la factura suele ser de la tienda vendedora, no de ML → falso positivo). Tampoco hay desempate por fecha entre ambiguas. Esos quedan manuales.
 

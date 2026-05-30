@@ -277,38 +277,78 @@ export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Pr
  *   - exactamente una                 → { invoiceId }
  */
 export type MovInvoiceMatchReason =
-  | "no_rut_to_validate"
-  | "no_rut_match"
-  | "ambiguous_multi";
+  | "no_rut_to_validate" // no hay RUT ni comercio reconocible con qué validar
+  | "no_rut_match" // hay RUT pero ninguna candidata calza
+  | "ambiguous_multi" // varias candidatas calzan el RUT
+  | "no_merchant_match" // comercio reconocido pero ninguna factura de ese comercio
+  | "ambiguous_merchant"; // varias facturas del mismo comercio + monto
+
+// Comercios conocidos para el match de COMPRAS CON TARJETA (que no traen RUT).
+// Cada uno con un patrón para la glosa del banco y otro para la razón social
+// de la factura — a veces difieren (el local Sherwin factura como "Vespucio
+// Oriente"; Homecenter es marca de Sodimac).
+//
+// A PROPÓSITO no incluye MercadoLibre/MercadoPago: la factura suele venir de
+// la tienda vendedora, no de MercadoLibre, así que matchear por ese nombre
+// daría falsos positivos (ADR 2026-05-30). Esas quedan pendientes.
+const TARJETA_MERCHANTS: { id: string; glosa: RegExp; name: RegExp }[] = [
+  { id: "sodimac", glosa: /sodimac|homecenter/, name: /sodimac|homecenter/ },
+  { id: "easy", glosa: /\beasy\b/, name: /easy/ },
+  { id: "cavem", glosa: /cavem/, name: /cavem/ },
+  { id: "sherwin", glosa: /sherwin|vespucio oriente/, name: /sherwin/ },
+  { id: "construmart", glosa: /construmart/, name: /construmart/ },
+  { id: "imperial", glosa: /imperial/, name: /imperial/ },
+  { id: "tottus", glosa: /tottus/, name: /tottus/ },
+  { id: "copec", glosa: /copec/, name: /copec/ },
+];
+const normTxt = (s: string | null) =>
+  (s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+function merchantFromGlosa(desc: string | null): string | null {
+  const t = normTxt(desc);
+  return TARJETA_MERCHANTS.find((m) => m.glosa.test(t))?.id ?? null;
+}
+function merchantFromName(name: string | null): string | null {
+  const t = normTxt(name);
+  return TARJETA_MERCHANTS.find((m) => m.name.test(t))?.id ?? null;
+}
 
 export function decideMovementInvoiceMatch(args: {
-  candidates: { id: string; rutIssuer: string | null; rutReceiver: string | null }[];
+  candidates: { id: string; rutIssuer: string | null; rutReceiver: string | null; businessName: string | null }[];
   isCargo: boolean; // true = cargo (recibida, RUT del emisor); false = abono (emitida, RUT del receptor)
   movRutDigits: string; // dígitos de counterpartyRut del banco ("" si no hay)
   aliasRutDigits: string[]; // últimos 8 dígitos de los aliases de reembolsador que matchean el mov
+  movDescription: string; // glosa del banco — para match por comercio cuando no hay RUT
 }): { invoiceId: string } | { reason: MovInvoiceMatchReason } {
-  const { candidates, isCargo, movRutDigits, aliasRutDigits } = args;
+  const { candidates, isCargo, movRutDigits, aliasRutDigits, movDescription } = args;
 
-  // Sin información de RUT (ni del mov ni vía alias), no se puede validar.
-  // Mejor dejar pendiente que adivinar.
-  if (!movRutDigits && aliasRutDigits.length === 0) {
-    return { reason: "no_rut_to_validate" };
+  // CAMINO A — hay RUT (del mov o vía alias de reembolsador): validar por RUT.
+  // Es la señal fuerte; si hay RUT y no calza, NO se cae al match por comercio
+  // (un RUT que no cuadra es indicio claro de que es otra factura).
+  if (movRutDigits || aliasRutDigits.length > 0) {
+    const isRutValid = (c: { rutIssuer: string | null; rutReceiver: string | null }) => {
+      const cRut = (isCargo ? c.rutIssuer : c.rutReceiver) ?? "";
+      const cRutDigits = cRut.replace(/\D/g, "");
+      if (cRutDigits.length === 0) return false;
+      if (movRutDigits && (movRutDigits.includes(cRutDigits) || cRutDigits.includes(movRutDigits))) {
+        return true;
+      }
+      return aliasRutDigits.some((a) => a.includes(cRutDigits) || cRutDigits.includes(a));
+    };
+    const filtered = candidates.filter(isRutValid);
+    if (filtered.length === 0) return { reason: "no_rut_match" };
+    if (filtered.length > 1) return { reason: "ambiguous_multi" };
+    return { invoiceId: filtered[0].id };
   }
 
-  const isRutValid = (c: { rutIssuer: string | null; rutReceiver: string | null }) => {
-    const cRut = (isCargo ? c.rutIssuer : c.rutReceiver) ?? "";
-    const cRutDigits = cRut.replace(/\D/g, "");
-    if (cRutDigits.length === 0) return false;
-    if (movRutDigits && (movRutDigits.includes(cRutDigits) || cRutDigits.includes(movRutDigits))) {
-      return true;
-    }
-    return aliasRutDigits.some((a) => a.includes(cRutDigits) || cRutDigits.includes(a));
-  };
-
-  const filtered = candidates.filter(isRutValid);
-  if (filtered.length === 0) return { reason: "no_rut_match" };
-  if (filtered.length > 1) return { reason: "ambiguous_multi" };
-  return { invoiceId: filtered[0].id };
+  // CAMINO B — compra con tarjeta (sin RUT): match por nombre de comercio.
+  // Solo concilia si el comercio de la glosa es conocido y hay EXACTAMENTE
+  // una factura pendiente de ese mismo comercio (+monto, ya filtrado afuera).
+  const merchant = merchantFromGlosa(movDescription);
+  if (!merchant) return { reason: "no_rut_to_validate" }; // comercio no reconocido → manual
+  const byMerchant = candidates.filter((c) => merchantFromName(c.businessName) === merchant);
+  if (byMerchant.length === 0) return { reason: "no_merchant_match" };
+  if (byMerchant.length > 1) return { reason: "ambiguous_merchant" };
+  return { invoiceId: byMerchant[0].id };
 }
 
 /**
@@ -381,6 +421,7 @@ export async function tryAutoMatchMovementWithInvoices(
     isCargo,
     movRutDigits,
     aliasRutDigits,
+    movDescription: mov.description,
   });
   if ("reason" in decision) return { matched: false, reason: decision.reason };
   const match = candidates.find((c) => c.id === decision.invoiceId)!;

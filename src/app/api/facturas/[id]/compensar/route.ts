@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { recomputeInvoiceStatus } from "@/lib/banco/invoicePayments";
 
 // Compensar una NC (tipoDoc=61) de tres maneras:
 //   - other_invoice: la NC se aplica a OTRA factura como medio de pago.
@@ -30,7 +31,7 @@ export async function POST(
 
     const nc = await prisma.invoice.findUnique({
       where: { id },
-      select: { id: true, tipoDoc: true },
+      select: { id: true, tipoDoc: true, totalAmount: true, appliedToInvoiceId: true },
     });
     if (!nc) {
       return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
@@ -41,6 +42,12 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    // Si antes la NC estaba aplicada a otra factura y ahora cambiamos
+    // (a null, a otro tipo o a otra factura), hay que recalcular el
+    // estado de la factura ANTERIOR — vuelve a pendiente / parcial si
+    // tiene pagos reales, sino pendiente.
+    const previousTargetId = nc.appliedToInvoiceId;
 
     const updates: {
       compensationType: string | null;
@@ -130,6 +137,46 @@ export async function POST(
         refundBankMovementId: true,
       },
     });
+
+    // Recalcular status de la factura objetivo (la que la NC anula).
+    // - Si type=other_invoice, la factura queda "anulada" cuando la NC
+    //   la cubre completa (mismo monto), o se recalcula por pagos si la
+    //   NC es parcial.
+    // - Si limpiamos / cambiamos a otro tipo, revertimos la factura
+    //   anterior al estado que le corresponde por sus pagos reales.
+    const newTargetId = updates.appliedToInvoiceId;
+    if (previousTargetId && previousTargetId !== newTargetId) {
+      await recomputeInvoiceStatus(previousTargetId);
+    }
+    if (newTargetId) {
+      const target = await prisma.invoice.findUnique({
+        where: { id: newTargetId },
+        select: { totalAmount: true, payments: { select: { amountApplied: true } } },
+      });
+      if (target) {
+        const realPaid = target.payments.reduce((s, p) => s + p.amountApplied, 0);
+        const ncAbs = Math.abs(nc.totalAmount);
+        const totalEffective = realPaid + ncAbs;
+        if (totalEffective >= target.totalAmount - 10) {
+          // La NC (sola o sumada a pagos) cubre completa → anulada.
+          await prisma.invoice.update({
+            where: { id: newTargetId },
+            data: { status: "anulada", paidAt: new Date() },
+          });
+        } else {
+          // NC parcial: queda parcial (los pagos reales + lo cubierto
+          // por NC) — recomputamos por pagos, despues ajustamos a parcial
+          // si la NC + pagos cubren mas que 0 pero menos que el total.
+          await recomputeInvoiceStatus(newTargetId);
+          if (realPaid <= 0 && ncAbs > 0) {
+            await prisma.invoice.update({
+              where: { id: newTargetId },
+              data: { status: "parcial" },
+            });
+          }
+        }
+      }
+    }
 
     return NextResponse.json(updated);
   } catch (error) {

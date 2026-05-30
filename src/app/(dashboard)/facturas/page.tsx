@@ -77,6 +77,8 @@ export default async function FacturasPage({
       include: {
         project: { select: { id: true, name: true } },
         category: { select: { id: true, name: true } },
+        // Para marcar en la UI las facturas conciliadas automáticamente.
+        payments: { select: { autoMatched: true } },
       },
       // Excluir el blob del PDF oficial — pesado (~170KB c/u) y solo lo
       // sirve el endpoint /api/facturas/[id]/pdf cuando se descarga.
@@ -226,6 +228,7 @@ export default async function FacturasPage({
               siiCodigo: inv.siiCodigo,
               project: inv.project ? { id: inv.project.id, name: inv.project.name } : null,
               category: inv.category ? { id: inv.category.id, name: inv.category.name } : null,
+              autoMatched: inv.payments.some((p) => p.autoMatched),
             }))}
           />
         )}

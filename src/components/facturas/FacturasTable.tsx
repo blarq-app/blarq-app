@@ -41,6 +41,9 @@ type Invoice = {
   siiCodigo: string | null;
   project: { id: string; name: string } | null;
   category: { id: string; name: string } | null;
+  // true = alguna imputación de esta factura la creó el auto-match. Marca
+  // discreta en la UI para que MJ pueda revisar las conciliadas solas.
+  autoMatched: boolean;
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -202,7 +205,7 @@ export default function FacturasTable({
                 <td className="px-4 py-2 text-right tabular-nums font-medium text-gray-900">
                   {formatCLP(inv.totalAmount)}
                 </td>
-                <td className="px-4 py-2">
+                <td className="px-4 py-2 whitespace-nowrap">
                   <span
                     className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${
                       STATUS_TONE[inv.status] || "bg-gray-100"
@@ -210,6 +213,14 @@ export default function FacturasTable({
                   >
                     {inv.status}
                   </span>
+                  {inv.autoMatched && (
+                    <span
+                      className="ml-1 text-[9px] lowercase tracking-wider text-gray-400"
+                      title="Conciliada automáticamente — revisá si tenés dudas"
+                    >
+                      auto
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-2">
                   <span

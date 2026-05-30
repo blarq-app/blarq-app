@@ -760,6 +760,11 @@ model InvoicePayment {
   bankMovementId  String
   invoiceId       String
   amountApplied   Float
+  // true = la imputación la creó el auto-match (no MJ a mano). Sirve para
+  // marcar en la UI las conciliaciones automáticas y poder auditarlas. Las
+  // imputaciones manuales (modal, bulk assign, pago sin factura) quedan false.
+  // Solo registra de acá en adelante — las viejas no se pueden distinguir.
+  autoMatched     Boolean      @default(false)
   createdAt       DateTime     @default(now())
 
   bankMovement    BankMovement @relation(fields: [bankMovementId], references: [id], onDelete: Cascade)

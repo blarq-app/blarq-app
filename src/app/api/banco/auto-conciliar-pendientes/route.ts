@@ -122,6 +122,7 @@ export async function POST() {
         bankMovementId: mov.id,
         invoiceId: match.id,
         amountApplied: absAmount,
+        autoMatched: true, // creada por el auto-match
       },
     });
     await prisma.bankMovement.update({

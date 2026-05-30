@@ -251,6 +251,7 @@ export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Pr
       bankMovementId: mov.id,
       invoiceId: inv.id,
       amountApplied: Math.abs(mov.amount),
+      autoMatched: true, // creada por el auto-match
     },
   });
   await prisma.bankMovement.update({
@@ -452,6 +453,7 @@ export async function tryAutoMatchMovementWithInvoices(
       bankMovementId: mov.id,
       invoiceId: match.id,
       amountApplied: absAmount,
+      autoMatched: true, // creada por el auto-match
     },
   });
   await prisma.bankMovement.update({

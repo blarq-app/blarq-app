@@ -27,6 +27,8 @@ El auto-match es **conservador**: solo concilia con certeza; ante la duda deja e
 
 **Implementado el 2026-05-30**: la decisión vive en la función pura `decideMovementInvoiceMatch` (en `src/lib/banco/invoicePayments.ts`), con test de regresión `scripts/test-conciliacion.ts` (13 casos). El importador de cartolas (`/api/banco/import`) tenía una copia inline con el bug "toma la primera del mismo monto" — se eliminó y ahora delega en la función compartida `tryAutoMatchMovementWithInvoices`. Match único y conservador en los tres caminos (importador, sync SII, auto-conciliar pendientes).
 
+Unificación: los 4 puntos de entrada del auto-match (importador de cartolas, "auto-conciliar pendientes", alta de factura, sync SII) usan las funciones compartidas `tryAutoMatchMovementWithInvoices` (mov→factura) y `tryAutoMatchInvoiceWithExistingMovs` (factura→mov). No quedan copias inline. El match por comercio + ventana de fecha corre en AMBAS direcciones (simétrico).
+
 Dos caminos de validación:
 - **Con RUT** (del mov o vía alias de reembolsador): el RUT debe calzar. Si hay RUT y no calza, NO cae al match por comercio. La fecha no interviene.
 - **Sin RUT** (compras con tarjeta — las 775 compras del banco no traen RUT): match por **nombre de comercio** (glosa vs razón social). Whitelist `TARJETA_MERCHANTS` (Sodimac/Homecenter, Easy, Cavem, Sherwin/Vespucio Oriente, Construmart, Imperial, Tottus, Copec). Concilia solo si hay EXACTAMENTE una factura de ese comercio + monto **dentro de ±31 días** (`MERCHANT_DATE_WINDOW_DAYS`). Si la única candidata del comercio está a meses → `merchant_out_of_window` (pendiente). Si hay varias del mismo comercio+monto, la fecha desempata: gana la que cae dentro de la ventana.

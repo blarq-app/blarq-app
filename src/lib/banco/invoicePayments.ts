@@ -179,6 +179,8 @@ export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Pr
       status: true,
       rutIssuer: true,
       rutReceiver: true,
+      businessName: true,
+      issueDate: true,
       payments: { select: { id: true } },
     },
   });
@@ -236,9 +238,34 @@ export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Pr
     });
   }
 
-  // Unimos por id (un mov puede caer en ambas listas).
+  // Candidatos por COMERCIO: las compras con tarjeta no traen RUT, así que
+  // byRut/byAlias nunca las encuentran. Para una factura recibida de un
+  // comercio conocido (Sodimac, Easy, Sherwin/Vespucio...), buscamos movs
+  // sin asignar del mismo monto cuya glosa nombre ese comercio, dentro de la
+  // ventana de fecha (la boleta de tarjeta es del mismo día). Simétrico al
+  // match por comercio del camino movimiento→factura.
+  let byMerchant: { id: string; amount: number; date: Date }[] = [];
+  const invMerchant = inv.type === "recibida" ? merchantFromName(inv.businessName) : null;
+  if (invMerchant) {
+    const sameAmount = await prisma.bankMovement.findMany({
+      where: { status: "sin_asignar", ...amountWhere },
+      select: { id: true, amount: true, date: true, description: true },
+      take: 20,
+    });
+    const issueT = new Date(inv.issueDate).getTime();
+    byMerchant = sameAmount
+      .filter((m) => merchantFromGlosa(m.description) === invMerchant)
+      .filter(
+        (m) =>
+          Math.abs(issueT - new Date(m.date).getTime()) / 86400000 <=
+          MERCHANT_DATE_WINDOW_DAYS
+      )
+      .map((m) => ({ id: m.id, amount: m.amount, date: m.date }));
+  }
+
+  // Unimos por id (un mov puede caer en varias listas).
   const byId = new Map<string, { id: string; amount: number; date: Date }>();
-  for (const m of [...byRut, ...byAlias]) byId.set(m.id, m);
+  for (const m of [...byRut, ...byAlias, ...byMerchant]) byId.set(m.id, m);
   const candidates = [...byId.values()];
 
   // Solo auto-conciliamos si hay UN único candidato — si hay varios, es

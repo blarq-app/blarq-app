@@ -405,12 +405,19 @@ function InvoicePickerModal({
   // emitida F-162 a Camila con saldo $6.811.589 sale primera).
   const absTotal = Math.abs(totalNeto);
 
+  // El tipo de factura se decide por el signo del neto del lote:
+  //   - Egresos (neto < 0) → buscamos facturas RECIBIDAS (proveedores).
+  //   - Ingresos (neto > 0) → buscamos facturas EMITIDAS (clientes).
+  // Antes el modal hardcodeaba "emitida" y no permitía conciliar movs
+  // negativos contra recibidas — caso reportado por MJ con "mantencion".
+  const facturaType: "emitida" | "recibida" = totalNeto >= 0 ? "emitida" : "recibida";
+
   const search = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
-      params.set("type", "emitida");
+      params.set("type", facturaType);
       if (q.trim()) params.set("q", q.trim());
       params.set("onlyWithBalance", onlyWithBalance ? "1" : "0");
       if (absTotal > 0) params.set("amount", String(absTotal));
@@ -429,7 +436,7 @@ function InvoicePickerModal({
     } finally {
       setLoading(false);
     }
-  }, [q, onlyWithBalance, absTotal, filterSameClient, sharedCounterpartyRut]);
+  }, [q, onlyWithBalance, absTotal, filterSameClient, sharedCounterpartyRut, facturaType]);
 
   useEffect(() => {
     const t = setTimeout(search, 200);
@@ -448,7 +455,7 @@ function InvoicePickerModal({
         <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-semibold text-gray-900">
-              Asignar a factura emitida
+              Asignar a factura {facturaType}
             </h2>
             <p className="text-xs text-gray-500 mt-1 tabular-nums">
               {movementCount} movimiento{movementCount !== 1 ? "s" : ""} · neto{" "}
@@ -477,14 +484,14 @@ function InvoicePickerModal({
             {sharedCounterpartyRut && (
               <label
                 className="text-xs text-gray-700 flex items-center gap-1.5 cursor-pointer"
-                title="Mostrar solo facturas emitidas a este cliente"
+                title={`Mostrar solo facturas ${facturaType === "emitida" ? "emitidas a este cliente" : "recibidas de este proveedor"}`}
               >
                 <input
                   type="checkbox"
                   checked={filterSameClient}
                   onChange={(e) => setFilterSameClient(e.target.checked)}
                 />
-                Mismo cliente
+                Mismo {facturaType === "emitida" ? "cliente" : "proveedor"}
               </label>
             )}
             <label className="text-xs text-gray-700 flex items-center gap-1.5 cursor-pointer">
@@ -511,7 +518,7 @@ function InvoicePickerModal({
                 <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500">
                   <tr>
                     <th className="text-left px-3 py-2">Folio</th>
-                    <th className="text-left px-3 py-2">Cliente</th>
+                    <th className="text-left px-3 py-2">{facturaType === "emitida" ? "Cliente" : "Proveedor"}</th>
                     <th className="text-left px-3 py-2">Proyecto</th>
                     <th className="text-right px-3 py-2">Total</th>
                     <th className="text-right px-3 py-2">Saldo</th>

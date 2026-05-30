@@ -4,6 +4,16 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-29 — Tooling de auditoría read-only + rotación de credencial de prod
+
+- **Qué cambió**: dos scripts nuevos para auditar facturas/conciliación sin tocar datos: `scripts/audit-dump.ts` (dump read-only de prod a JSON — `findMany` con `select`, excluye `Invoice.pdfContent`) y `scripts/audit-analyze.ts` (análisis 100% offline sobre el JSON, cero acceso a BD). Producen `docs/REVIEW_facturas-conciliacion_2026-05-29.md`.
+- **Parche de seguridad**: el print de debug de `audit-dump.ts` imprimía un fragmento del `DATABASE_URL` (con contraseña). Se cambió para imprimir solo el host. Lección registrada en ADR `2026-05-29-credenciales-en-console-logs.md`.
+- **Operación (no es cambio de código)**: por esa filtración se rotó la contraseña de la BD de prod en Neon y se propagó a Vercel (Production + Preview) + redeploy + LaunchAgent del SII + `.env.prod`. La contraseña vieja quedó inválida.
+- **Sin cambios de schema, sin tocar `metrics.ts`.** Los scripts y el reporte son artefactos de auditoría; `.env.prod` y `backups/` siguen gitignored.
+- **Archivos**: `scripts/audit-dump.ts`, `scripts/audit-analyze.ts`, `docs/REVIEW_facturas-conciliacion_2026-05-29.md`, `docs/decisions/2026-05-29-credenciales-en-console-logs.md`.
+
+---
+
 ## 2026-05-22 — Artefactos se multiplican por cantidad · Cuadro Resumen dinámico
 
 - **Qué cambió**: `metrics.ts` ahora calcula el total de artefactos como `clientPrice × quantity` (antes sumaba `clientPrice` sin multiplicar). El Cuadro Resumen del proyecto pasó a tener columnas dinámicas: muestra solo los conceptos cargados con monto > 0 (obra / cocina / sanitarios / iluminación / muebles), no 4 columnas fijas.

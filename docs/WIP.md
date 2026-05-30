@@ -4,7 +4,21 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-29 (ronda 33 — limpieza profunda de conciliación bancaria + features de modal)
+- **Última actualización**: 2026-05-30 (ronda 34 — limpieza de conciliaciones erróneas + criterio de fecha flexible)
+
+- **Ronda 34 — Limpieza de conciliaciones mal asignadas + criterio conservador (sesión con MJ)**:
+  - **Disparador**: MJ encontró facturas conciliadas con el movimiento equivocado (ej. factura de Comercial Habitat pegada a una compra Sodimac; Sherwin del 6-mar pegada al pago del 23-mar). Pidió revisar TODA la conciliación.
+  - **Detección**: `scripts/audit-conciliaciones-erroneas.ts` (offline sobre dump read-only) marca 3 tipos de error: pago anterior a la emisión de la factura (solo compras con tarjeta — en transferencias a maestros pagar antes es normal), comercio de glosa ≠ comercio de factura, y RUT no calza ni por reembolsador.
+  - **Arreglos aplicados en prod** (scripts con dry-run + guards de verificación; backups en `backups/audit-facturas-conciliacion-2026-05-30T*.json`):
+    - 1ª tanda (`fix-conciliaciones-cruzadas.ts`): 3 pares cruzados (Easy↔Cavem, Easy↔Sodimac, Cavem↔Sodimac) + Comercial K $4.990 desasignado (factura MercadoLibre 8 meses posterior) + Sherwin $18.683 movido de F-2963377 (6-mar) a F-2974064 (23-mar) vía `fix-sherwin-18683.ts`.
+    - 2ª tanda (`fix-conciliaciones-ronda2.ts`): 2 pares cruzados más (Easy↔Sodimac $31.980, Tottus↔Sodimac $17.810) + 10 compras con tarjeta viejas (2025) soltadas de facturas 2026 que no correspondían (no existía factura correcta → vuelven a pendiente).
+    - Peaje MercadoPago $10.959 soltado (`fix-mercadopago-peaje.ts`).
+    - Conciliado MercadoPago $39.990 → F-12254760 MercadoLibre (`conciliar-mercadolibre-39990.ts`), match exacto.
+    - **Grupo 2 (proveedor cruzado) quedó en 0**. Quedan solo Cabify/MercadoPago/Copec (mismo proveedor, boleta mensual — no son errores).
+  - **2 reembolsadores nuevos** (`crear-reembolsadores-alejandro-carlos.ts`): Alejandro Henríquez → Comercializadora Angélica Sepúlveda; Carlos Patricio → Climair. Total ahora: **12**.
+  - **MercadoLibre**: `scripts/descubrir-mercadopago.ts` lista, por cada mov MercadoPago sin conciliar, las facturas del mismo monto. Hallazgo: de 51 movs sin conciliar, solo 1 tenía factura en el sistema (el $39.990). Los otros 50 no tienen factura electrónica — confirma que el auto-match hizo bien en no inventarlas. Si son gastos a contabilizar: conseguir factura o usar "pago sin factura".
+  - **Decisión de criterio (ADR `2026-05-30-conciliacion-conservadora-fecha-flexible.md`)**: la fecha NO es filtro que descarte, solo desempate; match por RUT+monto (+reembolsador); compras con tarjeta por nombre de comercio; ante la duda, dejar pendiente. MJ: "prefiero trabajo manual a trabajo mal hecho". **Implementación en `invoicePayments.ts` sigue pendiente** (es el #1/#2 de ronda 32) — hoy el criterio se aplicó solo a mano.
+  - **Pendiente menor**: 50 movs MercadoPago + Cabify/Copec sin factura esperan decisión de MJ (factura o "pago sin factura").
 
 - **Ronda 33 — Limpieza profunda de conciliación bancaria + UX del modal (sesión paralela a ronda 32)**:
   - **Contexto**: sesión larga arrancada para sacar la cotización del maestro (Paseo del Sena), terminó tocando todo el flujo de conciliación bancaria. Corrió simultánea con la auditoría de ronda 32 (sesión paralela). Atacó varios ítems de la cola pendiente de esa ronda.

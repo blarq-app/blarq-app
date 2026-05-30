@@ -4,6 +4,17 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-30 — Limpieza de conciliaciones erróneas + criterio conservador
+
+- **Qué cambió (datos en prod, no código de la app)**: se corrigieron conciliaciones banco↔factura mal asignadas — 5 pares de proveedor cruzado (swap), 11 compras con tarjeta soltadas de facturas que no correspondían (vuelven a pendiente), 1 conciliación correcta agregada (MercadoPago $39.990 → MercadoLibre F-12254760). El grupo "comercio cruzado" quedó en 0.
+- **Reembolsadores**: +2 (Alejandro Henríquez → Comercializadora Angélica; Carlos Patricio → Climair). Total 12.
+- **Tooling nuevo (read-only salvo los fix con `--apply`)**: `audit-conciliaciones-erroneas.ts` (detector), `descubrir-mercadopago.ts` (ayudante), `list-conciliaciones-dudosas.ts`, y scripts de fix puntuales con dry-run + guards.
+- **Decisión**: ADR `2026-05-30-conciliacion-conservadora-fecha-flexible.md` — la fecha no descarta (solo desempata), match por RUT+monto/comercio, ante la duda dejar pendiente. Implementación en `invoicePayments.ts` pendiente (es el #1/#2 de la auditoría ronda 32).
+- **Sin cambios de schema, sin tocar `metrics.ts`.** Los totales de plata no se movieron (solo cambia a qué factura apunta cada pago).
+- **Archivos**: `scripts/audit-conciliaciones-erroneas.ts`, `scripts/fix-conciliaciones-cruzadas.ts`, `scripts/fix-conciliaciones-ronda2.ts`, `scripts/fix-sherwin-18683.ts`, `scripts/fix-mercadopago-peaje.ts`, `scripts/conciliar-mercadolibre-39990.ts`, `scripts/crear-reembolsadores-alejandro-carlos.ts`, `scripts/descubrir-mercadopago.ts`, `scripts/list-conciliaciones-dudosas.ts`, `docs/decisions/2026-05-30-conciliacion-conservadora-fecha-flexible.md`, `docs/glossary.md`, `docs/WIP.md`.
+
+---
+
 ## 2026-05-29 — Tooling de auditoría read-only + rotación de credencial de prod
 
 - **Qué cambió**: dos scripts nuevos para auditar facturas/conciliación sin tocar datos: `scripts/audit-dump.ts` (dump read-only de prod a JSON — `findMany` con `select`, excluye `Invoice.pdfContent`) y `scripts/audit-analyze.ts` (análisis 100% offline sobre el JSON, cero acceso a BD). Producen `docs/REVIEW_facturas-conciliacion_2026-05-29.md`.

@@ -68,7 +68,8 @@ Términos del dominio que un externo no entendería. Una línea por término. Cu
 ## Banco
 
 - **Conciliación** — Acto de matchear cada movimiento bancario contra una factura recibida (gasto) o emitida (cobro).
-- **Auto-match** — Matching automático cuando coinciden RUT + monto exacto (o saldo restante en cobros parciales).
+- **Auto-match** — Matching automático cuando coinciden RUT + monto exacto (o saldo restante en cobros parciales). La fecha NO descarta; solo desempata. Criterio conservador: ante la duda, dejar pendiente. Ver ADR `2026-05-30-conciliacion-conservadora-fecha-flexible.md`.
+- **Comercio ≠ glosa del banco** — En compras con tarjeta el banco rotula por ubicación o intermediario, no por el comercio real. Casos conocidos: el local de **Sherwin Williams** aparece como `Compra VESPUCIO ORIENTE`; **MercadoLibre/MercadoPago** factura a veces directo (MercadoLibre Chile) y a veces a nombre de la **tienda vendedora** (el código tras el asterisco, `*RCCE`/`*HOME`/`*FERR`, es la pista del vendedor). Por eso buscar movimientos por nombre de proveedor no siempre los trae todos; conviene filtrar por monto o por RUT de la glosa.
 - **Fondo Sueldos** — "Plata reservada para pagar a los socios" derivada de cobros del cliente. Se calcula proyecto a proyecto: GG de Obra + utilidad de Muebles. Ver §8 de [business-model.md](business-model.md).
 - **Drift** — Diferencia entre `BankAccount.lastKnownBalance` (último saldo importado) y la suma teórica de movimientos. Indica que faltan movimientos por importar o hubo error de imputación.
 - **Transferencia interna BLARQ** — Movimiento entre las dos cuentas Santander de BLARQ. Detectada por descripción que empieza con `0772707339 Transf` (RUT BLARQ sin DV).

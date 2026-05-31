@@ -23,6 +23,7 @@
 import { prisma } from "@/lib/prisma";
 import { tryAutoMatchInvoiceWithExistingMovs } from "@/lib/banco/invoicePayments";
 import { applyInvoiceRule } from "@/lib/facturas/categorizationRules";
+import { applyPendingTagsForInvoice } from "@/lib/facturas/pendingTags";
 import { mockDTEs, type RemoteDTE } from "@/lib/sii/simpleFacturaClient";
 import { fetchDTEsFromSII, isSiiReaderAvailable } from "@/lib/sii/siiDteReader";
 import { linkNcReferences } from "@/lib/sii/linkNcReferences";
@@ -126,6 +127,13 @@ async function upsertInvoice(
     });
     // Aplicar regla de categorización por RUT si existe.
     await applyInvoiceRule(created.id).catch(() => ({ applied: false }));
+    // Aplicar etiquetas de centro de costo "en espera": si MJ/JT
+    // fotografiaron esta factura desde Telegram antes de que llegara por
+    // el SII, acá se asigna la obra que indicaron. Corre DESPUÉS de la
+    // regla por RUT: la regla por proveedor casi nunca trae proyecto (los
+    // proveedores son transversales), así que la etiqueta es la que
+    // completa el centro de costo. applyTagToInvoice respeta lo ya seteado.
+    await applyPendingTagsForInvoice(created.id).catch(() => 0);
     // Auto-conciliar contra movimientos bancarios sin asignar previos
     // del mismo RUT (caso típico: te pagaron, después llega la factura
     // sincronizada del SII).
@@ -141,6 +149,10 @@ async function upsertInvoice(
   // pisa lo ya asignado), así que es seguro llamarla siempre.
   if (!existing.categoryId || !existing.projectId) {
     await applyInvoiceRule(existing.id).catch(() => ({ applied: false }));
+    // Mismo motivo que en el create: una factura pudo entrar al sync antes
+    // de que MJ/JT la fotografiaran. Si quedó sin proyecto, intentamos
+    // aplicar una etiqueta en espera que haya aparecido después.
+    await applyPendingTagsForInvoice(existing.id).catch(() => 0);
   }
 
   // Después actualizar montos si cambiaron. Preservamos projectId /

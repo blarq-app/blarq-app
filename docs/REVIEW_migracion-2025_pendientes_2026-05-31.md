@@ -28,6 +28,8 @@ Al rellenar el saldo corrido, la cartola del Santander tenía **2 movimientos** 
 
 ## 2. Facturas de Maxxa que NO están en la app (193) — decidir si se traen
 
+> **ACTUALIZACIÓN 2026-05-31 (ronda 38) — migración 1043 COMPLETA.** Son **99** (no 110). Balance: **54 traídos** como costo de obra ($8.050.435) en Duplex/Waterloo/Holanda/Eduardo Montes/Escobar Blanco (scripts `cruce-1043-2025.ts` + `aplicar-1043-2025.ts`; verificado: Δ exacto, 0 sobre-imputados, 0 huérfanos). **8 ya existían** (Casa Arrau, ronda 37 — sin doble conteo). **7 omitidos** sin transferencia real ($2.255.000): 4 que Maxxa marca "Efectivo" pero MJ confirma que no se pagó en efectivo, + 3 que Maxxa marca banco pero sin movimiento cargado (2 del 27-nov, mes con hueco). **Regla MJ: nunca crear transferencias falsas o inventadas.** **2 traspasos excluidos** (F-167 Patricia $4M, F-164 Studio Group — no son costo). **28 internos/sin proyecto** fuera. **OJO: los "más grandes" que lista la tabla de abajo estaban MAL** — F-166/F-268/F-307 no son 1043. Detalle en WIP ronda 38. **Pendiente lateral**: giro real de $3M a Patricia (21-abr, Operativa) sin imputar — revisar qué es.
+
 Son registros que Maxxa tiene pero el SII no (porque no son documentos tributarios electrónicos). Desglose por tipo:
 
 | Tipo | Cuántas | Qué son | ¿Traer? |

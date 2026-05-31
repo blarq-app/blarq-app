@@ -4,7 +4,17 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-30 (ronda 34 — limpieza de conciliaciones erróneas + criterio de fecha flexible)
+- **Última actualización**: 2026-05-30 (ronda 35 — análisis conciliación Sodimac Maxxa vs app, solo lectura)
+
+- **Ronda 35 — Análisis conciliación Sodimac: export Maxxa vs app (sesión solo-lectura con MJ)**:
+  - **Disparador**: MJ bajó de Maxxa `MovimientosCartola_20260530_1834.xlsx` (su conciliación bancaria, algunos auto, algunos a mano) y pidió comparar contra la app: ¿mismos movimientos conciliados con las mismas facturas?
+  - **Alcance real del export**: NO es la conciliación completa — es **una sola cuenta** (89134595, compras con tarjeta) y **500 movimientos, todos Sodimac**. Las transferencias a proveedores (Brune, JPB, Termoplus, etc.) viven en otra cartola y no están acá. Comparar contra TODA la app daba ruido (310 "en app no en Maxxa" = otras cuentas; 303 "en Maxxa no en app" = Sodimac viejo fuera del rango de la app). La comparación válida es solo Sodimac.
+  - **Resultado Sodimac (donde ambos tienen datos)**: 156 facturas conciliadas igual. Diferencias explicadas, NO errores de plata: (a) la app arranca su historia Sodimac en jun-2025, Maxxa llega a 2024; (b) la cartola de la app está ~2 semanas atrasada (movs Sodimac hasta 15-may; Maxxa hasta 29-may) → las compras de fin de mayo figuran pendientes en la app porque falta importar esa cartola.
+  - **Hallazgo 2 — 38 facturas Sodimac "pagada" sin enlace de pago**: `import-maxxa-invoices.ts` crea las facturas legacy como `status=pagada` (cuando el Saldo de Maxxa = 0) y setea `paidAt`, pero **no crea el `InvoicePayment`**. La cartola se importó aparte; el auto-match solo mira facturas `pendiente`/`parcial` (`invoicePayments.ts:189` y `:432`), así que nunca las enlazó → el cargo del banco quedó `sin_factura`. **NO duplica gasto**: `metrics.ts` calcula el gasto SOLO de facturas recibidas, no mira movimientos bancarios (0 referencias). Es brecha de trazabilidad, no de plata. Re-enlazar las 38 queda para sesión planificada aparte (cambio en prod, hay cola más prioritaria).
+  - **Hallazgo 3 — facturas anuladas conciliadas**: 7 Sodimac (17 en total con proyecto) están `status=anulada` pero igual suman al gasto, porque `metrics.ts` filtra solo por `type`, no por estado. **NO inflan el total**: las 17 tienen su nota de crédito (tipoDoc 61) que las referencia, y las NC restan (sign −1) → +factura −NC = 0 neto. El equilibrio depende de que la NC siempre exista (hoy 17/17).
+  - **Riesgo latente registrado**: `metrics.ts` no excluye anuladas explícitamente; el total queda bien por disciplina de la NC. Defensa futura simple = filtrar `status=anulada` en el cómputo de gastado. ADR `2026-05-30-metrics-no-filtra-anuladas.md`. NO se tocó `metrics.ts` esta ronda.
+  - **Entregable**: `~/Downloads/Analisis_Sodimac_2026-05-30.xlsx` (hoja 1: 38 pagadas-sin-enlace; hoja 2: 7 anuladas conciliadas; con razón social, fechas y montos).
+  - **Sin cambios de código ni datos. Sesión 100% solo-lectura sobre prod** (consultas SELECT, confirmadas con MJ). Scripts ad-hoc temporales, borrados al cierre.
 
 - **Ronda 34 — Limpieza de conciliaciones mal asignadas + criterio conservador (sesión con MJ)**:
   - **Disparador**: MJ encontró facturas conciliadas con el movimiento equivocado (ej. factura de Comercial Habitat pegada a una compra Sodimac; Sherwin del 6-mar pegada al pago del 23-mar). Pidió revisar TODA la conciliación.

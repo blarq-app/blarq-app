@@ -4,6 +4,17 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-05-30 — Análisis conciliación Sodimac (Maxxa vs app) — solo lectura
+
+- **Qué pasó (no es cambio de código ni datos)**: se comparó el export de Maxxa `MovimientosCartola_20260530_1834.xlsx` (1 cuenta, 500 compras Sodimac) contra la conciliación de la app. Donde ambos tienen datos: 156 facturas conciliadas igual. El resto son diferencias de alcance (otras cuentas / historia Sodimac fuera del rango de la app / cartola de la app ~2 semanas atrasada), no errores de plata.
+- **Hallazgo de fondo sobre `metrics.ts`**: el gasto se calcula SOLO de facturas recibidas (no mira movimientos bancarios) → las 38 facturas legacy "pagada sin enlace" NO duplican gasto. Y `metrics.ts` no filtra `status=anulada`, pero las 17 anuladas (con proyecto) tienen su NC que las compensa → total correcto por disciplina de la NC.
+- **Decisión / deuda**: ADR `2026-05-30-metrics-no-filtra-anuladas.md` registra el riesgo latente; defensa futura simple = filtrar anuladas explícitamente en el gastado. Re-enlazar las 38 pagadas-sin-enlace queda para sesión aparte.
+- **Sin script commiteable** (análisis con scripts ad-hoc, borrados al cierre). **Sin cambios de schema, sin tocar `metrics.ts`.**
+- **Entregable**: `~/Downloads/Analisis_Sodimac_2026-05-30.xlsx` (38 pagadas-sin-enlace + 7 anuladas conciliadas).
+- **Archivos**: `docs/decisions/2026-05-30-metrics-no-filtra-anuladas.md`, `docs/WIP.md`.
+
+---
+
 ## 2026-05-30 — Limpieza de conciliaciones erróneas + criterio conservador
 
 - **Qué cambió (datos en prod, no código de la app)**: se corrigieron conciliaciones banco↔factura mal asignadas — 5 pares de proveedor cruzado (swap), 11 compras con tarjeta soltadas de facturas que no correspondían (vuelven a pendiente), 1 conciliación correcta agregada (MercadoPago $39.990 → MercadoLibre F-12254760). El grupo "comercio cruzado" quedó en 0.

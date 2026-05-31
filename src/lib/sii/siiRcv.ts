@@ -47,7 +47,7 @@ export interface RcvDetalleItem {
   detDvDoc: string;
   detRznSoc: string;
   detNroDoc: number;
-  detFchDoc: string; // dd/mm/yyyy
+  detFchDoc: string | null; // dd/mm/yyyy — null en docs basura del Reg. de Ventas (ej. tipoDoc 48)
   detFecRecepcion: string | null;
   detMntExe: number;
   detMntNeto: number;

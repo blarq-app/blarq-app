@@ -66,7 +66,12 @@ function periodsInRange(fromDate: string, toDate: string): string[] {
 }
 
 // El SII entrega fecha "dd/mm/yyyy". La pasamos a "yyyy-mm-dd".
-function parseSiiDate(s: string): string {
+// Null-safe: el Registro de Ventas trae documentos basura (ej. tipoDoc 48
+// "comprobante de pago", sin RUT ni fecha) con detFchDoc=null. Antes esto
+// reventaba TODA la sincronización de ventas (`null.match()`). Devolvemos ""
+// para esos casos → el filtro de rango de fechas los descarta solo.
+function parseSiiDate(s: string | null | undefined): string {
+  if (!s) return "";
   const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (!m) return s.slice(0, 10);
   const [, dd, mm, yyyy] = m;
@@ -126,6 +131,9 @@ export async function fetchDTEsFromSII(opts: FetchOptions): Promise<RemoteDTE[]>
         operacion
       );
       for (const d of detalle) {
+        // Saltar documentos basura sin fecha (ej. tipoDoc 48 "comprobante de
+        // pago" sin RUT ni fecha que aparece en el Registro de Ventas).
+        if (!d.detFchDoc) continue;
         out.push(toRemoteDTE(d, tipoDoc, opts.type));
       }
     }

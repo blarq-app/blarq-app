@@ -63,6 +63,7 @@ model Project {
   estadosPago     EstadoPago[]
   shoppingItems   ShoppingItem[]
   invoiceRules    InvoiceCategorizationRule[]
+  pendingTags     PendingProjectTag[]
 
   @@index([maestroId])
   @@index([status])
@@ -589,6 +590,7 @@ model CostCategory {
   children    CostCategory[] @relation("CategoryParent")
   invoices    Invoice[]
   invoiceRules InvoiceCategorizationRule[]
+  pendingTags PendingProjectTag[]
 
   @@index([parentId])
 }
@@ -742,6 +744,56 @@ model InvoiceCategorizationRule {
   @@index([rutIssuer])
   @@index([categoryId])
   @@index([projectId])
+}
+
+// Etiqueta de centro de costo "en espera", capturada desde una foto vía el
+// bot de Telegram. MJ/JT fotografían una factura de proveedor en el momento
+// de la compra y escriben a qué obra (y opcional categoría) va. Pero la
+// factura todavía NO llegó por el sync del SII (puede tardar horas o días).
+//
+// Esta tabla guarda la INTENCIÓN: "cuando llegue la factura folio X del RUT
+// Y, asignala a esta obra/categoría". El sync (runSiiSync) la consume al
+// crear/actualizar la factura y la marca como aplicada.
+//
+// Por qué no es una InvoiceCategorizationRule: aquella es por proveedor
+// (RUT → siempre esta obra), y los proveedores acá son transversales
+// (Sodimac compra para muchas obras). Esto es de UN SOLO USO, para una
+// factura específica identificada por (rutIssuer, folioNumber).
+//
+// Identidad de la factura objetivo: (rutIssuer, folioNumber). El monto y la
+// fecha leídos de la foto se guardan como respaldo para confirmar el match
+// (la lectura de folio de una foto no es 100% confiable).
+model PendingProjectTag {
+  id              String    @id @default(cuid())
+  // Identificadores del DTE leídos de la foto.
+  rutIssuer       String    // RUT del proveedor (formato 12345678-9)
+  folioNumber     String?   // folio de la factura; puede venir null si la foto no se leyó bien
+  // Respaldo para confirmar el match contra la factura que llega del SII.
+  totalAmount     Float?
+  issueDate       DateTime?
+  businessName    String?   // nombre del proveedor leído, referencial
+  // Destino a aplicar.
+  projectId       String?
+  categoryId      String?
+  // Quién la mandó (id numérico de Telegram + nombre para mostrar).
+  requestedBy     String?
+  requestedByName String?
+  // Ciclo de vida:
+  //   "esperando"  → todavía no llegó la factura; el sync la busca.
+  //   "aplicada"   → el sync la encontró y asignó proyecto/categoría.
+  //   "descartada" → MJ/JT la cancelaron, o no se pudo resolver.
+  status          String    @default("esperando") // esperando | aplicada | descartada
+  appliedToInvoiceId String?
+  appliedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project         Project?      @relation(fields: [projectId], references: [id])
+  category        CostCategory? @relation(fields: [categoryId], references: [id])
+
+  // El sync busca por (rutIssuer, folioNumber, status) al llegar cada factura.
+  @@index([rutIssuer, folioNumber, status])
+  @@index([status])
 }
 
 model BankCategorizationRule {

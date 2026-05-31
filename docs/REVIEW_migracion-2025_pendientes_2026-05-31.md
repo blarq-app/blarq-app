@@ -39,15 +39,26 @@ Son registros que Maxxa tiene pero el SII no (porque no son documentos tributari
 | 1039 BHE | 7 | Boletas de honorarios (Juan Pablo, etc.) | Quizás (es gasto) |
 | 35 / 48 / 1053 / 1059 | 13 | Boletas, préstamos, varios | Revisar |
 
-**Lo accionable**: las **110 "sin respaldo"** son pagos a maestros (mano de obra) que hoy NO están como costo en sus proyectos. Es el mismo caso que resolvimos con Pedro Barrera/Quincho. Se traen con "Pago sin factura", proyecto por proyecto. Los más grandes:
+> **CORRECCIÓN (verificada folio por folio en `2025_Maxxa/exportar (2).xls`)**: los números de abajo de la versión original estaban MAL (eran de un script rápido sin verificar). Lo correcto:
+> - Son **99 registros tipoDoc 1043** (no 110), por **$20.161.281** en total.
+> - Los ejemplos viejos NO existían: "F-166" no existe (solo F-167 Patricia $4M, Duplex), "F-268 Williamson" es en realidad un tipoDoc 33 (Mármoles, no un 1043), "F-307 JT" no existe (el folio 1043 más alto es F-304).
+> - **Fiarse del export, no de los montos citados acá originalmente.**
 
-| Folio | Quién | Monto | Proyecto (Maxxa) |
-|---|---|--:|---|
-| F-167/166 | Patricia Ximena (×2) | $4.000.000 c/u | Duplex Escriba de Balaguer |
-| F-268 | Ricardo Williamson | $3.228.729 | Dpto Williamson |
-| F-307 | José Tomás Larraín | $2.010.000 | Ana Maria Didyk |
+**Lo accionable**: de los 99, el subconjunto de mano de obra de maestros por obra (excluyendo internos de BLARQ) es **~73 registros, ~$16,76M**, repartido así:
 
-(Los traspasos, impuestos y préstamos son internos de BLARQ, no costo de proyecto — esos los dejaría afuera.)
+| Centro de costo Maxxa | Regs | Monto | Nota |
+|---|--:|--:|---|
+| 41 Duplex Escriba de Balaguer | 30 | $8.129.455 | proyecto existe |
+| 48 Casa Waterloo | 16 | $3.736.580 | proyecto existe |
+| 45 Dpto Holanda 940 | 9 | $1.501.400 | proyecto existe |
+| 46 Ampliación Casa Arrau | 8 | $1.140.000 | **CUIDADO: Pedro Barrera ya cargado (ronda 37) — cruzar y no duplicar** |
+| 43 Eduardo Montes | 6 | $924.850 | proyecto existe |
+| 49 Cocina Escobar Blanco | 3 | $873.000 | proyecto existe |
+| 34 Terraza Andrea Salas | 1 | $450.000 | proyecto NO existe en la app |
+
+**Internos a dejar AFUERA** (~26 regs): 00_BLARQ (Uber/Google/Tesorería/retiros), 00_CASA, sin centro de costo — no son costo de obra.
+
+**Dos riesgos antes de crear nada** (cruzar contra prod read-only primero): (1) **doble conteo** — varios folios de Arrau/Quincho ya se cargaron en ronda 37; saltarlos. (2) **huérfanos** — verificar que cada 1043 tenga su transferencia real en el banco antes de crear+conciliar (crear "pagada" sin movimiento reproduce el bug).
 
 ---
 

@@ -6,21 +6,23 @@ Cierre de la migración de 2025 (Maxxa + SII → app, ronda 37). Acá está, con
 
 ---
 
-## 1. Movimientos que la app perdió (7) — ALTA prioridad
+## 1. Movimientos que la app perdió (7) — ✅ RESUELTO (2026-05-31)
 
-Al rellenar el saldo corrido, la cartola del Santander tiene **2 movimientos** del mismo monto el mismo día, pero la app solo tiene **1**. La app perdió uno de cada par (el bug viejo de "mismo monto, mismo día"). Hay que agregarlos a mano (o reconciliar) — **es plata que salió del banco y no está registrada**.
+Al rellenar el saldo corrido, la cartola del Santander tenía **2 movimientos** del mismo monto el mismo día y la app solo **1**. La app perdió uno de cada par (bug viejo de "mismo monto, mismo día"). **Era plata real fuera del registro — ya se recuperó** (`scripts/agregar-movs-perdidos.ts`).
 
-| Fecha | Monto | Falta en la app |
-|---|--:|---|
-| 2025-03-24 | −$600.000 | 1 de 2 |
-| 2025-04-02 | −$1.000.000 | 1 de 2 |
-| 2025-05-02 | −$1.000.000 | 1 de 2 |
-| 2025-06-09 | $1 | 1 de 2 (probable reverso/ajuste) |
-| 2025-07-01 | −$2.000.000 | 1 de 2 |
-| 2025-09-01 | −$2.000.000 | 1 de 2 |
-| 2025-10-06 | −$2.000.000 | 1 de 2 |
+**Hallazgo**: 5 de los 7 eran **retiros de MJ** ("Transf a BLANCO ROGAT", RUT 18023983-9): cada vez había un retiro a JT y otro a MJ del mismo monto el mismo día, y la app guardaba el de JT y perdía el de MJ.
 
-Total faltante: ~$6,6M. Para agregarlos: identificar a quién fue cada uno (la cartola Santander tiene los dos, con su glosa) y cargarlos. Lo podemos hacer juntos con `reconcile-cartolas.ts`.
+| Fecha | Monto | Lo que faltaba | Qué es |
+|---|--:|---|---|
+| 02-abr-25 | $1.000.000 | Transf a BLANCO ROGAT | retiro MJ |
+| 02-may-25 | $1.000.000 | Transf a BLANCO ROGAT | retiro MJ |
+| 01-jul-25 | $2.000.000 | Transf a BLANCO ROGAT | retiro MJ |
+| 01-sep-25 | $2.000.000 | Transf a BLANCO ROGAT | retiro MJ |
+| 06-oct-25 | $2.000.000 | Transf a BLANCO ROGAT | retiro MJ |
+| 24-mar-25 | $600.000 | 2º a Victorino Soto | pago maestro |
+| 09-jun-25 | $1 | 2º Shinkansen | ajuste |
+
+**Total recuperado: $8.600.001.** Los 7 quedaron cargados con su saldo corrido y RUT; los 7 que ya estaban recibieron su saldo corrido. Verificado: los 7 pares tienen ahora 2 movimientos. Quedaron `sin_asignar` (los retiros no son costo de proyecto — MJ los categoriza si quiere).
 
 ---
 

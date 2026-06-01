@@ -35,9 +35,15 @@ export interface MatchResult<T> {
 
 /**
  * Busca el mejor candidato cuyo nombre aparezca en el texto.
- * Estrategia: para cada candidato, contamos cuántas de sus palabras
- * (de 3+ letras) aparecen en el texto. Gana el de mayor cobertura, siempre
- * que sea único. Empate o cero → no resolvemos solos.
+ * Estrategia: contamos cuántas PALABRAS del texto coinciden con palabras del
+ * nombre del candidato (intersección). Gana el de más coincidencias, siempre
+ * que sea ÚNICO (le saca ventaja estricta al segundo).
+ *
+ * Por qué cuenta absoluta y no fracción del nombre: MJ/JT suelen escribir una
+ * sola palabra distintiva ("Arrau" por "Ampliacion Casa Arrau", "JNC" por
+ * "JNC-Vitacura"). Si esa palabra aparece en UN solo proyecto, alcanza. Si la
+ * palabra es común y aparece en varios (ej. "Casa"), hay empate → preguntamos
+ * en vez de adivinar. Conservador: ante duda real, no resolvemos solos.
  */
 function matchByName<T extends NamedMatch>(
   texto: string,
@@ -45,16 +51,18 @@ function matchByName<T extends NamedMatch>(
 ): MatchResult<T> {
   const t = norm(texto);
   const tWords = new Set(t.split(" ").filter((w) => w.length >= 3));
+  if (tWords.size === 0) {
+    return { kind: "ninguno", candidates: candidatos };
+  }
 
   const scored = candidatos
     .map((c) => {
       const words = norm(c.name)
         .split(" ")
         .filter((w) => w.length >= 3);
-      if (words.length === 0) return { c, score: 0 };
+      // score = cantidad de palabras del nombre que aparecen en el texto.
       const hits = words.filter((w) => tWords.has(w)).length;
-      // score = fracción de palabras del nombre que aparecen en el texto.
-      return { c, score: hits / words.length };
+      return { c, score: hits };
     })
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score);
@@ -65,16 +73,19 @@ function matchByName<T extends NamedMatch>(
 
   const best = scored[0];
   const second = scored[1];
-  // Match claro: el mejor cubre al menos la mitad del nombre y le saca
-  // ventaja al segundo (o no hay segundo).
-  if (best.score >= 0.5 && (!second || best.score > second.score)) {
+  // Match claro: el mejor le saca ventaja estricta al segundo (o es el único).
+  if (!second || best.score > second.score) {
     return {
       kind: "exacto",
       match: best.c,
       candidates: scored.map((s) => s.c),
     };
   }
-  return { kind: "ambiguo", candidates: scored.map((s) => s.c) };
+  // Empate en cantidad de palabras → ambiguo, listamos los empatados.
+  return {
+    kind: "ambiguo",
+    candidates: scored.filter((s) => s.score === best.score).map((s) => s.c),
+  };
 }
 
 /**

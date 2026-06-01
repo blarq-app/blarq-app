@@ -92,12 +92,17 @@ function matchByName<T extends NamedMatch>(
  * Resuelve proyecto a partir del texto del mensaje. Considera proyectos
  * no archivados (cotización / ejecución / terminado) — un gasto puede
  * llegar a una obra recién terminada.
+ *
+ * INCLUYE los centros de costo INTERNOS (isInternal: true) — BLARQ (gastos
+ * generales del estudio), CASA, etc. No se compra "para un cliente" pero sí
+ * se imputan gastos a ellos (autopistas, bencina, patente → BLARQ). Antes se
+ * excluían y MJ no podía mandar una factura de gasto general por el bot.
  */
 export async function matchProject(
   texto: string
 ): Promise<MatchResult<NamedMatch>> {
   const projects = await prisma.project.findMany({
-    where: { status: { not: "archivado" }, isInternal: false },
+    where: { status: { not: "archivado" } },
     select: { id: true, name: true },
     orderBy: { updatedAt: "desc" },
   });

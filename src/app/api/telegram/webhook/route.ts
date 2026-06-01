@@ -289,7 +289,9 @@ async function asignarDesdeTexto(
 
   const existing = await findInvoiceByRutFolio(
     datos.rutIssuer!,
-    datos.folioNumber
+    datos.folioNumber,
+    datos.totalAmount,
+    datos.issueDate
   );
 
   const catLabel = category ? `, ${category.name}` : "";

@@ -4,7 +4,15 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-05-31 (ronda 40 — bot de Telegram: asignar centro de costo desde una foto)
+- **Última actualización**: 2026-06-01 (ronda 41 — panel revisable de auto-conciliación + optimización del endpoint)
+
+- **Ronda 41 — Panel para revisar la auto-conciliación + endpoint 70× más rápido (2026-06-01)**:
+  - **Pedido de MJ**: tras apretar "Auto-conciliar pendientes", poder ver QUÉ concilió para revisar si hubo error. Antes el botón solo decía "5 conciliados" sin detalle. Decidido (preguntado a MJ): resumen JUSTO al conciliar (no vista persistente), solo ver + deshacer (sin marcar "revisado", sin campo nuevo en BD).
+  - **Panel revisable** (`AutoConciliarPendientesButton.tsx` + `auto-conciliar-pendientes/route.ts`): el endpoint devuelve `matches[]` con folio, proveedor, total factura, monto+fecha+descripción del movimiento, paymentId. El botón muestra un panel con cada match, link a la factura y botón "deshacer" (reusa el DELETE de payment existente). Señal "revisar monto" (ámbar) si monto mov ≠ total factura. Importante: NO se llama `router.refresh()` al conciliar (desmontaba el panel antes de que MJ lo viera); se refresca al cerrar el panel o tras deshacer.
+  - **Optimización del endpoint** (tardaba ~2 min con 200+ movs): el cuello era ~3 queries por movimiento contra la BD remota (Neon) = cientos de viajes ida/vuelta (cada uno ~300-440ms de latencia de red). Fix: `loadReembolsadores()` + `loadCandidateInvoices()` + traer los movimientos completos, todo UNA vez, y el match filtra en memoria. `tryAutoMatchMovementWithInvoices` acepta 3º param opcional `{invoices, excludeInvoiceIds, movement}`; sin él (sync SII, import de cartola) consulta la BD igual que antes. `excludeInvoiceIds` evita imputar 2 movs a la misma factura dentro del batch (la lista en memoria no ve los pagos que el propio batch crea).
+  - **Medido en dev**: 144s → **1.9s**, con resultado **IDÉNTICO** (mismo set de facturas conciliadas — verificado corriendo vieja vs nueva y comparando). `test-conciliacion.ts` 15/15 OK (lógica de match intacta — es contable, sin tests amplios, §4.2). tsc 0 errores.
+  - **Verificado end-to-end en navegador (dev)**: con un caso sembrado que concilia, el panel aparece con el detalle correcto y el botón "deshacer" revierte de verdad (mov→sin_asignar, factura→pendiente, confirmado en BD). Caso de prueba y password temporal de MJ (se seteó una temp para poder loguear en preview) limpiados/restaurados al final.
+  - **Desplegado**: commit `7acaeb6` en `main`, push hecho → Vercel desplegando. Solo toca el flujo de auto-conciliar (lectura + el panel); no cambia cómo se decide un match.
 
 - **Ronda 40 ter — Uso real + 2 fixes del matcher (2026-05-31)**:
   - **MJ usó el bot en vivo con muchas facturas Sodimac reales y las reconoció TODAS.** Funciona en producción.

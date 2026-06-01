@@ -49,6 +49,131 @@ function effectiveTotal(
   return (comp.quantity || 0) * (comp.unitCost || 0);
 }
 
+/**
+ * Convierte los montos globales (costMaterial, costLabor, etc.) de un ObraItem
+ * en componentes equivalentes, UNA sola vez, cuando la partida todavía no tiene
+ * ningún componente detallado.
+ *
+ * Por qué existe: muchas partidas viejas se cargaron con el costo "en bruto"
+ * (un solo número por tipo: Mano de obra $2.500) sin lista de materiales. En el
+ * momento en que MJ empieza a detallar (agrega su primer material), el recálculo
+ * pasa a derivar TODOS los montos desde los componentes — y como no había
+ * componente de mano de obra, el $2.500 se iría a $0 sin aviso.
+ *
+ * Para evitar esa pérdida silenciosa, sembramos primero una línea por cada
+ * monto global no-cero, etiquetada "(monto original)". El total de la partida
+ * queda IDÉNTICO (la suma de las líneas sembradas = la suma de los montos
+ * globales). MJ puede después editar o borrar cada línea con total control.
+ *
+ * Idempotente: si la partida ya tiene componentes, no hace nada.
+ * Devuelve true si sembró algo.
+ */
+export async function seedObraItemComponentsFromLumps(
+  obraItemId: string
+): Promise<boolean> {
+  const existing = await prisma.obraItemComponent.count({
+    where: { obraItemId },
+  });
+  if (existing > 0) return false;
+
+  const item = await prisma.obraItem.findUnique({
+    where: { id: obraItemId },
+    select: {
+      costMaterial: true,
+      costLabor: true,
+      costTools: true,
+      costSubcontract: true,
+      costLoss: true,
+      costMargin: true,
+    },
+  });
+  if (!item) return false;
+
+  // Costos directos (material, MO, herramientas, subcontrato, pérdida) se
+  // siembran como MONTO FIJO: son la plata real de la partida.
+  const fixedLumps: Array<{ type: string; amount: number; label: string }> = [
+    { type: "material", amount: item.costMaterial ?? 0, label: "Materiales (monto original)" },
+    { type: "mano_obra", amount: item.costLabor ?? 0, label: "Mano de obra (monto original)" },
+    { type: "herramientas", amount: item.costTools ?? 0, label: "Herramientas (monto original)" },
+    { type: "subcontrato", amount: item.costSubcontract ?? 0, label: "Subcontrato (monto original)" },
+    { type: "perdida", amount: item.costLoss ?? 0, label: "Pérdida (monto original)" },
+  ].filter((l) => l.amount && l.amount !== 0);
+
+  // El MARGEN es un recargo % sobre el costo directo, no un monto fijo. Se
+  // siembra como % para que CREZCA cuando MJ agregue materiales (su pedido
+  // 2026-06-01). El % se deriva del propio monto actual de la partida, así el
+  // total de hoy NO cambia y solo escala bien hacia adelante.
+  //   base = costo directo (todo menos margen y pérdida), igual que el
+  //   recalc del margen en effectiveTotal().
+  const margin = item.costMargin ?? 0;
+  const marginBase =
+    (item.costMaterial ?? 0) +
+    (item.costLabor ?? 0) +
+    (item.costTools ?? 0) +
+    (item.costSubcontract ?? 0);
+
+  const rows: Array<{
+    type: string;
+    description: string;
+    unit: string;
+    quantity: number;
+    unitCost: number;
+    totalCost: number;
+  }> = fixedLumps.map((l) => ({
+    type: l.type,
+    description: l.label,
+    unit: "GL",
+    quantity: 1,
+    unitCost: l.amount,
+    totalCost: l.amount,
+  }));
+
+  if (margin !== 0) {
+    if (marginBase > 0) {
+      // Margen como % del costo directo. quantity = % (lo que lee el recalc).
+      const pct = (margin / marginBase) * 100;
+      rows.push({
+        type: "margen",
+        description: "Margen (% original)",
+        unit: "%",
+        quantity: pct,
+        unitCost: 0,
+        totalCost: margin,
+      });
+    } else {
+      // Sin base (todo el costo directo en cero) no se puede expresar como %;
+      // se preserva como monto fijo para no perderlo.
+      rows.push({
+        type: "margen",
+        description: "Margen (monto original)",
+        unit: "GL",
+        quantity: 1,
+        unitCost: margin,
+        totalCost: margin,
+      });
+    }
+  }
+
+  if (rows.length === 0) return false;
+
+  await prisma.obraItemComponent.createMany({
+    data: rows.map((r, i) => ({
+      obraItemId,
+      type: r.type,
+      description: r.description,
+      unit: r.unit,
+      quantity: r.quantity,
+      unitCost: r.unitCost,
+      totalCost: r.totalCost,
+      sortOrder: i,
+      // Sembrado desde un monto puesto a mano → blindado contra sync masivo.
+      isCustomized: true,
+    })),
+  });
+
+  return true;
+}
+
 export async function recalcObraItemFromComponents(obraItemId: string) {
   const components = await prisma.obraItemComponent.findMany({
     where: { obraItemId },

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { formatCLP } from "@/lib/utils";
 import MoneyInput from "@/components/ui/MoneyInput";
+import MaterialAutocomplete from "@/components/catalogo/MaterialAutocomplete";
 
 interface Material {
   id: string;
@@ -11,6 +12,15 @@ interface Material {
   netPrice: number;
   referenceLink: string | null;
 }
+
+// Forma que devuelve el autocomplete de materiales del catálogo.
+type CatalogMaterial = {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  netPrice: number;
+};
 
 interface Component {
   id: string;
@@ -42,20 +52,32 @@ function typeMeta(type: string) {
   return COMP_TYPES.find((t) => t.value === type) ?? COMP_TYPES[0];
 }
 
+// Unidades disponibles (mismas que el catálogo). "%" convierte la línea en un
+// porcentaje: leyes sociales sobre la mano de obra, margen sobre el costo.
+const UNIT_OPTIONS = ["UN", "M2", "ML", "M3", "KG", "GL", "DIA", "HR", "%"];
+
 export default function ObraItemComponentsEditor({
   budgetId,
   itemId,
   canEdit,
+  catalogPartidaId,
   onChanged,
 }: {
   budgetId: string;
   itemId: string;
   canEdit: boolean;
+  // Si la partida viene del catálogo, habilita el botón "↑ al catálogo" por
+  // línea. Si es null (partida 100% manual), no se muestra.
+  catalogPartidaId?: string | null;
   onChanged?: () => void;
 }) {
   const [comps, setComps] = useState<Component[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  // Texto del buscador de materiales del catálogo.
+  const [matQuery, setMatQuery] = useState("");
+  // Línea recién subida al catálogo (para mostrar "✓ en catálogo" un momento).
+  const [pushedId, setPushedId] = useState<string | null>(null);
 
   const fetchComps = useCallback(async () => {
     setLoading(true);
@@ -100,6 +122,72 @@ export default function ObraItemComponentsEditor({
     }
   }
 
+  // Editar varios campos de una línea de una sola vez (ej. al cambiar la
+  // unidad a "%" también hay que ajustar appliedToType para que el % se
+  // calcule sobre lo correcto).
+  async function patchCompFields(compId: string, fields: Record<string, unknown>) {
+    setSaving(compId);
+    setComps((prev) =>
+      prev.map((c) => (c.id === compId ? { ...c, ...fields, isCustomized: true } : c))
+    );
+    try {
+      await fetch(
+        `/api/presupuestos/${budgetId}/partidas/${itemId}/componentes/${compId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(fields),
+        }
+      );
+      await fetchComps();
+      onChanged?.();
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  // Cambiar la unidad de una línea. Si pasa a "%":
+  //   - mano de obra → leyes sociales (% sobre la mano de obra).
+  //   - margen → % sobre el costo directo (sin appliedTo).
+  // Si sale de "%", se limpian los appliedTo.
+  function changeUnit(c: Component, newUnit: string) {
+    const fields: Record<string, unknown> = { unit: newUnit };
+    if (newUnit === "%") {
+      fields.appliedToType = c.type === "mano_obra" ? "mano_obra" : null;
+    } else {
+      fields.appliedToType = null;
+      fields.appliedToComponentId = null;
+    }
+    patchCompFields(c.id, fields);
+  }
+
+  // Agregar "leyes sociales" = mano de obra como % sobre la mano de obra.
+  async function addLeyes() {
+    setSaving("__new");
+    try {
+      await fetch(
+        `/api/presupuestos/${budgetId}/partidas/${itemId}/componentes`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "mano_obra",
+            description: "Leyes sociales",
+            unit: "%",
+            quantity: 30,
+            unitCost: 0,
+            appliedToType: "mano_obra",
+            sortOrder: comps.length,
+          }),
+        }
+      );
+      await fetchComps();
+      onChanged?.();
+    } finally {
+      setSaving(null);
+    }
+  }
+
   async function deleteComp(compId: string) {
     if (!confirm("¿Eliminar este componente?")) return;
     setSaving(compId);
@@ -110,6 +198,55 @@ export default function ObraItemComponentsEditor({
       );
       await fetchComps();
       onChanged?.();
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  // Agregar un material elegido del catálogo: trae su precio neto y queda
+  // enlazado por materialId (para futuros sync de precio).
+  async function addMaterial(m: CatalogMaterial) {
+    setSaving("__new");
+    try {
+      await fetch(
+        `/api/presupuestos/${budgetId}/partidas/${itemId}/componentes`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "material",
+            description: m.name,
+            unit: m.unit || "UN",
+            quantity: 1,
+            unitCost: m.netPrice ?? 0,
+            materialId: m.id,
+            sortOrder: comps.length,
+          }),
+        }
+      );
+      setMatQuery("");
+      await fetchComps();
+      onChanged?.();
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  // Subir esta línea al catálogo de la partida ("solo lo que toqué").
+  async function pushToCatalog(compId: string) {
+    setSaving(compId);
+    try {
+      const r = await fetch(
+        `/api/presupuestos/${budgetId}/partidas/${itemId}/componentes/${compId}/al-catalogo`,
+        { method: "POST" }
+      );
+      if (r.ok) {
+        setPushedId(compId);
+        setTimeout(() => setPushedId((id) => (id === compId ? null : id)), 2500);
+      } else {
+        const err = await r.json().catch(() => ({}));
+        alert(err.error || "No se pudo subir al catálogo");
+      }
     } finally {
       setSaving(null);
     }
@@ -127,7 +264,7 @@ export default function ObraItemComponentsEditor({
             type,
             description: "",
             unit: type === "margen" || type === "perdida" ? "%" : "UN",
-            quantity: type === "margen" ? 10 : 0,
+            quantity: type === "margen" ? 10 : type === "perdida" ? 5 : 0,
             unitCost: 0,
             sortOrder: comps.length,
             appliedToType: type === "mano_obra" ? null : null,
@@ -157,7 +294,7 @@ export default function ObraItemComponentsEditor({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-[10px] uppercase tracking-wider text-gray-500">
-          Desglose por componente
+          Detalle de materiales y costos
         </span>
         {!canEdit && (
           <span className="text-[10px] italic text-gray-400">
@@ -171,10 +308,10 @@ export default function ObraItemComponentsEditor({
             <th className="text-left py-1 px-2 font-medium w-28">Tipo</th>
             <th className="text-left py-1 px-2 font-medium">Descripción</th>
             <th className="text-center py-1 px-2 font-medium w-16">Un.</th>
-            <th className="text-right py-1 px-2 font-medium w-16">Cant.</th>
+            <th className="text-right py-1 px-2 font-medium w-16">Cant./%</th>
             <th className="text-right py-1 px-2 font-medium w-24">Costo</th>
             <th className="text-right py-1 px-2 font-medium w-24">Total</th>
-            <th className="w-8"></th>
+            <th className="w-20"></th>
           </tr>
         </thead>
         <tbody>
@@ -225,25 +362,67 @@ export default function ObraItemComponentsEditor({
                     </a>
                   )}
                 </td>
-                <td className="py-1 px-2 text-center text-gray-500">{c.unit}</td>
-                <td className="py-1 px-2 text-right">
+                <td className="py-1 px-2 text-center text-gray-500">
                   {canEdit ? (
-                    <input
-                      type="number"
-                      step="0.01"
-                      defaultValue={c.quantity}
-                      onBlur={(e) => {
-                        const v = parseFloat(e.target.value) || 0;
-                        if (v !== c.quantity) patchComp(c.id, "quantity", v);
-                      }}
-                      className="w-full bg-transparent text-right text-gray-900 tabular-nums"
-                    />
+                    <select
+                      value={c.unit}
+                      onChange={(e) => changeUnit(c, e.target.value)}
+                      className="bg-transparent text-gray-700 text-xs text-center cursor-pointer"
+                      title="Unidad. Elegí % para que la línea sea un porcentaje (leyes sociales sobre la mano de obra, margen sobre el costo)."
+                    >
+                      {UNIT_OPTIONS.map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
-                    <span className="text-gray-700 tabular-nums">{c.quantity}</span>
+                    c.unit
                   )}
                 </td>
                 <td className="py-1 px-2 text-right">
-                  {isPct ? (
+                  {canEdit ? (
+                    <div className="flex items-center justify-end gap-0.5">
+                      <input
+                        type="number"
+                        step="0.01"
+                        defaultValue={c.quantity}
+                        onBlur={(e) => {
+                          const v = parseFloat(e.target.value) || 0;
+                          if (v !== c.quantity) patchComp(c.id, "quantity", v);
+                        }}
+                        className="w-full bg-transparent text-right text-gray-900 tabular-nums"
+                      />
+                      {isPct && <span className="text-gray-400 text-[10px]">%</span>}
+                    </div>
+                  ) : (
+                    <span className="text-gray-700 tabular-nums">
+                      {c.quantity}
+                      {isPct ? "%" : ""}
+                    </span>
+                  )}
+                </td>
+                <td className="py-1 px-2 text-right">
+                  {isPct && c.type === "perdida" && canEdit ? (
+                    // Pérdida = % de un material concreto: hay que elegir cuál.
+                    <select
+                      value={c.appliedToComponentId ?? ""}
+                      onChange={(e) =>
+                        patchComp(c.id, "appliedToComponentId", e.target.value || null)
+                      }
+                      className="w-full bg-white border border-gray-200 rounded text-[10px] px-1 py-0.5"
+                      title="Sobre cuál material se aplica la pérdida"
+                    >
+                      <option value="">— sobre cuál material —</option>
+                      {comps
+                        .filter((m) => m.type === "material" && m.id !== c.id)
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.description.slice(0, 28) || "(sin descripción)"}
+                          </option>
+                        ))}
+                    </select>
+                  ) : isPct ? (
                     <span className="text-[10px] text-gray-400 italic">
                       {c.type === "margen"
                         ? "sobre resto"
@@ -268,16 +447,33 @@ export default function ObraItemComponentsEditor({
                 <td className="py-1 px-2 text-right font-medium text-gray-900 tabular-nums">
                   {formatCLP(c.totalCost)}
                 </td>
-                <td className="py-1 px-1 text-right">
+                <td className="py-1 px-1 text-right whitespace-nowrap">
                   {canEdit && (
-                    <button
-                      onClick={() => deleteComp(c.id)}
-                      disabled={saving === c.id}
-                      className="text-gray-300 hover:text-red-600 text-sm leading-none"
-                      title="Eliminar componente"
-                    >
-                      ×
-                    </button>
+                    <>
+                      {catalogPartidaId &&
+                        (pushedId === c.id ? (
+                          <span className="text-[10px] text-emerald-600 mr-1.5">
+                            ✓ en catálogo
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => pushToCatalog(c.id)}
+                            disabled={saving === c.id}
+                            className="text-gray-300 hover:text-gray-900 text-sm leading-none mr-1.5 disabled:opacity-40"
+                            title="Subir solo esta línea al catálogo de la partida (queda guardada para la próxima vez)"
+                          >
+                            ↑
+                          </button>
+                        ))}
+                      <button
+                        onClick={() => deleteComp(c.id)}
+                        disabled={saving === c.id}
+                        className="text-gray-300 hover:text-red-600 text-sm leading-none"
+                        title="Eliminar línea"
+                      >
+                        ×
+                      </button>
+                    </>
                   )}
                 </td>
               </tr>
@@ -287,18 +483,47 @@ export default function ObraItemComponentsEditor({
       </table>
 
       {canEdit && (
-        <div className="flex flex-wrap gap-1 pt-1">
-          {COMP_TYPES.map((t) => (
+        <div className="space-y-2 pt-1">
+          {/* Agregar material buscándolo en el catálogo (trae su precio) o
+              creando uno nuevo si no existe. */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-gray-500 w-28 shrink-0">
+              Agregar material
+            </span>
+            <div className="flex-1 max-w-md">
+              <MaterialAutocomplete
+                value={matQuery}
+                onChange={setMatQuery}
+                onSelect={(m) => addMaterial(m)}
+                placeholder="Buscar material en el catálogo… (ej: cerámica, pegamento)"
+              />
+            </div>
+          </div>
+
+          {/* Otros tipos de línea (mano de obra, herramientas, etc.). */}
+          <div className="flex flex-wrap gap-1">
+            {COMP_TYPES.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => addComp(t.value)}
+                disabled={saving === "__new"}
+                className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded border border-gray-200 hover:border-gray-400 ${t.color} disabled:opacity-50`}
+              >
+                + {t.label}
+              </button>
+            ))}
+            {/* Leyes sociales = mano de obra como % sobre la mano de obra. */}
             <button
-              key={t.value}
               type="button"
-              onClick={() => addComp(t.value)}
+              onClick={addLeyes}
               disabled={saving === "__new"}
-              className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded border border-gray-200 hover:border-gray-400 ${t.color} disabled:opacity-50`}
+              className="text-[10px] uppercase tracking-wider px-2 py-1 rounded border border-gray-200 hover:border-gray-400 bg-emerald-50 text-emerald-700 disabled:opacity-50"
+              title="Agrega leyes sociales como % sobre la mano de obra"
             >
-              + {t.label}
+              + Leyes sociales %
             </button>
-          ))}
+          </div>
         </div>
       )}
     </div>

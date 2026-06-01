@@ -1194,6 +1194,7 @@ export default function ObraEditor({
                               budgetId={initialBudget.id}
                               itemId={item.id}
                               canEdit={initialBudget.status === "borrador"}
+                              catalogPartidaId={item.catalogPartidaId}
                               onChanged={() => router.refresh()}
                             />
                           </div>

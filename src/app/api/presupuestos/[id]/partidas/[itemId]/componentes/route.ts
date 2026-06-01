@@ -11,7 +11,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import { recalcObraItemFromComponents } from "@/lib/catalog/recalcObraItem";
+import {
+  recalcObraItemFromComponents,
+  seedObraItemComponentsFromLumps,
+} from "@/lib/catalog/recalcObraItem";
 
 async function assertBorrador(itemId: string) {
   const item = await prisma.obraItem.findUnique({
@@ -62,6 +65,17 @@ export async function POST(
     const qty = data.quantity ?? 0;
     const cost = data.unitCost ?? 0;
 
+    // Seguro anti-borrado: si la partida todavía estaba "en bruto" (montos
+    // globales sin detalle), primero sembramos esos montos como líneas
+    // equivalentes para que al detallar no se pierda la mano de obra / margen
+    // que MJ había puesto a mano. No mueve el total. Idempotente.
+    await seedObraItemComponentsFromLumps(itemId);
+
+    // sortOrder al final de la lista (cuenta ya incluye lo sembrado).
+    const count = await prisma.obraItemComponent.count({
+      where: { obraItemId: itemId },
+    });
+
     const component = await prisma.obraItemComponent.create({
       data: {
         obraItemId: itemId,
@@ -73,7 +87,7 @@ export async function POST(
         totalCost: data.totalCost ?? qty * cost,
         referenceLink: data.referenceLink ?? null,
         materialId: data.materialId ?? null,
-        sortOrder: data.sortOrder ?? 0,
+        sortOrder: data.sortOrder ?? count,
         appliedToComponentId: data.appliedToComponentId ?? null,
         appliedToType: data.appliedToType ?? null,
         // El usuario está creando un componente nuevo a mano — eso es

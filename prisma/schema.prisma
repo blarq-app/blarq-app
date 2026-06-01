@@ -779,10 +779,12 @@ model PendingProjectTag {
   requestedBy     String?
   requestedByName String?
   // Ciclo de vida:
-  //   "esperando"  → todavía no llegó la factura; el sync la busca.
-  //   "aplicada"   → el sync la encontró y asignó proyecto/categoría.
-  //   "descartada" → MJ/JT la cancelaron, o no se pudo resolver.
-  status          String    @default("esperando") // esperando | aplicada | descartada
+  //   "por_confirmar" → obra leída a mano de la foto; espera que MJ/JT
+  //                     toquen "Sí" en el botón antes de aplicarse.
+  //   "esperando"     → confirmada; todavía no llegó la factura, el sync la busca.
+  //   "aplicada"      → el sync (o la confirmación) la asignó.
+  //   "descartada"    → MJ/JT la cancelaron, o no se pudo resolver.
+  status          String    @default("esperando") // por_confirmar | esperando | aplicada | descartada
   appliedToInvoiceId String?
   appliedAt       DateTime?
   createdAt       DateTime  @default(now())

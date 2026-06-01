@@ -40,6 +40,52 @@ export async function sendMessage(
 }
 
 /**
+ * Manda un mensaje con botones (inline keyboard). Cada botón lleva un
+ * `callbackData` (máx 64 bytes) que Telegram devuelve cuando el usuario lo
+ * toca, vía un update tipo callback_query. Lo usamos para la confirmación
+ * de la obra leída a mano: botones "Sí" / "No".
+ */
+export async function sendMessageWithButtons(
+  chatId: number | string,
+  text: string,
+  buttons: { text: string; callbackData: string }[][]
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/bot${token()}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: buttons.map((row) =>
+          row.map((b) => ({ text: b.text, callback_data: b.callbackData }))
+        ),
+      },
+    }),
+  });
+  if (!res.ok) {
+    console.warn(
+      "[telegram] sendMessageWithButtons falló:",
+      res.status,
+      await res.text()
+    );
+  }
+}
+
+/**
+ * Confirma a Telegram que recibimos el toque de un botón (apaga el "reloj"
+ * de carga en el cliente). Se llama apenas llega el callback_query.
+ */
+export async function answerCallbackQuery(callbackQueryId: string): Promise<void> {
+  await fetch(`${API_BASE}/bot${token()}/answerCallbackQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ callback_query_id: callbackQueryId }),
+  }).catch(() => {});
+}
+
+/**
  * Resuelve el file_path de un file_id (paso 1 para bajar un archivo).
  * Telegram entrega los archivos en dos pasos: getFile → download.
  */
@@ -97,7 +143,9 @@ export async function setWebhook(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       url,
-      allowed_updates: ["message"],
+      // "message" = fotos/texto; "callback_query" = toques de botón (Sí/No
+      // de la confirmación de obra manuscrita).
+      allowed_updates: ["message", "callback_query"],
       ...(secretToken ? { secret_token: secretToken } : {}),
     }),
   });

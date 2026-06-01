@@ -142,16 +142,26 @@ async function reembolsadorSignalsForAliasRut(
  * reembolsadores que matchean ese mov — por personRut (preferido) o por
  * glosa (respaldo). Caso: mov "Transf a Jose Perez" → RUT de JPB.
  */
-async function aliasRutsForMovement(
+// Forma de un reembolsador ya cargado, para poder pasarlo precargado y no
+// re-consultar la BD por cada movimiento (ver auto-conciliar masivo).
+type ReembolsadorLite = {
+  glosa: string;
+  personRut: string | null;
+  aliases: { rut: string }[];
+};
+
+// Versión PURA: recibe los reembolsadores ya cargados. La lógica es idéntica
+// a aliasRutsForMovement, solo que no consulta la BD. La usa el batch para
+// cargar los reembolsadores UNA vez en vez de 1 por movimiento (era el cuello
+// de botella del endpoint masivo: ~200 consultas idénticas).
+function aliasRutsFromList(
   description: string,
-  counterpartyRut: string | null
-): Promise<string[]> {
+  counterpartyRut: string | null,
+  reembolsadores: ReembolsadorLite[]
+): string[] {
   const desc = (description ?? "").toLowerCase();
   const movRut = (counterpartyRut ?? "").replace(/\D/g, "");
   if (!desc && !movRut) return [];
-  const reembolsadores = await prisma.reembolsador.findMany({
-    select: { glosa: true, personRut: true, aliases: { select: { rut: true } } },
-  });
   const ruts = new Set<string>();
   for (const r of reembolsadores) {
     const pr = (r.personRut ?? "").replace(/\D/g, "");
@@ -166,6 +176,23 @@ async function aliasRutsForMovement(
     }
   }
   return [...ruts];
+}
+
+// Carga los reembolsadores (glosa + RUT + aliases) una sola vez. Útil para
+// procesar muchos movimientos sin repetir la query.
+export async function loadReembolsadores(): Promise<ReembolsadorLite[]> {
+  return prisma.reembolsador.findMany({
+    select: { glosa: true, personRut: true, aliases: { select: { rut: true } } },
+  });
+}
+
+async function aliasRutsForMovement(
+  description: string,
+  counterpartyRut: string | null,
+  reembolsadores?: ReembolsadorLite[]
+): Promise<string[]> {
+  const list = reembolsadores ?? (await loadReembolsadores());
+  return aliasRutsFromList(description, counterpartyRut, list);
 }
 
 export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Promise<number> {
@@ -411,13 +438,78 @@ export function decideMovementInvoiceMatch(args: {
  * endpoint de "Auto-conciliar pendientes", el sync SII y el importador de
  * cartolas (/api/banco/import).
  */
-export async function tryAutoMatchMovementWithInvoices(
-  movId: string
-): Promise<{ matched: boolean; invoiceId?: string; reason?: string }> {
-  const mov = await prisma.bankMovement.findUnique({
-    where: { id: movId },
-    include: { payments: true },
+// Factura candidata ya cargada con sus pagos, para el camino batch (precarga
+// una vez en vez de consultar por cada movimiento — ver loadCandidateInvoices).
+export type CandidateInvoice = {
+  id: string;
+  type: string;
+  rutIssuer: string | null;
+  rutReceiver: string | null;
+  businessName: string | null;
+  issueDate: Date;
+  totalAmount: number;
+  tipoDoc: number | null;
+  payments: { amountApplied: number }[];
+};
+
+// Carga TODAS las facturas pendientes/parciales (recibidas y emitidas) con
+// sus pagos, de una sola vez. El batch la llama una vez y filtra en memoria
+// por monto/tipo para cada movimiento, en lugar de hacer una query
+// invoice.findMany por movimiento (era el cuello de botella real: ~440ms ×
+// N movimientos). NC (tipoDoc 61) se excluyen, igual que en la query original.
+export async function loadCandidateInvoices(): Promise<CandidateInvoice[]> {
+  return prisma.invoice.findMany({
+    where: {
+      status: { in: ["pendiente", "parcial"] },
+      tipoDoc: { not: 61 },
+    },
+    select: {
+      id: true,
+      type: true,
+      rutIssuer: true,
+      rutReceiver: true,
+      businessName: true,
+      issueDate: true,
+      totalAmount: true,
+      tipoDoc: true,
+      payments: { select: { amountApplied: true } },
+    },
   });
+}
+
+export async function tryAutoMatchMovementWithInvoices(
+  movId: string,
+  // Reembolsadores precargados (opcional). Cuando se procesan muchos
+  // movimientos en lote, pasarlos evita re-consultar la BD por cada uno.
+  reembolsadores?: ReembolsadorLite[],
+  // Facturas candidatas precargadas (opcional, para el batch). Si viene, se
+  // filtra en memoria en lugar de consultar la BD. excludeInvoiceIds son las
+  // facturas ya consumidas en esta corrida (la lista en memoria no refleja
+  // los pagos creados durante el propio batch, así que las excluimos a mano
+  // para no imputar dos movimientos a la misma factura).
+  preloaded?: {
+    invoices: CandidateInvoice[];
+    excludeInvoiceIds: Set<string>;
+    // Movimiento ya cargado (con sus pagos). Evita el findUnique por mov —
+    // el otro cuello de botella del batch (cientos de viajes a la BD remota).
+    // El batch los trae todos en UNA query y los pasa de a uno.
+    movement?: {
+      id: string;
+      amount: number;
+      status: string;
+      description: string;
+      counterpartyRut: string | null;
+      date: Date;
+      payments: { id: string }[];
+    };
+  }
+): Promise<{ matched: boolean; invoiceId?: string; reason?: string }> {
+  const mov =
+    preloaded?.movement ??
+    (await prisma.bankMovement.findUnique({
+      where: { id: movId },
+      include: { payments: true },
+    }));
   if (!mov) return { matched: false, reason: "mov_not_found" };
   if (mov.status === "interno") return { matched: false, reason: "interno" };
   if (mov.payments.length > 0) return { matched: false, reason: "already_has_payments" };
@@ -426,23 +518,37 @@ export async function tryAutoMatchMovementWithInvoices(
   const targetType = isCargo ? "recibida" : "emitida";
   const absAmount = Math.abs(mov.amount);
 
-  const rawCandidates = await prisma.invoice.findMany({
-    where: {
-      type: targetType,
-      status: { in: ["pendiente", "parcial"] },
-      tipoDoc: { not: 61 },
-      totalAmount: { gte: absAmount - 10 },
-    },
-    select: {
-      id: true,
-      rutIssuer: true,
-      rutReceiver: true,
-      businessName: true,
-      issueDate: true,
-      totalAmount: true,
-      payments: { select: { amountApplied: true } },
-    },
-  });
+  // Candidatas: de la lista precargada (batch) o consultando la BD (caso
+  // suelto, ej. sync SII de una factura). El resultado es idéntico.
+  let rawCandidates: CandidateInvoice[];
+  if (preloaded) {
+    rawCandidates = preloaded.invoices.filter(
+      (c) =>
+        c.type === targetType &&
+        !preloaded.excludeInvoiceIds.has(c.id) &&
+        c.totalAmount >= absAmount - 10
+    );
+  } else {
+    rawCandidates = await prisma.invoice.findMany({
+      where: {
+        type: targetType,
+        status: { in: ["pendiente", "parcial"] },
+        tipoDoc: { not: 61 },
+        totalAmount: { gte: absAmount - 10 },
+      },
+      select: {
+        id: true,
+        type: true,
+        rutIssuer: true,
+        rutReceiver: true,
+        businessName: true,
+        issueDate: true,
+        totalAmount: true,
+        tipoDoc: true,
+        payments: { select: { amountApplied: true } },
+      },
+    });
+  }
 
   const candidates = rawCandidates
     .map((c) => {
@@ -460,7 +566,8 @@ export async function tryAutoMatchMovementWithInvoices(
   // (pura, testeable): exige RUT directo o vía alias de reembolsador.
   const aliasRutDigits = await aliasRutsForMovement(
     mov.description,
-    mov.counterpartyRut
+    mov.counterpartyRut,
+    reembolsadores
   );
   const movRutDigits = (mov.counterpartyRut ?? "").replace(/\D/g, "");
 

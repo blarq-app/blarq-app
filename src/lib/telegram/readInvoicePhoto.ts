@@ -28,6 +28,12 @@ export interface InvoicePhotoData {
   // Confianza declarada por el modelo (0-1) sobre folio+rut. Sirve para
   // decidir si pedir confirmación humana antes de aplicar.
   confidence: number | null;
+  // Texto MANUSCRITO sobre el papel (típicamente JT anota el nombre de la
+  // obra a lápiz/lapicera). null si no hay nada escrito a mano. Como la
+  // lectura de manuscrito es menos confiable que el texto tipeado en el
+  // mensaje, el webhook lo usa solo si MJ/JT NO escribieron la obra como
+  // caption, y SIEMPRE pide confirmación antes de asignar.
+  handwrittenNote: string | null;
 }
 
 const SYSTEM_PROMPT = `Eres un lector de facturas electrónicas chilenas (DTE).
@@ -42,10 +48,15 @@ Te dan la foto de una factura o boleta. Extrae SOLO estos datos del EMISOR
 - issueDate: fecha de emisión en formato YYYY-MM-DD.
 - businessName: razón social del emisor.
 - confidence: tu confianza de 0 a 1 en que leíste bien rutIssuer y folioNumber.
+- handwrittenNote: si hay texto ESCRITO A MANO sobre el papel (a lápiz o
+  lapicera, por encima de lo impreso — típicamente el nombre de una obra o
+  proyecto anotado por la persona que compró), transcribilo tal cual lo leas.
+  Es SOLO el texto manuscrito, NO el texto impreso de la factura. Si no hay
+  nada escrito a mano, poné null.
 
 Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin
 markdown. Si un campo no se puede leer, ponlo en null. Ejemplo:
-{"rutIssuer":"76123456-7","folioNumber":"12345","totalAmount":45990,"issueDate":"2026-05-31","businessName":"SODIMAC S.A.","confidence":0.95}`;
+{"rutIssuer":"76123456-7","folioNumber":"12345","totalAmount":45990,"issueDate":"2026-05-31","businessName":"SODIMAC S.A.","confidence":0.95,"handwrittenNote":"Portofino"}`;
 
 /**
  * Lee la foto y devuelve los datos del DTE. Lanza si falta la API key o si
@@ -136,5 +147,9 @@ export async function readInvoicePhoto(
       typeof parsed.businessName === "string" ? parsed.businessName : null,
     confidence:
       typeof parsed.confidence === "number" ? parsed.confidence : null,
+    handwrittenNote:
+      typeof parsed.handwrittenNote === "string" && parsed.handwrittenNote.trim()
+        ? parsed.handwrittenNote.trim()
+        : null,
   };
 }

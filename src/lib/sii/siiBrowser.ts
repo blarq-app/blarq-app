@@ -49,6 +49,7 @@ const SII_HOSTS = [
   "https://maullin.sii.cl",
   "https://zeusr.sii.cl",
   "https://zeus.sii.cl",
+  "https://loa.sii.cl", // boletas de honorarios recibidas (informe BHE) — mTLS
 ];
 
 // User-Agent moderno; el SII rechaza clientes con UA obvios de bot.

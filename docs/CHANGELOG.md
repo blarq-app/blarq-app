@@ -4,6 +4,17 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-02 — Boletas de Honorarios recibidas (BHE) del SII importadas
+
+- **Qué cambió (datos en prod)**: se importaron las 9 BHE recibidas por BLARQ (2025: 7 · 2026: 2) bajadas del portal de honorarios del SII (`loa.sii.cl`). 7 creadas + 2 corregidas (venían de la ronda 39 al líquido → ahora al bruto). Gasto recibidas: $453.457.326 → $459.730.632 (+$6.273.306, de los cuales $4.678.362 son 2 honorarios de la propia MJ que se decidió incluir).
+- **Modelo nuevo**: BHE = `Invoice` type=recibida, **tipoDoc=1039** (convención honorarios, paralela a 1043=mano de obra), sin IVA, totalAmount=netAmount=**bruto** (retención NO modelada, sin cambio de schema). Etiqueta agregada a `InvoicePDF.html.ts`.
+- **Auto-sync desatendido NO viable**: el WAF F5 de `loa.sii.cl` rechaza la navegación de Playwright (ERR_CONNECTION_CLOSED, headless y headed); el APIRequestContext conecta pero el informe da `I082 host no definido` (sesión server-side irreproducible). Vercel descartado por WAF. Único camino que funciona: manejar el Chrome real de MJ (extensión). Recorrido y endpoints documentados en WIP ronda 45.
+- **Tooling**: `scripts/importar-bhe.ts` (dry-run default, `--apply` solo prod, idempotente, verifica delta de gasto). Backup `audit-...2026-06-02T16-50.json`.
+- **Pendiente MJ**: asignar obra a las 7 nuevas (projectId=null); conciliación (pago = líquido, saldo = retención); reconfirmar no-doble-conteo de los honorarios de MJ.
+- **Archivos**: `scripts/importar-bhe.ts`, `src/lib/pdf/InvoicePDF.html.ts`, `docs/WIP.md`, `docs/CHANGELOG.md`.
+
+---
+
 ## 2026-05-30 — Análisis conciliación Sodimac (Maxxa vs app) — solo lectura
 
 - **Qué pasó (no es cambio de código ni datos)**: se comparó el export de Maxxa `MovimientosCartola_20260530_1834.xlsx` (1 cuenta, 500 compras Sodimac) contra la conciliación de la app. Donde ambos tienen datos: 156 facturas conciliadas igual. El resto son diferencias de alcance (otras cuentas / historia Sodimac fuera del rango de la app / cartola de la app ~2 semanas atrasada), no errores de plata.

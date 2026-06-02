@@ -11,6 +11,7 @@ const DTE_LABEL: Record<number, string> = {
   52: "Guía de despacho electrónica",
   56: "Nota de débito electrónica",
   61: "Nota de crédito electrónica",
+  1039: "Boleta de honorarios electrónica",
 };
 
 export interface InvoicePDFInput {

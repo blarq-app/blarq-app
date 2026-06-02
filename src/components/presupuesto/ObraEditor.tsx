@@ -640,6 +640,41 @@ export default function ObraEditor({
     }
   }, [initialBudget.id]);
 
+  // Tras editar el detalle de componentes de una partida, el recálculo vive en
+  // el server. Acá traemos los totales frescos de ESA partida y actualizamos
+  // los campos de arriba (Material/Mano de obra/Margen/P.U./total), así no
+  // quedan mostrando los valores viejos hasta recargar la página.
+  async function refreshItemTotals(itemId: string) {
+    try {
+      const r = await fetch(
+        `/api/presupuestos/${initialBudget.id}/partidas/${itemId}`,
+        { cache: "no-store" }
+      );
+      if (!r.ok) return;
+      const fresh = await r.json();
+      setItems((curr) =>
+        curr.map((it) =>
+          it.id === itemId
+            ? {
+                ...it,
+                quantity: fresh.quantity ?? it.quantity,
+                unitPrice: fresh.unitPrice ?? it.unitPrice,
+                total: fresh.total ?? it.total,
+                costMaterial: fresh.costMaterial ?? 0,
+                costLabor: fresh.costLabor ?? 0,
+                costTools: fresh.costTools ?? 0,
+                costSubcontract: fresh.costSubcontract ?? 0,
+                costLoss: fresh.costLoss ?? 0,
+                costMargin: fresh.costMargin ?? 0,
+              }
+            : it
+        )
+      );
+    } catch {
+      /* si falla, queda el valor en pantalla; no rompe nada */
+    }
+  }
+
   function handleUpdateItem(
     itemId: string,
     field: string,
@@ -1195,7 +1230,7 @@ export default function ObraEditor({
                               itemId={item.id}
                               canEdit={initialBudget.status === "borrador"}
                               catalogPartidaId={item.catalogPartidaId}
-                              onChanged={() => router.refresh()}
+                              onChanged={() => refreshItemTotals(item.id)}
                             />
                           </div>
                         </td>

@@ -1,6 +1,40 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
+// Devuelve los totales actuales de la partida. Lo usa el editor para refrescar
+// los campos de arriba (Material/Mano de obra/Margen/total) después de editar
+// el detalle de componentes, sin recargar toda la página.
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string; itemId: string }> }
+) {
+  try {
+    const { itemId } = await params;
+    const item = await prisma.obraItem.findUnique({
+      where: { id: itemId },
+      select: {
+        id: true,
+        quantity: true,
+        unitPrice: true,
+        total: true,
+        costMaterial: true,
+        costLabor: true,
+        costTools: true,
+        costSubcontract: true,
+        costLoss: true,
+        costMargin: true,
+      },
+    });
+    if (!item) {
+      return NextResponse.json({ error: "Ítem no encontrado" }, { status: 404 });
+    }
+    return NextResponse.json(item);
+  } catch (error) {
+    console.error("Error leyendo partida:", error);
+    return NextResponse.json({ error: "Error" }, { status: 500 });
+  }
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> }

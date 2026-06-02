@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { formatCLP, formatDate } from "@/lib/utils";
 import BulkAssignBar from "./BulkAssignBar";
 import {
@@ -63,6 +64,13 @@ export default function FacturasTable({
   categories: Category[];
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // URL de la lista con el filtro activo (ej. ?q=brune). Se la pasamos a la
+  // pantalla de detalle como `from` para que el botón "Volver" devuelva a MJ
+  // exactamente a donde estaba, con el filtro puesto.
+  const sp = useSearchParams();
+  const listSearch = sp.toString();
+  const returnTo = listSearch ? `/facturas?${listSearch}` : "/facturas";
 
   // Adaptamos los props existentes al shape que esperan los selects inline.
   const projectOptions: ProjectOption[] = useMemo(
@@ -158,7 +166,7 @@ export default function FacturasTable({
                 </td>
                 <td className="px-4 py-2 tabular-nums text-gray-700">
                   <Link
-                    href={`/facturas/${inv.id}`}
+                    href={`/facturas/${inv.id}?from=${encodeURIComponent(returnTo)}`}
                     className="hover:text-gray-900 hover:underline"
                   >
                     {inv.folioNumber || "—"}

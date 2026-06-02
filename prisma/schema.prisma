@@ -865,9 +865,13 @@ model BankMovement {
   amount          Float    // signed: negativo = cargo, positivo = abono
   type            String   // cargo | abono
   // Saldo corrido tras aplicar este movimiento. Se calcula al importar la
-  // cartola, sobre un orden canónico (fecha, monto, descripción) para que
-  // sea idéntico entre los formatos Histórica y Provisoria. Es el
-  // identificador estable para deduplicar el import (ver @@unique abajo).
+  // cartola, sobre un orden canónico (fecha, monto, descripción). YA NO es
+  // la llave de deduplicación: resultó frágil cuando dos cartolas del mismo
+  // período traen sets de movimientos distintos (la Provisoria es un
+  // snapshot incompleto), porque eso corre el saldo y desincroniza la llave
+  // (bug 2026-06-02). El dedup ahora va por huella estable — ver
+  // src/lib/banco/dedup.ts. balanceAfter se conserva como dato informativo
+  // y como segunda barrera vía el @@unique de abajo.
   // Nullable solo por los movimientos que ya existían antes del backfill
   // del 2026-05-17.
   balanceAfter    Float?
@@ -900,15 +904,13 @@ model BankMovement {
   internalTransferTo BankMovement? @relation("InternalTransfer", fields: [internalTransferToId], references: [id])
   internalTransferFrom BankMovement? @relation("InternalTransfer")
 
-  // Idempotencia del import. El identificador estable de cada transacción
-  // es el saldo posterior (balanceAfter): el saldo de la cuenta una vez
-  // aplicado el movimiento. Es un número absoluto que NO depende del
-  // formato de cartola — la Histórica trae N° de documento, la Provisoria
-  // lo trae en cero, así que externalRef no sirve para deduplicar entre
-  // formatos (reimportar la misma cartola en el otro formato duplicaba
-  // todo, bug detectado 2026-05-17). Dos transferencias del mismo monto
-  // el mismo día tienen balanceAfter distinto — la cuenta queda en otro
-  // saldo después de cada una — así que no se confunden como duplicado.
+  // Segunda barrera de idempotencia del import. La decisión real de qué es
+  // duplicado la toma `planImportDedup` (src/lib/banco/dedup.ts) por huella
+  // estable; este constraint queda como red de seguridad a nivel BD. Histórico:
+  // hasta 2026-05-17 el dedup iba por N° de documento (externalRef), que la
+  // Provisoria trae en cero → duplicaba entre formatos; se pasó a balanceAfter,
+  // que falló cuando una cartola trae un set incompleto (bug 2026-06-02) →
+  // se pasó a la huella estable.
   @@unique([bankAccountId, date, amount, balanceAfter], name: "movement_unique")
   @@index([bankAccountId])
   @@index([date])

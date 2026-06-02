@@ -3,33 +3,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseCartolaSantander } from "@/lib/banco/santanderParser";
 import { tryAutoMatchMovementWithInvoices } from "@/lib/banco/invoicePayments";
 import { applyRulesToMovement } from "@/lib/banco/categorizationRules";
+import { planImportDedup } from "@/lib/banco/dedup";
 
-// Detecta si un movimiento ya está en la BD.
-//
-// Regla: el identificador estable de una transacción es el saldo
-// posterior (`balanceAfter`) — el saldo de la cuenta una vez aplicado el
-// movimiento. Es un número absoluto que no depende del formato de
-// cartola. Antes el check usaba el n° de documento (`externalRef`), pero
-// la cartola Histórica lo trae y la Provisoria lo trae en cero: por eso
-// reimportar la misma cartola en el otro formato duplicaba todo (bug
-// detectado 2026-05-17).
-//
-// DOS transferencias del mismo monto el mismo día NO se confunden: cada
-// una deja la cuenta en un saldo distinto, así que tienen balanceAfter
-// distinto.
-async function findExistingMovement(
-  bankAccountId: string,
-  mov: { date: Date; amount: number; balanceAfter: number }
-) {
-  return prisma.bankMovement.findFirst({
-    where: {
-      bankAccountId,
-      date: mov.date,
-      amount: mov.amount,
-      balanceAfter: mov.balanceAfter,
-    },
-  });
-}
+// El dedup del import vive en `planImportDedup` (src/lib/banco/dedup.ts).
+// Identifica cada movimiento por una huella estable (fecha + monto +
+// contraparte) que NO depende del saldo corrido `balanceAfter`. Hasta el
+// bug 2026-06-02 el dedup usaba balanceAfter como llave; era frágil cuando
+// dos cartolas del mismo período traían sets de movimientos distintos
+// (la Provisoria es un snapshot incompleto: le faltan compras que settlean
+// después), porque eso corre el saldo reconstruido y desincroniza la llave.
+// Ver el comentario extenso en dedup.ts.
 
 // POST /api/banco/import
 //   body: form-data con `file` (Excel cartola Santander)
@@ -39,9 +22,10 @@ async function findExistingMovement(
 //   1. Lee el Excel y extrae movimientos.
 //   2. Identifica la cuenta por accountNumber (tiene que estar pre-creada
 //      en BankAccount — las 2 BLARQ ya están seeded).
-//   3. Inserta los movimientos. Idempotente: el unique
-//      (bankAccountId, date, amount, balanceAfter) impide duplicados al
-//      reimportar la misma cartola, en cualquiera de los dos formatos.
+//   3. Inserta los movimientos. Idempotente: `planImportDedup` reconoce los
+//      que ya existen por huella estable (no por saldo corrido), así que
+//      reimportar una cartola que se solapa no duplica, aunque sea de otro
+//      formato o un snapshot incompleto.
 //   4. Auto-detecta transferencias internas: para cada movimiento marcado
 //      como isInternalCandidate, busca el contraparte (mismo monto, sentido
 //      opuesto, ±1 día) en LA OTRA cuenta y los linkea.
@@ -102,28 +86,39 @@ export async function POST(request: NextRequest) {
       dryRun,
     };
 
+    // Dedup por huella estable: traemos los movimientos ya guardados de la
+    // cuenta en el rango de fechas de la cartola y dejamos que
+    // `planImportDedup` decida cuáles son nuevos y cuáles ya existen
+    // (preservando gemelos legítimos por conteo). Acotamos por rango de
+    // fechas para no cargar toda la historia de la cuenta.
+    let toInsert = cartola.movements;
+    let duplicateCount = 0;
+    if (cartola.movements.length > 0) {
+      const times = cartola.movements.map((m) => m.date.getTime());
+      const minDate = new Date(Math.min(...times));
+      const maxDate = new Date(Math.max(...times));
+      const existing = await prisma.bankMovement.findMany({
+        where: { bankAccountId: bankAccount.id, date: { gte: minDate, lte: maxDate } },
+        select: { date: true, amount: true, description: true },
+      });
+      const plan = planImportDedup(existing, cartola.movements);
+      toInsert = plan.toInsert;
+      duplicateCount = plan.duplicates.length;
+    }
+    stats.duplicates = duplicateCount;
+
     if (dryRun) {
-      // Preview sin tocar DB. Igual contamos cuántos serían duplicados.
-      for (const mov of cartola.movements) {
-        const exists = await findExistingMovement(bankAccount.id, mov);
-        if (exists) stats.duplicates++;
-        else stats.created++;
-        if (mov.suggestedCategory) stats.categorized++;
-      }
+      // Preview sin tocar DB.
+      stats.created = toInsert.length;
+      stats.categorized = toInsert.filter((m) => m.suggestedCategory).length;
       return NextResponse.json({ ok: true, stats, sample: cartola.movements.slice(0, 5) });
     }
 
-    // 3. Insertar movimientos (skip duplicates). El check de duplicado es
-    // EXPLÍCITO (findExistingMovement) — el constraint de la BD queda como
-    // segunda barrera, pero la decisión real de saltar un duplicado la
-    // toma este check antes de intentar el insert.
+    // 3. Insertar los movimientos nuevos. El constraint
+    // (bankAccountId, date, amount, balanceAfter) queda como segunda barrera;
+    // la decisión real de qué es duplicado la tomó `planImportDedup` arriba.
     const insertedIds: string[] = [];
-    for (const mov of cartola.movements) {
-      const exists = await findExistingMovement(bankAccount.id, mov);
-      if (exists) {
-        stats.duplicates++;
-        continue;
-      }
+    for (const mov of toInsert) {
       try {
         const created = await prisma.bankMovement.create({
           data: {
@@ -144,9 +139,10 @@ export async function POST(request: NextRequest) {
         stats.created++;
         if (mov.suggestedCategory) stats.categorized++;
       } catch (e) {
-        // P2002 = unique violation. Con el check explícito de arriba esto
-        // casi no debería pasar — solo si dos movimientos de la MISMA
-        // cartola coinciden en (cuenta,fecha,monto,balanceAfter).
+        // P2002 = unique violation del constraint
+        // (cuenta,fecha,monto,balanceAfter). Con el dedup por huella esto
+        // casi no debería pasar; queda como red de seguridad por si dos
+        // movimientos terminan con el mismo saldo corrido.
         if (typeof e === "object" && e !== null && "code" in e && (e as { code?: string }).code === "P2002") {
           stats.duplicates++;
         } else {

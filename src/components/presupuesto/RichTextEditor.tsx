@@ -17,18 +17,18 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { useEffect } from "react";
 import { plainTextToHtml, isRichTextEmpty } from "@/lib/richText";
 
-// Paleta de colores APAGADOS (desaturados), pedida por MJ. "Negro" = quitar
-// color (vuelve al texto normal). Burdeo + variedad de tonos sobrios.
+// Paleta de colores: tonos sobrios pero un poco PRENDIDOS (no neón), a pedido
+// de MJ — los apagados se notaban poco. "Negro" = quitar color (texto normal).
 const COLORS: { name: string; value: string | null }[] = [
   { name: "Negro (normal)", value: null },
   { name: "Gris", value: "#6b7280" },
-  { name: "Burdeo", value: "#7c2d2d" },
-  { name: "Tierra", value: "#6b4f3a" },
-  { name: "Oliva", value: "#4d5e3a" },
-  { name: "Petróleo", value: "#3a5d5a" },
-  { name: "Pizarra", value: "#3b4e63" },
-  { name: "Ciruela", value: "#5d4660" },
-  { name: "Mostaza", value: "#8a6d1f" },
+  { name: "Burdeo", value: "#b23a3a" },
+  { name: "Tierra", value: "#c2703a" },
+  { name: "Oliva", value: "#6f8c2f" },
+  { name: "Petróleo", value: "#2f8f86" },
+  { name: "Pizarra", value: "#3a6ea5" },
+  { name: "Ciruela", value: "#8a4a96" },
+  { name: "Mostaza", value: "#c79a1e" },
 ];
 
 function ToolbarButton({
@@ -65,6 +65,9 @@ function Toolbar({ editor }: { editor: Editor }) {
       </ToolbarButton>
       <ToolbarButton title="Cursiva" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
         <span className="italic font-serif">I</span>
+      </ToolbarButton>
+      <ToolbarButton title="Subrayado" active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()}>
+        <span className="underline">U</span>
       </ToolbarButton>
       <span className="mx-0.5 w-px h-5 bg-gray-200" />
       <ToolbarButton title="Viñetas" active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}>

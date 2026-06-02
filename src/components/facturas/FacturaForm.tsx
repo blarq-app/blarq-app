@@ -58,6 +58,9 @@ export default function FacturaForm({
   categories,
   tipoDoc = null,
   referenceCandidates = [],
+  // A dónde volver al cancelar/guardar/eliminar. Por defecto la lista sin
+  // filtro; el detalle nos pasa la lista con el filtro que MJ tenía puesto.
+  returnTo = "/facturas",
 }: {
   mode: "create" | "edit";
   initial: FacturaFormValues;
@@ -65,6 +68,7 @@ export default function FacturaForm({
   categories: Category[];
   tipoDoc?: number | null;
   referenceCandidates?: ReferenceCandidate[];
+  returnTo?: string;
 }) {
   const router = useRouter();
   const [v, setV] = useState<FacturaFormValues>(initial);
@@ -141,7 +145,7 @@ export default function FacturaForm({
           businessName: v.businessName || v.rutIssuer || "—",
         });
       } else {
-        router.push("/facturas");
+        router.push(returnTo);
         router.refresh();
       }
     } finally {
@@ -157,7 +161,7 @@ export default function FacturaForm({
       );
     }
     setRuleToast(null);
-    router.push("/facturas");
+    router.push(returnTo);
     router.refresh();
   }
 
@@ -167,7 +171,7 @@ export default function FacturaForm({
     setSaving(true);
     try {
       await fetch(`/api/facturas/${v.id}`, { method: "DELETE" });
-      router.push("/facturas");
+      router.push(returnTo);
       router.refresh();
     } finally {
       setSaving(false);
@@ -423,10 +427,10 @@ export default function FacturaForm({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => router.push("/facturas")}
+            onClick={() => router.push(returnTo)}
             disabled={saving}
           >
-            Cancelar
+            Volver
           </Button>
           <Button variant="primary" size="sm" onClick={submit} disabled={saving}>
             {saving ? "Guardando…" : mode === "edit" ? "Guardar cambios" : "Crear factura"}

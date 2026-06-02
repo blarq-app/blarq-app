@@ -16,10 +16,20 @@ const DTE_LABEL: Record<number, string> = {
 
 export default async function EditFacturaPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { id } = await params;
+
+  // `from` es la URL de la lista con el filtro que MJ tenía puesto al abrir
+  // esta factura (ej. /facturas?q=brune). El botón "Volver" y el breadcrumb
+  // la usan para devolverla a donde estaba. Solo aceptamos rutas internas a
+  // /facturas para no abrir un redirect a sitios externos.
+  const { from } = await searchParams;
+  const returnTo =
+    from && from.startsWith("/facturas") ? from : "/facturas";
 
   const [invoice, projects, categories, payments] = await Promise.all([
     // Carga todos los campos del Invoice — incluye `pdfContent` (Bytes
@@ -120,7 +130,7 @@ export default async function EditFacturaPage({
     <div>
       <div className="flex items-center gap-3 mb-6">
         <Link
-          href="/facturas"
+          href={returnTo}
           className="text-gray-400 hover:text-gray-600 transition-colors"
         >
           Facturas
@@ -280,6 +290,7 @@ export default async function EditFacturaPage({
 
       <FacturaForm
         mode="edit"
+        returnTo={returnTo}
         projects={projects}
         categories={categories}
         tipoDoc={invoice.tipoDoc ?? null}

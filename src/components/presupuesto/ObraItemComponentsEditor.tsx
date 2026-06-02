@@ -52,6 +52,23 @@ function typeMeta(type: string) {
   return COMP_TYPES.find((t) => t.value === type) ?? COMP_TYPES[0];
 }
 
+// Orden visual fijo de la tabla editable: materiales arriba, margen abajo
+// (mismo orden que COMP_TYPES y que la vista resumen "Detalle por costo
+// directo"). Dentro de cada tipo se respeta sortOrder (orden de creación), así
+// una línea NUEVA cae al final de su grupo y no al final de toda la tabla.
+const TYPE_RANK: Record<string, number> = Object.fromEntries(
+  COMP_TYPES.map((t, i) => [t.value, i])
+);
+function compareComps(
+  a: { type: string; sortOrder: number },
+  b: { type: string; sortOrder: number }
+) {
+  return (
+    (TYPE_RANK[a.type] ?? 99) - (TYPE_RANK[b.type] ?? 99) ||
+    a.sortOrder - b.sortOrder
+  );
+}
+
 // Unidades disponibles (mismas que el catálogo). "%" convierte la línea en un
 // porcentaje: leyes sociales sobre la mano de obra, margen sobre el costo.
 const UNIT_OPTIONS = ["UN", "M2", "ML", "M3", "KG", "GL", "DIA", "HR", "%"];
@@ -315,7 +332,7 @@ export default function ObraItemComponentsEditor({
           </tr>
         </thead>
         <tbody>
-          {comps.map((c) => {
+          {[...comps].sort(compareComps).map((c) => {
             const meta = typeMeta(c.type);
             const isPct = c.unit === "%";
             return (

@@ -4,6 +4,18 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-02 — Cotizador: orden por tipo + descripciones con formato (texto rico)
+
+- **Orden del detalle de costos (fix)**: la tabla editable "Detalle de materiales y costos" (`ObraItemComponentsEditor`) ahora ordena SIEMPRE por tipo (material → mano de obra → herramientas → subcontrato → pérdida → margen) y dentro de cada tipo por orden de creación. Antes una línea nueva se agregaba al final de todo; ahora cae al final de su grupo. Es orden de presentación: no toca cálculos ni `sortOrder` guardado.
+- **Descripciones con formato (feature)**: las descripciones al cliente (`descriptionCliente`) y al maestro (`descriptionMaestro`) pasan de texto plano a texto con formato — negrita, cursiva, viñetas/listas y color (paleta de tonos apagados, a pedido de MJ). Editor nuevo `RichTextEditor` (Tiptap v3) en el panel expandido de cada partida; en la celda compacta de la tabla se muestra el formato como vista previa (clic abre el panel para editar). Se guarda HTML en los mismos campos (sin cambio de schema).
+- **PDFs**: `ObraPDF` (cliente), `EstadoPagoPDF` y `ObraMaestroPDF` (maestro) inyectan el HTML con formato (antes escapaban el texto). Se agregó CSS de listas/marcas al `.col-desc` de cada uno.
+- **Seguridad**: `src/lib/richText.ts` con `sanitizeRichTextHtml` (allowlist: solo p/br/strong/em/u/s/ul/ol/li/span-color; saca scripts/onclick/img/estilos no-color), `isRichTextEmpty`, `plainTextToHtml` (migra texto plano viejo). Test de regresión `scripts/test-richtext.ts` (17 casos).
+- **Dependencias nuevas**: `@tiptap/react`, `@tiptap/pm`, `@tiptap/starter-kit`, `@tiptap/extension-text-style`, `@tiptap/extension-color`, `@tiptap/extension-placeholder`.
+- **Pendiente**: verificación visual del editor en el navegador (no se pudo en esta sesión por el login). Nota estética: el color va contra §3 (blanco/negro/gris); se acotó a paleta apagada por decisión de la dueña.
+- **Archivos**: `src/lib/richText.ts`, `src/components/presupuesto/RichTextEditor.tsx`, `src/components/presupuesto/ObraItemComponentsEditor.tsx`, `src/components/presupuesto/ObraEditor.tsx`, `src/lib/pdf/{ObraPDF,EstadoPagoPDF,ObraMaestroPDF}.html.ts`, `scripts/test-richtext.ts`.
+
+---
+
 ## 2026-06-02 — Boletas de Honorarios recibidas (BHE) del SII importadas
 
 - **Qué cambió (datos en prod)**: se importaron las 9 BHE recibidas por BLARQ (2025: 7 · 2026: 2) bajadas del portal de honorarios del SII (`loa.sii.cl`). 7 creadas + 2 corregidas (venían de la ronda 39 al líquido → ahora al bruto). Gasto recibidas: $453.457.326 → $459.730.632 (+$6.273.306, de los cuales $4.678.362 son 2 honorarios de la propia MJ que se decidió incluir).

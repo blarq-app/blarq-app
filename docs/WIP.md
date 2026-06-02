@@ -4,7 +4,7 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-06-02 (ronda 45 — Boletas de Honorarios recibidas (BHE) del SII: importadas las 9 boletas 2025-2026 a prod. Ver bullet "Ronda 45" abajo.)
+- **Última actualización**: 2026-06-02 (ronda 46 — Cotizador: fix orden del detalle por tipo + descripciones con formato/texto rico cliente y maestro. Ver CHANGELOG 2026-06-02. PENDIENTE: verificación visual del editor en navegador, no se pudo por login; sin pushear aún. // ronda 45 — BHE importadas a prod, bullet abajo.)
 
 - **Ronda 45 — Boletas de Honorarios Electrónicas recibidas (BHE) importadas (2026-06-02)**:
   - **Contexto**: retomamos el pendiente de la ronda 39 (que el botón "Sincronizar SII" bajara también las BHE recibidas). Las BHE NO viven en el RCV: están en `loa.sii.cl` (portal de honorarios), aparte.

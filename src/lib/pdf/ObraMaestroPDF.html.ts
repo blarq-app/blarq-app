@@ -10,6 +10,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { sanitizeRichTextHtml } from "@/lib/richText";
 
 const PROFESSIONAL = "JOSÉ TOMÁS LARRAÍN";
 
@@ -171,6 +172,13 @@ const CSS = `
   .col-item   { width: 5%;  text-align: center; white-space: nowrap; }
   .col-name   { width: 19%; text-align: left;   font-weight: 600; }
   .col-desc   { width: 40%; text-align: left;   font-weight: 400; }
+  /* Descripción con formato (negrita/cursiva/listas/color del editor). */
+  .col-desc p  { margin: 0; }
+  .col-desc ul { margin: 0; padding-left: 12px; list-style: disc; }
+  .col-desc ol { margin: 0; padding-left: 14px; list-style: decimal; }
+  .col-desc li { margin: 0; }
+  .col-desc strong { font-weight: 700; }
+  .col-desc em { font-style: italic; }
   .col-unit   { width: 5%;  text-align: center; white-space: nowrap; }
   .col-qty    { width: 8%;  text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .col-pu     { width: 10%; text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -250,8 +258,8 @@ export function renderObraMaestroHTML(data: ObraMaestroHTMLInput): string {
           <tr>
             <td class="col-item">${ch.index}.${idx + 1}</td>
             <td class="col-name">${esc(item.name)}</td>
-            <td class="col-desc">${esc(
-              item.descriptionMaestro ?? item.descriptionCliente ?? ""
+            <td class="col-desc">${sanitizeRichTextHtml(
+              item.descriptionMaestro ?? item.descriptionCliente
             )}</td>
             <td class="col-unit">${esc(item.unit)}</td>
             <td class="col-qty">${fmtQty(item.quantity)}</td>

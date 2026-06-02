@@ -7,6 +7,8 @@ import MoneyInput from "@/components/ui/MoneyInput";
 import BudgetAuditBanner from "@/components/presupuesto/BudgetAuditBanner";
 import ObraItemComponentsEditor from "@/components/presupuesto/ObraItemComponentsEditor";
 import CostoDirectoDetalle from "@/components/presupuesto/CostoDirectoDetalle";
+import RichTextEditor from "@/components/presupuesto/RichTextEditor";
+import { sanitizeRichTextHtml, isRichTextEmpty } from "@/lib/richText";
 
 interface ObraItemComponent {
   id: string;
@@ -1045,27 +1047,29 @@ export default function ObraEditor({
                         />
                       </td>
                       <td className="px-3 py-0.5 align-top">
-                        {/* DESCRIPCION — textarea auto-altura, sin cap.
-                            Muestra todo el texto, la fila crece con el contenido. */}
-                        <textarea
-                          ref={(el) => {
-                            if (el) {
-                              el.style.height = "auto";
-                              el.style.height = `${el.scrollHeight}px`;
-                            }
-                          }}
-                          value={item.descriptionCliente ?? ""}
-                          onChange={(e) => {
-                            handleUpdateItem(item.id, "descriptionCliente", e.target.value);
-                            e.currentTarget.style.height = "auto";
-                            e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
-                          }}
-                          title={item.descriptionCliente || ""}
-                          placeholder="Descripción para el cliente (PDF)…"
-                          rows={1}
-                          className="text-force-10 w-full resize-none bg-transparent border-0 p-0 text-gray-600 placeholder:text-gray-300 focus:ring-0 outline-none leading-snug overflow-hidden"
-                          style={{ minHeight: "14px" }}
-                        />
+                        {/* DESCRIPCION CLIENTE — vista con formato (negrita,
+                            cursiva, listas, color). La edición está en el panel
+                            expandido (abajo); acá un clic lo abre, porque una
+                            barra de formato no entra en esta celda compacta. */}
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() =>
+                            setExpandedItems((prev) => ({ ...prev, [item.id]: true }))
+                          }
+                          title="Clic para editar la descripción (se abre el detalle)"
+                          className="text-force-10 w-full text-gray-600 leading-snug cursor-text min-h-[14px] [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-4 [&_ol]:pl-4 [&_li]:my-0.5"
+                        >
+                          {isRichTextEmpty(item.descriptionCliente) ? (
+                            <span className="text-gray-300">Descripción para el cliente (PDF)…</span>
+                          ) : (
+                            <span
+                              dangerouslySetInnerHTML={{
+                                __html: sanitizeRichTextHtml(item.descriptionCliente),
+                              }}
+                            />
+                          )}
+                        </div>
                       </td>
                       <td className="px-2 py-0.5 align-top text-center">
                         {/* Unidad NO editable — viene de la PartidaCatalog
@@ -1141,6 +1145,22 @@ export default function ObraEditor({
                     {expandedItems[item.id] && (
                       <tr className="bg-gray-50">
                         <td colSpan={10} className="px-4 py-3 space-y-3">
+                          {/* Descripción para el CLIENTE (va en el PDF del presupuesto) */}
+                          <div>
+                            <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
+                              Descripción para el cliente
+                              <span className="ml-2 text-gray-400 normal-case font-normal italic">
+                                — aparece en el PDF del presupuesto
+                              </span>
+                            </label>
+                            <RichTextEditor
+                              value={item.descriptionCliente}
+                              onChange={(html) =>
+                                handleUpdateItem(item.id, "descriptionCliente", html)
+                              }
+                              placeholder="Descripción para el cliente…"
+                            />
+                          </div>
                           {/* Descripción para el maestro (no aparece en PDF cliente) */}
                           <div>
                             <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
@@ -1149,14 +1169,12 @@ export default function ObraEditor({
                                 — aparece en el estado de pago
                               </span>
                             </label>
-                            <textarea
-                              value={item.descriptionMaestro ?? ""}
-                              onChange={(e) =>
-                                handleUpdateItem(item.id, "descriptionMaestro", e.target.value)
+                            <RichTextEditor
+                              value={item.descriptionMaestro}
+                              onChange={(html) =>
+                                handleUpdateItem(item.id, "descriptionMaestro", html)
                               }
-                              rows={2}
                               placeholder="Alcance específico del trabajo para el maestro…"
-                              className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs resize-y focus:ring-1 focus:ring-gray-900 outline-none"
                             />
                           </div>
                           <div className="grid grid-cols-2 md:grid-cols-7 gap-3 text-xs">

@@ -6,6 +6,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { sanitizeRichTextHtml } from "@/lib/richText";
 
 const PROFESSIONAL = "JOSÉ TOMÁS LARRAÍN";
 
@@ -186,6 +187,13 @@ const CSS = `
   .col-item   { width: 4%;  text-align: center; white-space: nowrap; }
   .col-name   { width: 18%; text-align: left; }
   .col-desc   { width: 28%; text-align: left; font-size: 6pt; color: #555; }
+  /* Descripción con formato (negrita/cursiva/listas/color del editor). */
+  .col-desc p  { margin: 0; }
+  .col-desc ul { margin: 0; padding-left: 12px; list-style: disc; }
+  .col-desc ol { margin: 0; padding-left: 14px; list-style: decimal; }
+  .col-desc li { margin: 0; }
+  .col-desc strong { font-weight: 700; }
+  .col-desc em { font-style: italic; }
   .col-unit   { width: 5%;  text-align: center; white-space: nowrap; }
   .col-qty    { width: 6%;  text-align: center; font-variant-numeric: tabular-nums; }
   .col-pu     { width: 9%;  text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -374,7 +382,7 @@ export function renderEPHtml(data: EPHTMLInput): string {
               ${esc(item.name)}
               ${item.outOfScope ? '<span class="badge-oos">Fuera de alcance</span>' : ""}
             </td>
-            <td class="col-desc">${esc(item.descriptionMaestro ?? "")}</td>
+            <td class="col-desc">${sanitizeRichTextHtml(item.descriptionMaestro)}</td>
             <td class="col-unit">${esc(item.unit)}</td>
             <td class="col-qty">${fmtQty(item.quantity)}</td>
             <td class="col-pu">${fmtCLP(item.laborUnitPrice)}</td>

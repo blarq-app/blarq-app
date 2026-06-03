@@ -4,6 +4,17 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-03 (ronda 49) — Botón "Sin factura" en movimientos + conciliación cobros Maxxa
+
+- **Botón "Sin factura" inline** en `/banco/movimientos` (`MarkSinFacturaButton.tsx`, cableado en `MovementsTable`): marca un movimiento pendiente/parcial como `sin_factura` con categoría (Sueldo, Previred, Comisión banco, Retiro personal, Depósito efectivo, Otro) **sin crear factura ficticia ni exigir proyecto** — antes el único camino era "Pago sin factura", que obliga a un proyecto y crea una recibida `sin_respaldo`. Motivo: sueldos/comisiones no son costo de obra. Hasta ahora esas categorías solo se ponían por reglas al importar; los movimientos sin regla (ej. transferencia a Juan Pablo Costa) quedaban sin forma de marcarse a mano.
+- **PATCH `/api/banco/movimientos/[id]`**: la creación de regla de auto-categorización pasa a ser **opt-in** (`saveRule:true`). Antes cualquier `{category}` creaba regla; el patrón se deriva de la glosa y puede quedar amplio ("Transf a Juan"). El botón nuevo trae el check "Guardar regla" apagado por default. Ningún caller previo mandaba `category`, así que no cambia comportamiento existente.
+
+## 2026-06-03 (ronda 49) — Conciliación cobros 2025+2026 "pagada sin enlace" desde Maxxa
+
+- **`scripts/conciliar-maxxa-2025.ts`** (ahora 2025 **y** 2026): (1) deja de saltar facturas `status==="pagada"` — vincula por saldo real `invRem = total − pagos` y no degrada el estado (a una pagada solo le agrega el enlace al banco); (2) transferencias gemelas: dedup de filas de cartola por la identidad estable de Maxxa (set de `id_pago`), no por fecha|monto|desc, y consume un movimiento de app distinto por fila; (3) lee las 4 cartolas 2026 + filtros de fecha a 2026. Mantiene el guard de signo y el match de emitidas por `tipoDoc{33,34,61,39}|folio` (NO por folio solo: los docs Maxxa 1043/1054 colisionan con el correlativo de emitidas y crearían enlaces falsos).
+- **Datos de prod** (dry-run + OK MJ + backup): 63 imputaciones creadas. 18 cobros (emitidas) cerrados a saldo $0 (≈ $199,4M) + recibidas chicas. Integridad: 0 facturas/movimientos sobre-imputados. No mueve totales de obra (cobrado/gastado salen de facturas). F-5705931 (Servipag) excluido por decisión MJ.
+- **Pendiente de dato**: 92 movimientos Maxxa sin contraparte en la app = compras Sodimac 2024 (la app solo tiene cartola desde 2025-01-02). Importar cartola 2024 para cerrarlas.
+
 ## 2026-06-03 — Import banco: "compra con tarjeta" ya no se marca "sin factura" + auto-match comercios
 
 - **Import deja de esconder compras en "sin factura"**: `inferCategory` (`santanderParser.ts`) ya NO infiere `compra_tarjeta` por el prefijo "Compra ". `import/route.ts` solo nace `status=sin_factura` para categorías sin documento real (`previred`, `sueldo`); el resto nace `sin_asignar` y entra a la cola de conciliación. Motivo: el atajo mandaba toda compra con tarjeta (la mayoría CON factura) a "sin factura", donde el filtro de pendientes no la muestra. "Sin factura" pasa a enseñarse caso por caso (reglas `bankCategorizationRule`).

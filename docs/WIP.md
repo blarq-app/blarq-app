@@ -4,7 +4,26 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Última actualización**: 2026-06-02 (ronda 47 — fix dedup import cartolas, bullet abajo. SIN pushear, espera OK de MJ. // ronda 46 — Cotizador: fix orden del detalle por tipo + descripciones con formato/texto rico cliente y maestro. Ver CHANGELOG 2026-06-02. PENDIENTE: verificación visual del editor en navegador, no se pudo por login; sin pushear aún. // ronda 45 — BHE importadas a prod, bullet abajo.)
+- **Última actualización**: 2026-06-03 (ronda 48 — "sin factura" mal asignado + conciliación cobros 2025 desde Maxxa, bullet abajo. Cambios de código COMMITEADOS en rama `fix/banco-sin-factura-conciliacion`, **SIN pushear**, espera OK de MJ. Cambios de datos YA aplicados en prod. PENDIENTE GRANDE: conciliación cobros 2026 ($178M, 48 movs). // ronda 47 — fix dedup import cartolas. // ronda 46 — Cotizador. // ronda 45 — BHE importadas a prod.)
+
+- **Ronda 48 — "Compra → sin factura" mal asignado + conciliación cobros 2025 desde Maxxa (2026-06-03)**:
+  - **Disparador (MJ)**: muchísimos movimientos catalogados "sin factura" en realidad SÍ tienen factura (Sodimac/Easy/etc.). Y cobros que en Maxxa están conciliados, en la app figuran pendientes.
+  - **Bug raíz del "sin factura"**: el import marcaba `status=sin_factura` a TODO lo que `inferCategory` categorizaba, e `inferCategory` ponía `compra_tarjeta` a cualquier glosa con prefijo "Compra ". Resultado: toda compra con tarjeta (con o sin factura) se escondía de la cola de pendientes (el filtro no muestra sin_factura). **Fix de código**: (a) `santanderParser.ts` ya no infiere `compra_tarjeta`; (b) `import/route.ts` solo nace `sin_factura` para categorías que de verdad no llevan documento (`previred`, `sueldo`) — el resto nace `sin_asignar`. Decisión MJ: "sin factura" debe enseñarse caso por caso, no adivinarse.
+  - **Datos prod (con dry-run + backup `*-backup.json`, reversibles)**:
+    - `reset-tarjeta-sin-factura.ts`: 138 compra_tarjeta sacadas de sin_factura (72 ya tenían factura → conciliado, resto → cola).
+    - `reset-depositos-comisiones.ts`: depósitos de clientes (ingresos) y comisiones del banco salen de sin_factura. **Hallazgo**: las comisiones SÍ tienen factura del Santander (97036000-K); la factura mensual = `COM.MANTENCION PLAN` + `COM.MANT.PROD.OPC.T.REDBANC` (split).
+    - `conciliar-santander-comisiones.ts`: 6 facturas Santander conciliadas con sus 2 cargos c/u (5 pagadas, marzo parcial $12).
+    - `marcar-google-sin-factura.ts` + `marcar-internacionales-sin-factura.ts`: Google/Claude/Hostinger → sin_factura (internacional) + **reglas** `bankCategorizationRule` para auto-clasificar a futuro.
+    - `limpiar-label-compra-tarjeta.ts`: 776 movimientos pierden el label "compra_tarjeta" (método de pago, no aporta; decisión MJ).
+    - `fix-drift-movimientos-con-pago.ts`: 42 movimientos que TENÍAN imputación pero figuraban pendientes → 39 conciliado, 3 parcial.
+  - **Conciliación cobros 2025 desde Maxxa** (`conciliar-maxxa-2025.ts`, ahora lee los **4** exports — antes 2; faltaba ene–mar 2025): ~36 imputaciones nuevas (~$83M, cobros Patricia/Eduardo/Raimundo/Asecon → emitidas F-65..F-77). **Mejoras al script**: guard de signo (emitida solo con abono, recibida solo con cargo — evita colisión de folio) + detalle legible. Casos de **transferencias gemelas** (2 idénticas el mismo día que el dedup juntaba) resueltos a mano: F-71 (2º $5M Patricia) y Raimundo 29-abr (split F-89 $1.757.582 + F-90 $1.242.418). Top-ups de parciales (`topup-maxxa-parciales.ts`): F-92 Geoffroy, F-109 Juan José → pagadas.
+  - **Verificado**: conciliar NO mueve totales de obra (`metrics.ts`: cobrado/gastado salen de facturas, no de pagos). Integridad: 0 sobre-imputaciones nuevas.
+  - **PENDIENTE**:
+    - **GRANDE: conciliación cobros 2026** ($178.034.467, 48 movimientos; emitidas 2026: 12 pendiente + 1 parcial). Data en `~/Downloads/MovimientosCartola_20260530_{1832,1834,1912,2156}.xlsx`. **Requiere antes arreglar el manejo de transferencias gemelas** en `conciliar-maxxa-2025.ts` (la dedup por fecha|monto|desc colapsa duplicados legítimos; 2026 tiene muchos $5M repetidos). Hacerlo como pasada propia.
+    - **Deploy**: rama `fix/banco-sin-factura-conciliacion` commiteada, SIN pushear (espera OK MJ). Hasta desplegar, un import nuevo desde la app podría re-introducir parte del bug viejo.
+    - **Pre-existente a revisar**: "Transf a Cristobal" −$214.200 imputado al DOBLE ($428.400).
+    - **Rediseño de categorías "sin factura"** (boletas tipo Lider/Rosso, internacional, impuestos/devoluciones, sueldos) — conversación de fondo pendiente.
+    - Lo de MJ: depósitos Farellones, $12 marzo Santander, devolución impuestos Tesorería.
 
 - **Ronda 47 — Fix duplicados al reimportar cartolas que se solapan (2026-06-02)**:
   - **Síntoma**: al cargar una cartola Santander que pisa movimientos ya existentes, quedaban filas duplicadas (caso real: cuenta Operativa, abono de Carolina Ovalle del 18-may $4.953.540; se limpió a mano).

@@ -21,7 +21,14 @@ function loadCart(f:string){const wb=XLSX.read(readFileSync(DIR+"/"+f));const ro
 
 async function main(){
   console.log("Modo:",APPLY?"APPLY":"DRY-RUN");
-  const cartola=[...loadCart("MovimientosCartola_20260530_2356.xlsx"),...loadCart("MovimientosCartola_20260530_2355.xlsx")];
+  // Los 4 exports de Maxxa cubren todo 2025: 1721/1722 = ene-mar (faltaban),
+  // 2356 = mar-jul, 2355 = jul-dic. Se deduplican abajo por fecha|monto|desc.
+  const cartola=[
+    ...loadCart("MovimientosCartola_20260601_1721.xlsx"),
+    ...loadCart("MovimientosCartola_20260601_1722.xlsx"),
+    ...loadCart("MovimientosCartola_20260530_2356.xlsx"),
+    ...loadCart("MovimientosCartola_20260530_2355.xlsx"),
+  ];
   // dedupe por fecha|monto|desc
   const seen=new Set<string>(); const cart=cartola.filter(m=>{const k=m.fecha+"|"+m.monto+"|"+(m.desc||"");if(seen.has(k))return false;seen.add(k);return true;});
   console.log("Movimientos cartola Maxxa 2025:",cart.length);
@@ -37,13 +44,17 @@ async function main(){
   const matchMov=(cm:any)=>{const c=movIdx.get(cm.fecha+"|"+Math.abs(cm.monto))||[];if(c.length<=1)return c[0]||null;const g=gl(cm.desc).slice(0,14);return c.find((x:any)=>gl(x.description).slice(0,14)===g)||c[0];};
 
   const planMov=new Map<string,number>(),planInv=new Map<string,number>();
-  const writes:any[]=[]; let noMov=0,noFact=0,yaConc=0;
+  const writes:any[]=[]; let noMov=0,noFact=0,yaConc=0,badSign=0;
   for(const cm of cart){ if(!cm.asign.length)continue;
     const mov=matchMov(cm); if(!mov){noMov++;continue;}
     const movCap=()=>Math.abs(mov.amount)-(appliedByMov.get(mov.id)||0)-(planMov.get(mov.id)||0);
     for(const a of cm.asign){
       const f = a.tipoDoc===33||a.tipoDoc===34||a.tipoDoc===61||a.tipoDoc===39 ? (idxEmi.get(a.tipoDoc+"|"+a.folio) || idxRec.get(a.tipoDoc+"|"+a.folio+"|"+a.rut)) : idxRec.get(a.tipoDoc+"|"+a.folio+"|"+a.rut);
       if(!f){noFact++;continue;}
+      // Coherencia de signo: una emitida (cobro) solo se concilia con ABONO
+      // (+), una recibida (gasto) solo con CARGO (-). Evita matches por
+      // colisión de folio (ej: una compra -$ pegada a la emitida F-92).
+      if(!((f.type==="emitida"&&mov.amount>0)||(f.type==="recibida"&&mov.amount<0))){badSign++;continue;}
       if(f.status==="pagada"){yaConc++;continue;}
       const invRem=f.totalAmount-(appliedByInv.get(f.id)||0)-(planInv.get(f.id)||0);
       if(invRem<1){yaConc++;continue;}
@@ -55,7 +66,11 @@ async function main(){
   }
   console.log("\nImputaciones a crear:",writes.length,"| Σ $"+fmt(writes.reduce((s,w)=>s+w.amount,0)));
   console.log("Facturas distintas a conciliar:",new Set(writes.map(w=>w.invId)).size,"| movimientos:",new Set(writes.map(w=>w.movId)).size);
-  console.log("Cartola: mov sin match en app:",noMov,"| asignación sin factura en app:",noFact,"| ya pagada/sin saldo:",yaConc);
+  console.log("Cartola: mov sin match en app:",noMov,"| asignación sin factura en app:",noFact,"| ya pagada/sin saldo:",yaConc,"| signo incoherente (descartado):",badSign);
+  // Detalle legible de cada imputación a crear (para revisar antes de aplicar).
+  const movById=new Map(movs.map(m=>[m.id,m as any])); const invById=new Map(inv.map(i=>[i.id,i as any]));
+  console.log("\nDetalle:");
+  for(const w of writes){const m=movById.get(w.movId);const f=invById.get(w.invId);console.log(`  ${ymd(m.date)} ${String(m.amount).padStart(10)} ${(m.description||"").slice(0,30).padEnd(30)} -> F-${f.folioNumber} ${f.type} tipo${f.tipoDoc} $${fmt(w.amount)}`);}
   if(!APPLY){console.log("\n(DRY-RUN — nada escrito)");await prisma.$disconnect();return;}
   console.log("\nAPLICANDO...");
   // dedupe por (mov,factura) — las 2 cartolas se solapan y el constraint es unique(bankMovementId,invoiceId)

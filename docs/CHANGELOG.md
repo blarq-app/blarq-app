@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-03 — Import banco: "compra con tarjeta" ya no se marca "sin factura" + auto-match comercios
+
+- **Import deja de esconder compras en "sin factura"**: `inferCategory` (`santanderParser.ts`) ya NO infiere `compra_tarjeta` por el prefijo "Compra ". `import/route.ts` solo nace `status=sin_factura` para categorías sin documento real (`previred`, `sueldo`); el resto nace `sin_asignar` y entra a la cola de conciliación. Motivo: el atajo mandaba toda compra con tarjeta (la mayoría CON factura) a "sin factura", donde el filtro de pendientes no la muestra. "Sin factura" pasa a enseñarse caso por caso (reglas `bankCategorizationRule`).
+- **Auto-match por comercio (`invoicePayments.ts`)**: arreglado Construmart (la glosa trae guion "CONSTRU-MART", la regex `/construmart/` no matcheaba → ahora `/constru-?mart/`); agregado ERPYME→MAXXA (suscripción mensual, monto exacto). Sin cambios en el criterio conservador (RUT o comercio reconocido; la fecha no interviene).
+- **`conciliar-maxxa-2025.ts`**: lee los 4 exports de Maxxa (antes 2; faltaba ene–mar 2025) + guard de coherencia de signo (emitida↔abono, recibida↔cargo) para no pegar pagos por colisión de folio. Limitación conocida: la dedup de cartola colapsa transferencias gemelas legítimas (pendiente arreglar para 2026).
+- **Datos de prod** (reseteos de estado, conciliaciones Maxxa 2025, Santander, internacionales): detalle en WIP.md ronda 48. No mueven totales de obra (cobrado/gastado salen de facturas, no de pagos).
+- **Archivos**: `src/lib/banco/santanderParser.ts`, `src/app/api/banco/import/route.ts`, `src/lib/banco/invoicePayments.ts`, `scripts/conciliar-maxxa-2025.ts` + scripts nuevos de reseteo/conciliación.
+
 ## 2026-06-02 — Cotizador: orden por tipo + descripciones con formato (texto rico)
 
 - **Orden del detalle de costos (fix)**: la tabla editable "Detalle de materiales y costos" (`ObraItemComponentsEditor`) ahora ordena SIEMPRE por tipo (material → mano de obra → herramientas → subcontrato → pérdida → margen) y dentro de cada tipo por orden de creación. Antes una línea nueva se agregaba al final de todo; ahora cae al final de su grupo. Es orden de presentación: no toca cálculos ni `sortOrder` guardado.

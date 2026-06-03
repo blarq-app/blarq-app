@@ -6,6 +6,7 @@ import { formatCLP } from "@/lib/utils";
 import MovementActionButton from "./MovementActionButton";
 import MatchHintButton from "./MatchHintButton";
 import MarkInternalButton from "./MarkInternalButton";
+import MarkSinFacturaButton from "./MarkSinFacturaButton";
 import MovementsBulkBar from "./MovementsBulkBar";
 
 type Payment = {
@@ -244,6 +245,10 @@ export default function MovementsTable({
                               .includes(blarqRutDigits) && (
                               <MarkInternalButton movimientoId={m.id} />
                             )}
+                          {(m.status === "sin_asignar" ||
+                            m.status === "parcial") && (
+                            <MarkSinFacturaButton movimientoId={m.id} />
+                          )}
                           <MovementActionButton
                             movimientoId={m.id}
                             amount={m.amount}

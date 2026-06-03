@@ -1,6 +1,7 @@
 import { formatCLP, relativeDate } from "@/lib/utils";
 import EditableCell from "@/components/proyecto/EditableCell";
 import ProjectStatusMenu from "@/components/proyecto/ProjectStatusMenu";
+import BorrarCotizacionButton from "@/components/proyecto/BorrarCotizacionButton";
 
 // Tabla densa compartida entre Dashboard, /proyectos y /cotizaciones.
 // El "preset" decide qué columnas se muestran; el resto del estilo es
@@ -231,14 +232,18 @@ function Row({
       )}
       <td className="px-2 py-2 text-right">
         {/* El menú solo aparece para proyectos NO internos en estados
-            donde tiene sentido cambiar status (ejecucion, terminado).
-            En cotizacion/archivado/convertida, la celda queda vacía. */}
+            donde tiene sentido cambiar status (ejecucion, terminado). */}
         {!row.isInternal && (variant === "ejecucion" || variant === "terminado") && (
           <ProjectStatusMenu
             projectId={row.id}
             projectName={row.name}
             status={row.status}
           />
+        )}
+        {/* Crucecita para eliminar — solo en cotizaciones sin convertir
+            (activas/archivadas). En convertidas no se ofrece: son obra viva. */}
+        {(variant === "cotizacion" || variant === "archivado") && (
+          <BorrarCotizacionButton projectId={row.id} projectName={row.name} />
         )}
       </td>
     </tr>

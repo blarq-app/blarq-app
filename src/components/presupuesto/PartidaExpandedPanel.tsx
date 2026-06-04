@@ -141,19 +141,15 @@ function DescBlock({
   label: string; hint: string; value: string | null;
   placeholder: string; onChange: (html: string) => void;
 }) {
-  // Achicamos la letra del editor (9px, más chica que el resto del panel) y el
-  // interlineado, bajamos el alto mínimo y la barra de formato a ~la mitad, SIN
-  // tocar RichTextEditor (lo edita otra sesión): todo se override desde afuera.
-  // Los botones B/I/U se distinguen de los círculos de color por la clase
-  // .rounded (los círculos usan .rounded-full), así no rompemos los swatches.
+  // Achicamos la letra del editor (9px, más chica que el resto del panel),
+  // apretamos el interlineado y bajamos el alto mínimo, SIN tocar
+  // RichTextEditor. La barra de formato ya no es fija (es un BubbleMenu
+  // flotante que aparece al seleccionar texto, PR #80), así que no hay nada
+  // de toolbar que achicar acá.
   const editorClass =
     "[&_.ProseMirror]:!text-[9px] [&_.ProseMirror]:!leading-[1.25] " +
     "[&_.ProseMirror]:!min-h-[22px] [&_.ProseMirror]:!py-0.5 [&_.ProseMirror]:!px-2 " +
-    "[&_.ProseMirror_p]:!my-0 [&_.ProseMirror_li]:!my-0 " +
-    "[&>div>div:first-child]:!py-[2px] [&>div>div:first-child]:!gap-0.5 " +
-    "[&_button.rounded]:!h-4 [&_button.rounded]:!min-w-4 [&_button.rounded]:!px-1 [&_button.rounded]:!text-[9px] " +
-    "[&_button.rounded-full]:!h-3 [&_button.rounded-full]:!w-3 " +
-    "[&_span.bg-gray-200]:!h-3";
+    "[&_.ProseMirror_p]:!my-0 [&_.ProseMirror_li]:!my-0";
   return (
     <div>
       <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-0.5">

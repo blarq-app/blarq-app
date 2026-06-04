@@ -23,6 +23,18 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 - **Datos de prod** (reseteos de estado, conciliaciones Maxxa 2025, Santander, internacionales): detalle en WIP.md ronda 48. No mueven totales de obra (cobrado/gastado salen de facturas, no de pagos).
 - **Archivos**: `src/lib/banco/santanderParser.ts`, `src/app/api/banco/import/route.ts`, `src/lib/banco/invoicePayments.ts`, `scripts/conciliar-maxxa-2025.ts` + scripts nuevos de reseteo/conciliación.
 
+---
+
+## 2026-06-03 — Cotizaciones: borrar con crucecita · editor: toolbar flotante + fix dropdowns
+
+- **Borrar cotización (feature)**: crucecita discreta a la derecha de cada fila en la lista de Cotizaciones (tabs Activas y Archivadas) con confirmación inline ("¿Eliminar? Sí/No"). Borrado definitivo (cascade: presupuestos, estados de pago, lista de compra). NO se ofrece en Convertidas (obra viva). El endpoint `DELETE /api/proyectos/[id]` suma guard server-side: solo borra status `cotizacion`/`archivado`. Componente nuevo `BorrarCotizacionButton`. (PR #79)
+- **Descripciones — toolbar flotante (UX)**: la barra de formato del `RichTextEditor` deja de ser fija y pasa a `BubbleMenu` (Tiptap) que aparece solo al seleccionar texto, chico y proporcional — ya no ocupa espacio al desplegar la partida. (PR #80)
+- **Agregar partida — dropdowns pegados (fix)**: dos desplegables del `ObraEditor` que no cerraban al click afuera: el buscador de catálogo (el cartel "No se encontraron partidas" persistía porque el handler solo limpiaba resultados, no la query → se separó la visibilidad en `showCatalogDropdown`) y el picker "+ Capítulo" (sin handler → se le agregó). (PR #80)
+- **Pendiente**: verificación visual del toolbar flotante en prod (no se pudo en sesión por inestabilidad del preview); si se ve mal, revertir PR #80.
+- **Archivos**: `src/components/proyecto/BorrarCotizacionButton.tsx`, `src/components/proyecto/ProjectsTable.tsx`, `src/app/api/proyectos/[id]/route.ts`, `src/components/presupuesto/RichTextEditor.tsx`, `src/components/presupuesto/ObraEditor.tsx`.
+
+---
+
 ## 2026-06-02 — Cotizador: orden por tipo + descripciones con formato (texto rico)
 
 - **Orden del detalle de costos (fix)**: la tabla editable "Detalle de materiales y costos" (`ObraItemComponentsEditor`) ahora ordena SIEMPRE por tipo (material → mano de obra → herramientas → subcontrato → pérdida → margen) y dentro de cada tipo por orden de creación. Antes una línea nueva se agregaba al final de todo; ahora cae al final de su grupo. Es orden de presentación: no toca cálculos ni `sortOrder` guardado.

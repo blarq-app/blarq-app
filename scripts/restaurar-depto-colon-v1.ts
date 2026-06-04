@@ -137,19 +137,123 @@ async function main() {
   }
 
   // ===== APPLY =====
-  // Backup completo de la versión
+  // Backup completo de la versión ANTES de tocar nada.
   mkdirSync("backups", { recursive: true });
   const full = await prisma.budgetVersion.findUnique({
     where: { id: SIN },
     include: { obraItems: { include: { components: true } } },
   });
-  const stamp = process.argv.find((a) => a.startsWith("--stamp="))?.split("=")[1] ?? "manual";
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const backupPath = `backups/restaurar-depto-colon-v1-${stamp}.json`;
   writeFileSync(backupPath, JSON.stringify(full, null, 2));
   console.log(`\nBackup -> ${backupPath}`);
 
-  // (La mutación real se implementa tras aprobar el dry-run.)
-  console.log("APPLY todavía no implementado — pendiente OK del dry-run.");
+  // Moldes de gas desde Con ampliación
+  const conItems = await prisma.obraItem.findMany({
+    where: { budgetVersionId: CON },
+    include: { components: { orderBy: { sortOrder: "asc" } } },
+  });
+  const moldeLlave = conItems.find((i) => norm(i.name).includes("llave de paso gas"));
+  const moldeTuberia = conItems.find((i) => norm(i.name).includes("modificacion tuberia gas"));
+  if (!moldeLlave || !moldeTuberia) throw new Error("No encontré los moldes de gas en Con ampliación");
+
+  // Capítulo de referencia (sección 4) desde un hermano en Sin ampliación
+  const ref4 = items.find((i) => norm(i.name).includes("modificaciones sanitarias cocina"));
+  const chapter4 = ref4?.chapter ?? moldeLlave.chapter;
+  const sub4 = ref4?.subChapter ?? moldeLlave.subChapter ?? null;
+  const maxSort = Math.max(...items.map((i) => i.sortOrder));
+
+  // cost* por tipo desde una lista de componentes (efectivo)
+  function costsByType(comps: ObraItemComponent[]) {
+    const by = (t: string) => comps.filter((c) => c.type === t).reduce((s, c) => s + effectiveTotal(c, comps), 0);
+    return {
+      costMaterial: by("material"), costLabor: by("mano_obra"), costTools: by("herramientas"),
+      costSubcontract: by("subcontrato"), costMargin: by("margen"), costLoss: by("perdida"),
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // 1) P.U./total = PDF para todas las partidas que matchean (idempotente en las 22;
+    //    corrige módulo y porcelanato). Marca isCustomized en las que se fijan (opción C).
+    for (const p of plan) {
+      if (!p.item) continue;
+      const [, , , , pu, total] = p.pdf;
+      const fija = p.accion.startsWith("FIJAR");
+      await tx.obraItem.update({
+        where: { id: p.item.id },
+        data: { unitPrice: pu, total, ...(fija ? { isCustomized: true } : {}) },
+      });
+    }
+
+    // 2) Convertir "encimera eléctrica" -> "INSTALACION ENCIMERA GAS" $46.000
+    //    GASFITER 40.000 + margen 15% = 46.000 (cuadra limpio).
+    const enc = sobrantes.find((s) => norm(s.name).includes("encimera"));
+    if (enc) {
+      await tx.obraItemComponent.deleteMany({ where: { obraItemId: enc.id } });
+      await tx.obraItemComponent.createMany({
+        data: [
+          { obraItemId: enc.id, type: "mano_obra", description: "GASFITER", unit: "UN", quantity: 1, unitCost: 40000, totalCost: 40000, sortOrder: 0, isCustomized: true },
+          { obraItemId: enc.id, type: "mano_obra", description: "LEYES SOCIALES", unit: "%", quantity: 0, unitCost: 400, totalCost: 0, appliedToType: "mano_obra", sortOrder: 1, isCustomized: true },
+          { obraItemId: enc.id, type: "margen", description: "MARGEN", unit: "%", quantity: 15, unitCost: 400, totalCost: 6000, sortOrder: 2, isCustomized: true },
+        ],
+      });
+      await tx.obraItem.update({
+        where: { id: enc.id },
+        data: {
+          name: "INSTALACION ENCIMERA GAS", unit: "UN", quantity: 1, unitPrice: 46000, total: 46000,
+          itemNumber: "4.3", isCustomized: true,
+          costMaterial: 0, costLabor: 40000, costTools: 0, costSubcontract: 0, costMargin: 6000, costLoss: 0,
+        },
+      });
+    }
+
+    // 3) Crear "Llave de paso gas" (79.496) y "Modif. tubería gas" (90.276) desde molde.
+    for (const [molde, pu, num] of [
+      [moldeLlave, 79496, "4.4"] as const,
+      [moldeTuberia, 90276, "4.5"] as const,
+    ]) {
+      const c = costsByType(molde.components);
+      const nuevo = await tx.obraItem.create({
+        data: {
+          budgetVersionId: SIN,
+          chapter: chapter4, subChapter: sub4,
+          itemNumber: num, name: molde.name,
+          descriptionCliente: molde.descriptionCliente, descriptionMaestro: molde.descriptionMaestro,
+          unit: molde.unit, quantity: 1, unitPrice: pu, total: pu,
+          isCustomized: true,
+          sortOrder: maxSort + (num === "4.4" ? 1 : 2),
+          ...c,
+        },
+      });
+      // Copiar el desglose del molde (detachado del catálogo: materialId=null, isCustomized=true)
+      let so = 0;
+      for (const m of molde.components) {
+        await tx.obraItemComponent.create({
+          data: {
+            obraItemId: nuevo.id, type: m.type, description: m.description, unit: m.unit,
+            quantity: m.quantity, unitCost: m.unitCost, totalCost: effectiveTotal(m, molde.components),
+            appliedToType: m.appliedToType, isCustomized: true, sortOrder: so++,
+          },
+        });
+      }
+    }
+
+    // 4) Congelar la versión: pasar a "enviado" (no se vuelve a mover con el catálogo).
+    await tx.budgetVersion.update({ where: { id: SIN }, data: { status: "enviado" } });
+  }, { timeout: 120000, maxWait: 20000 });
+
+  console.log("\n=== APLICADO. Verificación post: ===");
+  const post = await prisma.obraItem.findMany({
+    where: { budgetVersionId: SIN }, orderBy: { sortOrder: "asc" },
+    select: { itemNumber: true, name: true, unit: true, quantity: true, unitPrice: true, total: true },
+  });
+  const cd = post.reduce((a, i) => a + i.total, 0);
+  const bv = await prisma.budgetVersion.findUnique({ where: { id: SIN }, select: { status: true, ggPercentage: true, utilityPercentage: true } });
+  console.log(`  Partidas: ${post.length} (PDF=27) | status=${bv?.status}`);
+  const ggP = Math.round(cd * 0.2), utilP = Math.round(cd * 0.1), netoP = cd + ggP + utilP, ivaP = Math.round(netoP * 0.19);
+  console.log(`  Costo directo ${cd} | GG ${ggP} | Util ${utilP} | Neto ${netoP} | IVA ${ivaP} | TOTAL ${netoP + ivaP}`);
+  console.log(`  PDF objetivo : 5135909 | 1027182 | 513591 | 6676682 | 1268570 | 7945252`);
+  for (const i of post) console.log(`    [${i.itemNumber}] ${i.name} | ${i.unit} ${i.quantity} | PU ${Math.round(i.unitPrice)} | tot ${Math.round(i.total)}`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(async () => { await prisma.$disconnect(); });

@@ -153,6 +153,13 @@ export default function ObraEditor({
   const [showManualForm, setShowManualForm] = useState(false);
   const [selectedCatalog, setSelectedCatalog] = useState<CatalogPartida | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+  // Visibilidad del dropdown de resultados del buscador de catálogo. Se separa
+  // de catalogQuery/catalogResults para poder CERRAR el dropdown al hacer click
+  // afuera SIN borrar lo que MJ escribió. (fix: el dropdown "No se encontraron
+  // partidas" quedaba pegado porque el click-afuera solo limpiaba resultados.)
+  const [showCatalogDropdown, setShowCatalogDropdown] = useState(false);
+  // Ref del dropdown "+ Capítulo" para cerrarlo al hacer click afuera.
+  const chapterPickerRef = useRef<HTMLDivElement>(null);
 
   // New item state (for both catalog-selected and manual)
   const [newItem, setNewItem] = useState({
@@ -187,11 +194,19 @@ export default function ObraEditor({
     return () => clearTimeout(timer);
   }, [catalogQuery]);
 
-  // Close dropdown on click outside
+  // Cerrar los dropdowns al hacer click afuera: el buscador de catálogo y el
+  // picker "+ Capítulo". Un solo handler chequea ambos refs.
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setCatalogResults([]);
+      const target = e.target as Node;
+      if (searchRef.current && !searchRef.current.contains(target)) {
+        setShowCatalogDropdown(false);
+      }
+      if (
+        chapterPickerRef.current &&
+        !chapterPickerRef.current.contains(target)
+      ) {
+        setShowChapterPicker(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -289,6 +304,7 @@ export default function ObraEditor({
     setProvisionPrices(initPrices);
     setCatalogQuery("");
     setCatalogResults([]);
+    setShowCatalogDropdown(false);
     setShowManualForm(false);
   }
 
@@ -296,12 +312,14 @@ export default function ObraEditor({
     setSelectedCatalog(null);
     setShowManualForm(true);
     setCatalogResults([]);
+    setShowCatalogDropdown(false);
     setNewItem({ name: catalogQuery, descriptionCliente: "", descriptionMaestro: "", unit: "GL", quantity: 0, unitPrice: 0 });
   }
 
   function resetAddForm() {
     setCatalogQuery("");
     setCatalogResults([]);
+    setShowCatalogDropdown(false);
     setSelectedCatalog(null);
     setShowManualForm(false);
     setNewItem({ name: "", descriptionCliente: "", descriptionMaestro: "", unit: "GL", quantity: 0, unitPrice: 0 });
@@ -1273,7 +1291,11 @@ export default function ObraEditor({
                       <input
                         type="text"
                         value={catalogQuery}
-                        onChange={(e) => setCatalogQuery(e.target.value)}
+                        onChange={(e) => {
+                          setCatalogQuery(e.target.value);
+                          setShowCatalogDropdown(true);
+                        }}
+                        onFocus={() => setShowCatalogDropdown(true)}
                         className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
                         placeholder="Buscar partida en catalogo... (ej: demolicion muro, enchape)"
                         autoFocus
@@ -1299,7 +1321,7 @@ export default function ObraEditor({
                   </div>
 
                   {/* Search results dropdown */}
-                  {catalogResults.length > 0 && (
+                  {showCatalogDropdown && catalogResults.length > 0 && (
                     <div className="absolute z-10 left-0 right-16 mt-1 bg-white rounded-lg border border-gray-200 shadow-lg max-h-72 overflow-y-auto">
                       {catalogResults.map((p) => (
                         <button
@@ -1329,7 +1351,8 @@ export default function ObraEditor({
                   )}
 
                   {/* No results message */}
-                  {catalogQuery.length >= 2 &&
+                  {showCatalogDropdown &&
+                    catalogQuery.length >= 2 &&
                     !searchingCatalog &&
                     catalogResults.length === 0 && (
                       <div className="absolute z-10 left-0 right-16 mt-1 bg-white rounded-lg border border-gray-200 shadow-lg p-4">
@@ -1636,7 +1659,7 @@ export default function ObraEditor({
       {/* "+ Capítulo": dropdown para re-habilitar capítulos vacíos. Solo
           aparece cuando hay capítulos ocultos disponibles. */}
       {hiddenChapters.length > 0 && (
-        <div className="relative">
+        <div className="relative" ref={chapterPickerRef}>
           <button
             onClick={() => setShowChapterPicker((s) => !s)}
             className="text-sm text-gray-600 hover:text-gray-900 border border-dashed border-gray-300 hover:border-gray-500 px-4 py-2 rounded-lg transition-colors"

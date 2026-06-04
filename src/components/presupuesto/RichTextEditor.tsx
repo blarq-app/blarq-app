@@ -1,9 +1,13 @@
 "use client";
 
 // Editor de texto con formato para las descripciones del cotizador (cliente y
-// maestro). Basado en Tiptap. Soporta: negrita, cursiva, viñetas, lista
-// numerada y color (paleta acotada de tonos apagados, para no romper el tono
-// editorial blanco/negro/gris de BLARQ).
+// maestro). Basado en Tiptap. Soporta: negrita, cursiva, subrayado, viñetas,
+// lista numerada y color (paleta acotada de tonos apagados, para no romper el
+// tono editorial blanco/negro/gris de BLARQ).
+//
+// La barra de formato NO es fija: aparece como un menú flotante chico (BubbleMenu)
+// SOLO cuando hay texto seleccionado — así no ocupa espacio al desplegar la
+// partida (pedido de MJ). Estilo proporcional y discreto.
 //
 // Guarda HTML (controlado: value/onChange). El HTML se limpia con
 // sanitizeRichTextHtml() antes de mostrarse/imprimirse (ver lib/richText.ts).
@@ -11,6 +15,7 @@
 // dependencia de iconos).
 
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
+import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
 import { TextStyle, Color } from "@tiptap/extension-text-style";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -31,7 +36,9 @@ const COLORS: { name: string; value: string | null }[] = [
   { name: "Mostaza", value: "#c79a1e" },
 ];
 
-function ToolbarButton({
+// Botón chico del menú flotante. Compacto (24px) y sin borde pesado, para que
+// el menú se sienta liviano.
+function MenuButton({
   onClick,
   active,
   title,
@@ -48,8 +55,10 @@ function ToolbarButton({
       title={title}
       onMouseDown={(e) => e.preventDefault()} // no perder el foco/selección del editor
       onClick={onClick}
-      className={`min-w-7 h-7 px-1.5 rounded text-sm leading-none flex items-center justify-center border border-gray-200 transition-colors ${
-        active ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-700 hover:bg-gray-100"
+      className={`min-w-6 h-6 px-1 rounded text-xs leading-none flex items-center justify-center transition-colors ${
+        active
+          ? "bg-gray-800 text-white"
+          : "text-gray-700 hover:bg-gray-100"
       }`}
     >
       {children}
@@ -57,27 +66,28 @@ function ToolbarButton({
   );
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+// Contenido del menú flotante: formato + colores, en una sola fila compacta.
+function FloatingMenu({ editor }: { editor: Editor }) {
   return (
-    <div className="flex flex-wrap items-center gap-1 border-b border-gray-200 px-1.5 py-1 bg-gray-50/60 rounded-t">
-      <ToolbarButton title="Negrita" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
+    <div className="flex items-center gap-0.5 rounded-lg border border-gray-200 bg-white shadow-sm px-1 py-0.5">
+      <MenuButton title="Negrita" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
         <span className="font-bold">B</span>
-      </ToolbarButton>
-      <ToolbarButton title="Cursiva" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
+      </MenuButton>
+      <MenuButton title="Cursiva" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
         <span className="italic font-serif">I</span>
-      </ToolbarButton>
-      <ToolbarButton title="Subrayado" active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()}>
+      </MenuButton>
+      <MenuButton title="Subrayado" active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()}>
         <span className="underline">U</span>
-      </ToolbarButton>
-      <span className="mx-0.5 w-px h-5 bg-gray-200" />
-      <ToolbarButton title="Viñetas" active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}>
+      </MenuButton>
+      <span className="mx-0.5 w-px h-4 bg-gray-200" />
+      <MenuButton title="Viñetas" active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}>
         •
-      </ToolbarButton>
-      <ToolbarButton title="Lista numerada" active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
-        <span className="text-[11px]">1.</span>
-      </ToolbarButton>
-      <span className="mx-0.5 w-px h-5 bg-gray-200" />
-      <div className="flex items-center gap-1" title="Color del texto">
+      </MenuButton>
+      <MenuButton title="Lista numerada" active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+        <span className="text-[10px]">1.</span>
+      </MenuButton>
+      <span className="mx-0.5 w-px h-4 bg-gray-200" />
+      <div className="flex items-center gap-0.5" title="Color del texto">
         {COLORS.map((c) => (
           <button
             key={c.name}
@@ -89,7 +99,7 @@ function Toolbar({ editor }: { editor: Editor }) {
                 ? editor.chain().focus().setColor(c.value).run()
                 : editor.chain().focus().unsetColor().run()
             }
-            className="w-5 h-5 rounded-full border border-gray-300"
+            className="w-4 h-4 rounded-full border border-gray-300 hover:scale-110 transition-transform"
             style={{ backgroundColor: c.value ?? "#111827" }}
           />
         ))}
@@ -150,7 +160,12 @@ export default function RichTextEditor({
 
   return (
     <div className="rounded border border-gray-300 focus-within:border-gray-400 bg-white">
-      {editor && <Toolbar editor={editor} />}
+      {/* Menú flotante: aparece solo cuando hay texto seleccionado. */}
+      {editor && (
+        <BubbleMenu editor={editor}>
+          <FloatingMenu editor={editor} />
+        </BubbleMenu>
+      )}
       <EditorContent editor={editor} />
     </div>
   );

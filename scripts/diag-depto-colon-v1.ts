@@ -191,7 +191,9 @@ async function main() {
   // Detalle de componentes de las partidas que driftearon
   console.log(`\n== DETALLE DE COMPONENTES (todas las partidas) ==`);
   for (const it of items) {
-    console.log(`\n[${it.itemNumber}] ${it.name} — PU hoy ${Math.round(it.unitPrice)} — total ${Math.round(it.total)} — catalogPartidaId=${it.catalogPartidaId ?? "—"} isCustomized=${it.isCustomized}`);
+    const sumComp = it.components.reduce((a, c) => a + c.totalCost, 0);
+    const consistente = Math.abs(sumComp - it.unitPrice) < 1 ? "OK" : `DESCUADRE (suma comp=${Math.round(sumComp)} vs PU=${Math.round(it.unitPrice)})`;
+    console.log(`\n[${it.itemNumber}] ${it.name} — PU hoy ${Math.round(it.unitPrice)} — total ${Math.round(it.total)} — cant=${it.quantity} — consistencia=${consistente} — catalogPartidaId=${it.catalogPartidaId ?? "—"} isCustomized=${it.isCustomized}`);
     console.log(`    cost: mat=${it.costMaterial} mo=${it.costLabor} herr=${it.costTools} sub=${it.costSubcontract} margen=${it.costMargin} perdida=${it.costLoss}`);
     for (const c of it.components) {
       console.log(`    - ${c.type} | "${c.description}" | ${c.unit} | q=${c.quantity} | uc=${c.unitCost} | tc=${c.totalCost} | mat=${c.materialId ? "sí" : "—"} origin=${c.originComponentId ? "sí" : "—"} cust=${c.isCustomized} appliedTo=${c.appliedToComponentId ?? "—"}/${c.appliedToType ?? "—"}`);

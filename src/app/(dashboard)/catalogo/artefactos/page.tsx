@@ -6,9 +6,9 @@ export const dynamic = "force-dynamic";
 export default async function CatalogoArtefactosPage() {
   const items = await prisma.artefactoCatalog.findMany({
     orderBy: [
-      { isStandard: "desc" },
       { subcategory: "asc" },
-      { name: "asc" },
+      { sortOrder: "asc" }, // orden manual dentro de la pestaña
+      { name: "asc" }, // fallback estable cuando empatan en sortOrder
     ],
   });
 

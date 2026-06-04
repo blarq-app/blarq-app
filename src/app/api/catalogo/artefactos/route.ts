@@ -37,9 +37,9 @@ export async function GET(request: NextRequest) {
   const items = await prisma.artefactoCatalog.findMany({
     where,
     orderBy: [
-      { isStandard: "desc" }, // estándares primero
       { subcategory: "asc" },
-      { name: "asc" },
+      { sortOrder: "asc" }, // orden manual dentro de la pestaña
+      { name: "asc" }, // fallback estable cuando empatan en sortOrder
     ],
   });
 
@@ -55,6 +55,14 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    // El artefacto nuevo se ubica al final de su pestaña: tomamos el
+    // sortOrder más alto de esa subcategoría y le sumamos uno.
+    const last = await prisma.artefactoCatalog.findFirst({
+      where: { subcategory: data.subcategory },
+      orderBy: { sortOrder: "desc" },
+      select: { sortOrder: true },
+    });
+    const nextSortOrder = (last?.sortOrder ?? 0) + 1;
     const item = await prisma.artefactoCatalog.create({
       data: {
         name: data.name,
@@ -68,6 +76,7 @@ export async function POST(request: NextRequest) {
         listPrice: data.listPrice ?? 0,
         discountPercent: data.discountPercent ?? null,
         isStandard: !!data.isStandard,
+        sortOrder: nextSortOrder,
         lastPriceCheck: data.listPrice && data.listPrice > 0 ? new Date() : null,
       },
     });

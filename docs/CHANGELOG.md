@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-04 — Presupuesto: vista expandida de partida densa (~918→~490px)
+
+- El panel que se abre al expandir una partida (pestaña Presupuesto) ocupaba ~918px (más de una pantalla). Se compacta a ~490px **manteniendo toda la info**, a densidad tipo planilla maestra: descripciones cliente/maestro **lado a lado** (antes apiladas) con letra de 9px e interlineado apretado; 6 rubros de costo + suma en una fila; tabla "Detalle de materiales y costos" en modo denso (10px, filas pegadas, chips de tipo sin alto extra, totales 9px, botones "+Material…" más chicos).
+- El layout expandido se extrajo a un componente nuevo `PartidaExpandedPanel.tsx` (acota el cambio en `ObraEditor.tsx`). La densidad de la tabla se activa con un prop `dense` en `ObraItemComponentsEditor` (default off → la vista normal de esa tabla queda igual). UI pura, no toca cálculos ni `metrics.ts`. (PR #84)
+- **Arreglo lateral** (aplica también a la vista normal): el link ↗ de los materiales con referencia caía en una 2ª línea e inflaba esas filas; ahora va en la misma línea (flex).
+- Nota: el panel se diseñó sobre un `main` previo al PR #80 (toolbar flotante). En prod la barra de formato es el `BubbleMenu` flotante; las descripciones quedan sin barra fija (aún más compactas). Verificado: build de prod OK y endpoint de componentes 200 en producción (el 404 visto en dev era artefacto de turbopack con esa ruta anidada).
+
 ## 2026-06-03 — Catálogo de artefactos: pestañas por subcategoría + orden manual (drag) agrupado por tipo
 
 - **Pestañas** Sanitario / Cocina / Iluminación (con contador) reemplazan el desplegable de subcategoría en `/catalogo/artefactos` — botones arriba, un click. La búsqueda y el filtro "Solo paleta estándar" siguen operando dentro de la pestaña activa.

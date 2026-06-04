@@ -117,6 +117,16 @@ export async function POST(request: NextRequest) {
     // 3. Insertar los movimientos nuevos. El constraint
     // (bankAccountId, date, amount, balanceAfter) queda como segunda barrera;
     // la decisión real de qué es duplicado la tomó `planImportDedup` arriba.
+    //
+    // Categorías que GENUINAMENTE no llevan documento → nacen "sin_factura".
+    // Solo Previred (cotizaciones) y sueldos/retiros a socios. El resto que se
+    // categoriza nace "sin_asignar" para entrar a la cola de conciliación:
+    //   - comisiones del banco → SÍ tienen factura (del Santander, ya en el
+    //     sistema); se concilian.
+    //   - depósitos en efectivo → son INGRESOS de clientes; se concilian con
+    //     facturas emitidas, no son "sin factura".
+    // Decisión MJ 2026-06-03.
+    const CATEGORIAS_SIN_DOCUMENTO = new Set(["previred", "sueldo"]);
     const insertedIds: string[] = [];
     for (const mov of toInsert) {
       try {
@@ -132,7 +142,10 @@ export async function POST(request: NextRequest) {
             counterpartyName: mov.counterpartyName,
             counterpartyRut: mov.counterpartyRut,
             category: mov.suggestedCategory,
-            status: mov.suggestedCategory ? "sin_factura" : "sin_asignar",
+            status:
+              mov.suggestedCategory && CATEGORIAS_SIN_DOCUMENTO.has(mov.suggestedCategory)
+                ? "sin_factura"
+                : "sin_asignar",
           },
         });
         insertedIds.push(created.id);

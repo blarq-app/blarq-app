@@ -4,6 +4,27 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-03 (ronda 49) — Botón "Sin factura" en movimientos + conciliación cobros Maxxa
+
+- **Botón "Sin factura" inline** en `/banco/movimientos` (`MarkSinFacturaButton.tsx`, cableado en `MovementsTable`): marca un movimiento pendiente/parcial como `sin_factura` con categoría (Sueldo, Previred, Comisión banco, Retiro personal, Depósito efectivo, Otro) **sin crear factura ficticia ni exigir proyecto** — antes el único camino era "Pago sin factura", que obliga a un proyecto y crea una recibida `sin_respaldo`. Motivo: sueldos/comisiones no son costo de obra. Hasta ahora esas categorías solo se ponían por reglas al importar; los movimientos sin regla (ej. transferencia a Juan Pablo Costa) quedaban sin forma de marcarse a mano.
+- **PATCH `/api/banco/movimientos/[id]`**: la creación de regla de auto-categorización pasa a ser **opt-in** (`saveRule:true`). Antes cualquier `{category}` creaba regla; el patrón se deriva de la glosa y puede quedar amplio ("Transf a Juan"). El botón nuevo trae el check "Guardar regla" apagado por default. Ningún caller previo mandaba `category`, así que no cambia comportamiento existente.
+
+## 2026-06-03 (ronda 49) — Conciliación cobros 2025+2026 "pagada sin enlace" desde Maxxa
+
+- **`scripts/conciliar-maxxa-2025.ts`** (ahora 2025 **y** 2026): (1) deja de saltar facturas `status==="pagada"` — vincula por saldo real `invRem = total − pagos` y no degrada el estado (a una pagada solo le agrega el enlace al banco); (2) transferencias gemelas: dedup de filas de cartola por la identidad estable de Maxxa (set de `id_pago`), no por fecha|monto|desc, y consume un movimiento de app distinto por fila; (3) lee las 4 cartolas 2026 + filtros de fecha a 2026. Mantiene el guard de signo y el match de emitidas por `tipoDoc{33,34,61,39}|folio` (NO por folio solo: los docs Maxxa 1043/1054 colisionan con el correlativo de emitidas y crearían enlaces falsos).
+- **Datos de prod** (dry-run + OK MJ + backup): 63 imputaciones creadas. 18 cobros (emitidas) cerrados a saldo $0 (≈ $199,4M) + recibidas chicas. Integridad: 0 facturas/movimientos sobre-imputados. No mueve totales de obra (cobrado/gastado salen de facturas). F-5705931 (Servipag) excluido por decisión MJ.
+- **Pendiente de dato**: 92 movimientos Maxxa sin contraparte en la app = compras Sodimac 2024 (la app solo tiene cartola desde 2025-01-02). Importar cartola 2024 para cerrarlas.
+
+## 2026-06-03 — Import banco: "compra con tarjeta" ya no se marca "sin factura" + auto-match comercios
+
+- **Import deja de esconder compras en "sin factura"**: `inferCategory` (`santanderParser.ts`) ya NO infiere `compra_tarjeta` por el prefijo "Compra ". `import/route.ts` solo nace `status=sin_factura` para categorías sin documento real (`previred`, `sueldo`); el resto nace `sin_asignar` y entra a la cola de conciliación. Motivo: el atajo mandaba toda compra con tarjeta (la mayoría CON factura) a "sin factura", donde el filtro de pendientes no la muestra. "Sin factura" pasa a enseñarse caso por caso (reglas `bankCategorizationRule`).
+- **Auto-match por comercio (`invoicePayments.ts`)**: arreglado Construmart (la glosa trae guion "CONSTRU-MART", la regex `/construmart/` no matcheaba → ahora `/constru-?mart/`); agregado ERPYME→MAXXA (suscripción mensual, monto exacto). Sin cambios en el criterio conservador (RUT o comercio reconocido; la fecha no interviene).
+- **`conciliar-maxxa-2025.ts`**: lee los 4 exports de Maxxa (antes 2; faltaba ene–mar 2025) + guard de coherencia de signo (emitida↔abono, recibida↔cargo) para no pegar pagos por colisión de folio. Limitación conocida: la dedup de cartola colapsa transferencias gemelas legítimas (pendiente arreglar para 2026).
+- **Datos de prod** (reseteos de estado, conciliaciones Maxxa 2025, Santander, internacionales): detalle en WIP.md ronda 48. No mueven totales de obra (cobrado/gastado salen de facturas, no de pagos).
+- **Archivos**: `src/lib/banco/santanderParser.ts`, `src/app/api/banco/import/route.ts`, `src/lib/banco/invoicePayments.ts`, `scripts/conciliar-maxxa-2025.ts` + scripts nuevos de reseteo/conciliación.
+
+---
+
 ## 2026-06-03 — Cotizaciones: borrar con crucecita · editor: toolbar flotante + fix dropdowns
 
 - **Borrar cotización (feature)**: crucecita discreta a la derecha de cada fila en la lista de Cotizaciones (tabs Activas y Archivadas) con confirmación inline ("¿Eliminar? Sí/No"). Borrado definitivo (cascade: presupuestos, estados de pago, lista de compra). NO se ofrece en Convertidas (obra viva). El endpoint `DELETE /api/proyectos/[id]` suma guard server-side: solo borra status `cotizacion`/`archivado`. Componente nuevo `BorrarCotizacionButton`. (PR #79)

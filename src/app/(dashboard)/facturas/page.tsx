@@ -118,9 +118,6 @@ export default async function FacturasPage({
     .filter((i) => i.type === "recibida")
     .reduce((s, i) => s + i.netAmount, 0);
 
-  // Default desde el cual sincronizar SII (1 abril, fecha de corte de MJ)
-  const SII_SYNC_FROM = "2026-04-01";
-
   // Cuántas facturas SII están sin asignar a proyecto — para destacar el
   // filtro y atraer la atención del usuario.
   const siiUnassignedCount = await prisma.invoice.count({
@@ -138,7 +135,7 @@ export default async function FacturasPage({
           >
             Reglas
           </Link>
-          <SyncSiiButton defaultFrom={SII_SYNC_FROM} />
+          <SyncSiiButton />
           <Link
             href="/facturas/nueva"
             className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800"

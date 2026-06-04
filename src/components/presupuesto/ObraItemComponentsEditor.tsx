@@ -349,7 +349,12 @@ export default function ObraItemComponentsEditor({
             const meta = typeMeta(c.type);
             const isPct = c.unit === "%";
             return (
-              <tr key={c.id} className="border-b border-gray-50 last:border-0">
+              <tr
+                key={c.id}
+                className={`border-b last:border-0 ${
+                  dense ? "border-gray-100" : "border-gray-50"
+                }`}
+              >
                 <td className="py-1 px-2">
                   <span className={`px-1.5 py-0.5 rounded text-[10px] ${meta.color}`}>
                     {meta.label}

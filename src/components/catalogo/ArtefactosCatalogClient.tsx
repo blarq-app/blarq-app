@@ -1,8 +1,25 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface CatalogItem {
   id: string;
@@ -17,6 +34,7 @@ interface CatalogItem {
   listPrice: number;
   discountPercent: number | null;
   isStandard: boolean;
+  sortOrder: number;
   lastPriceCheck: Date | string | null;
 }
 
@@ -27,6 +45,11 @@ const SUBCATEGORY_LABELS: Record<string, string> = {
 };
 
 const SUBCATEGORY_OPTIONS = ["sanitario", "cocina", "iluminacion"];
+
+// Layout de columnas compartido entre el encabezado y cada fila. La primera
+// columna angosta es la manija para arrastrar.
+const GRID_COLS =
+  "grid-cols-[1.5rem_5rem_minmax(0,1.2fr)_minmax(0,2fr)_9rem_7rem_5rem_3rem]";
 
 // Input numérico con separadores de miles.
 function ThousandsInput({
@@ -72,8 +95,8 @@ export default function ArtefactosCatalogClient({
 }) {
   const router = useRouter();
   const [items, setItems] = useState<CatalogItem[]>(initialItems);
+  const [activeTab, setActiveTab] = useState<string>("sanitario");
   const [query, setQuery] = useState("");
-  const [subcatFilter, setSubcatFilter] = useState<string | null>(null);
   const [onlyStandard, setOnlyStandard] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newItem, setNewItem] = useState({
@@ -92,13 +115,34 @@ export default function ArtefactosCatalogClient({
   const [extractingForNew, setExtractingForNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Filtros y búsqueda ────────────────────────────────────────────────
-  const filtered = useMemo(() => {
-    return items.filter((it) => {
-      if (subcatFilter && it.subcategory !== subcatFilter) return false;
+  // ── Conteo por pestaña (sobre el universo completo, sin filtros) ──────
+  const countsByTab = useMemo(() => {
+    const c: Record<string, number> = { sanitario: 0, cocina: 0, iluminacion: 0 };
+    for (const it of items) {
+      if (c[it.subcategory] !== undefined) c[it.subcategory]++;
+    }
+    return c;
+  }, [items]);
+
+  // ── Items de la pestaña activa, ordenados por sortOrder ───────────────
+  // Este es el orden "real" del tab (sin filtros) — la base para arrastrar.
+  const tabItems = useMemo(() => {
+    return items
+      .filter((it) => it.subcategory === activeTab)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  }, [items, activeTab]);
+
+  // Si hay búsqueda o el filtro de estándares está activo, no se puede
+  // arrastrar (estaríamos reordenando sobre una vista parcial). El arrastre
+  // se hace sobre la lista completa de la pestaña.
+  const isFiltering = query.trim() !== "" || onlyStandard;
+
+  // ── Lista visible: aplica búsqueda + estándares sobre tabItems ────────
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return tabItems.filter((it) => {
       if (onlyStandard && !it.isStandard) return false;
-      if (query) {
-        const q = query.toLowerCase();
+      if (q) {
         const hay = [
           it.name,
           it.detail ?? "",
@@ -112,7 +156,44 @@ export default function ArtefactosCatalogClient({
       }
       return true;
     });
-  }, [items, query, subcatFilter, onlyStandard]);
+  }, [tabItems, query, onlyStandard]);
+
+  // ── Drag & drop ───────────────────────────────────────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  async function onDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIdx = tabItems.findIndex((it) => it.id === active.id);
+    const newIdx = tabItems.findIndex((it) => it.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(tabItems, oldIdx, newIdx);
+
+    // Optimista: reasigna sortOrder consecutivo a toda la pestaña.
+    const orderMap = new Map(reordered.map((it, i) => [it.id, i]));
+    setItems((prev) =>
+      prev.map((it) =>
+        orderMap.has(it.id) ? { ...it, sortOrder: orderMap.get(it.id)! } : it
+      )
+    );
+
+    // Persistir.
+    try {
+      await fetch("/api/catalogo/artefactos/reorder", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: reordered.map((it, i) => ({ id: it.id, sortOrder: i })),
+        }),
+      });
+    } catch {
+      alert("Error al guardar el orden");
+      router.refresh();
+    }
+  }
 
   // ── Mutaciones ────────────────────────────────────────────────────────
   async function persistItem(item: CatalogItem) {
@@ -165,12 +246,14 @@ export default function ArtefactosCatalogClient({
         throw new Error(err.error || "Error");
       }
       const created = await res.json();
-      setItems((prev) => [created, ...prev]);
+      setItems((prev) => [...prev, created]);
+      // Saltar a la pestaña donde quedó el artefacto recién creado.
+      setActiveTab(created.subcategory);
       setNewItem({
         name: "",
         detail: "",
         brand: "",
-        subcategory: "sanitario",
+        subcategory: activeTab,
         tag: "",
         supplier: "",
         referenceLink: "",
@@ -219,8 +302,67 @@ export default function ArtefactosCatalogClient({
     }
   }
 
+  // ── Render: filas + encabezados de grupo por tag ──────────────────────
+  // Recorremos la lista visible y, cada vez que el tag cambia respecto a la
+  // fila anterior, insertamos un encabezado con el tipo. Las filas sin tag
+  // no muestran encabezado (evita ruido).
+  const rows: ReactNode[] = [];
+  let prevTag = " "; // centinela imposible para forzar el primer chequeo
+  for (const item of visible) {
+    const tagKey = (item.tag ?? "").trim();
+    if (tagKey !== prevTag) {
+      if (tagKey) {
+        rows.push(
+          <div
+            key={`hdr-${item.id}`}
+            className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-500 uppercase tracking-wider"
+          >
+            {tagKey}
+          </div>
+        );
+      }
+      prevTag = tagKey;
+    }
+    rows.push(
+      <CatalogItemRow
+        key={item.id}
+        item={item}
+        canReorder={!isFiltering}
+        onUpdate={(patch) => updateItem(item.id, patch)}
+        onDelete={() => deleteItem(item.id)}
+      />
+    );
+  }
+
   return (
     <div>
+      {/* Pestañas de subcategoría */}
+      <div className="flex items-center gap-2 mb-4">
+        {SUBCATEGORY_OPTIONS.map((s) => {
+          const active = activeTab === s;
+          return (
+            <button
+              key={s}
+              onClick={() => setActiveTab(s)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                active
+                  ? "bg-gray-900 text-white border-gray-900"
+                  : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+              }`}
+            >
+              {SUBCATEGORY_LABELS[s]}
+              <span
+                className={`ml-2 tabular-nums ${
+                  active ? "text-gray-300" : "text-gray-400"
+                }`}
+              >
+                {countsByTab[s] ?? 0}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Toolbar: búsqueda + filtros + nuevo */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap items-center gap-3">
         <input
@@ -230,18 +372,6 @@ export default function ArtefactosCatalogClient({
           placeholder="Buscar por nombre, marca, proveedor…"
           className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-gray-500"
         />
-        <select
-          value={subcatFilter ?? ""}
-          onChange={(e) => setSubcatFilter(e.target.value || null)}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:border-gray-500"
-        >
-          <option value="">Todas las subcategorías</option>
-          {SUBCATEGORY_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {SUBCATEGORY_LABELS[s]}
-            </option>
-          ))}
-        </select>
         <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
           <input
             type="checkbox"
@@ -252,7 +382,11 @@ export default function ArtefactosCatalogClient({
           Solo paleta estándar BLARQ
         </label>
         <button
-          onClick={() => setAdding(!adding)}
+          onClick={() => {
+            // El formulario nuevo arranca en la pestaña activa.
+            setNewItem((prev) => ({ ...prev, subcategory: activeTab }));
+            setAdding(!adding);
+          }}
           className="ml-auto text-sm bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800"
         >
           {adding ? "Cancelar" : "+ Nuevo artefacto"}
@@ -377,7 +511,7 @@ export default function ArtefactosCatalogClient({
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                Tag (opcional, para agrupar)
+                Tipo (opcional, para agrupar)
               </label>
               <input
                 type="text"
@@ -385,7 +519,7 @@ export default function ArtefactosCatalogClient({
                 onChange={(e) =>
                   setNewItem({ ...newItem, tag: e.target.value })
                 }
-                placeholder="wc-piso, griferia-9cm…"
+                placeholder="grifería, muebles, WC…"
                 className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500"
               />
             </div>
@@ -469,51 +603,100 @@ export default function ArtefactosCatalogClient({
 
       {/* Tabla de items */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="grid grid-cols-[5rem_minmax(0,1.2fr)_minmax(0,2fr)_8rem_7rem_5rem_3rem] items-center gap-3 px-4 py-2 border-b border-gray-200 bg-gray-50 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+        <div
+          className={`grid ${GRID_COLS} items-center gap-3 px-4 py-2 border-b border-gray-200 bg-gray-50 text-[10px] font-semibold text-gray-500 uppercase tracking-wider`}
+        >
+          <div></div>
           <div className="text-center">Img</div>
           <div>Nombre / marca</div>
           <div>Detalle</div>
-          <div>Subcat. / tag</div>
+          <div>Subcat. / tipo</div>
           <div className="text-right">Precio lista / dcto</div>
           <div className="text-center">Std</div>
           <div></div>
         </div>
 
-        {filtered.length === 0 ? (
+        {!isFiltering && tabItems.length > 1 && (
+          <div className="px-4 py-1.5 bg-white border-b border-gray-100 text-[11px] text-gray-400">
+            Arrastrá una fila desde la manija (⋮⋮) para ordenarla a tu gusto.
+            Las filas con el mismo tipo se agrupan solas con un encabezado.
+          </div>
+        )}
+
+        {visible.length === 0 ? (
           <div className="p-8 text-center text-sm text-gray-500">
-            {items.length === 0
-              ? "Todavía no hay artefactos en el catálogo. Apretá '+ Nuevo artefacto' para empezar."
+            {tabItems.length === 0
+              ? "Todavía no hay artefactos en esta pestaña. Apretá '+ Nuevo artefacto' para empezar."
               : "No hay resultados con esos filtros."}
           </div>
         ) : (
-          filtered.map((item) => (
-            <CatalogItemRow
-              key={item.id}
-              item={item}
-              onUpdate={(patch) => updateItem(item.id, patch)}
-              onDelete={() => deleteItem(item.id)}
-            />
-          ))
+          <DndContext
+            id="artefactos-catalog-dnd"
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={onDragEnd}
+          >
+            <SortableContext
+              items={visible.map((it) => it.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {rows}
+            </SortableContext>
+          </DndContext>
         )}
       </div>
     </div>
   );
 }
 
-// ─── Componente: fila editable ──────────────────────────────────────────
+// ─── Componente: fila editable + arrastrable ────────────────────────────
 function CatalogItemRow({
   item,
+  canReorder,
   onUpdate,
   onDelete,
 }: {
   item: CatalogItem;
+  canReorder: boolean;
   onUpdate: (patch: Partial<CatalogItem>) => void;
   onDelete: () => void;
 }) {
-  const subcatLabel = SUBCATEGORY_LABELS[item.subcategory] ?? item.subcategory;
+  const sortable = useSortable({ id: item.id, disabled: !canReorder });
+  const style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.5 : 1,
+    zIndex: sortable.isDragging ? 10 : ("auto" as const),
+    background: sortable.isDragging ? "#FAFAFA" : undefined,
+  };
 
   return (
-    <div className="grid grid-cols-[5rem_minmax(0,1.2fr)_minmax(0,2fr)_8rem_7rem_5rem_3rem] items-center gap-3 px-4 py-2 border-b border-gray-100 last:border-b-0 text-xs hover:bg-gray-50">
+    <div
+      ref={sortable.setNodeRef}
+      style={style}
+      className={`grid ${GRID_COLS} items-center gap-3 px-4 py-2 border-b border-gray-100 last:border-b-0 text-xs hover:bg-gray-50`}
+    >
+      {/* Manija de arrastre */}
+      <div className="flex justify-center">
+        {canReorder ? (
+          <span
+            {...sortable.attributes}
+            {...sortable.listeners}
+            className="cursor-grab text-gray-300 hover:text-gray-700 select-none"
+            title="Arrastrar para reordenar"
+          >
+            ⋮⋮
+          </span>
+        ) : (
+          <span
+            className="text-gray-200 select-none"
+            title="Sacá la búsqueda y el filtro de estándares para poder reordenar"
+          >
+            ⋮⋮
+          </span>
+        )}
+      </div>
+
       <div className="flex justify-center">
         {item.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -566,11 +749,23 @@ function CatalogItemRow({
       </div>
 
       <div>
-        <div className="text-gray-700 font-medium">{subcatLabel}</div>
+        {/* Selector de subcategoría: permite mover el artefacto de pestaña. */}
+        <select
+          value={item.subcategory}
+          onChange={(e) => onUpdate({ subcategory: e.target.value })}
+          className="w-full bg-transparent border-0 p-0 text-gray-700 font-medium outline-none cursor-pointer focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+          title="Mover a otra pestaña"
+        >
+          {SUBCATEGORY_OPTIONS.map((s) => (
+            <option key={s} value={s}>
+              {SUBCATEGORY_LABELS[s]}
+            </option>
+          ))}
+        </select>
         <input
           type="text"
           value={item.tag ?? ""}
-          placeholder="tag"
+          placeholder="tipo (grifería, muebles…)"
           onChange={(e) => onUpdate({ tag: e.target.value })}
           className="w-full bg-transparent border-0 p-0 text-gray-500 text-[11px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5 mt-0.5"
         />

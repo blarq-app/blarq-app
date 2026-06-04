@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-03 — Catálogo de artefactos: pestañas por subcategoría + orden manual (drag) agrupado por tipo
+
+- **Pestañas** Sanitario / Cocina / Iluminación (con contador) reemplazan el desplegable de subcategoría en `/catalogo/artefactos` — botones arriba, un click. La búsqueda y el filtro "Solo paleta estándar" siguen operando dentro de la pestaña activa.
+- **Orden manual**: nueva columna `ArtefactoCatalog.sortOrder` (Int, default 0) + índice `[subcategory, sortOrder]`. Arrastre de filas con dnd-kit (`PATCH /api/catalogo/artefactos/reorder`, espejo del de partidas); los encabezados de "tipo" (campo `tag`) se arman solos según el orden en que quedan las filas. Selector de subcategoría por fila para mover un artefacto entre pestañas. El artefacto nuevo nace al final de su pestaña (`sortOrder = max+1`).
+- `DndContext` con `id` estable para no romper hidratación SSR (el counter de dnd-kit difería server/cliente). Verificado en dev (preview, base `ep-solitary-mud`): pestañas, agrupado y reorder OK; typecheck del proyecto limpio.
+- **Columna `sortOrder` ya aplicada en prod** vía `prisma db push` (aditiva, default 0, no mueve datos) antes del merge para que el deploy quede consistente.
+
 ## 2026-06-03 (ronda 49) — Botón "Sin factura" en movimientos + conciliación cobros Maxxa
 
 - **Botón "Sin factura" inline** en `/banco/movimientos` (`MarkSinFacturaButton.tsx`, cableado en `MovementsTable`): marca un movimiento pendiente/parcial como `sin_factura` con categoría (Sueldo, Previred, Comisión banco, Retiro personal, Depósito efectivo, Otro) **sin crear factura ficticia ni exigir proyecto** — antes el único camino era "Pago sin factura", que obliga a un proyecto y crea una recibida `sin_respaldo`. Motivo: sueldos/comisiones no son costo de obra. Hasta ahora esas categorías solo se ponían por reglas al importar; los movimientos sin regla (ej. transferencia a Juan Pablo Costa) quedaban sin forma de marcarse a mano.

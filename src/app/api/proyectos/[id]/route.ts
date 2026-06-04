@@ -161,6 +161,31 @@ export async function DELETE(
   try {
     const { id } = await params;
 
+    // Defensa en profundidad: solo se pueden borrar cotizaciones sin convertir
+    // (status "cotizacion" o "archivado"). Una cotización ya convertida en
+    // proyecto (status "ejecucion"/"terminado") tiene obra viva, facturas y
+    // estados de pago: borrarla es destructivo y se bloquea acá, no solo en la
+    // UI. Si MJ realmente necesita borrar una obra viva, primero la archiva.
+    const project = await prisma.project.findUnique({
+      where: { id },
+      select: { status: true, numeroProyecto: true },
+    });
+    if (!project) {
+      return NextResponse.json(
+        { error: "La cotización no existe" },
+        { status: 404 }
+      );
+    }
+    if (project.status !== "cotizacion" && project.status !== "archivado") {
+      return NextResponse.json(
+        {
+          error:
+            "Solo se pueden eliminar cotizaciones sin convertir. Esta ya es un proyecto en ejecución.",
+        },
+        { status: 400 }
+      );
+    }
+
     await prisma.project.delete({
       where: { id },
     });

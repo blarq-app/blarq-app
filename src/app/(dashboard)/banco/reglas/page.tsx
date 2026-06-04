@@ -9,6 +9,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   comision_bancaria: "Comisión banco",
   retiro_personal: "Retiro personal",
   deposito_efectivo: "Depósito efectivo",
+  impuestos: "Impuestos",
   compra_tarjeta: "Compra tarjeta",
   transfer_interno: "Transfer interno",
   otro_sin_factura: "Otro / sin factura",

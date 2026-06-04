@@ -20,6 +20,7 @@ const OPCIONES: { value: string; label: string }[] = [
   { value: "comision_bancaria", label: "Comisión banco" },
   { value: "retiro_personal", label: "Retiro personal" },
   { value: "deposito_efectivo", label: "Depósito efectivo" },
+  { value: "impuestos", label: "Impuestos" },
   { value: "otro_sin_factura", label: "Otro" },
 ];
 

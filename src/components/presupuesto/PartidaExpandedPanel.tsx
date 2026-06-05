@@ -9,6 +9,7 @@
 // (referencia: la planilla maestra de MJ). Reemplazó a la versión apilada que
 // ocupaba ~918px → este panel ronda los ~490px.
 
+import { useState } from "react";
 import { formatCLP } from "@/lib/utils";
 import MoneyInput from "@/components/ui/MoneyInput";
 import RichTextEditor from "@/components/presupuesto/RichTextEditor";
@@ -36,6 +37,9 @@ interface Props {
   saveStatus: SaveStatus;
   budgetId: string;
   canEdit: boolean;
+  // Cantidad de componentes que tiene la partida al abrir el panel (viene del
+  // dato cargado en ObraEditor). Define si mostramos o no la fila de totales.
+  initialComponentCount: number;
   onUpdate: (field: string, value: string | number) => void;
   onUpdateCatalog: () => void;
   onUpdateCatalogDescription: () => void;
@@ -73,6 +77,13 @@ function SaveHint({ status }: { status: SaveStatus }) {
 
 export default function PartidaExpandedPanel(p: Props) {
   const { item } = p;
+  // Cantidad de componentes en vivo (la reporta el editor de detalle). Cuando
+  // la partida YA tiene desglose, los montos de la fila de totales son un
+  // ESPEJO derivado de esos componentes (recalcObraItemFromComponents) — así
+  // que la ocultamos por redundante. Solo la mostramos cuando NO hay desglose:
+  // ahí esa fila es el único lugar para cargar los costos a mano.
+  const [compCount, setCompCount] = useState(p.initialComponentCount);
+  const showLumpRow = compCount === 0;
   return (
     <div className="px-4 py-1.5 space-y-1">
       {/* Descripciones cliente / maestro, lado a lado y compactas. */}
@@ -93,30 +104,35 @@ export default function PartidaExpandedPanel(p: Props) {
         />
       </div>
 
-      {/* Desglose de costo por unidad: 6 rubros + suma, en una fila. */}
-      <div className="grid grid-cols-4 md:grid-cols-7 gap-1.5 text-[11px]">
-        {COSTS.map(([label, field]) => (
-          <label key={field} className="flex flex-col">
-            <span className="mb-0.5 text-[9px] uppercase tracking-wide text-gray-500">{label}</span>
-            <div className="relative">
-              <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[11px]">$</span>
-              <MoneyInput
-                value={(item[field] as number | null) ?? 0}
-                onChange={(val) => p.onUpdate(field, val)}
-                className="w-full border border-gray-300 rounded pl-4 pr-1.5 py-0.5 text-right text-[11px]"
-              />
-            </div>
-          </label>
-        ))}
-        <div className="flex flex-col justify-end">
-          <span className="mb-0.5 text-[9px] uppercase tracking-wide text-gray-500 flex items-center gap-1">
-            Suma <SaveHint status={p.saveStatus} />
-          </span>
-          <span className="text-gray-900 font-semibold py-0.5 text-right tabular-nums text-xs">
-            {formatCLP(sumaDesglose(item))}
-          </span>
+      {/* Fila de costos por unidad (6 rubros + suma). SOLO cuando la partida
+          no tiene desglose: ahí es donde se cargan los costos a mano. Si hay
+          desglose abajo, esta fila sería un espejo derivado (redundante) y se
+          oculta. */}
+      {showLumpRow && (
+        <div className="grid grid-cols-4 md:grid-cols-7 gap-1.5 text-[11px]">
+          {COSTS.map(([label, field]) => (
+            <label key={field} className="flex flex-col">
+              <span className="mb-0.5 text-[9px] uppercase tracking-wide text-gray-500">{label}</span>
+              <div className="relative">
+                <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[11px]">$</span>
+                <MoneyInput
+                  value={(item[field] as number | null) ?? 0}
+                  onChange={(val) => p.onUpdate(field, val)}
+                  className="w-full border border-gray-300 rounded pl-4 pr-1.5 py-0.5 text-right text-[11px]"
+                />
+              </div>
+            </label>
+          ))}
+          <div className="flex flex-col justify-end">
+            <span className="mb-0.5 text-[9px] uppercase tracking-wide text-gray-500 flex items-center gap-1">
+              Suma <SaveHint status={p.saveStatus} />
+            </span>
+            <span className="text-gray-900 font-semibold py-0.5 text-right tabular-nums text-xs">
+              {formatCLP(sumaDesglose(item))}
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       <CatalogButtons {...p} />
 
@@ -128,6 +144,7 @@ export default function PartidaExpandedPanel(p: Props) {
           canEdit={p.canEdit}
           catalogPartidaId={item.catalogPartidaId}
           onChanged={p.onComponentsChanged}
+          onCountChange={setCompCount}
           dense
         />
       </div>

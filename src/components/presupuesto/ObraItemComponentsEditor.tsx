@@ -109,6 +109,7 @@ export default function ObraItemComponentsEditor({
   canEdit,
   catalogPartidaId,
   onChanged,
+  onCountChange,
   dense = false,
 }: {
   budgetId: string;
@@ -118,6 +119,10 @@ export default function ObraItemComponentsEditor({
   // línea. Si es null (partida 100% manual), no se muestra.
   catalogPartidaId?: string | null;
   onChanged?: () => void;
+  // Reporta la cantidad de componentes cada vez que se (re)cargan. Lo usa el
+  // panel para decidir si muestra la fila de totales (redundante con el
+  // desglose) o no.
+  onCountChange?: (count: number) => void;
   // Modo compacto: filas más bajas y letra más chica (vista densa estilo Excel).
   dense?: boolean;
 }) {
@@ -139,11 +144,12 @@ export default function ObraItemComponentsEditor({
       if (r.ok) {
         const data = await r.json();
         setComps(data);
+        onCountChange?.(Array.isArray(data) ? data.length : 0);
       }
     } finally {
       setLoading(false);
     }
-  }, [budgetId, itemId]);
+  }, [budgetId, itemId, onCountChange]);
 
   useEffect(() => {
     fetchComps();

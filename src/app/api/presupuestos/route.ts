@@ -70,6 +70,11 @@ export async function POST(request: NextRequest) {
         const items = await prisma.obraItem.findMany({
           where: { budgetVersionId: previousVersion.id },
           orderBy: { sortOrder: "asc" },
+          // Traemos también los componentes (el desglose por material/mano de
+          // obra/etc.) para copiarlos a la versión nueva. Sin esto, la partida
+          // duplicada quedaba con los montos globales pero el "Detalle de
+          // materiales y costos" vacío (bug reportado en duplicados de obra).
+          include: { components: { orderBy: { sortOrder: "asc" } } },
         });
 
         // Si se está usando como plantilla (importar desde otro proyecto),
@@ -118,7 +123,7 @@ export async function POST(request: NextRequest) {
           const quantity = isTemplateMode ? 0 : item.quantity;
           const total = quantity * unitPrice;
 
-          await prisma.obraItem.create({
+          const newItem = await prisma.obraItem.create({
             data: {
               budgetVersionId: budget.id,
               // En modo plantilla NO preservamos lineageId — el ítem importado
@@ -150,6 +155,50 @@ export async function POST(request: NextRequest) {
               sortOrder: item.sortOrder,
             },
           });
+
+          // Copiar el desglose (componentes) del ítem fuente. Sin esto la
+          // partida duplicada quedaba con montos globales pero detalle vacío.
+          // No lo hacemos cuando se refresca desde catálogo (importar desde
+          // otro proyecto con precios nuevos): ahí los montos vienen del
+          // catálogo y el desglose se rearma distinto — copiar el del source
+          // dejaría componentes que no calzan con los montos refrescados.
+          if (!useCatalog && item.components.length > 0) {
+            // appliedToComponentId apunta a otro componente del MISMO ítem
+            // (ej. "pérdida" sobre un material concreto). Al copiar hay que
+            // remapear ese id viejo → el nuevo. Primero creamos todos, luego
+            // seteamos los appliedTo con el mapa.
+            const idMap = new Map<string, string>();
+            for (const c of item.components) {
+              const createdComp = await prisma.obraItemComponent.create({
+                data: {
+                  obraItemId: newItem.id,
+                  type: c.type,
+                  description: c.description,
+                  unit: c.unit,
+                  quantity: c.quantity,
+                  unitCost: c.unitCost,
+                  totalCost: c.totalCost,
+                  referenceLink: c.referenceLink,
+                  materialId: c.materialId,
+                  originComponentId: c.originComponentId,
+                  isCustomized: c.isCustomized,
+                  sortOrder: c.sortOrder,
+                  appliedToType: c.appliedToType,
+                  // appliedToComponentId se setea en la 2da pasada (remap).
+                },
+              });
+              idMap.set(c.id, createdComp.id);
+            }
+            for (const c of item.components) {
+              if (!c.appliedToComponentId) continue;
+              const remapped = idMap.get(c.appliedToComponentId);
+              if (!remapped) continue;
+              await prisma.obraItemComponent.update({
+                where: { id: idMap.get(c.id)! },
+                data: { appliedToComponentId: remapped },
+              });
+            }
+          }
         }
       }
 

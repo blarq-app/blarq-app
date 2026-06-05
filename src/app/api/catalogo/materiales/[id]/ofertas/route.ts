@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { syncMaterialToComponents } from "@/lib/catalog/syncMaterial";
 import { NextRequest, NextResponse } from "next/server";
 
 // GET: listar ofertas del material
@@ -45,8 +46,13 @@ export async function POST(
     },
   });
 
-  // Si es pin y el precio neto es mejor que el actual, actualizar netPrice + link
+  // Si se crea como fijada, pasa a ser la fuente oficial del catálogo:
+  // despinear las otras, actualizar netPrice + link y propagar a partidas.
   if (offer.isPinned && offer.priceNet) {
+    await prisma.materialPriceOffer.updateMany({
+      where: { materialId: id, id: { not: offer.id } },
+      data: { isPinned: false },
+    });
     await prisma.materialCatalog.update({
       where: { id },
       data: {
@@ -56,6 +62,7 @@ export async function POST(
         lastResearchAt: new Date(),
       },
     });
+    await syncMaterialToComponents(id, { propagateToBudgets: false });
   } else {
     await prisma.materialCatalog.update({
       where: { id },

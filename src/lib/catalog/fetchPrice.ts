@@ -130,6 +130,140 @@ async function fetchEasyPrice(url: string): Promise<PriceResult | null> {
   return null;
 }
 
+// ── VTEX (mK y otras tiendas chilenas sobre la plataforma VTEX) ─────
+//
+// A diferencia de Sodimac/Easy (que scrapeamos del HTML con regex frágil),
+// las tiendas VTEX exponen una API pública de catálogo que devuelve precio
+// y stock en JSON limpio:
+//   /api/catalog_system/pub/products/search?ft=<texto>      → búsqueda
+//   /api/catalog_system/pub/products/search/<slug>/p        → por link
+//
+// Solo mK está VERIFICADA hoy (probado 2026-06-05). Construmart, Imperial,
+// Easy y Chilemat NO responden esta API (devuelven HTML). Sumar otra tienda
+// VTEX = agregar una línea a VTEX_STORES y confirmar que su /api/catalog_system
+// responde JSON.
+
+export interface VtexStore {
+  key: string; // identificador interno; coincide con MaterialPriceOffer.store
+  label: string; // visible en la UI
+  host: string; // dominio con www, sin protocolo
+}
+
+export const VTEX_STORES: VtexStore[] = [
+  { key: "mk", label: "mK", host: "www.mk.cl" },
+];
+
+function vtexStoreFromUrl(url: string): VtexStore | null {
+  const lower = url.toLowerCase();
+  return (
+    VTEX_STORES.find((s) => lower.includes(s.host.replace(/^www\./, ""))) ?? null
+  );
+}
+
+export function vtexStoreByKey(key: string): VtexStore | null {
+  return VTEX_STORES.find((s) => s.key === key) ?? null;
+}
+
+/** Producto candidato devuelto por la búsqueda en vivo de una tienda. */
+export interface StoreProduct {
+  store: string; // key de la tienda
+  productName: string;
+  refId: string | null; // referencia/SKU de la tienda
+  price: number; // precio c/IVA tal como aparece en la web
+  priceNet: number; // neto = round(price / 1.19)
+  available: boolean; // hay stock
+  url: string | null;
+}
+
+// Tipos mínimos del JSON de VTEX (solo los campos que usamos).
+interface VtexOffer {
+  Price?: number;
+  AvailableQuantity?: number;
+}
+interface VtexItem {
+  nameComplete?: string;
+  referenceId?: { Key: string; Value: string }[];
+  sellers?: { commertialOffer?: VtexOffer }[];
+}
+interface VtexProduct {
+  productName?: string;
+  productReference?: string;
+  linkText?: string;
+  link?: string;
+  items?: VtexItem[];
+}
+
+function mapVtexProduct(store: VtexStore, p: VtexProduct): StoreProduct | null {
+  const item = p?.items?.[0];
+  const offer = item?.sellers?.[0]?.commertialOffer;
+  const price = offer?.Price;
+  if (!price || price < 100) return null;
+  const refId =
+    item?.referenceId?.find((r) => r.Key === "RefId")?.Value ??
+    p?.productReference ??
+    null;
+  return {
+    store: store.key,
+    productName: p?.productName ?? item?.nameComplete ?? "Producto",
+    refId,
+    price,
+    priceNet: Math.round(price / 1.19),
+    available: (offer?.AvailableQuantity ?? 0) > 0,
+    url: p?.linkText
+      ? `https://${store.host}/${p.linkText}/p`
+      : (p?.link ?? null),
+  };
+}
+
+async function vtexSearch(
+  store: VtexStore,
+  query: string,
+  max = 8
+): Promise<StoreProduct[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const url = `https://${store.host}/api/catalog_system/pub/products/search?ft=${encodeURIComponent(q)}&_from=0&_to=${max - 1}`;
+  try {
+    const res = await fetch(url, {
+      headers: { ...BROWSER_HEADERS, Accept: "application/json" },
+      signal: AbortSignal.timeout(12000),
+    });
+    // VTEX devuelve 206 (Partial Content) cuando hay paginación: es válido.
+    if (!res.ok && res.status !== 206) return [];
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+    return data
+      .map((p: VtexProduct) => mapVtexProduct(store, p))
+      .filter((x): x is StoreProduct => x !== null);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchVtexPriceByUrl(
+  store: VtexStore,
+  url: string
+): Promise<PriceResult | null> {
+  // El link de un producto VTEX termina en .../{slug}/p
+  const m = url.match(/\/([^/]+)\/p(?:[?#]|$)/i);
+  const slug = m?.[1];
+  if (!slug) return null;
+  try {
+    const apiUrl = `https://${store.host}/api/catalog_system/pub/products/search/${slug}/p`;
+    const res = await fetch(apiUrl, {
+      headers: { ...BROWSER_HEADERS, Accept: "application/json" },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok && res.status !== 206) return null;
+    const data = await res.json();
+    const mapped = Array.isArray(data) ? mapVtexProduct(store, data[0]) : null;
+    if (mapped) return { priceIva: mapped.price, netPrice: mapped.priceNet };
+  } catch {
+    /* el producto pudo haberse movido: el link viejo ya no resuelve */
+  }
+  return null;
+}
+
 /**
  * Determina la fuente y delega al scraper apropiado. Devuelve null si la
  * URL no es de un sitio soportado o si el scraping falló.
@@ -148,5 +282,27 @@ export async function fetchPriceFromUrl(
     const r = await fetchEasyPrice(url);
     return r ? { ...r, source: "easy" } : null;
   }
+  const vtex = vtexStoreFromUrl(url);
+  if (vtex) {
+    const r = await fetchVtexPriceByUrl(vtex, url);
+    return r ? { ...r, source: vtex.key } : null;
+  }
   return null;
+}
+
+/**
+ * Búsqueda en vivo de productos en una tienda, por texto. Devuelve candidatos
+ * con su precio y stock de HOY, para que MJ elija cuál linkear cuando el
+ * producto viejo ya no existe o quiere cambiar de fuente.
+ *
+ * Hoy solo las tiendas VTEX (mK) soportan búsqueda en vivo. Sodimac/Easy se
+ * siguen actualizando pegando el link directo (fetchPriceFromUrl).
+ */
+export async function searchStoreProducts(
+  storeKey: string,
+  query: string
+): Promise<StoreProduct[]> {
+  const vtex = vtexStoreByKey(storeKey);
+  if (vtex) return vtexSearch(vtex, query);
+  return [];
 }

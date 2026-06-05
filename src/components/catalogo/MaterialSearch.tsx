@@ -392,10 +392,10 @@ export default function MaterialSearch({
                           {!mat.isProvision && (
                             <button
                               onClick={() => setOffersMaterial(mat)}
-                              className="text-blue-600 hover:text-blue-800 text-xs"
-                              title="Actualizar precio"
+                              className="text-gray-500 hover:text-gray-900 text-xs"
+                              title="Ver y actualizar precios"
                             >
-                              🔍 Precios
+                              Precios
                             </button>
                           )}
                           <button

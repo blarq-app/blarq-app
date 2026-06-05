@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { syncMaterialToComponents } from "@/lib/catalog/syncMaterial";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function PATCH(
@@ -22,14 +23,14 @@ export async function PATCH(
     },
   });
 
-  // Si este se pinea, despinear otros del mismo material
+  // Si este se pinea, despinear otros del mismo material y volverlo la
+  // fuente oficial del catálogo (netPrice + link).
   if (data.isPinned) {
     await prisma.materialPriceOffer.updateMany({
       where: { materialId: id, id: { not: offerId } },
       data: { isPinned: false },
     });
 
-    // Actualizar material netPrice
     if (offer.priceNet) {
       await prisma.materialCatalog.update({
         where: { id },
@@ -37,8 +38,13 @@ export async function PATCH(
           netPrice: offer.priceNet,
           referenceLink: offer.productUrl,
           lastUpdated: new Date(),
+          lastResearchAt: new Date(),
         },
       });
+      // Propagar el precio nuevo a las partidas que usan este material.
+      // Sin esto, fijar una oferta cambiaba el catálogo pero dejaba las
+      // partidas con el precio viejo.
+      await syncMaterialToComponents(id, { propagateToBudgets: false });
     }
   }
 

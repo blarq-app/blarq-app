@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       );
     }
     return NextResponse.json(
-      { error: "Solo se soporta Sodimac y Easy por ahora" },
+      { error: "Solo se soporta Sodimac, Easy y mK por ahora" },
       { status: 422 }
     );
   } catch (error) {

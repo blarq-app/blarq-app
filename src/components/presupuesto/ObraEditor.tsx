@@ -1477,7 +1477,19 @@ export default function ObraEditor({
                       (buscar en catalogo)
                     </button>
                   </div>
-                  <div className="grid grid-cols-12 gap-2 items-end">
+                  <div
+                    className="grid grid-cols-12 gap-2 items-end"
+                    onKeyDown={(e) => {
+                      // Enter dentro del formulario manual ("Crear partida nueva")
+                      // guarda igual que el botón Agregar. Mismo patrón que el form
+                      // del catálogo: preventDefault evita submit/recarga; las
+                      // validaciones viven en handleAddItem (si falta el nombre, no hace nada).
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddItem(chapter.key);
+                      }
+                    }}
+                  >
                     <div className="col-span-4">
                       <label className="block text-xs text-gray-600 mb-1">
                         Nombre

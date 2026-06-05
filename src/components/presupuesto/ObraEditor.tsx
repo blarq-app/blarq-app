@@ -9,6 +9,94 @@ import ObraItemComponentsEditor from "@/components/presupuesto/ObraItemComponent
 import CostoDirectoDetalle from "@/components/presupuesto/CostoDirectoDetalle";
 import PartidaExpandedPanel from "@/components/presupuesto/PartidaExpandedPanel";
 import { sanitizeRichTextHtml, isRichTextEmpty } from "@/lib/richText";
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+// Props que SortableRow le pasa a la fila (via render-prop) para enganchar
+// el arrastre: ref del nodo, estilo con el transform de dnd-kit, y los
+// listeners que van SOLO en la manija (no en toda la fila, para no pelear
+// con los textareas/botones editables de cada celda).
+type SortableReturn = ReturnType<typeof useSortable>;
+type DragHandle = {
+  setNodeRef: SortableReturn["setNodeRef"];
+  style: React.CSSProperties;
+  attributes: SortableReturn["attributes"];
+  listeners: SortableReturn["listeners"];
+  isDragging: boolean;
+};
+
+// Envoltorio que llama useSortable (un hook → necesita ser componente) y le
+// entrega al hijo lo necesario para arrastrar. Se usa como render-prop para
+// no tener que extraer la fila gigante de la partida fuera de ObraEditor
+// (así sigue cerrando sobre todos los handlers del editor).
+function SortableRow({
+  id,
+  disabled,
+  children,
+}: {
+  id: string;
+  disabled?: boolean;
+  children: (drag: DragHandle) => React.ReactNode;
+}) {
+  const {
+    setNodeRef,
+    transform,
+    transition,
+    attributes,
+    listeners,
+    isDragging,
+  } = useSortable({ id, disabled });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    // La fila que se arrastra se atenúa; el "fantasma" que sigue al cursor
+    // lo dibuja el DragOverlay aparte.
+    opacity: isDragging ? 0.4 : 1,
+  };
+  return <>{children({ setNodeRef, style, attributes, listeners, isDragging })}</>;
+}
+
+// Versión "plana" de la fila para el render del servidor y la primera
+// hidratación: NO llama useSortable, así que NO emite los atributos de
+// dnd-kit (aria-describedby con un contador interno que difiere entre
+// servidor y cliente y genera un warning de hidratación). Una vez montado
+// en el cliente, ObraEditor cambia a SortableRow y el arrastre se activa.
+function PlainRow({
+  children,
+}: {
+  id: string;
+  disabled?: boolean;
+  children: (drag: DragHandle) => React.ReactNode;
+}) {
+  return (
+    <>
+      {children({
+        setNodeRef: () => {},
+        style: {},
+        attributes: {} as DragHandle["attributes"],
+        listeners: undefined,
+        isDragging: false,
+      })}
+    </>
+  );
+}
 
 interface ObraItemComponent {
   id: string;
@@ -145,6 +233,19 @@ export default function ObraEditor({
   // fila, selecciona varias y aplica una zona desde la barra flotante.
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [bulkZoneDraft, setBulkZoneDraft] = useState("");
+  // Arrastre de partidas (orden manual). activeDragId = id de la fila que se
+  // está arrastrando, para dibujar el "fantasma" (DragOverlay) que sigue al
+  // cursor. distance:6 = hay que mover 6px antes de iniciar el arrastre, así
+  // un click simple en la manija no dispara drag y no pelea con la edición.
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  // El arrastre se monta solo en el cliente (evita el warning de hidratación
+  // de dnd-kit, ver PlainRow). En SSR y primera hidratación: filas planas.
+  const [dndMounted, setDndMounted] = useState(false);
+  useEffect(() => setDndMounted(true), []);
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   // Catalog search state
   const [catalogQuery, setCatalogQuery] = useState("");
@@ -238,11 +339,17 @@ export default function ObraEditor({
   const allChaptersData = chapters.map(([key, chapter]) => {
     const chapterItems = items.filter((item) => item.chapter === key);
     // Ordenar dentro del chapter:
-    //   1) Primero los items sin sub-chapter, ordenados por nombre.
-    //   2) Después agrupados por sub-chapter (orden alfabético del label),
-    //      cada grupo ordenado por nombre internamente.
-    // Esto da un orden estable y permite mostrar separadores visuales.
+    //   1) Por sortOrder — el ORDEN MANUAL que arma MJ arrastrando las filas
+    //      (regla MJ 2026-06-05; reemplaza el orden alfabético previo). Le
+    //      sirve para contar la obra al cliente en orden cronológico.
+    //   2) Desempate: zona (subChapter) y luego nombre. Esto importa para los
+    //      presupuestos viejos donde TODAS las partidas tienen sortOrder=0
+    //      (el campo nunca se pobló): con el empate en 0, caen al orden de
+    //      antes (zona + nombre), o sea se ven IGUAL que hoy hasta que MJ
+    //      arrastre por primera vez. Apenas arrastra, el sortOrder pasa a ser
+    //      distinto para cada fila y manda el orden manual.
     const sortedItems = [...chapterItems].sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
       const aSub = a.subChapter ?? "";
       const bSub = b.subChapter ?? "";
       if (aSub !== bSub) return aSub.localeCompare(bSub, "es");
@@ -279,6 +386,83 @@ export default function ObraEditor({
   );
   // Re-asignar índices visualmente (1, 2, 3...) en el orden cronológico.
   const itemsByChapter = visibleChapters.map((c, i) => ({ ...c, index: i + 1 }));
+
+  // Orden de arrastre: solo en versiones editables (borrador/enviado). En
+  // aprobado/rechazado la lista queda fija.
+  const canReorder = ["borrador", "enviado"].includes(initialBudget.status);
+  // Lista plana de ids EN EL ORDEN VISIBLE (capítulo por capítulo, y dentro de
+  // cada uno el orden ya calculado arriba). dnd-kit ordena contra esta lista,
+  // así que tiene que reflejar exactamente lo que se ve en pantalla.
+  const orderedIds = itemsByChapter.flatMap((c) => c.items.map((i) => i.id));
+  // Para dibujar el "fantasma" mientras se arrastra.
+  const activeDragItem = activeDragId
+    ? items.find((i) => i.id === activeDragId) ?? null
+    : null;
+  // Solo envolvemos las filas con el arrastre real cuando está montado en el
+  // cliente Y la versión es editable. Antes (SSR / 1ª hidratación): fila plana.
+  const dndActive = dndMounted && canReorder;
+  const RowWrapper = dndActive ? SortableRow : PlainRow;
+
+  function handleDragStart(e: DragStartEvent) {
+    setActiveDragId(String(e.active.id));
+  }
+
+  // Al soltar una partida: la reubico en el orden visible (arrayMove) y, si
+  // cayó en otro capítulo, le cambio el chapter al del destino (caso "metí
+  // piso flotante en Eléctricas y lo arrastro a Terminaciones"). Después
+  // reasigno sortOrder consecutivo a TODAS las partidas en el nuevo orden y lo
+  // persisto, igual que el reorder del catálogo de artefactos.
+  async function handleDragEnd(e: DragEndEvent) {
+    setActiveDragId(null);
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    const oldIndex = orderedIds.indexOf(activeId);
+    const newIndex = orderedIds.indexOf(overId);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    // El capítulo de destino = el de la partida sobre la que se soltó.
+    const overItem = items.find((i) => i.id === overId);
+    const targetChapter = overItem?.chapter;
+
+    const newOrder = arrayMove(orderedIds, oldIndex, newIndex);
+    const sortMap = new Map(newOrder.map((id, idx) => [id, idx]));
+
+    // Optimista: actualizo el estado local antes de que conteste el servidor.
+    const updated = items.map((it) => {
+      const so = sortMap.get(it.id);
+      const base = so !== undefined ? { ...it, sortOrder: so } : it;
+      if (it.id === activeId && targetChapter && targetChapter !== it.chapter) {
+        return { ...base, chapter: targetChapter };
+      }
+      return base;
+    });
+    setItems(updated);
+    setSaveStatus("saving");
+
+    try {
+      const payload = newOrder.map((id) => {
+        const it = updated.find((u) => u.id === id)!;
+        return { id, sortOrder: it.sortOrder, chapter: it.chapter };
+      });
+      const res = await fetch(
+        `/api/presupuestos/${initialBudget.id}/partidas/reorder`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: payload }),
+        }
+      );
+      if (!res.ok) throw new Error("Error");
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 1500);
+    } catch {
+      setSaveStatus("idle");
+      alert("Error al guardar el orden");
+      router.refresh();
+    }
+  }
   // Capítulos disponibles para "+ agregar" (los que no están visibles).
   const hiddenChapters = allChaptersData.filter(
     (c) => c.items.length === 0 && c.key !== addingChapter && !enabledEmptyChapters.has(c.key)
@@ -833,6 +1017,14 @@ export default function ObraEditor({
         </table>
       </div>
 
+      <DndContext
+        id="obra-partidas-dnd"
+        sensors={dndSensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+      <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
       <div className="space-y-0 -mt-3">
       {itemsByChapter.map((chapter) => (
         <div
@@ -947,9 +1139,13 @@ export default function ObraEditor({
                         <td></td>
                       </tr>
                     )}
+                    <RowWrapper id={item.id} disabled={!canReorder}>
+                    {(drag) => (
                     <tr
+                      ref={drag.setNodeRef}
+                      style={drag.style}
                       className={`border-b border-gray-100 hover:bg-gray-50/60 group ${
-                        selectedItemIds.has(item.id) ? "bg-gray-50" : ""
+                        selectedItemIds.has(item.id) || drag.isDragging ? "bg-gray-50" : ""
                       }`}
                     >
                       <td className="px-2 py-1 align-top text-center">
@@ -961,6 +1157,19 @@ export default function ObraEditor({
                         />
                       </td>
                       <td className="px-3 py-1 text-gray-700 text-xs tabular-nums align-top whitespace-nowrap">
+                        {/* Manija de arrastre — solo en versiones editables.
+                            Los listeners van acá (no en toda la fila) para no
+                            pelear con la edición de las celdas. */}
+                        {dndActive && (
+                          <span
+                            {...drag.attributes}
+                            {...(drag.listeners ?? {})}
+                            className="mr-1 inline-block cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-700 select-none align-middle"
+                            title="Arrastrar para reordenar"
+                          >
+                            ⋮⋮
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={() => {
@@ -1160,6 +1369,8 @@ export default function ObraEditor({
                         </button>
                       </td>
                     </tr>
+                    )}
+                    </RowWrapper>
                     {expandedItems[item.id] && (
                       <tr className="bg-gray-50">
                         <td colSpan={10} className="p-0">
@@ -1587,6 +1798,24 @@ export default function ObraEditor({
         </div>
       ))}
       </div>
+      </SortableContext>
+      {/* Fantasma que sigue al cursor mientras se arrastra una partida. Es una
+          versión liviana de la fila (nombre + total), suficiente para que MJ
+          vea qué está moviendo sin arrastrar toda la tabla. */}
+      <DragOverlay>
+        {activeDragItem ? (
+          <div className="flex items-center gap-3 bg-white border border-gray-300 rounded shadow-sm px-3 py-1.5 text-xs">
+            <span className="text-gray-400">⋮⋮</span>
+            <span className="font-medium text-gray-900 uppercase truncate max-w-[280px]">
+              {activeDragItem.name || "(sin nombre)"}
+            </span>
+            <span className="ml-auto text-gray-700 tabular-nums whitespace-nowrap">
+              {formatCLP(activeDragItem.total)}
+            </span>
+          </div>
+        ) : null}
+      </DragOverlay>
+      </DndContext>
 
       {/* "+ Capítulo": dropdown para re-habilitar capítulos vacíos. Solo
           aparece cuando hay capítulos ocultos disponibles. */}

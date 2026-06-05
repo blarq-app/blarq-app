@@ -57,3 +57,7 @@ cert/
 
 # backups locales de la BD (script db:backup) — datos sensibles, NO commitear
 /backups/
+
+# respaldos y exports locales de scripts de conciliación (datos financieros) — NO commitear
+*-backup.json
+audit-tarjeta-sin-factura.csv

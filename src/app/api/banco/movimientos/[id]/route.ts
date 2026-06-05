@@ -16,7 +16,13 @@ import { upsertRuleFromMovement } from "@/lib/banco/categorizationRules";
 //                                con un solo elemento.
 //   { invoiceId: null }        → atajo: desvincular todo. Equivalente a
 //                                payments=[].
-//   { category: string }       → categorizar como sueldo/previred/etc (sin factura)
+//   { category: string }       → categorizar como sueldo/previred/etc (sin factura).
+//                                Por sí solo NO crea regla de auto-categorización.
+//   { category, saveRule:true } → además guarda una regla para que movs futuros
+//                                con descripción similar se categoricen solos.
+//                                Opt-in: el patrón se deriva de la glosa y puede
+//                                quedar amplio (ej "Transf a Juan"), por eso no
+//                                es el default.
 //   { ignore: true }           → marcar como "sin_factura" sin categoría
 //   { markInternal: true }     → marcar como transferencia interna BLARQ↔BLARQ
 //   { notes: string }          → agregar nota
@@ -33,6 +39,7 @@ export async function PATCH(
       payments: Array<{ invoiceId: string; amountApplied: number }>;
       invoiceId: string | null;
       category: string | null;
+      saveRule: boolean;
       ignore: boolean;
       markInternal: boolean;
       notes: string;
@@ -121,9 +128,10 @@ export async function PATCH(
     if (body.category !== undefined) {
       update.category = body.category;
       update.status = body.category ? "sin_factura" : "sin_asignar";
-      // Si es categoría real (no null), guardar/actualizar regla para que
-      // movs futuros con descripción similar se categoricen solos.
-      if (body.category) {
+      // La regla de auto-categorización solo se crea si MJ lo pide explícito
+      // (saveRule). El patrón se deriva de la glosa y puede quedar amplio
+      // ("Transf a Juan" atraparía a cualquier Juan), por eso es opt-in.
+      if (body.category && body.saveRule) {
         await upsertRuleFromMovement(mov.description, body.category).catch(() => {});
       }
     }

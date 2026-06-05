@@ -4,6 +4,51 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-04 — Presupuesto: vista expandida de partida densa (~918→~490px)
+
+- El panel que se abre al expandir una partida (pestaña Presupuesto) ocupaba ~918px (más de una pantalla). Se compacta a ~490px **manteniendo toda la info**, a densidad tipo planilla maestra: descripciones cliente/maestro **lado a lado** (antes apiladas) con letra de 9px e interlineado apretado; 6 rubros de costo + suma en una fila; tabla "Detalle de materiales y costos" en modo denso (10px, filas pegadas, chips de tipo sin alto extra, totales 9px, botones "+Material…" más chicos).
+- El layout expandido se extrajo a un componente nuevo `PartidaExpandedPanel.tsx` (acota el cambio en `ObraEditor.tsx`). La densidad de la tabla se activa con un prop `dense` en `ObraItemComponentsEditor` (default off → la vista normal de esa tabla queda igual). UI pura, no toca cálculos ni `metrics.ts`. (PR #84)
+- **Arreglo lateral** (aplica también a la vista normal): el link ↗ de los materiales con referencia caía en una 2ª línea e inflaba esas filas; ahora va en la misma línea (flex).
+- Nota: el panel se diseñó sobre un `main` previo al PR #80 (toolbar flotante). En prod la barra de formato es el `BubbleMenu` flotante; las descripciones quedan sin barra fija (aún más compactas). Verificado: build de prod OK y endpoint de componentes 200 en producción (el 404 visto en dev era artefacto de turbopack con esa ruta anidada).
+
+## 2026-06-03 — Catálogo de artefactos: pestañas por subcategoría + orden manual (drag) agrupado por tipo
+
+- **Pestañas** Sanitario / Cocina / Iluminación (con contador) reemplazan el desplegable de subcategoría en `/catalogo/artefactos` — botones arriba, un click. La búsqueda y el filtro "Solo paleta estándar" siguen operando dentro de la pestaña activa.
+- **Orden manual**: nueva columna `ArtefactoCatalog.sortOrder` (Int, default 0) + índice `[subcategory, sortOrder]`. Arrastre de filas con dnd-kit (`PATCH /api/catalogo/artefactos/reorder`, espejo del de partidas); los encabezados de "tipo" (campo `tag`) se arman solos según el orden en que quedan las filas. Selector de subcategoría por fila para mover un artefacto entre pestañas. El artefacto nuevo nace al final de su pestaña (`sortOrder = max+1`).
+- `DndContext` con `id` estable para no romper hidratación SSR (el counter de dnd-kit difería server/cliente). Verificado en dev (preview, base `ep-solitary-mud`): pestañas, agrupado y reorder OK; typecheck del proyecto limpio.
+- **Columna `sortOrder` ya aplicada en prod** vía `prisma db push` (aditiva, default 0, no mueve datos) antes del merge para que el deploy quede consistente.
+
+## 2026-06-03 (ronda 49) — Botón "Sin factura" en movimientos + conciliación cobros Maxxa
+
+- **Botón "Sin factura" inline** en `/banco/movimientos` (`MarkSinFacturaButton.tsx`, cableado en `MovementsTable`): marca un movimiento pendiente/parcial como `sin_factura` con categoría (Sueldo, Previred, Comisión banco, Retiro personal, Depósito efectivo, Otro) **sin crear factura ficticia ni exigir proyecto** — antes el único camino era "Pago sin factura", que obliga a un proyecto y crea una recibida `sin_respaldo`. Motivo: sueldos/comisiones no son costo de obra. Hasta ahora esas categorías solo se ponían por reglas al importar; los movimientos sin regla (ej. transferencia a Juan Pablo Costa) quedaban sin forma de marcarse a mano.
+- **PATCH `/api/banco/movimientos/[id]`**: la creación de regla de auto-categorización pasa a ser **opt-in** (`saveRule:true`). Antes cualquier `{category}` creaba regla; el patrón se deriva de la glosa y puede quedar amplio ("Transf a Juan"). El botón nuevo trae el check "Guardar regla" apagado por default. Ningún caller previo mandaba `category`, así que no cambia comportamiento existente.
+
+## 2026-06-03 (ronda 49) — Conciliación cobros 2025+2026 "pagada sin enlace" desde Maxxa
+
+- **`scripts/conciliar-maxxa-2025.ts`** (ahora 2025 **y** 2026): (1) deja de saltar facturas `status==="pagada"` — vincula por saldo real `invRem = total − pagos` y no degrada el estado (a una pagada solo le agrega el enlace al banco); (2) transferencias gemelas: dedup de filas de cartola por la identidad estable de Maxxa (set de `id_pago`), no por fecha|monto|desc, y consume un movimiento de app distinto por fila; (3) lee las 4 cartolas 2026 + filtros de fecha a 2026. Mantiene el guard de signo y el match de emitidas por `tipoDoc{33,34,61,39}|folio` (NO por folio solo: los docs Maxxa 1043/1054 colisionan con el correlativo de emitidas y crearían enlaces falsos).
+- **Datos de prod** (dry-run + OK MJ + backup): 63 imputaciones creadas. 18 cobros (emitidas) cerrados a saldo $0 (≈ $199,4M) + recibidas chicas. Integridad: 0 facturas/movimientos sobre-imputados. No mueve totales de obra (cobrado/gastado salen de facturas). F-5705931 (Servipag) excluido por decisión MJ.
+- **Pendiente de dato**: 92 movimientos Maxxa sin contraparte en la app = compras Sodimac 2024 (la app solo tiene cartola desde 2025-01-02). Importar cartola 2024 para cerrarlas.
+
+## 2026-06-03 — Import banco: "compra con tarjeta" ya no se marca "sin factura" + auto-match comercios
+
+- **Import deja de esconder compras en "sin factura"**: `inferCategory` (`santanderParser.ts`) ya NO infiere `compra_tarjeta` por el prefijo "Compra ". `import/route.ts` solo nace `status=sin_factura` para categorías sin documento real (`previred`, `sueldo`); el resto nace `sin_asignar` y entra a la cola de conciliación. Motivo: el atajo mandaba toda compra con tarjeta (la mayoría CON factura) a "sin factura", donde el filtro de pendientes no la muestra. "Sin factura" pasa a enseñarse caso por caso (reglas `bankCategorizationRule`).
+- **Auto-match por comercio (`invoicePayments.ts`)**: arreglado Construmart (la glosa trae guion "CONSTRU-MART", la regex `/construmart/` no matcheaba → ahora `/constru-?mart/`); agregado ERPYME→MAXXA (suscripción mensual, monto exacto). Sin cambios en el criterio conservador (RUT o comercio reconocido; la fecha no interviene).
+- **`conciliar-maxxa-2025.ts`**: lee los 4 exports de Maxxa (antes 2; faltaba ene–mar 2025) + guard de coherencia de signo (emitida↔abono, recibida↔cargo) para no pegar pagos por colisión de folio. Limitación conocida: la dedup de cartola colapsa transferencias gemelas legítimas (pendiente arreglar para 2026).
+- **Datos de prod** (reseteos de estado, conciliaciones Maxxa 2025, Santander, internacionales): detalle en WIP.md ronda 48. No mueven totales de obra (cobrado/gastado salen de facturas, no de pagos).
+- **Archivos**: `src/lib/banco/santanderParser.ts`, `src/app/api/banco/import/route.ts`, `src/lib/banco/invoicePayments.ts`, `scripts/conciliar-maxxa-2025.ts` + scripts nuevos de reseteo/conciliación.
+
+---
+
+## 2026-06-03 — Cotizaciones: borrar con crucecita · editor: toolbar flotante + fix dropdowns
+
+- **Borrar cotización (feature)**: crucecita discreta a la derecha de cada fila en la lista de Cotizaciones (tabs Activas y Archivadas) con confirmación inline ("¿Eliminar? Sí/No"). Borrado definitivo (cascade: presupuestos, estados de pago, lista de compra). NO se ofrece en Convertidas (obra viva). El endpoint `DELETE /api/proyectos/[id]` suma guard server-side: solo borra status `cotizacion`/`archivado`. Componente nuevo `BorrarCotizacionButton`. (PR #79)
+- **Descripciones — toolbar flotante (UX)**: la barra de formato del `RichTextEditor` deja de ser fija y pasa a `BubbleMenu` (Tiptap) que aparece solo al seleccionar texto, chico y proporcional — ya no ocupa espacio al desplegar la partida. (PR #80)
+- **Agregar partida — dropdowns pegados (fix)**: dos desplegables del `ObraEditor` que no cerraban al click afuera: el buscador de catálogo (el cartel "No se encontraron partidas" persistía porque el handler solo limpiaba resultados, no la query → se separó la visibilidad en `showCatalogDropdown`) y el picker "+ Capítulo" (sin handler → se le agregó). (PR #80)
+- **Pendiente**: verificación visual del toolbar flotante en prod (no se pudo en sesión por inestabilidad del preview); si se ve mal, revertir PR #80.
+- **Archivos**: `src/components/proyecto/BorrarCotizacionButton.tsx`, `src/components/proyecto/ProjectsTable.tsx`, `src/app/api/proyectos/[id]/route.ts`, `src/components/presupuesto/RichTextEditor.tsx`, `src/components/presupuesto/ObraEditor.tsx`.
+
+---
+
 ## 2026-06-02 — Cotizador: orden por tipo + descripciones con formato (texto rico)
 
 - **Orden del detalle de costos (fix)**: la tabla editable "Detalle de materiales y costos" (`ObraItemComponentsEditor`) ahora ordena SIEMPRE por tipo (material → mano de obra → herramientas → subcontrato → pérdida → margen) y dentro de cada tipo por orden de creación. Antes una línea nueva se agregaba al final de todo; ahora cae al final de su grupo. Es orden de presentación: no toca cálculos ni `sortOrder` guardado.

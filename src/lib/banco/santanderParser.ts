@@ -297,12 +297,23 @@ function parseDescription(desc: string): {
 
 // Sugiere categoría según patrón en la descripción. null si no se reconoce.
 // MJ puede sobrescribir manualmente en la UI de conciliación.
+//
+// IMPORTANTE (decisión MJ 2026-06-03): NO inferir "compra_tarjeta" por el
+// prefijo "Compra ". Ese atajo mandaba a "sin_factura" a TODA compra con
+// tarjeta (Sodimac, Easy, Construmart, etc.) solo porque la glosa empieza con
+// "Compra" — y la gran mayoría de esas compras SÍ tienen factura. El efecto
+// era que se escondían de la cola de conciliación (el filtro de pendientes no
+// muestra los "sin_factura"). Ahora una compra con tarjeta queda sin categoría
+// → status "sin_asignar" → entra a la cola y al auto-match contra facturas.
+// "Sin factura" debe ser algo que MJ ENSEÑA caso por caso (Claude, Google,
+// Hostinger, boletas), no una adivinanza del prefijo.
+//
+// Acá solo se infieren categorías que de verdad NO llevan factura y son
+// inequívocas por la glosa: Previred, sueldos a socios, comisiones del banco,
+// depósitos en efectivo.
 function inferCategory(desc: string): string | null {
   const upper = desc.toUpperCase();
   if (upper.includes("PREVIRED")) return "previred";
-  if (/\bCOMPRA\s/.test(upper) || upper.includes("LIDER.CL") || upper.includes("TOKU")) {
-    return "compra_tarjeta";
-  }
   if (upper.includes("DEPOSITO EN EFECTIVO") || upper.includes("DEPÓSITO EN EFECTIVO")) {
     return "deposito_efectivo";
   }

@@ -360,10 +360,17 @@ const TARJETA_MERCHANTS: { id: string; glosa: RegExp; name: RegExp }[] = [
   { id: "easy", glosa: /\beasy\b/, name: /easy/ },
   { id: "cavem", glosa: /cavem/, name: /cavem/ },
   { id: "sherwin", glosa: /sherwin|vespucio oriente/, name: /sherwin/ },
-  { id: "construmart", glosa: /construmart/, name: /construmart/ },
+  // Construmart aparece en la glosa con guion ("CONSTRU-MART"); el guion
+  // opcional cubre ambas formas (antes /construmart/ no matcheaba "constru-mart"
+  // y la compra no se auto-conciliaba aunque la factura calzara exacto).
+  { id: "construmart", glosa: /constru-?mart/, name: /construmart/ },
   { id: "imperial", glosa: /imperial/, name: /imperial/ },
   { id: "tottus", glosa: /tottus/, name: /tottus/ },
   { id: "copec", glosa: /copec/, name: /copec/ },
+  // ERPYME es la suscripción mensual al software de MAXXA; la glosa del banco
+  // dice "ERPYME" pero la factura la emite "MAXXA SOFTWARE SPA". Cargo mensual
+  // de monto exacto, candidato único → seguro para auto-conciliar.
+  { id: "maxxa", glosa: /erpyme/, name: /maxxa/ },
 ];
 const normTxt = (s: string | null) =>
   (s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");

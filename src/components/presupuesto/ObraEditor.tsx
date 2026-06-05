@@ -7,7 +7,7 @@ import MoneyInput from "@/components/ui/MoneyInput";
 import BudgetAuditBanner from "@/components/presupuesto/BudgetAuditBanner";
 import ObraItemComponentsEditor from "@/components/presupuesto/ObraItemComponentsEditor";
 import CostoDirectoDetalle from "@/components/presupuesto/CostoDirectoDetalle";
-import RichTextEditor from "@/components/presupuesto/RichTextEditor";
+import PartidaExpandedPanel from "@/components/presupuesto/PartidaExpandedPanel";
 import { sanitizeRichTextHtml, isRichTextEmpty } from "@/lib/richText";
 
 interface ObraItemComponent {
@@ -153,6 +153,13 @@ export default function ObraEditor({
   const [showManualForm, setShowManualForm] = useState(false);
   const [selectedCatalog, setSelectedCatalog] = useState<CatalogPartida | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+  // Visibilidad del dropdown de resultados del buscador de catálogo. Se separa
+  // de catalogQuery/catalogResults para poder CERRAR el dropdown al hacer click
+  // afuera SIN borrar lo que MJ escribió. (fix: el dropdown "No se encontraron
+  // partidas" quedaba pegado porque el click-afuera solo limpiaba resultados.)
+  const [showCatalogDropdown, setShowCatalogDropdown] = useState(false);
+  // Ref del dropdown "+ Capítulo" para cerrarlo al hacer click afuera.
+  const chapterPickerRef = useRef<HTMLDivElement>(null);
 
   // New item state (for both catalog-selected and manual)
   const [newItem, setNewItem] = useState({
@@ -187,11 +194,19 @@ export default function ObraEditor({
     return () => clearTimeout(timer);
   }, [catalogQuery]);
 
-  // Close dropdown on click outside
+  // Cerrar los dropdowns al hacer click afuera: el buscador de catálogo y el
+  // picker "+ Capítulo". Un solo handler chequea ambos refs.
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setCatalogResults([]);
+      const target = e.target as Node;
+      if (searchRef.current && !searchRef.current.contains(target)) {
+        setShowCatalogDropdown(false);
+      }
+      if (
+        chapterPickerRef.current &&
+        !chapterPickerRef.current.contains(target)
+      ) {
+        setShowChapterPicker(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -289,6 +304,7 @@ export default function ObraEditor({
     setProvisionPrices(initPrices);
     setCatalogQuery("");
     setCatalogResults([]);
+    setShowCatalogDropdown(false);
     setShowManualForm(false);
   }
 
@@ -296,12 +312,14 @@ export default function ObraEditor({
     setSelectedCatalog(null);
     setShowManualForm(true);
     setCatalogResults([]);
+    setShowCatalogDropdown(false);
     setNewItem({ name: catalogQuery, descriptionCliente: "", descriptionMaestro: "", unit: "GL", quantity: 0, unitPrice: 0 });
   }
 
   function resetAddForm() {
     setCatalogQuery("");
     setCatalogResults([]);
+    setShowCatalogDropdown(false);
     setSelectedCatalog(null);
     setShowManualForm(false);
     setNewItem({ name: "", descriptionCliente: "", descriptionMaestro: "", unit: "GL", quantity: 0, unitPrice: 0 });
@@ -1144,114 +1162,21 @@ export default function ObraEditor({
                     </tr>
                     {expandedItems[item.id] && (
                       <tr className="bg-gray-50">
-                        <td colSpan={10} className="px-4 py-3 space-y-3">
-                          {/* Descripción para el CLIENTE (va en el PDF del presupuesto) */}
-                          <div>
-                            <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
-                              Descripción para el cliente
-                              <span className="ml-2 text-gray-400 normal-case font-normal italic">
-                                — aparece en el PDF del presupuesto
-                              </span>
-                            </label>
-                            <RichTextEditor
-                              value={item.descriptionCliente}
-                              onChange={(html) =>
-                                handleUpdateItem(item.id, "descriptionCliente", html)
-                              }
-                              placeholder="Descripción para el cliente…"
-                            />
-                          </div>
-                          {/* Descripción para el maestro (no aparece en PDF cliente) */}
-                          <div>
-                            <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
-                              Descripción para el maestro
-                              <span className="ml-2 text-gray-400 normal-case font-normal italic">
-                                — aparece en el estado de pago
-                              </span>
-                            </label>
-                            <RichTextEditor
-                              value={item.descriptionMaestro}
-                              onChange={(html) =>
-                                handleUpdateItem(item.id, "descriptionMaestro", html)
-                              }
-                              placeholder="Alcance específico del trabajo para el maestro…"
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 md:grid-cols-7 gap-3 text-xs">
-                            {(([
-                              ["Material", "costMaterial"],
-                              ["Mano de obra", "costLabor"],
-                              ["Herramientas", "costTools"],
-                              ["Subcontrato", "costSubcontract"],
-                              ["Pérdida", "costLoss"],
-                              ["Margen", "costMargin"],
-                            ]) as [string, keyof ObraItem][]).map(([label, field]) => (
-                              <label key={field} className="flex flex-col">
-                                <span className="mb-1 text-gray-500">{label}</span>
-                                <div className="relative">
-                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none text-xs">
-                                    $
-                                  </span>
-                                  <MoneyInput
-                                    value={(item[field] as number | null) ?? 0}
-                                    onChange={(v) => handleUpdateItem(item.id, field, v)}
-                                    className="w-full border border-gray-300 rounded pl-5 pr-2 py-1 text-right text-sm"
-                                  />
-                                </div>
-                              </label>
-                            ))}
-                            <div className="flex flex-col justify-end">
-                              <span className="text-gray-500 mb-1 flex items-center gap-2">
-                                Suma desglose
-                                {saveStatus === "saving" && (
-                                  <span className="text-xs text-gray-400 animate-pulse">guardando…</span>
-                                )}
-                                {saveStatus === "saved" && (
-                                  <span className="text-xs text-green-600">✓ guardado</span>
-                                )}
-                              </span>
-                              <span className="text-gray-900 font-medium px-2 py-1 text-right">
-                                {formatCLP(
-                                  (item.costMaterial ?? 0) +
-                                    (item.costLabor ?? 0) +
-                                    (item.costSubcontract ?? 0) +
-                                    (item.costMargin ?? 0) +
-                                    (item.costTools ?? 0) +
-                                    (item.costLoss ?? 0)
-                                )}
-                              </span>
-                            </div>
-                          </div>
-                          {item.catalogPartidaId && (
-                            <div className="mt-2 flex justify-end gap-2">
-                              <button
-                                onClick={() => handleUpdateCatalogDescription(item)}
-                                className="text-xs text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-3 py-1 rounded-lg transition-colors"
-                                title="Guardar esta descripción en el catálogo + propagar a cotizaciones en borrador (no toca enviadas/aprobadas ni las que editaste a mano)"
-                              >
-                                ↑ Actualizar descripción en catálogo + borradores
-                              </button>
-                              <button
-                                onClick={() => handleUpdateCatalog(item)}
-                                className="text-xs text-orange-600 hover:text-orange-800 border border-orange-200 hover:border-orange-400 px-3 py-1 rounded-lg transition-colors"
-                                title="Propagar estos precios al catálogo + cotizaciones en borrador (no toca enviadas/aprobadas ni las que editaste a mano)"
-                              >
-                                ↑ Actualizar precios en catálogo + borradores
-                              </button>
-                            </div>
-                          )}
-                          {/* Desglose por componente — editable en borrador
-                              Y en enviado (la enviada está deslinkada del
-                              catálogo, pero se puede ajustar a mano). */}
-                          <div className="pt-3 border-t border-gray-200">
-                            <ObraItemComponentsEditor
-                              budgetId={initialBudget.id}
-                              itemId={item.id}
-                              canEdit={["borrador", "enviado"].includes(initialBudget.status)}
-                              catalogPartidaId={item.catalogPartidaId}
-                              onChanged={() => refreshItemTotals(item.id)}
-                            />
-                          </div>
+                        <td colSpan={10} className="p-0">
+                          <PartidaExpandedPanel
+                            item={item}
+                            saveStatus={saveStatus}
+                            budgetId={initialBudget.id}
+                            canEdit={["borrador", "enviado"].includes(initialBudget.status)}
+                            onUpdate={(field, value) =>
+                              handleUpdateItem(item.id, field, value)
+                            }
+                            onUpdateCatalog={() => handleUpdateCatalog(item)}
+                            onUpdateCatalogDescription={() =>
+                              handleUpdateCatalogDescription(item)
+                            }
+                            onComponentsChanged={() => refreshItemTotals(item.id)}
+                          />
                         </td>
                       </tr>
                     )}
@@ -1274,7 +1199,11 @@ export default function ObraEditor({
                       <input
                         type="text"
                         value={catalogQuery}
-                        onChange={(e) => setCatalogQuery(e.target.value)}
+                        onChange={(e) => {
+                          setCatalogQuery(e.target.value);
+                          setShowCatalogDropdown(true);
+                        }}
+                        onFocus={() => setShowCatalogDropdown(true)}
                         className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
                         placeholder="Buscar partida en catalogo... (ej: demolicion muro, enchape)"
                         autoFocus
@@ -1300,7 +1229,7 @@ export default function ObraEditor({
                   </div>
 
                   {/* Search results dropdown */}
-                  {catalogResults.length > 0 && (
+                  {showCatalogDropdown && catalogResults.length > 0 && (
                     <div className="absolute z-10 left-0 right-16 mt-1 bg-white rounded-lg border border-gray-200 shadow-lg max-h-72 overflow-y-auto">
                       {catalogResults.map((p) => (
                         <button
@@ -1330,7 +1259,8 @@ export default function ObraEditor({
                   )}
 
                   {/* No results message */}
-                  {catalogQuery.length >= 2 &&
+                  {showCatalogDropdown &&
+                    catalogQuery.length >= 2 &&
                     !searchingCatalog &&
                     catalogResults.length === 0 && (
                       <div className="absolute z-10 left-0 right-16 mt-1 bg-white rounded-lg border border-gray-200 shadow-lg p-4">
@@ -1637,7 +1567,7 @@ export default function ObraEditor({
       {/* "+ Capítulo": dropdown para re-habilitar capítulos vacíos. Solo
           aparece cuando hay capítulos ocultos disponibles. */}
       {hiddenChapters.length > 0 && (
-        <div className="relative">
+        <div className="relative" ref={chapterPickerRef}>
           <button
             onClick={() => setShowChapterPicker((s) => !s)}
             className="text-sm text-gray-600 hover:text-gray-900 border border-dashed border-gray-300 hover:border-gray-500 px-4 py-2 rounded-lg transition-colors"

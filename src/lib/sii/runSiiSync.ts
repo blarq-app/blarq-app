@@ -34,6 +34,34 @@ export interface SyncOptions {
   types?: ("emitida" | "recibida")[]; // default = ambos
 }
 
+// Fecha de corte histórica: el primer sync de MJ trajo desde el 1-abr-2026.
+// Solo se usa como respaldo cuando todavía NO hay ninguna factura del SII
+// guardada (base recién creada). En operación normal la fecha la deduce
+// getDefaultSyncFrom() de las facturas ya traídas.
+export const SII_SYNC_FALLBACK_FROM = "2026-04-01";
+
+// Calcula SOLA desde qué fecha sincronizar cuando el usuario no elige una.
+// Mira la factura del SII más reciente que ya está guardada y arranca desde
+// el primer día del MES ANTERIOR a su emisión. Ese mes de colchón cubre el
+// caso de que el SII publique tarde una factura del período previo (los DTEs
+// aparecen en el RCV con algún retraso). Como el sync es idempotente
+// (upsert por la unique key), re-traer ese colchón no duplica nada.
+//
+// Las fechas de emisión se guardan a medianoche UTC, así que el cálculo del
+// mes se hace en UTC para no correrse un día por la zona horaria de Chile.
+export async function getDefaultSyncFrom(): Promise<string> {
+  const latest = await prisma.invoice.findFirst({
+    where: { origin: "sii_automatica" },
+    orderBy: { issueDate: "desc" },
+    select: { issueDate: true },
+  });
+  if (!latest) return SII_SYNC_FALLBACK_FROM;
+  const d = latest.issueDate;
+  // Date.UTC con mes -1 hace bien el rollover de enero → diciembre anterior.
+  const from = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1));
+  return from.toISOString().slice(0, 10);
+}
+
 export interface SyncResult {
   ok: true;
   fromDate: string;

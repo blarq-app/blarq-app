@@ -391,6 +391,10 @@ model ArtefactoCatalog {
   listPrice         Float    @default(0) // Precio lista
   discountPercent   Float?   // % descuento típico (decimal 0..1)
   isStandard        Boolean  @default(false) // Parte de la paleta base BLARQ
+  // Orden manual dentro de cada subcategoría (pestaña). MJ arrastra las
+  // filas a su gusto y este número fija el orden; default 0 = todos los
+  // existentes empatan y caen al orden por nombre hasta que ella arrastre.
+  sortOrder         Int      @default(0)
   lastPriceCheck    DateTime? // Última vez que se verificó el precio
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -398,6 +402,7 @@ model ArtefactoCatalog {
   @@index([subcategory])
   @@index([tag])
   @@index([isStandard])
+  @@index([subcategory, sortOrder])
 }
 
 // Items de artefactos

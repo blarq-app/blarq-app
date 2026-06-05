@@ -85,6 +85,20 @@ Si un campo tiene un motor de automatización que decide en base a "está vacío
 - No reversible o blast radius alto (`git push --force`, drop de tabla en prod, borrar branch, deploy a prod, cambiar env vars en Vercel): **confirmar con MJ antes**.
 - Cualquier cosa que apunte a la BD prod (Neon `ep-shy-morning`) debe ser confirmada explícitamente.
 
+### 4.8 Trabajo en paralelo — ramas y worktrees
+
+MJ trabaja con **varias sesiones a la vez** (a propósito, es más eficiente). El riesgo es perder trabajo o enredar dos features. Regla base: **una sesión = una rama propia = una carpeta de trabajo propia (worktree)**. Si cada sesión vive en su carpeta, son incapaces de pisarse aunque corran al mismo tiempo. El enredo clásico ocurre cuando dos sesiones editan la **misma** carpeta sobre la **misma** rama.
+
+Protocolo obligatorio para cualquier sesión que vaya a tocar código:
+
+1. **Al arrancar**: correr `git status` + `git branch --show-current`. Si hay cambios sin guardar de **otro tema** (no del tuyo), **parar y avisar a MJ** — no tocarlos, no commitearlos, no mezclarlos. Son de otra sesión.
+2. **Rama propia**: trabajar en una rama que arranque de `main` (`git switch -c feat/<tema> main`), nunca encima de la rama de otra sesión. Para paralelo real, pedir/usar un worktree propio (carpeta separada).
+3. **Commitear solo lo propio**: stagear archivos explícitos (`git add <ruta>`), **nunca `git add -A` ni `git add .`**. Antes de commitear, verificar con `git diff <archivo>` que el archivo compartido (ej. `MovementsTable.tsx`, `CHANGELOG.md`) solo tenga TUS cambios.
+4. **Al cerrar**: dejar todo commiteado en tu rama y decir el nombre. No dejar trabajo sin guardar "para después" en una carpeta compartida.
+5. **Borrar ramas / cerrar worktrees**: blast radius alto → confirmar con MJ (ver §4.7). Borrar solo ramas ya integradas a `main` con `git branch -d` (el `-d` se niega si no están integradas; nunca usar `-D` sin OK).
+
+Mantener temas distintos entre sesiones (ej. artefactos vs facturas) ayuda, pero **no sustituye** el aislamiento por rama/carpeta.
+
 ## 5. Stack y workflow técnico
 
 Detalle completo en [docs/architecture.md](docs/architecture.md). Resumen:

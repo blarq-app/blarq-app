@@ -109,6 +109,7 @@ export default function ObraItemComponentsEditor({
   canEdit,
   catalogPartidaId,
   onChanged,
+  dense = false,
 }: {
   budgetId: string;
   itemId: string;
@@ -117,6 +118,8 @@ export default function ObraItemComponentsEditor({
   // línea. Si es null (partida 100% manual), no se muestra.
   catalogPartidaId?: string | null;
   onChanged?: () => void;
+  // Modo compacto: filas más bajas y letra más chica (vista densa estilo Excel).
+  dense?: boolean;
 }) {
   const [comps, setComps] = useState<Component[]>([]);
   const [loading, setLoading] = useState(true);
@@ -338,7 +341,17 @@ export default function ObraItemComponentsEditor({
   }
 
   return (
-    <div className="space-y-2">
+    <div
+      className={
+        dense
+          ? "space-y-0.5 text-[10px] leading-none [&_td]:!py-0 [&_th]:!py-[1px] " +
+            "[&_input]:!text-[10px] [&_input]:!leading-none [&_select]:!text-[10px] [&_td]:!align-middle " +
+            // Chips de tipo (Material/Mano de obra/…) sin alto extra: aprietan
+            // el renglón. Son los únicos <span> con .rounded en la tabla.
+            "[&_span.rounded]:!py-0 [&_span.rounded]:!leading-none"
+          : "space-y-2"
+      }
+    >
       <div className="flex items-center justify-between">
         <span className="text-[10px] uppercase tracking-wider text-gray-500">
           Detalle de materiales y costos
@@ -370,7 +383,12 @@ export default function ObraItemComponentsEditor({
             // dependiente de la línea de arriba.
             const isNestedPerdida = c.type === "perdida" && !!c.appliedToComponentId;
             return (
-              <tr key={c.id} className="border-b border-gray-50 last:border-0">
+              <tr
+                key={c.id}
+                className={`border-b last:border-0 ${
+                  dense ? "border-gray-100" : "border-gray-50"
+                }`}
+              >
                 <td className={`py-1 px-2 ${isNestedPerdida ? "pl-6" : ""}`}>
                   {isNestedPerdida && (
                     <span className="text-gray-300 mr-1" aria-hidden="true">
@@ -390,6 +408,10 @@ export default function ObraItemComponentsEditor({
                   )}
                 </td>
                 <td className="py-1 px-2">
+                  {/* Input + link ↗ en la MISMA línea (flex), si no el ↗
+                      caía en un renglón nuevo e inflaba las filas con
+                      referencia (vista densa). */}
+                  <div className="flex items-center gap-1">
                   {canEdit ? (
                     <input
                       type="text"
@@ -401,22 +423,23 @@ export default function ObraItemComponentsEditor({
                       onKeyDown={(e) => {
                         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                       }}
-                      className="w-full bg-transparent text-gray-900"
+                      className="flex-1 min-w-0 bg-transparent text-gray-900"
                     />
                   ) : (
-                    <span className="text-gray-900">{c.description}</span>
+                    <span className="flex-1 min-w-0 text-gray-900">{c.description}</span>
                   )}
                   {c.referenceLink && (
                     <a
                       href={c.referenceLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="ml-1 text-blue-500"
+                      className="shrink-0 text-blue-500"
                       title={c.referenceLink}
                     >
                       ↗
                     </a>
                   )}
+                  </div>
                 </td>
                 <td className="py-1 px-2 text-center text-gray-500">
                   {canEdit ? (
@@ -500,7 +523,7 @@ export default function ObraItemComponentsEditor({
                     </span>
                   )}
                 </td>
-                <td className="py-1 px-2 text-right font-medium text-gray-900 tabular-nums">
+                <td className={`py-1 px-2 text-right font-medium text-gray-900 tabular-nums ${dense ? "text-[9px]" : ""}`}>
                   {formatCLP(c.totalCost)}
                 </td>
                 <td className="py-1 px-1 text-right whitespace-nowrap">
@@ -539,11 +562,11 @@ export default function ObraItemComponentsEditor({
       </table>
 
       {canEdit && (
-        <div className="space-y-2 pt-1">
+        <div className={dense ? "space-y-1 pt-0.5" : "space-y-2 pt-1"}>
           {/* Agregar material buscándolo en el catálogo (trae su precio) o
               creando uno nuevo si no existe. */}
           <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-gray-500 w-28 shrink-0">
+            <span className={`${dense ? "text-[8px]" : "text-[10px]"} uppercase tracking-wider text-gray-500 w-28 shrink-0`}>
               Agregar material
             </span>
             <div className="flex-1 max-w-md">
@@ -564,7 +587,7 @@ export default function ObraItemComponentsEditor({
                 type="button"
                 onClick={() => addComp(t.value)}
                 disabled={saving === "__new"}
-                className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded border border-gray-200 hover:border-gray-400 ${t.color} disabled:opacity-50`}
+                className={`${dense ? "text-[8px] px-1.5 py-0.5" : "text-[10px] px-2 py-1"} uppercase tracking-wider rounded border border-gray-200 hover:border-gray-400 ${t.color} disabled:opacity-50`}
               >
                 + {t.label}
               </button>
@@ -574,7 +597,7 @@ export default function ObraItemComponentsEditor({
               type="button"
               onClick={addLeyes}
               disabled={saving === "__new"}
-              className="text-[10px] uppercase tracking-wider px-2 py-1 rounded border border-gray-200 hover:border-gray-400 bg-emerald-50 text-emerald-700 disabled:opacity-50"
+              className={`${dense ? "text-[8px] px-1.5 py-0.5" : "text-[10px] px-2 py-1"} uppercase tracking-wider rounded border border-gray-200 hover:border-gray-400 bg-emerald-50 text-emerald-700 disabled:opacity-50`}
               title="Agrega leyes sociales como % sobre la mano de obra"
             >
               + Leyes sociales %

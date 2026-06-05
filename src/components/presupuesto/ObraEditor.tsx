@@ -1298,7 +1298,19 @@ export default function ObraEditor({
                       (cambiar)
                     </button>
                   </div>
-                  <div className="grid grid-cols-12 gap-2 items-end">
+                  <div
+                    className="grid grid-cols-12 gap-2 items-end"
+                    onKeyDown={(e) => {
+                      // Enter dentro del formulario "Del catálogo" guarda igual
+                      // que el botón Agregar. preventDefault evita que el navegador
+                      // intente un submit o una recarga. Las validaciones viven en
+                      // handleAddItem (si falta el nombre, no hace nada).
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddItem(chapter.key);
+                      }
+                    }}
+                  >
                     <div className="col-span-4">
                       <label className="block text-xs text-gray-600 mb-1">
                         Nombre

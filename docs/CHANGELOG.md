@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-05 — Presupuesto: densidad del detalle, negrita en descripciones y fix de duplicación
+
+- **Buscador de material + "Detalle por costo directo"** (PR #94): en el buscador de material de una partida, el nombre ahora se ve completo y la categoría pasó a subtítulo gris (antes cortaba el nombre). En "Detalle por costo directo", cada sección (Materiales, Mano de obra, …) tiene una flechita para colapsarla + botón global "Ocultar todo / Mostrar todo"; tipografía ~2pt más chica e interlineado más apretado.
+- **Negrita tapada por el sidebar** (PR #93): la barra de formato flotante (`BubbleMenu`) de las descripciones aparecía centrada y, al seleccionar cerca del borde izquierdo, su lado izquierdo —el botón B— quedaba debajo del sidebar y no se veía. Fix: `placement: "top-start"` + `shift` con padding izquierdo. La B existía y funcionaba; solo estaba tapada.
+- **Duplicación de obra perdía el desglose** (PR #95): al duplicar un presupuesto de obra se copiaban los montos globales de cada partida pero NO sus `ObraItemComponent` (el detalle quedaba vacío). Ahora se copian, remapeando `appliedToComponentId` (pérdida→material) en dos pasadas. Backfill puntual en prod del duplicado de Colon ya afectado ("V1-editada sin ampliacion": 23 partidas / 126 componentes copiados desde "V1_Sin ampliación", con backup; sin pisar las partidas ya editadas a mano).
+- Antecedente del mismo hilo (06-04): densificación de la vista expandida de partida (~918→~490px) y línea entre filas del detalle más visible (PRs #84/#85/#86).
+
 ## 2026-06-05 — Catálogo: panel de precios multi-tienda con búsqueda en vivo (VTEX/mK)
 
 - El panel de precios de un material (`MaterialOffersDrawer`) se rediseñó para **mostrar todas las ofertas guardadas** (tienda, neto/IVA, stock, link) y permitir **fijar la oficial con un click** ("Usar esta") sin perder las demás. Esos datos (`MaterialPriceOffer`) ya existían en la BD pero la UI no los exponía: solo dejaba editar un precio/link a la vez.

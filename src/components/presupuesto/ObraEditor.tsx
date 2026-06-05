@@ -1167,7 +1167,7 @@ export default function ObraEditor({
                             item={item}
                             saveStatus={saveStatus}
                             budgetId={initialBudget.id}
-                            canEdit={initialBudget.status === "borrador"}
+                            canEdit={["borrador", "enviado"].includes(initialBudget.status)}
                             onUpdate={(field, value) =>
                               handleUpdateItem(item.id, field, value)
                             }

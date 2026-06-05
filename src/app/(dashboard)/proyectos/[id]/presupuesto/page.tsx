@@ -4,6 +4,7 @@ import { BUDGET_STATUSES, BudgetStatus, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import NuevaVersionButton from "@/components/presupuesto/NuevaVersionButton";
 import AprobarBudgetButton from "@/components/presupuesto/AprobarBudgetButton";
+import VolverALoEnviadoButton from "@/components/presupuesto/VolverALoEnviadoButton";
 import BorrarBudgetButton from "@/components/presupuesto/BorrarBudgetButton";
 import EditableVersionLabel from "@/components/presupuesto/EditableVersionLabel";
 import ImportarDesdeProyectoButton, { SourceProject } from "@/components/presupuesto/ImportarDesdeProyectoButton";
@@ -206,6 +207,12 @@ export default async function PresupuestoPage({
                             currentStatus={budget.status}
                             version={budget.version}
                           />
+                          {budget.status === "enviado" && budget.sentAt && (
+                            <VolverALoEnviadoButton
+                              budgetId={budget.id}
+                              version={budget.version}
+                            />
+                          )}
                           <BorrarBudgetButton
                             budgetId={budget.id}
                             currentStatus={budget.status}

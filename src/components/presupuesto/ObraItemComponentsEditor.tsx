@@ -69,6 +69,36 @@ function compareComps(
   );
 }
 
+// Orden de despliegue: como compareComps, pero cada línea de PÉRDIDA que se
+// calcula sobre un material concreto (appliedToComponentId) se muestra JUSTO
+// DEBAJO de ese material, no agrupada al final. Así se entiende visualmente
+// sobre qué material aplica la pérdida. Las pérdidas sin material apuntado
+// (appliedToComponentId null) se quedan en su grupo normal (orden por tipo).
+function orderForDisplay(list: Component[]): Component[] {
+  const anidadas = list.filter(
+    (c) => c.type === "perdida" && c.appliedToComponentId
+  );
+  const base = list
+    .filter((c) => !(c.type === "perdida" && c.appliedToComponentId))
+    .sort(compareComps);
+  const out: Component[] = [];
+  const colocadas = new Set<string>();
+  for (const c of base) {
+    out.push(c);
+    colocadas.add(c.id);
+    for (const p of anidadas
+      .filter((p) => p.appliedToComponentId === c.id)
+      .sort((a, b) => a.sortOrder - b.sortOrder)) {
+      out.push(p);
+      colocadas.add(p.id);
+    }
+  }
+  // Pérdidas cuyo material apuntado ya no existe en la lista → al final,
+  // para no perderlas de vista.
+  for (const p of anidadas) if (!colocadas.has(p.id)) out.push(p);
+  return out;
+}
+
 // Unidades disponibles (mismas que el catálogo). "%" convierte la línea en un
 // porcentaje: leyes sociales sobre la mano de obra, margen sobre el costo.
 const UNIT_OPTIONS = ["UN", "M2", "ML", "M3", "KG", "GL", "DIA", "HR", "%"];
@@ -345,9 +375,13 @@ export default function ObraItemComponentsEditor({
           </tr>
         </thead>
         <tbody>
-          {[...comps].sort(compareComps).map((c) => {
+          {orderForDisplay(comps).map((c) => {
             const meta = typeMeta(c.type);
             const isPct = c.unit === "%";
+            // Pérdida calculada sobre un material concreto: se muestra anidada
+            // debajo de ese material, con sangría y "↳" para que se lea como
+            // dependiente de la línea de arriba.
+            const isNestedPerdida = c.type === "perdida" && !!c.appliedToComponentId;
             return (
               <tr
                 key={c.id}
@@ -355,7 +389,12 @@ export default function ObraItemComponentsEditor({
                   dense ? "border-gray-100" : "border-gray-50"
                 }`}
               >
-                <td className="py-1 px-2">
+                <td className={`py-1 px-2 ${isNestedPerdida ? "pl-6" : ""}`}>
+                  {isNestedPerdida && (
+                    <span className="text-gray-300 mr-1" aria-hidden="true">
+                      ↳
+                    </span>
+                  )}
                   <span className={`px-1.5 py-0.5 rounded text-[10px] ${meta.color}`}>
                     {meta.label}
                   </span>

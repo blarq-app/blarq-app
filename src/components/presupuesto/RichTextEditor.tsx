@@ -160,9 +160,22 @@ export default function RichTextEditor({
 
   return (
     <div className="rounded border border-gray-300 focus-within:border-gray-400 bg-white">
-      {/* Menú flotante: aparece solo cuando hay texto seleccionado. */}
+      {/* Menú flotante: aparece solo cuando hay texto seleccionado.
+          - placement "top-start": se alinea al INICIO de la selección y crece
+            hacia la derecha (antes quedaba centrado y, en la columna izquierda,
+            su lado izquierdo —donde está la B— se metía DEBAJO del sidebar y
+            no se veía: "se perdía la negrita").
+          - shift padding.left 256 ≈ ancho del sidebar: red de seguridad para
+            que nunca se posicione tapado por la barra lateral. */}
       {editor && (
-        <BubbleMenu editor={editor}>
+        <BubbleMenu
+          editor={editor}
+          options={{
+            placement: "top-start",
+            offset: 6,
+            shift: { padding: { left: 256, right: 8, top: 8, bottom: 8 } },
+          }}
+        >
           <FloatingMenu editor={editor} />
         </BubbleMenu>
       )}

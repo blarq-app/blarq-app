@@ -16,17 +16,20 @@ import {
   seedObraItemComponentsFromLumps,
 } from "@/lib/catalog/recalcObraItem";
 
+// Edición manual permitida en borrador Y en enviado (la enviada está
+// deslinkada del catálogo pero sigue editable a mano). Ver nota en
+// componentes/[compId]/route.ts. aprobado/rechazado cerrados.
 async function assertBorrador(itemId: string) {
   const item = await prisma.obraItem.findUnique({
     where: { id: itemId },
     select: { budgetVersion: { select: { status: true } } },
   });
   if (!item) return { ok: false, status: 404, msg: "Ítem no encontrado" };
-  if (item.budgetVersion.status !== "borrador") {
+  if (!["borrador", "enviado"].includes(item.budgetVersion.status)) {
     return {
       ok: false,
       status: 400,
-      msg: "Solo se pueden editar componentes en presupuestos borrador",
+      msg: "Solo se pueden editar componentes en presupuestos borrador o enviados",
     };
   }
   return { ok: true as const };

@@ -12,17 +12,21 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { recalcObraItemFromComponents } from "@/lib/catalog/recalcObraItem";
 
+// Edición manual permitida en borrador Y en enviado: una versión enviada
+// queda DESLIGADA del catálogo (el sync no la toca) pero MJ igual puede
+// ajustarla a mano sin reconectarla — no hace falta volver a borrador
+// (eso sí la reconectaría). aprobado/rechazado quedan cerrados.
 async function assertBorrador(itemId: string) {
   const item = await prisma.obraItem.findUnique({
     where: { id: itemId },
     select: { budgetVersion: { select: { status: true } } },
   });
   if (!item) return { ok: false, status: 404, msg: "Ítem no encontrado" };
-  if (item.budgetVersion.status !== "borrador") {
+  if (!["borrador", "enviado"].includes(item.budgetVersion.status)) {
     return {
       ok: false,
       status: 400,
-      msg: "Solo se pueden editar componentes en presupuestos borrador",
+      msg: "Solo se pueden editar componentes en presupuestos borrador o enviados",
     };
   }
   return { ok: true as const };

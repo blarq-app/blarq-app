@@ -1240,13 +1240,14 @@ export default function ObraEditor({
                               </button>
                             </div>
                           )}
-                          {/* Desglose por componente — editable si el
-                              presupuesto está en borrador. */}
+                          {/* Desglose por componente — editable en borrador
+                              Y en enviado (la enviada está deslinkada del
+                              catálogo, pero se puede ajustar a mano). */}
                           <div className="pt-3 border-t border-gray-200">
                             <ObraItemComponentsEditor
                               budgetId={initialBudget.id}
                               itemId={item.id}
-                              canEdit={initialBudget.status === "borrador"}
+                              canEdit={["borrador", "enviado"].includes(initialBudget.status)}
                               catalogPartidaId={item.catalogPartidaId}
                               onChanged={() => refreshItemTotals(item.id)}
                             />

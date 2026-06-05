@@ -163,6 +163,15 @@ model BudgetVersion {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Foto inmutable de la versión al momento de enviarla/cerrarla: copia
+  // profunda de las partidas + su desglose + totales tal cual se mandó al
+  // cliente. Una vez enviada, la versión queda DESLIGADA del catálogo (el
+  // sync nunca la toca) y se puede editar a mano sin reconectarla. La foto
+  // es el registro de "esto fue lo que se envió el día X" y habilita el
+  // "volver a lo enviado". Null mientras nunca se envió. Ver ADR/WIP (9).
+  sentSnapshot Json?
+  sentAt       DateTime?
+
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   parentVersion BudgetVersion? @relation("VersionLineage", fields: [parentVersionId], references: [id], onDelete: SetNull)
   childVersions BudgetVersion[] @relation("VersionLineage")

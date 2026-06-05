@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { buildBudgetSnapshot } from "@/lib/catalog/budgetSnapshot";
 
 // Actualizar presupuesto (observaciones, GG%, utilidad%, estado)
 export async function PUT(
@@ -35,6 +36,29 @@ export async function PUT(
       where: { id },
       data: updateData,
     });
+
+    // Foto al enviar/cerrar (tarea 9): cuando la versión pasa a "enviado" se
+    // saca una foto fresca (re-enviar = foto nueva). Al pasar a "aprobado"
+    // solo si todavía no había foto (cubre el caso borrador→aprobado directo).
+    // La foto deja registro de lo enviado y habilita "volver a lo enviado".
+    // El deslinkado del catálogo ya lo da el status ≠ borrador (el sync solo
+    // toca borradores) — la foto es el respaldo, no el candado.
+    if (data.status === "enviado" || data.status === "aprobado") {
+      const necesitaFoto =
+        data.status === "enviado" ||
+        !(await prisma.budgetVersion.findUnique({
+          where: { id },
+          select: { sentSnapshot: true },
+        }))?.sentSnapshot;
+      if (necesitaFoto) {
+        const snap = await buildBudgetSnapshot(id);
+        await prisma.budgetVersion.update({
+          where: { id },
+          // JSON puro (sin Date crudos de los items de muebles/artefactos).
+          data: { sentSnapshot: JSON.parse(JSON.stringify(snap)), sentAt: new Date() },
+        });
+      }
+    }
 
     // Cuando se aprueba un presupuesto de obra, el proyecto pasa a "ejecucion"
     // y se le asigna numeroProyecto si aún no lo tenía (transición cotizacion→ejecucion).

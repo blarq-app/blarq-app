@@ -206,12 +206,54 @@ export async function POST(request: NextRequest) {
     if (!invoiceId) {
       return NextResponse.json({ error: "Falta la factura destino" }, { status: 400 });
     }
-    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: {
+        id: true,
+        folioNumber: true,
+        totalAmount: true,
+        // Pagos actuales de la factura — para calcular cuánto saldo le
+        // queda antes de aceptar este lote.
+        payments: { select: { amountApplied: true, bankMovementId: true } },
+      },
+    });
     if (!invoice) {
       return NextResponse.json({ error: "La factura no existe" }, { status: 404 });
     }
 
     const ids = targetMovs.map((m) => m.id);
+
+    // TOPE anti-sobre-imputación. Este camino imputa cada movimiento por su
+    // monto COMPLETO; sin tope, marcar varios movimientos contra una factura
+    // chica la dejaba con más cobrado que su total (sobre-imputada) y
+    // "enterraba" plata que en realidad era de otra factura. La plata de los
+    // proyectos no se descuadra (sale de las facturas, no de los enganches),
+    // pero la trazabilidad sí. Acá cortamos antes de hacer el daño.
+    //
+    // Capacidad = total de la factura − pagos que NO vienen de este lote
+    // (los de este lote se reemplazan, así que no cuentan). Si el lote supera
+    // esa capacidad, no asignamos nada y le explicamos a MJ por cuánto se pasa.
+    const batchSum = targetMovs.reduce((s, m) => s + Math.abs(m.amount), 0);
+    const idSet = new Set(ids);
+    const otherPaid = invoice.payments
+      .filter((p) => !p.bankMovementId || !idSet.has(p.bankMovementId))
+      .reduce((s, p) => s + p.amountApplied, 0);
+    const capacity = invoice.totalAmount - otherPaid;
+    if (batchSum > capacity + 1) {
+      const clp = (n: number) => "$" + Math.round(n).toLocaleString("es-CL");
+      const exceso = batchSum - Math.max(0, capacity);
+      return NextResponse.json(
+        {
+          error:
+            `Estos ${targetMovs.length} movimiento${targetMovs.length !== 1 ? "s" : ""} suman ${clp(batchSum)}, ` +
+            `pero a la factura F-${invoice.folioNumber ?? "?"} solo le queda saldo ${clp(Math.max(0, capacity))} ` +
+            `(se pasa ${clp(exceso)}). Revisá la selección, o usá "Asignar" en la fila ` +
+            `para repartir el monto entre varias facturas.`,
+        },
+        { status: 400 }
+      );
+    }
+
     // Imputaciones previas que se reemplazan — esas facturas también
     // recalculan status (pueden quedar con menos cobrado que antes).
     const previousInvoiceIds = targetMovs.flatMap((m) =>

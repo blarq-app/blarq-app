@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-05 — Catálogo: panel de precios multi-tienda con búsqueda en vivo (VTEX/mK)
+
+- El panel de precios de un material (`MaterialOffersDrawer`) se rediseñó para **mostrar todas las ofertas guardadas** (tienda, neto/IVA, stock, link) y permitir **fijar la oficial con un click** ("Usar esta") sin perder las demás. Esos datos (`MaterialPriceOffer`) ya existían en la BD pero la UI no los exponía: solo dejaba editar un precio/link a la vez.
+- **Búsqueda en vivo**: nuevo motor VTEX en `src/lib/catalog/fetchPrice.ts` (`searchStoreProducts` + `VTEX_STORES`) que consulta la API pública de catálogo y devuelve candidatos con **precio y stock de hoy**. Nuevo endpoint `POST /api/catalogo/buscar-precio`. Sirve para relinkear cuando el producto viejo se movió (caso real: el guardapolvo foliado apuntaba a un link mK ya inexistente; catálogo $4.990 vs ~$6.990–9.990 hoy). Solo **mK** verificada hoy — Construmart/Imperial/Easy/Chilemat no exponen esa API (devuelven HTML). `fetchPriceFromUrl` también detecta dominios VTEX.
+- **Fix**: al fijar una oferta (POST y PATCH de ofertas) ahora se llama `syncMaterialToComponents` — antes cambiaba el `netPrice` del catálogo pero dejaba las partidas con el precio viejo. El POST además despinea las otras ofertas (faltaba).
+- Detalles: query del buscador prellenada suavizada (minúsculas + medida triple `15x90x2400mm` colapsada a `15x90`, porque el nombre exacto del catálogo no calza en la búsqueda); botón "Precios" sin emoji (regla BLARQ). UI pura sobre datos, no toca `metrics.ts`. (rama `feat/catalogo-precios-multitienda`)
+
 ## 2026-06-04 — Presupuesto: vista expandida de partida densa (~918→~490px)
 
 - El panel que se abre al expandir una partida (pestaña Presupuesto) ocupaba ~918px (más de una pantalla). Se compacta a ~490px **manteniendo toda la info**, a densidad tipo planilla maestra: descripciones cliente/maestro **lado a lado** (antes apiladas) con letra de 9px e interlineado apretado; 6 rubros de costo + suma en una fila; tabla "Detalle de materiales y costos" en modo denso (10px, filas pegadas, chips de tipo sin alto extra, totales 9px, botones "+Material…" más chicos).

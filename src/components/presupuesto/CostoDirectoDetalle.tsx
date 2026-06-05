@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { formatCLP } from "@/lib/utils";
 
 // Vista de "Detalle por costo directo": agrupa los ObraItemComponent de
@@ -167,6 +168,30 @@ export default function CostoDirectoDetalle({ items }: { items: ItemLite[] }) {
   const grandTotal = sections.reduce((s, sec) => s + sec.total, 0);
   const hasAnyComponent = grandTotal > 0;
 
+  // Apertura por SECCIÓN (Materiales, Mano de obra, …). Cada sección se puede
+  // colapsar con su flechita; el botón global abre/cierra todas a la vez.
+  // (El desglose "en qué partidas aparece" de cada fila queda aparte, como
+  // <details> nativo por fila.) Default: todas abiertas.
+  const sectionTypes = sections.filter((s) => s.groups.length > 0).map((s) => s.type);
+  const [closedSections, setClosedSections] = useState<Record<string, boolean>>({});
+  const allOpen = sectionTypes.every((t) => !closedSections[t]);
+  function toggleAll() {
+    if (allOpen) {
+      // cerrar todas
+      setClosedSections(Object.fromEntries(sectionTypes.map((t) => [t, true])));
+    } else {
+      // abrir todas
+      setClosedSections({});
+    }
+  }
+  function setSectionOpen(type: string, open: boolean) {
+    setClosedSections((m) => {
+      const isClosed = !!m[type];
+      if (isClosed === !open) return m;
+      return { ...m, [type]: !open };
+    });
+  }
+
   if (!hasAnyComponent) {
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -184,21 +209,31 @@ export default function CostoDirectoDetalle({ items }: { items: ItemLite[] }) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <div className="flex items-baseline justify-between mb-1">
-        <h2 className="text-lg font-semibold text-gray-900">
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="flex items-baseline justify-between mb-1 gap-3">
+        <h2 className="text-sm font-semibold text-gray-900">
           Detalle por costo directo
         </h2>
-        <span className="text-xs text-gray-400 tabular-nums">
-          Total componentes: {formatCLP(grandTotal)}
-        </span>
+        <div className="flex items-baseline gap-3">
+          <button
+            type="button"
+            onClick={toggleAll}
+            className="text-[10px] text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 rounded px-2 py-0.5 transition-colors whitespace-nowrap"
+            title="Colapsa o despliega todas las secciones (Materiales, Mano de obra, …) a la vez"
+          >
+            {allOpen ? "Ocultar todo" : "Mostrar todo"}
+          </button>
+          <span className="text-[10px] text-gray-400 tabular-nums whitespace-nowrap">
+            Total componentes: {formatCLP(grandTotal)}
+          </span>
+        </div>
       </div>
-      <p className="text-xs text-gray-500 mb-4">
+      <p className="text-[10px] text-gray-500 mb-2">
         Qué se está comprando dentro de cada tipo de costo. Click en una fila
         para ver en qué partidas aparece.
       </p>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {sections.map((sec) => {
           if (sec.groups.length === 0) return null;
           const pct = grandTotal > 0 ? (sec.total / grandTotal) * 100 : 0;
@@ -206,36 +241,47 @@ export default function CostoDirectoDetalle({ items }: { items: ItemLite[] }) {
             <details
               key={sec.type}
               className="border border-gray-200 rounded-lg overflow-hidden"
-              open
+              open={!closedSections[sec.type]}
+              onToggle={(e) => setSectionOpen(sec.type, e.currentTarget.open)}
             >
-              <summary className="cursor-pointer flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors">
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold text-gray-900">
+              <summary className="cursor-pointer flex items-center justify-between px-2.5 py-1 bg-gray-50 hover:bg-gray-100 transition-colors list-none [&::-webkit-details-marker]:hidden">
+                <div className="flex items-center gap-1.5">
+                  {/* Flechita para ocultar/desplegar toda la sección.
+                      Rota según el estado (controlado), no por group-open,
+                      para no chocar con la flechita por fila (anidada). */}
+                  <span
+                    className={`text-gray-400 transition-transform inline-block text-[10px] leading-none ${
+                      closedSections[sec.type] ? "" : "rotate-90"
+                    }`}
+                  >
+                    ▶
+                  </span>
+                  <span className="text-[11px] font-semibold text-gray-900">
                     {sec.label}
                   </span>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-[9px] text-gray-400">
                     {sec.groups.length} {sec.groups.length === 1 ? "ítem" : "ítems"}
                   </span>
                 </div>
                 <div className="flex items-center gap-3 tabular-nums">
-                  <span className="text-xs text-gray-400 w-10 text-right">
+                  <span className="text-[9px] text-gray-400 w-9 text-right">
                     {pct.toFixed(0)}%
                   </span>
-                  <span className="text-sm font-medium text-gray-900 w-28 text-right">
+                  <span className="text-[11px] font-medium text-gray-900 w-28 text-right">
                     {formatCLP(sec.total)}
                   </span>
                 </div>
               </summary>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-[11px] leading-tight">
                   <thead className="text-[10px] uppercase tracking-wider text-gray-500 border-t border-gray-100">
                     <tr>
-                      <th className="text-left px-4 py-2 font-medium">Descripción</th>
-                      <th className="text-right px-2 py-2 font-medium">Cant. total</th>
-                      <th className="text-right px-2 py-2 font-medium">Costo unit.</th>
-                      <th className="text-right px-4 py-2 font-medium">Total</th>
-                      <th className="text-right px-2 py-2 font-medium">% sección</th>
+                      <th className="text-left px-3 py-1 font-medium">Descripción</th>
+                      <th className="text-right px-2 py-1 font-medium">Cant. total</th>
+                      <th className="text-right px-2 py-1 font-medium">Costo unit.</th>
+                      <th className="text-right px-3 py-1 font-medium">Total</th>
+                      <th className="text-right px-2 py-1 font-medium">% sección</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -254,9 +300,9 @@ export default function CostoDirectoDetalle({ items }: { items: ItemLite[] }) {
                         >
                           <td colSpan={5} className="p-0">
                             <details className="group">
-                              <summary className="cursor-pointer grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 px-4 py-2 hover:bg-gray-50">
-                                <div className="text-gray-900 pr-3 flex items-center gap-2">
-                                  <span className="text-gray-300 group-open:rotate-90 transition-transform inline-block text-xs">
+                              <summary className="cursor-pointer grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 px-3 py-0.5 hover:bg-gray-50">
+                                <div className="text-gray-900 pr-3 flex items-center gap-1.5">
+                                  <span className="text-gray-300 group-open:rotate-90 transition-transform inline-block text-[10px]">
                                     ▶
                                   </span>
                                   <span>{g.description}</span>
@@ -277,30 +323,30 @@ export default function CostoDirectoDetalle({ items }: { items: ItemLite[] }) {
                                       ? formatCLP(g.unitCostRef)
                                       : "—"}
                                 </div>
-                                <div className="text-right tabular-nums font-medium text-gray-900 w-28 pr-4">
+                                <div className="text-right tabular-nums font-medium text-gray-900 w-28 pr-3">
                                   {formatCLP(g.totalAmount)}
                                 </div>
-                                <div className="text-right tabular-nums text-gray-400 w-12 text-xs">
+                                <div className="text-right tabular-nums text-gray-400 w-12 text-[10px]">
                                   {pctSec.toFixed(0)}%
                                 </div>
                               </summary>
-                              <div className="px-4 pb-3 pt-1 bg-gray-50">
-                                <table className="w-full text-xs">
+                              <div className="px-3 pb-1.5 pt-0.5 bg-gray-50">
+                                <table className="w-full text-[11px] leading-tight">
                                   <thead className="text-[10px] uppercase tracking-wider text-gray-400">
                                     <tr>
-                                      <th className="text-left py-1 font-medium">
+                                      <th className="text-left py-0.5 font-medium">
                                         Partida
                                       </th>
-                                      <th className="text-right py-1 px-2 font-medium">
+                                      <th className="text-right py-0.5 px-2 font-medium">
                                         Cant. partida
                                       </th>
-                                      <th className="text-right py-1 px-2 font-medium">
+                                      <th className="text-right py-0.5 px-2 font-medium">
                                         Cant. comp.
                                       </th>
-                                      <th className="text-right py-1 px-2 font-medium">
+                                      <th className="text-right py-0.5 px-2 font-medium">
                                         Costo unit.
                                       </th>
-                                      <th className="text-right py-1 font-medium">
+                                      <th className="text-right py-0.5 font-medium">
                                         Total
                                       </th>
                                     </tr>
@@ -311,22 +357,22 @@ export default function CostoDirectoDetalle({ items }: { items: ItemLite[] }) {
                                         key={u.itemId + "-" + i}
                                         className="border-t border-gray-200"
                                       >
-                                        <td className="py-1 text-gray-700">
+                                        <td className="py-0.5 text-gray-700">
                                           <span className="text-gray-400 mr-1">
                                             {u.itemNumber}
                                           </span>
                                           {u.itemName}
                                         </td>
-                                        <td className="text-right tabular-nums text-gray-600 py-1 px-2">
+                                        <td className="text-right tabular-nums text-gray-600 py-0.5 px-2">
                                           {u.itemQuantity}
                                         </td>
-                                        <td className="text-right tabular-nums text-gray-600 py-1 px-2">
+                                        <td className="text-right tabular-nums text-gray-600 py-0.5 px-2">
                                           {u.componentQuantity} {u.unit}
                                         </td>
-                                        <td className="text-right tabular-nums text-gray-600 py-1 px-2">
+                                        <td className="text-right tabular-nums text-gray-600 py-0.5 px-2">
                                           {formatCLP(u.unitCost)}
                                         </td>
-                                        <td className="text-right tabular-nums font-medium text-gray-900 py-1">
+                                        <td className="text-right tabular-nums font-medium text-gray-900 py-0.5">
                                           {formatCLP(u.totalContribution)}
                                         </td>
                                       </tr>

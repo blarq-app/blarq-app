@@ -160,17 +160,23 @@ export default function MaterialAutocomplete({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => handleSelect(m)}
                 onMouseEnter={() => setHighlight(i)}
-                className={`w-full text-left px-2 py-1 flex items-center justify-between gap-2 ${
+                className={`w-full text-left px-2.5 py-1.5 flex items-start justify-between gap-3 ${
                   i === highlight ? "bg-gray-100" : "hover:bg-gray-50"
                 }`}
               >
-                <span className="truncate text-gray-900">
-                  <span className="text-[10px] text-gray-400 mr-1.5">
+                {/* Nombre completo y prominente (puede ocupar 2 líneas si es
+                    largo, no se corta). La categoría pasa a ser un subtítulo
+                    chico y gris debajo — antes iba antes del nombre y lo
+                    empujaba/cortaba. */}
+                <span className="min-w-0 flex-1">
+                  <span className="block text-gray-900 leading-snug break-words">
+                    {m.name}
+                  </span>
+                  <span className="block text-[9px] uppercase tracking-wide text-gray-400 mt-0.5">
                     {m.category}
                   </span>
-                  {m.name}
                 </span>
-                <span className="text-[10px] text-gray-500 tabular-nums whitespace-nowrap">
+                <span className="shrink-0 pt-0.5 text-[10px] text-gray-500 tabular-nums whitespace-nowrap">
                   {m.unit} · ${m.netPrice.toLocaleString("es-CL")}
                 </span>
               </button>

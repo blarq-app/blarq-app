@@ -147,6 +147,10 @@ export default function MaterialOffersDrawer({
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loadingOffers, setLoadingOffers] = useState(true);
   const [busyOfferId, setBusyOfferId] = useState<string | null>(null);
+  // Precio que muestra el recuadro "Precio actual en catálogo". Arranca del
+  // prop pero se actualiza solo al fijar una oferta o guardar precio manual,
+  // así MJ ve el cambio al toque sin tener que cerrar y reabrir el panel.
+  const [currentNet, setCurrentNet] = useState(material.netPrice);
 
   // Búsqueda en vivo
   const [searchStore, setSearchStore] = useState(SEARCHABLE_STORES[0].key);
@@ -189,6 +193,13 @@ export default function MaterialOffersDrawer({
   useEffect(() => {
     loadOffers();
   }, [loadOffers]);
+
+  // Cuando cambian las ofertas, el recuadro de arriba sigue a la oferta
+  // oficial (la fijada), que es la que define el precio del catálogo.
+  useEffect(() => {
+    const pinned = offers.find((o) => o.isPinned);
+    if (pinned?.priceNet != null) setCurrentNet(pinned.priceNet);
+  }, [offers]);
 
   // Marca una oferta ya guardada como la oficial del catálogo.
   async function pinOffer(offerId: string) {
@@ -297,6 +308,7 @@ export default function MaterialOffersDrawer({
         referenceLink: referenceLink || null,
       }),
     });
+    setCurrentNet(netPrice);
     await loadOffers();
     onChanged();
     setSavingManual(false);
@@ -345,11 +357,11 @@ export default function MaterialOffersDrawer({
               Precio actual en catálogo
             </p>
             <p className="text-2xl font-bold text-gray-900 tabular-nums">
-              {formatCLP(material.netPrice)}{" "}
+              {formatCLP(currentNet)}{" "}
               <span className="text-sm font-normal text-gray-500">neto</span>
             </p>
             <p className="text-sm text-gray-500 mt-0.5 tabular-nums">
-              {formatCLP(Math.round(material.netPrice * 1.19))} c/IVA
+              {formatCLP(Math.round(currentNet * 1.19))} c/IVA
             </p>
           </div>
 

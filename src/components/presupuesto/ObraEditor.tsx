@@ -748,7 +748,7 @@ export default function ObraEditor({
     if (!item.catalogPartidaId) return;
     if (
       !confirm(
-        `¿Actualizar los PRECIOS de la partida "${item.name}" en el catálogo?\n\n` +
+        `¿Actualizar la partida "${item.name}" en el catálogo?\n\n` +
           `Material: $${item.costMaterial ?? 0}\n` +
           `Mano de obra: $${item.costLabor ?? 0}\n` +
           `Herramientas: $${item.costTools ?? 0}\n` +
@@ -756,13 +756,30 @@ export default function ObraEditor({
           `Pérdida: $${item.costLoss ?? 0}\n` +
           `Subcontrato: $${item.costSubcontract ?? 0}\n` +
           `P. Unitario: $${item.unitPrice}\n\n` +
-          `Esto afectará la plantilla base para todos los proyectos futuros\n` +
-          `Y se propagará automáticamente a las cotizaciones EN BORRADOR\n` +
+          `Se guarda el DESGLOSE completo (todas las líneas, incluida la pérdida)\n` +
+          `en el catálogo, y se propagan los precios a las cotizaciones EN BORRADOR\n` +
           `(no toca las enviadas/aprobadas, ni las que vos editaste a mano).`
       )
     )
       return;
     try {
+      // 1) Subir el DESGLOSE COMPLETO de la partida al catálogo (materiales,
+      //    mano de obra, pérdida, margen, etc.). Antes esto NO se hacía: el
+      //    botón solo mandaba los 6 montos globales y la pérdida del desglose
+      //    nunca llegaba al catálogo. Si la partida no está vinculada al
+      //    catálogo el endpoint responde 400 con mensaje claro.
+      const resDesglose = await fetch(
+        `/api/presupuestos/${initialBudget.id}/partidas/${item.id}/al-catalogo`,
+        { method: "POST" }
+      );
+      if (!resDesglose.ok) {
+        const err = await resDesglose.json().catch(() => ({}));
+        throw new Error(err.error || "Error al subir el desglose");
+      }
+
+      // 2) Propagar los precios al catálogo + cotizaciones en borrador. El
+      //    desglose ya quedó arriba (paso 1); este PUT actualiza los montos
+      //    globales y hace la propagación a los borradores.
       const res = await fetch(`/api/catalogo/partidas/${item.catalogPartidaId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -783,9 +800,9 @@ export default function ObraEditor({
         p && p.obraItemsUpdated > 0
           ? `\n\nAdemás se actualizaron ${p.obraItemsUpdated} ítem${p.obraItemsUpdated === 1 ? "" : "s"} en ${p.budgetVersionsAffected} cotización${p.budgetVersionsAffected === 1 ? "" : "es"} en borrador.`
           : "";
-      alert(`✓ Precios del catálogo actualizados para "${item.name}"${extra}`);
-    } catch {
-      alert("Error al actualizar catálogo");
+      alert(`✓ Catálogo actualizado (desglose + precios) para "${item.name}"${extra}`);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Error al actualizar catálogo");
     }
   }
 

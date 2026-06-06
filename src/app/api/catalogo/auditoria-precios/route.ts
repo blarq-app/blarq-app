@@ -3,26 +3,48 @@
  *
  * GET: detecta tres tipos de desactualización en presupuestos status="borrador":
  *      (a) componentes existentes cuyo unitCost/description difiere del
- *          MaterialCatalog linkeado (stale).
+ *          MaterialCatalog linkeado (update).
  *      (b) componentes del catálogo de partidas que faltan en el ObraItem
- *          (missing) — pasaron a existir después de copiar la partida.
+ *          (add) — pasaron a existir después de copiar la partida.
  *      (c) componentes del proyecto cuyo origen ya no está en el catálogo
- *          (orphan) — se borraron del catálogo después.
- *      Solo cuenta componentes/partidas que NO están customizados.
- *      Agrupado por proyecto + presupuesto.
+ *          (remove) — se borraron del catálogo después.
+ *      Solo cuenta componentes/partidas que NO están customizados y cuyo
+ *      lineage no esté congelado por una versión enviada/aprobada.
+ *
+ *      Devuelve:
+ *        - totalStaleComponents / groups / etc. → resumen histórico que usa la
+ *          página /configuracion/auditoria-precios (NO cambiar la forma).
+ *        - changes[] → lista granular (un objeto por diferencia) que usa el
+ *          panel "Actualizar" del editor para que MJ acepte/rechace cambio por
+ *          cambio. Pensado para llamarse con ?budgetId= (un solo borrador).
  */
 
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { getFrozenLineageIds } from "@/lib/catalog/frozenLineage";
+import type { AuditChange } from "@/lib/catalog/auditChanges";
 
 export async function GET(request: NextRequest) {
   try {
     // Si se pasa ?budgetId=xxx limitamos al presupuesto puntual (lo usa el
-    // cartelito del editor de presupuesto). Sin parámetro, lista todos los
-    // borradores con stale components (para la página /configuracion/auditoria-precios).
+    // panel del editor de presupuesto). Sin parámetro, lista todos los
+    // borradores (para la página /configuracion/auditoria-precios).
     const budgetId = request.nextUrl.searchParams.get("budgetId");
 
-    // Solo borradores. Status enviado/aprobado/rechazado están congelados.
+    // Cache de lineages congelados por (projectId|type) — se reusa entre
+    // componentes y partidas para no consultar de más.
+    const frozenCache = new Map<string, Set<string>>();
+    const frozenSet = async (projectId: string, type: string) => {
+      const key = `${projectId}|${type}`;
+      if (!frozenCache.has(key)) {
+        frozenCache.set(key, await getFrozenLineageIds(projectId, type));
+      }
+      return frozenCache.get(key)!;
+    };
+
+    const changes: AuditChange[] = [];
+
+    // ── (a) Componentes con material linkeado, desactualizados ────────
     const components = await prisma.obraItemComponent.findMany({
       where: {
         materialId: { not: null },
@@ -39,11 +61,15 @@ export async function GET(request: NextRequest) {
             id: true,
             name: true,
             itemNumber: true,
+            isCustomized: true,
+            lineageId: true,
             budgetVersion: {
               select: {
                 id: true,
                 version: true,
                 date: true,
+                projectId: true,
+                type: true,
                 project: { select: { id: true, name: true } },
               },
             },
@@ -62,11 +88,32 @@ export async function GET(request: NextRequest) {
       );
     });
 
-    // ── Detectar diferencias con el catálogo de partidas ──────────────
-    // (a) Componentes del catálogo que faltan en el ObraItem.
-    // (b) Componentes del ObraItem cuyo origen ya no existe en el catálogo.
-    // Solo consideramos ObraItems en borrador, con catalogPartidaId y no
-    // customizados (a nivel partida).
+    // changes "update" — respetando partida customizada / lineage congelado
+    // (esos el aplicar los saltaría, así que no los ofrecemos).
+    for (const c of stale) {
+      const oi = c.obraItem;
+      if (oi.isCustomized) continue;
+      const frozen = await frozenSet(
+        oi.budgetVersion.projectId,
+        oi.budgetVersion.type
+      );
+      if (frozen.has(oi.lineageId)) continue;
+      changes.push({
+        kind: "update",
+        id: c.id,
+        obraItemId: oi.id,
+        budgetVersionId: oi.budgetVersion.id,
+        itemNumber: oi.itemNumber,
+        itemName: oi.name,
+        compType: c.type,
+        oldDescription: c.description,
+        newDescription: c.material!.name,
+        oldUnitCost: c.unitCost,
+        newUnitCost: c.material!.netPrice,
+      });
+    }
+
+    // ── (b) y (c): diff con el catálogo de partidas ───────────────────
     const obraItemsBudget = await prisma.obraItem.findMany({
       where: {
         budgetVersionId: budgetId ?? undefined,
@@ -76,47 +123,29 @@ export async function GET(request: NextRequest) {
       },
       select: {
         id: true,
+        name: true,
+        itemNumber: true,
         catalogPartidaId: true,
         budgetVersionId: true,
         lineageId: true,
         budgetVersion: {
-          select: { projectId: true, type: true },
+          select: { id: true, projectId: true, type: true },
         },
         components: {
           select: {
+            id: true,
             originComponentId: true,
             type: true,
             description: true,
             unit: true,
+            unitCost: true,
+            quantity: true,
             materialId: true,
           },
         },
         discardedCatalogComponents: { select: { partidaComponentId: true } },
       },
     });
-
-    // Lineage congelado por contrato: partidas que ya viajaron en una
-    // versión enviada/aprobada del mismo proyecto+tipo. Aunque aparezcan
-    // en una V2 borrador (porque V2 se duplicó de V1), no se sincronizan.
-    // Construimos el set por (projectId, type) para reutilizar entre items.
-    const frozenByKey = new Map<string, Set<string>>();
-    for (const oi of obraItemsBudget) {
-      const key = `${oi.budgetVersion.projectId}|${oi.budgetVersion.type}`;
-      if (!frozenByKey.has(key)) {
-        const heredadas = await prisma.obraItem.findMany({
-          where: {
-            budgetVersion: {
-              projectId: oi.budgetVersion.projectId,
-              type: oi.budgetVersion.type,
-              status: { in: ["enviado", "aprobado"] },
-            },
-          },
-          select: { lineageId: true },
-          distinct: ["lineageId"],
-        });
-        frozenByKey.set(key, new Set(heredadas.map((h) => h.lineageId)));
-      }
-    }
 
     let missingCount = 0;
     let orphanCount = 0;
@@ -129,6 +158,8 @@ export async function GET(request: NextRequest) {
           type: true,
           description: true,
           unit: true,
+          unitCost: true,
+          quantity: true,
           materialId: true,
         },
       });
@@ -143,25 +174,25 @@ export async function GET(request: NextRequest) {
       );
 
       // Guarda contra data vieja: si tiene componentes pero ninguno está
-      // mapeado (originComponentId=null en todos), no contamos diferencias —
-      // el sync no agregaría/borraría nada para evitar duplicados.
+      // mapeado (originComponentId=null en todos), no contamos diferencias.
       const legacyUnmapped =
         oi.components.length > 0 &&
         oi.components.every((c) => c.originComponentId === null);
       if (legacyUnmapped) continue;
 
       // Guarda por contrato: partida heredada de una versión enviada/aprobada.
-      // Tampoco la mostramos como diferencia — el sync la respetaría.
-      const frozenKey = `${oi.budgetVersion.projectId}|${oi.budgetVersion.type}`;
-      if (frozenByKey.get(frozenKey)?.has(oi.lineageId)) continue;
+      const frozen = await frozenSet(
+        oi.budgetVersion.projectId,
+        oi.budgetVersion.type
+      );
+      if (frozen.has(oi.lineageId)) continue;
 
-      // Componentes huérfanos del proyecto (sin originComponentId) — los
-      // usamos para descartar faltantes que ya están presentes por loose
-      // match (mismo type+description+unit+materialId).
+      // Componentes huérfanos del proyecto (sin originComponentId) — para
+      // descartar faltantes que ya están presentes por loose match.
       const orphanProjectComps = oi.components.filter(
         (c) => c.originComponentId === null
       );
-      const hasLooseMatch = (cat: typeof catalogComps[number]) =>
+      const hasLooseMatch = (cat: (typeof catalogComps)[number]) =>
         orphanProjectComps.some(
           (p) =>
             p.type === cat.type &&
@@ -171,30 +202,52 @@ export async function GET(request: NextRequest) {
               cat.description.trim().toLowerCase()
         );
 
-      // Faltantes: en catálogo, no mapeados al proyecto, no descartados,
-      // y sin loose match con un componente huérfano del proyecto.
-      let m = 0;
+      // Faltantes (add): en catálogo, no mapeados, no descartados, sin loose match.
       for (const cat of catalogComps) {
         if (projectOriginIds.has(cat.id)) continue;
         if (discardedIds.has(cat.id)) continue;
         if (hasLooseMatch(cat)) continue;
-        m++;
+        missingCount++;
+        changes.push({
+          kind: "add",
+          id: cat.id,
+          obraItemId: oi.id,
+          budgetVersionId: oi.budgetVersion.id,
+          itemNumber: oi.itemNumber,
+          itemName: oi.name,
+          compType: cat.type,
+          description: cat.description,
+          unit: cat.unit,
+          unitCost: cat.unitCost,
+          quantity: cat.quantity,
+        });
+        budgetIdsWithDiff.add(oi.budgetVersionId);
       }
 
-      // Huérfanos: en proyecto con originComponentId, pero ese id no
-      // existe en el catálogo.
-      let o = 0;
+      // Huérfanos (remove): en proyecto con originComponentId que ya no existe
+      // en el catálogo.
       for (const c of oi.components) {
         if (!c.originComponentId) continue;
-        if (!catalogIds.has(c.originComponentId)) o++;
+        if (catalogIds.has(c.originComponentId)) continue;
+        orphanCount++;
+        changes.push({
+          kind: "remove",
+          id: c.id,
+          obraItemId: oi.id,
+          budgetVersionId: oi.budgetVersion.id,
+          itemNumber: oi.itemNumber,
+          itemName: oi.name,
+          compType: c.type,
+          description: c.description,
+          unit: c.unit,
+          unitCost: c.unitCost,
+          quantity: c.quantity,
+        });
+        budgetIdsWithDiff.add(oi.budgetVersionId);
       }
-
-      missingCount += m;
-      orphanCount += o;
-      if (m + o > 0) budgetIdsWithDiff.add(oi.budgetVersionId);
     }
 
-    // Agrupar por presupuesto
+    // ── Resumen histórico para la página de configuración (NO cambiar) ──
     type BudgetGroup = {
       budgetId: string;
       version: string;
@@ -240,25 +293,23 @@ export async function GET(request: NextRequest) {
       a.projectName.localeCompare(b.projectName)
     );
 
-    // Total que dispara el banner: stale + faltantes + huérfanos. El banner
-    // amarillo aparece si cualquiera de los tres es > 0.
     const totalDiffWithCatalog = missingCount + orphanCount;
     const allBudgetIds = new Set([...groups.keys(), ...budgetIdsWithDiff]);
 
     return NextResponse.json({
       totalStaleComponents: stale.length + totalDiffWithCatalog,
-      // Desglose para depurar / mostrar en la página de auditoría:
       staleMaterialComponents: stale.length,
       missingFromCatalog: missingCount,
       orphanedFromCatalog: orphanCount,
       budgetsAffected: allBudgetIds.size,
       groups: result,
+      // Lista granular para el panel del editor (acepta/rechaza cambio por
+      // cambio). Filtrada por customizado/congelado: es exactamente lo que el
+      // endpoint `aplicar` está dispuesto a tocar.
+      changes,
     });
   } catch (error) {
     console.error("Error en auditoría:", error);
-    return NextResponse.json(
-      { error: "Error en auditoría" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Error en auditoría" }, { status: 500 });
   }
 }

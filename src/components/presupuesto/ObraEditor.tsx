@@ -757,8 +757,8 @@ export default function ObraEditor({
           `Subcontrato: $${item.costSubcontract ?? 0}\n` +
           `P. Unitario: $${item.unitPrice}\n\n` +
           `Se guarda el DESGLOSE completo (todas las líneas, incluida la pérdida)\n` +
-          `en el catálogo, y se propagan los precios a las cotizaciones EN BORRADOR\n` +
-          `(no toca las enviadas/aprobadas, ni las que vos editaste a mano).`
+          `en el catálogo (la biblioteca de moldes). NO toca ninguna otra\n` +
+          `cotización: cada cotización es independiente.`
       )
     )
       return;
@@ -794,13 +794,11 @@ export default function ObraEditor({
         }),
       });
       if (!res.ok) throw new Error("Error");
-      const result = await res.json();
-      const p = result?._propagated;
-      const extra =
-        p && p.obraItemsUpdated > 0
-          ? `\n\nAdemás se actualizaron ${p.obraItemsUpdated} ítem${p.obraItemsUpdated === 1 ? "" : "s"} en ${p.budgetVersionsAffected} cotización${p.budgetVersionsAffected === 1 ? "" : "es"} en borrador.`
-          : "";
-      alert(`✓ Catálogo actualizado (desglose + precios) para "${item.name}"${extra}`);
+      await res.json();
+      alert(
+        `Catálogo actualizado (desglose + precios) para "${item.name}".\n\n` +
+          `Solo se actualizó el molde del catálogo. Las demás cotizaciones no se tocaron.`
+      );
     } catch (e) {
       alert(e instanceof Error ? e.message : "Error al actualizar catálogo");
     }
@@ -815,9 +813,8 @@ export default function ObraEditor({
         `¿Actualizar las DESCRIPCIONES de "${item.name}" en el catálogo?\n\n` +
           `Cliente: "${descCli || "(vacía)"}"\n` +
           `Maestro: "${descMae || "(vacía)"}"\n\n` +
-          `Esto afectará las descripciones base para todos los proyectos futuros\n` +
-          `Y se propagará automáticamente a las cotizaciones EN BORRADOR\n` +
-          `(no toca las enviadas/aprobadas, ni las que vos editaste a mano).`
+          `Esto afecta solo el molde del catálogo (para los proyectos FUTUROS).\n` +
+          `NO toca ninguna otra cotización: cada cotización es independiente.`
       )
     )
       return;
@@ -831,13 +828,11 @@ export default function ObraEditor({
         }),
       });
       if (!res.ok) throw new Error("Error");
-      const result = await res.json();
-      const p = result?._propagated;
-      const extra =
-        p && p.obraItemsUpdated > 0
-          ? `\n\nAdemás se actualizaron ${p.obraItemsUpdated} ítem${p.obraItemsUpdated === 1 ? "" : "s"} en ${p.budgetVersionsAffected} cotización${p.budgetVersionsAffected === 1 ? "" : "es"} en borrador.`
-          : "";
-      alert(`✓ Descripción del catálogo actualizada para "${item.name}"${extra}`);
+      await res.json();
+      alert(
+        `Descripción del catálogo actualizada para "${item.name}".\n\n` +
+          `Solo se actualizó el molde. Las demás cotizaciones no se tocaron.`
+      );
     } catch {
       alert("Error al actualizar descripción del catálogo");
     }

@@ -19,6 +19,10 @@ type SearchParams = {
   // redondeos de IVA típicos (factura emitida $100.000 vs neto+iva
   // que da $99.999 por floor).
   monto?: string;
+  // Atajo del banner "NC sin clasificar / saldo a favor": muestra solo las
+  // notas de crédito recibidas que todavía no se clasificaron (sin saber si
+  // volvieron en efectivo, al banco, o se aplicaron a otra factura).
+  sinClasificar?: string;
 };
 
 // Status tone moved to FacturasTable client component.
@@ -69,6 +73,13 @@ export default async function FacturasPage({
       where.totalAmount = { gte: m - 10, lte: m + 10 };
     }
   }
+  if (sp.sinClasificar) {
+    // NC recibidas sin compensación decidida = plata a favor flotando.
+    where.tipoDoc = 61;
+    where.type = "recibida";
+    where.compensationType = null;
+    where.status = { not: "anulada" };
+  }
 
   const [invoices, projects, categories] = await Promise.all([
     prisma.invoice.findMany({
@@ -77,8 +88,9 @@ export default async function FacturasPage({
       include: {
         project: { select: { id: true, name: true } },
         category: { select: { id: true, name: true } },
-        // Para marcar en la UI las facturas conciliadas automáticamente.
-        payments: { select: { autoMatched: true } },
+        // autoMatched: para marcar conciliadas automáticamente.
+        // amountApplied: para calcular el saldo (columna "Saldo").
+        payments: { select: { autoMatched: true, amountApplied: true } },
       },
       // Excluir el blob del PDF oficial — pesado (~170KB c/u) y solo lo
       // sirve el endpoint /api/facturas/[id]/pdf cuando se descarga.
@@ -124,6 +136,64 @@ export default async function FacturasPage({
     where: { origin: "sii_automatica", projectId: null },
   });
 
+  // Saldo por factura (para la columna "Saldo"). Misma lógica que la lista
+  // por proyecto: pagado = suma de InvoicePayment + crédito de las NC
+  // aplicadas a esta factura (compensationType="other_invoice"). Saldo =
+  // total − pagado, nunca negativo.
+  const invoiceIds = invoices.map((i) => i.id);
+  const ncsCompensadas =
+    invoiceIds.length > 0
+      ? await prisma.invoice.findMany({
+          where: {
+            compensationType: "other_invoice",
+            appliedToInvoiceId: { in: invoiceIds },
+          },
+          select: { appliedToInvoiceId: true, totalAmount: true },
+        })
+      : [];
+  const ncCreditByInvoice = new Map<string, number>();
+  for (const nc of ncsCompensadas) {
+    if (!nc.appliedToInvoiceId) continue;
+    ncCreditByInvoice.set(
+      nc.appliedToInvoiceId,
+      (ncCreditByInvoice.get(nc.appliedToInvoiceId) ?? 0) + Math.abs(nc.totalAmount)
+    );
+  }
+  const paidOf = (inv: {
+    id: string;
+    status: string;
+    totalAmount: number;
+    payments: { amountApplied: number }[];
+  }) => {
+    const ncCredit = ncCreditByInvoice.get(inv.id) ?? 0;
+    if (inv.payments.length > 0) {
+      return inv.payments.reduce((s, p) => s + p.amountApplied, 0) + ncCredit;
+    }
+    if (inv.status === "pagada") return inv.totalAmount;
+    return ncCredit;
+  };
+  const remainingOf = (inv: {
+    id: string;
+    status: string;
+    totalAmount: number;
+    payments: { amountApplied: number }[];
+  }) => Math.max(0, inv.totalAmount - paidOf(inv));
+
+  // Banner "saldo a favor": NC recibidas sin clasificar (no se sabe si la
+  // plata volvió en efectivo, al banco, o se aplicó a otra factura).
+  const ncSinClasificarAgg = await prisma.invoice.aggregate({
+    where: {
+      tipoDoc: 61,
+      type: "recibida",
+      compensationType: null,
+      status: { not: "anulada" },
+    },
+    _count: true,
+    _sum: { totalAmount: true },
+  });
+  const ncSinClasificarCount = ncSinClasificarAgg._count;
+  const ncSinClasificarTotal = ncSinClasificarAgg._sum.totalAmount ?? 0;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -159,6 +229,27 @@ export default async function FacturasPage({
             </span>{" "}
             sin asignar a proyecto — asignalas para que cuenten en su Estado de
             Resultados.
+          </p>
+          <span className="text-xs text-gray-500 underline">Ver →</span>
+        </Link>
+      )}
+
+      {/* Atajo a "notas de crédito sin clasificar" = plata a favor que todavía
+          no se resolvió (efectivo / banco / aplicada a otra factura). Mismo
+          estilo gris/mono que el banner de arriba. */}
+      {ncSinClasificarCount > 0 && !sp.sinClasificar && (
+        <Link
+          href="/facturas?sinClasificar=1"
+          className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 mb-4 hover:border-gray-400 transition-colors"
+        >
+          <span className="text-gray-500 text-base leading-none">⚐</span>
+          <p className="text-sm text-gray-900 flex-1">
+            <span className="font-semibold">
+              {ncSinClasificarCount} nota{ncSinClasificarCount > 1 ? "s" : ""} de
+              crédito sin clasificar
+            </span>{" "}
+            — {formatCLP(ncSinClasificarTotal)} a favor. Clasificalas (efectivo,
+            banco, o aplicar a otra factura).
           </p>
           <span className="text-xs text-gray-500 underline">Ver →</span>
         </Link>
@@ -226,6 +317,7 @@ export default async function FacturasPage({
               project: inv.project ? { id: inv.project.id, name: inv.project.name } : null,
               category: inv.category ? { id: inv.category.id, name: inv.category.name } : null,
               autoMatched: inv.payments.some((p) => p.autoMatched),
+              remaining: remainingOf(inv),
             }))}
           />
         )}

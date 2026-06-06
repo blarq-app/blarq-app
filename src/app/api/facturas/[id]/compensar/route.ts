@@ -156,17 +156,25 @@ export async function POST(
       if (target) {
         const realPaid = target.payments.reduce((s, p) => s + p.amountApplied, 0);
         const ncAbs = Math.abs(nc.totalAmount);
-        const totalEffective = realPaid + ncAbs;
-        if (totalEffective >= target.totalAmount - 10) {
-          // La NC (sola o sumada a pagos) cubre completa → anulada.
+        if (realPaid >= target.totalAmount - 10) {
+          // CASO 1 — la factura ya estaba pagada entera por el banco antes
+          // de la NC. La NC es una DEVOLUCIÓN, no anula la factura: queda
+          // "pagada". La seteamos explícita (recompute saltaría si quedó
+          // "anulada" por el bug viejo, y no la corregiría).
           await prisma.invoice.update({
             where: { id: newTargetId },
-            data: { status: "anulada", paidAt: new Date() },
+            data: { status: "pagada" },
+          });
+        } else if (realPaid + ncAbs >= target.totalAmount - 10) {
+          // CASOS 2/3 — la NC + lo pagado cubren el total:
+          //  - Caso 2: pagaste una parte real → SALDADA = "pagada".
+          //  - Caso 3: no pagaste nada → la compra se deshizo entera = "anulada".
+          await prisma.invoice.update({
+            where: { id: newTargetId },
+            data: { status: realPaid > 0 ? "pagada" : "anulada", paidAt: new Date() },
           });
         } else {
-          // NC parcial: queda parcial (los pagos reales + lo cubierto
-          // por NC) — recomputamos por pagos, despues ajustamos a parcial
-          // si la NC + pagos cubren mas que 0 pero menos que el total.
+          // CASO 4 — NC chica, todavía debés saldo → parcial.
           await recomputeInvoiceStatus(newTargetId);
           if (realPaid <= 0 && ncAbs > 0) {
             await prisma.invoice.update({

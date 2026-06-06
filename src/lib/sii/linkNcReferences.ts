@@ -181,7 +181,24 @@ export async function autoApplyNcCompensation(ncId: string): Promise<boolean> {
   });
   if (!target) return false;
 
-  // Setear la compensación lógica en la NC.
+  // Cuánto se pagó por banco ANTES de la NC, y monto de la NC.
+  const realPaid = target.payments.reduce((s, p) => s + p.amountApplied, 0);
+  const ncAbs = Math.abs(nc.totalAmount);
+  const total = target.totalAmount;
+
+  // CASO 1 — la factura YA estaba pagada entera por el banco antes de la
+  // NC. Entonces la NC es una DEVOLUCIÓN de plata (el proveedor te devuelve
+  // una parte), NO una compensación de esta factura. No la auto-clasificamos
+  // ni tocamos el estado: la factura queda "pagada" y la NC queda SIN
+  // CLASIFICAR para que MJ diga cómo volvió la plata (efectivo / banco).
+  // La referencia (referenceFolioNumber) ya quedó seteada por el caller, así
+  // que la señal de "saldo a favor" puede ubicar a qué factura pertenece.
+  if (realPaid >= total - 10) {
+    return false;
+  }
+
+  // CASOS 2/3/4 — la factura no estaba pagada entera: la NC se aplica a
+  // ESTA factura como crédito que cubre (parte de) el saldo.
   await prisma.invoice.update({
     where: { id: nc.id },
     data: {
@@ -192,15 +209,16 @@ export async function autoApplyNcCompensation(ncId: string): Promise<boolean> {
     },
   });
 
-  // Actualizar status de la factura objetivo.
-  const realPaid = target.payments.reduce((s, p) => s + p.amountApplied, 0);
-  const ncAbs = Math.abs(nc.totalAmount);
-  if (realPaid + ncAbs >= target.totalAmount - 10) {
+  if (realPaid + ncAbs >= total - 10) {
+    // La NC + lo pagado cubren el total:
+    //  - Caso 2: pagaste una parte real → SALDADA = "pagada".
+    //  - Caso 3: no pagaste nada → la compra se deshizo entera = "anulada".
     await prisma.invoice.update({
       where: { id: target.id },
-      data: { status: "anulada", paidAt: new Date() },
+      data: { status: realPaid > 0 ? "pagada" : "anulada", paidAt: new Date() },
     });
-  } else if (realPaid <= 0 && ncAbs > 0) {
+  } else {
+    // Caso 4: NC chica, todavía debés saldo → parcial.
     await prisma.invoice.update({
       where: { id: target.id },
       data: { status: "parcial" },

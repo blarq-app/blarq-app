@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-05 — Conciliación: NC sobre factura pagada ya no la anula + señales de saldo a favor
+
+- **NC parcial sobre factura ya pagada ya no la anula** (`linkNcReferences.ts` automático + `facturas/[id]/compensar` manual): antes, cualquier NC cuyo monto + lo pagado llegaba al total tiraba la factura a "anulada" aunque ya estuviera pagada entera (una devolución de $66k sobre una factura pagada de $341k la borraba). Ahora distingue 4 casos: pagada entera + NC → queda "pagada" y la NC queda sin clasificar (devolución a resolver); pagó una parte + NC cubre el resto → "pagada" (saldada); no pagó nada + NC cubre todo → "anulada" (único caso que anula); NC chica con saldo → "parcial". El gasto por obra NO cambia (`metrics.ts` ya resta la NC por tipoDoc=61, sin mirar el estado).
+- **Datos prod** (`scripts/fix-nc-anuladas-pagadas.ts`, dry-run + backup + verificación Δ$0): 13 facturas mal-anuladas (pagadas reales $6,6M, casi todas Sodimac/Comercial K) → "pagada"; sus 14 NC → sin clasificar. Re-conteo: 0 mal-anuladas (quedan 28 anuladas legítimas = "no se pagó nada").
+- **Barra de saldo a favor** en `/facturas`: cuenta las NC recibidas sin clasificar y su total ("N notas de crédito sin clasificar — $X a favor"), gris/mono como la del SII, atajo `?sinClasificar=1`. Surge plata a favor antes invisible (prod: 24 NC / $6,8M).
+- **Columna "Saldo"** en la lista global: muestra lo que falta (azul si parcial, gris si pendiente, "—" si saldada). La query global ahora trae `amountApplied` + créditos de NC, igual que la lista por proyecto. Solo display. (rama `feat/conciliacion-unificada`, NO desplegada)
+
 ## 2026-06-05 — Presupuesto: densidad del detalle, negrita en descripciones y fix de duplicación
 
 - **Buscador de material + "Detalle por costo directo"** (PR #94): en el buscador de material de una partida, el nombre ahora se ve completo y la categoría pasó a subtítulo gris (antes cortaba el nombre). En "Detalle por costo directo", cada sección (Materiales, Mano de obra, …) tiene una flechita para colapsarla + botón global "Ocultar todo / Mostrar todo"; tipografía ~2pt más chica e interlineado más apretado.

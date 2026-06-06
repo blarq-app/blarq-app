@@ -45,6 +45,8 @@ type Invoice = {
   // true = alguna imputación de esta factura la creó el auto-match. Marca
   // discreta en la UI para que MJ pueda revisar las conciliadas solas.
   autoMatched: boolean;
+  // Saldo pendiente (total − pagado − créditos NC). 0 = saldada/pagada.
+  remaining: number;
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -131,6 +133,7 @@ export default function FacturasTable({
             <th className="text-left px-4 py-2">Proyecto</th>
             <th className="text-left px-4 py-2">Categoría</th>
             <th className="text-right px-4 py-2">Total</th>
+            <th className="text-right px-4 py-2">Saldo</th>
             <th className="text-left px-4 py-2">Estado</th>
             <th className="text-left px-4 py-2">Origen</th>
             <th className="text-right px-3 py-2">PDF</th>
@@ -212,6 +215,22 @@ export default function FacturasTable({
                 </td>
                 <td className="px-4 py-2 text-right tabular-nums font-medium text-gray-900">
                   {formatCLP(inv.totalAmount)}
+                </td>
+                <td className="px-4 py-2 text-right tabular-nums whitespace-nowrap">
+                  {inv.remaining > 0 ? (
+                    <span
+                      className={
+                        inv.status === "parcial"
+                          ? "text-blue-700"
+                          : "text-gray-700"
+                      }
+                    >
+                      {formatCLP(inv.remaining)}
+                    </span>
+                  ) : (
+                    // "El cero no ocupa espacio prominente": saldada/pagada.
+                    <span className="text-gray-300">—</span>
+                  )}
                 </td>
                 <td className="px-4 py-2 whitespace-nowrap">
                   <span

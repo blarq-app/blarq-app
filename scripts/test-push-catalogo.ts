@@ -9,7 +9,7 @@ import { prisma } from "../src/lib/prisma";
  * Pega contra el server dev en :3000. Crea y borra su data.
  */
 
-const BASE = "http://localhost:3000";
+const BASE = process.env.SMOKE_BASE || "http://localhost:3000";
 let projectId = "";
 let partidaCatId = "";
 

@@ -25,10 +25,23 @@ export function effectiveTotal(
     return (comp.quantity || 0) * (comp.unitCost || 0);
   }
 
-  if (comp.type === "perdida" && comp.appliedToComponentId) {
-    const target = active.find((c) => c.id === comp.appliedToComponentId);
-    if (!target) return 0;
-    return effectiveTotal(target, all) * (pct / 100);
+  if (comp.type === "perdida") {
+    // Pérdida % sobre UN material concreto.
+    if (comp.appliedToComponentId) {
+      const target = active.find((c) => c.id === comp.appliedToComponentId);
+      if (!target) return 0;
+      return effectiveTotal(target, all) * (pct / 100);
+    }
+    // Pérdida % sobre TODOS los materiales (Paso 4): % sobre la suma de
+    // todas las líneas de tipo material.
+    if (comp.appliedToType === "material") {
+      const matBase = active
+        .filter((c) => c.type === "material" && c.id !== comp.id)
+        .reduce((s, c) => s + effectiveTotal(c, all), 0);
+      return matBase * (pct / 100);
+    }
+    // Pérdida % sin objetivo = $0.
+    return 0;
   }
 
   if (comp.type === "mano_obra" && comp.appliedToType === "mano_obra") {

@@ -55,10 +55,22 @@ function effectiveTotal(comp: Component, all: Component[]): number {
     return (comp.quantity || 0) * (comp.unitCost || 0);
   }
 
-  if (comp.type === "perdida" && comp.appliedToComponentId) {
-    const target = active.find((c) => c.id === comp.appliedToComponentId);
-    if (!target) return 0;
-    return effectiveTotal(target, all) * (pct / 100);
+  if (comp.type === "perdida") {
+    // Pérdida % sobre UN material concreto.
+    if (comp.appliedToComponentId) {
+      const target = active.find((c) => c.id === comp.appliedToComponentId);
+      if (!target) return 0;
+      return effectiveTotal(target, all) * (pct / 100);
+    }
+    // Pérdida % sobre TODOS los materiales (Paso 4).
+    if (comp.appliedToType === "material") {
+      const matBase = active
+        .filter((c) => c.type === "material" && c.id !== comp.id)
+        .reduce((s, c) => s + effectiveTotal(c, all), 0);
+      return matBase * (pct / 100);
+    }
+    // Pérdida % sin objetivo = $0.
+    return 0;
   }
 
   if (comp.type === "mano_obra" && comp.appliedToType === "mano_obra") {
@@ -274,17 +286,21 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
     });
   }
 
-  // Para pérdida con unit="%": setear el material concreto sobre el que
-  // se aplica (por ID del componente de la misma partida).
-  function pickAppliedTo(compId: string, targetCompId: string | null) {
+  // Para pérdida con unit="%": elegir sobre qué se aplica.
+  //   - "__ALL__"  → sobre TODOS los materiales (appliedToType="material").
+  //   - <id>       → sobre ese material concreto (appliedToComponentId).
+  //   - null/""    → sin objetivo (queda en $0).
+  function pickAppliedTo(compId: string, value: string | null) {
     if (!draft) return;
     setDraft({
       ...draft,
-      components: draft.components.map((c) =>
-        c.id === compId
-          ? { ...c, appliedToComponentId: targetCompId }
-          : c
-      ),
+      components: draft.components.map((c) => {
+        if (c.id !== compId) return c;
+        if (value === "__ALL__") {
+          return { ...c, appliedToComponentId: null, appliedToType: "material" };
+        }
+        return { ...c, appliedToComponentId: value || null, appliedToType: null };
+      }),
     });
   }
 
@@ -1517,14 +1533,19 @@ function ComponentEditRow({
         {comp.unit === "%" && comp.type === "perdida" ? (
           // Pérdida sobre un material concreto (5c)
           <select
-            value={comp.appliedToComponentId ?? ""}
+            value={
+              comp.appliedToType === "material"
+                ? "__ALL__"
+                : comp.appliedToComponentId ?? ""
+            }
             onChange={(e) =>
               onPickAppliedTo(comp.id, e.target.value || null)
             }
             className="w-full border border-gray-300 rounded px-1 py-1 text-[10px] bg-white"
-            title="Sobre cuál material aplicar la pérdida"
+            title="Sobre qué aplicar la pérdida"
           >
-            <option value="">— elegir material —</option>
+            <option value="">— elegir —</option>
+            <option value="__ALL__">Todos los materiales</option>
             {allActive
               .filter((c) => c.type === "material" && c.id !== comp.id)
               .map((c) => (

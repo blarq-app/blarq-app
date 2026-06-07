@@ -506,16 +506,33 @@ export default function ObraItemComponentsEditor({
                 </td>
                 <td className="py-1 px-2 text-right">
                   {isPct && c.type === "perdida" && canEdit ? (
-                    // Pérdida = % de un material concreto: hay que elegir cuál.
+                    // Pérdida = % sobre un material concreto o sobre TODOS los
+                    // materiales (opción "Todos los materiales", Paso 4).
                     <select
-                      value={c.appliedToComponentId ?? ""}
-                      onChange={(e) =>
-                        patchComp(c.id, "appliedToComponentId", e.target.value || null)
+                      value={
+                        c.appliedToType === "material"
+                          ? "__ALL__"
+                          : c.appliedToComponentId ?? ""
                       }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "__ALL__") {
+                          patchCompFields(c.id, {
+                            appliedToComponentId: null,
+                            appliedToType: "material",
+                          });
+                        } else {
+                          patchCompFields(c.id, {
+                            appliedToComponentId: v || null,
+                            appliedToType: null,
+                          });
+                        }
+                      }}
                       className="w-full bg-white border border-gray-200 rounded text-[10px] px-1 py-0.5"
-                      title="Sobre cuál material se aplica la pérdida"
+                      title="Sobre qué se aplica la pérdida"
                     >
-                      <option value="">— sobre cuál material —</option>
+                      <option value="">— elegir —</option>
+                      <option value="__ALL__">Todos los materiales</option>
                       {comps
                         .filter((m) => m.type === "material" && m.id !== c.id)
                         .map((m) => (
@@ -529,7 +546,9 @@ export default function ObraItemComponentsEditor({
                       {c.type === "margen"
                         ? "sobre resto"
                         : c.type === "perdida"
-                          ? "sobre material"
+                          ? c.appliedToType === "material"
+                            ? "sobre todos los mat."
+                            : "sobre material"
                           : c.type === "mano_obra"
                             ? "sobre M.O."
                             : "—"}

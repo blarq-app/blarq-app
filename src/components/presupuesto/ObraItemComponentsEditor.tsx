@@ -11,7 +11,12 @@ interface Material {
   unit: string;
   netPrice: number;
   referenceLink: string | null;
+  // Provisión al cliente (no es un producto de tienda; es algo que BLARQ
+  // provee a un precio que la clienta paga). Su precio se maneja c/IVA.
+  isProvision?: boolean;
 }
+
+const IVA = 1.19;
 
 // Forma que devuelve el autocomplete de materiales del catálogo.
 type CatalogMaterial = {
@@ -384,6 +389,10 @@ export default function ObraItemComponentsEditor({
           {orderForDisplay(comps).map((c) => {
             const meta = typeMeta(c.type);
             const isPct = c.unit === "%";
+            // Provisión al cliente: material marcado isProvision en el catálogo.
+            // Su precio se ingresa y muestra c/IVA; guardamos el neto (÷1,19).
+            const isProv =
+              c.type === "material" && !isPct && c.material?.isProvision === true;
             // Pérdida calculada sobre un material concreto: se muestra anidada
             // debajo de ese material, con sangría y "↳" para que se lea como
             // dependiente de la línea de arriba.
@@ -404,6 +413,14 @@ export default function ObraItemComponentsEditor({
                   <span className={`px-1.5 py-0.5 rounded text-[10px] ${meta.color}`}>
                     {meta.label}
                   </span>
+                  {isProv && (
+                    <span
+                      className="ml-1 px-1 py-0.5 rounded text-[9px] uppercase bg-indigo-50 text-indigo-700"
+                      title="Provisión al cliente — el precio se ingresa con IVA."
+                    >
+                      provisión
+                    </span>
+                  )}
                   {c.isCustomized && (
                     <span
                       className="ml-1 text-[9px] uppercase text-amber-600"
@@ -516,6 +533,24 @@ export default function ObraItemComponentsEditor({
                           : c.type === "mano_obra"
                             ? "sobre M.O."
                             : "—"}
+                    </span>
+                  ) : isProv && canEdit ? (
+                    // Provisión: se ingresa el precio c/IVA al cliente; se
+                    // guarda el neto (÷1,19) para que el desglose siga en neto.
+                    <div className="flex items-center justify-end gap-0.5">
+                      <MoneyInput
+                        value={Math.round(c.unitCost * IVA)}
+                        onChange={(v) =>
+                          patchComp(c.id, "unitCost", Math.round((v || 0) / IVA))
+                        }
+                        className="w-full bg-transparent text-right tabular-nums text-gray-900"
+                      />
+                      <span className="text-gray-400 text-[9px] shrink-0">c/IVA</span>
+                    </div>
+                  ) : isProv ? (
+                    <span className="text-gray-700 tabular-nums">
+                      {formatCLP(Math.round(c.unitCost * IVA))}
+                      <span className="text-gray-400 text-[9px] ml-0.5">c/IVA</span>
                     </span>
                   ) : canEdit ? (
                     <MoneyInput

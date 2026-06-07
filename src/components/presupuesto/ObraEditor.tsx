@@ -1333,25 +1333,42 @@ export default function ObraEditor({
                           className="text-force-11 w-full min-w-0 bg-transparent border-0 p-0 text-right text-gray-900 tabular-nums focus:ring-0 outline-none"
                         />
                       </td>
+                      {/* Mano de obra y P. Unitario: cuando la partida TIENE
+                          desglose, el encabezado es un ESPEJO de la suma del
+                          desglose → solo lectura (se edita abajo, en el
+                          detalle). Si todavía no tiene desglose, se pueden
+                          cargar a mano acá (estado transitorio). */}
                       <td className="px-3 py-0.5 align-top" title="Mano de obra por unidad — lo que pagás al maestro por cada m²/un/ml">
-                        <div className="flex items-center justify-end gap-0.5 tabular-nums">
-                          <span className="text-amber-700/60 text-sm">$</span>
-                          <MoneyInput
-                            value={item.costLabor ?? 0}
-                            onChange={(v) => handleUpdateItem(item.id, "costLabor", v)}
-                            className="w-16 bg-transparent border-0 p-0 text-right text-sm text-amber-800 tabular-nums focus:ring-0 outline-none"
-                          />
-                        </div>
+                        {(item.components?.length ?? 0) > 0 ? (
+                          <div className="text-right text-sm text-amber-800/80 tabular-nums" title="Viene del desglose — se edita abajo">
+                            {formatCLP(item.costLabor ?? 0)}
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-0.5 tabular-nums">
+                            <span className="text-amber-700/60 text-sm">$</span>
+                            <MoneyInput
+                              value={item.costLabor ?? 0}
+                              onChange={(v) => handleUpdateItem(item.id, "costLabor", v)}
+                              className="w-16 bg-transparent border-0 p-0 text-right text-sm text-amber-800 tabular-nums focus:ring-0 outline-none"
+                            />
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-0.5 align-top">
-                        <div className="flex items-center justify-end gap-0.5 tabular-nums">
-                          <span className="text-gray-400 text-sm">$</span>
-                          <MoneyInput
-                            value={item.unitPrice}
-                            onChange={(v) => handleUpdateItem(item.id, "unitPrice", v)}
-                            className="w-20 bg-transparent border-0 p-0 text-right text-sm text-gray-900 tabular-nums focus:ring-0 outline-none"
-                          />
-                        </div>
+                        {(item.components?.length ?? 0) > 0 ? (
+                          <div className="text-right text-sm text-gray-900 tabular-nums" title="Viene del desglose — se edita abajo">
+                            {formatCLP(item.unitPrice)}
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-0.5 tabular-nums">
+                            <span className="text-gray-400 text-sm">$</span>
+                            <MoneyInput
+                              value={item.unitPrice}
+                              onChange={(v) => handleUpdateItem(item.id, "unitPrice", v)}
+                              className="w-20 bg-transparent border-0 p-0 text-right text-sm text-gray-900 tabular-nums focus:ring-0 outline-none"
+                            />
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-0.5 align-top text-right text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">

@@ -4,6 +4,16 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-06 — Presupuesto: desglose = única verdad (catálogo opt-in, encabezado espejo, provisión y pérdida)
+
+- **Regla**: el total al cliente sale SIEMPRE del desglose; el encabezado es solo su espejo; el catálogo es biblioteca de moldes y NO propaga solo a otras cotizaciones (solo a cotizaciones futuras al agregar la partida).
+- **R3 — catálogo opt-in**: sacada la propagación automática del PUT `catalogo/partidas/[id]` que arrastraba todos los borradores al "Mandar al catálogo" (causa del enredo de Constanza). Ahora ese botón toca solo el molde.
+- **Paso 6 — panel "Actualizar" cambio por cambio**: el banner ámbar pasa de aplicar-todo-a-ciegas a un panel que lista cada diferencia (precio / material nuevo / eliminado) con un check por cambio. `GET auditoria-precios` devuelve `changes[]`; nuevo endpoint `auditoria-precios/aplicar` re-valida en server y aplica SOLO lo marcado. Tipo `src/lib/catalog/auditChanges.ts`.
+- **R2 — encabezado espejo**: en la fila de la partida, Mano de obra y P. Unitario quedan de solo lectura cuando hay desglose.
+- **Paso 2+3 — provisión editable**: las líneas de provisión (material `isProvision`) se ven/editan en el desglose con su precio **c/IVA** (se guarda el neto ÷1,19); chip "provisión". Resuelve editar la provisión de una partida ya agregada y elimina su descuadre.
+- **Paso 4 — pérdida sobre "todos los materiales"**: la pérdida % puede aplicarse sobre la suma de todas las líneas material (`appliedToType="material"`), no solo sobre una. Cambiado en los 2 motores (recalcObraItem, recalcPartida) y los 2 editores. Tests: `test-perdida.ts`, `test-perdida-todos-materiales.ts`. Verificado visual en dev (panel, encabezado, provisión).
+- **Datos prod** (con backup, plata real Δ$0): cuadre de 3 borradores (Paseo del Sena, Cocina Candelaria/2; **Portofino excluida**) + 14 moldes del catálogo sin desglose sembrados (Σcost==P.U.) → catálogo con 0 partidas sin desglose. Foto pre/post `snapshot-metrics`: cobrado/gastado/utilidad real intactos.
+
 ## 2026-06-05 — Catálogo: "Precios a catálogo" ahora sube el desglose completo (incluida la pérdida)
 
 - **Bug**: el botón "↑ Precios a catálogo + borradores" solo mandaba los 6 montos globales (`cost*`), NO el desglose por componente. Como el catálogo deriva sus totales DEL desglose (`recalcPartidaTotals`), una pérdida agregada en la cotización nunca quedaba como línea en el catálogo, y el monto que sí recibía arriba se borraba solo en el siguiente recálculo. La flechita ↑ por línea subía la línea pero perdía `appliedToComponentId` → la pérdida % se calculaba en $0.

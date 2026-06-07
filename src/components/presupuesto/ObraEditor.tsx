@@ -757,8 +757,8 @@ export default function ObraEditor({
           `Subcontrato: $${item.costSubcontract ?? 0}\n` +
           `P. Unitario: $${item.unitPrice}\n\n` +
           `Se guarda el DESGLOSE completo (todas las líneas, incluida la pérdida)\n` +
-          `en el catálogo, y se propagan los precios a las cotizaciones EN BORRADOR\n` +
-          `(no toca las enviadas/aprobadas, ni las que vos editaste a mano).`
+          `en el catálogo (la biblioteca de moldes). NO toca ninguna otra\n` +
+          `cotización: cada cotización es independiente.`
       )
     )
       return;
@@ -794,13 +794,11 @@ export default function ObraEditor({
         }),
       });
       if (!res.ok) throw new Error("Error");
-      const result = await res.json();
-      const p = result?._propagated;
-      const extra =
-        p && p.obraItemsUpdated > 0
-          ? `\n\nAdemás se actualizaron ${p.obraItemsUpdated} ítem${p.obraItemsUpdated === 1 ? "" : "s"} en ${p.budgetVersionsAffected} cotización${p.budgetVersionsAffected === 1 ? "" : "es"} en borrador.`
-          : "";
-      alert(`✓ Catálogo actualizado (desglose + precios) para "${item.name}"${extra}`);
+      await res.json();
+      alert(
+        `Catálogo actualizado (desglose + precios) para "${item.name}".\n\n` +
+          `Solo se actualizó el molde del catálogo. Las demás cotizaciones no se tocaron.`
+      );
     } catch (e) {
       alert(e instanceof Error ? e.message : "Error al actualizar catálogo");
     }
@@ -815,9 +813,8 @@ export default function ObraEditor({
         `¿Actualizar las DESCRIPCIONES de "${item.name}" en el catálogo?\n\n` +
           `Cliente: "${descCli || "(vacía)"}"\n` +
           `Maestro: "${descMae || "(vacía)"}"\n\n` +
-          `Esto afectará las descripciones base para todos los proyectos futuros\n` +
-          `Y se propagará automáticamente a las cotizaciones EN BORRADOR\n` +
-          `(no toca las enviadas/aprobadas, ni las que vos editaste a mano).`
+          `Esto afecta solo el molde del catálogo (para los proyectos FUTUROS).\n` +
+          `NO toca ninguna otra cotización: cada cotización es independiente.`
       )
     )
       return;
@@ -831,13 +828,11 @@ export default function ObraEditor({
         }),
       });
       if (!res.ok) throw new Error("Error");
-      const result = await res.json();
-      const p = result?._propagated;
-      const extra =
-        p && p.obraItemsUpdated > 0
-          ? `\n\nAdemás se actualizaron ${p.obraItemsUpdated} ítem${p.obraItemsUpdated === 1 ? "" : "s"} en ${p.budgetVersionsAffected} cotización${p.budgetVersionsAffected === 1 ? "" : "es"} en borrador.`
-          : "";
-      alert(`✓ Descripción del catálogo actualizada para "${item.name}"${extra}`);
+      await res.json();
+      alert(
+        `Descripción del catálogo actualizada para "${item.name}".\n\n` +
+          `Solo se actualizó el molde. Las demás cotizaciones no se tocaron.`
+      );
     } catch {
       alert("Error al actualizar descripción del catálogo");
     }
@@ -1338,25 +1333,42 @@ export default function ObraEditor({
                           className="text-force-11 w-full min-w-0 bg-transparent border-0 p-0 text-right text-gray-900 tabular-nums focus:ring-0 outline-none"
                         />
                       </td>
+                      {/* Mano de obra y P. Unitario: cuando la partida TIENE
+                          desglose, el encabezado es un ESPEJO de la suma del
+                          desglose → solo lectura (se edita abajo, en el
+                          detalle). Si todavía no tiene desglose, se pueden
+                          cargar a mano acá (estado transitorio). */}
                       <td className="px-3 py-0.5 align-top" title="Mano de obra por unidad — lo que pagás al maestro por cada m²/un/ml">
-                        <div className="flex items-center justify-end gap-0.5 tabular-nums">
-                          <span className="text-amber-700/60 text-sm">$</span>
-                          <MoneyInput
-                            value={item.costLabor ?? 0}
-                            onChange={(v) => handleUpdateItem(item.id, "costLabor", v)}
-                            className="w-16 bg-transparent border-0 p-0 text-right text-sm text-amber-800 tabular-nums focus:ring-0 outline-none"
-                          />
-                        </div>
+                        {(item.components?.length ?? 0) > 0 ? (
+                          <div className="text-right text-sm text-amber-800/80 tabular-nums" title="Viene del desglose — se edita abajo">
+                            {formatCLP(item.costLabor ?? 0)}
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-0.5 tabular-nums">
+                            <span className="text-amber-700/60 text-sm">$</span>
+                            <MoneyInput
+                              value={item.costLabor ?? 0}
+                              onChange={(v) => handleUpdateItem(item.id, "costLabor", v)}
+                              className="w-16 bg-transparent border-0 p-0 text-right text-sm text-amber-800 tabular-nums focus:ring-0 outline-none"
+                            />
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-0.5 align-top">
-                        <div className="flex items-center justify-end gap-0.5 tabular-nums">
-                          <span className="text-gray-400 text-sm">$</span>
-                          <MoneyInput
-                            value={item.unitPrice}
-                            onChange={(v) => handleUpdateItem(item.id, "unitPrice", v)}
-                            className="w-20 bg-transparent border-0 p-0 text-right text-sm text-gray-900 tabular-nums focus:ring-0 outline-none"
-                          />
-                        </div>
+                        {(item.components?.length ?? 0) > 0 ? (
+                          <div className="text-right text-sm text-gray-900 tabular-nums" title="Viene del desglose — se edita abajo">
+                            {formatCLP(item.unitPrice)}
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-0.5 tabular-nums">
+                            <span className="text-gray-400 text-sm">$</span>
+                            <MoneyInput
+                              value={item.unitPrice}
+                              onChange={(v) => handleUpdateItem(item.id, "unitPrice", v)}
+                              className="w-20 bg-transparent border-0 p-0 text-right text-sm text-gray-900 tabular-nums focus:ring-0 outline-none"
+                            />
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-0.5 align-top text-right text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">

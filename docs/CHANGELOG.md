@@ -4,6 +4,11 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-08 — Conciliación: el desplegable de proyectos esconde las cotizaciones no ganadas
+
+- **Bug (MJ)**: al asignar centro de costo a una factura/movimiento, el selector de proyecto listaba TODOS los proyectos, incluidas las cotizaciones (`status="cotizacion"`) que todavía no son obras.
+- **Fix**: las 4 superficies de asignación (`facturas/page.tsx`, `facturas/[id]/page.tsx`, `banco/movimientos/page.tsx`, `proyectos/[id]/facturas/page.tsx`) filtran con `where: { NOT: { status: "cotizacion", isInternal: false } }` — esconde solo las cotizaciones, mantiene obras en ejecución + terminadas + centros internos (BLARQ). Decisión de MJ: dejar también las terminadas (facturas tardías). Solo cambia las OPCIONES del desplegable; no toca asignaciones guardadas. Prod: esconde 5 cotizaciones, deja 26.
+
 ## 2026-06-08 — NC: estado "aplicada" coherente + auto-compensación de NC emitidas en el sync
 
 - **Bug (MJ)**: al anular una factura con su NC, la factura quedaba "anulada" pero la NC seguía "pendiente". Caso real: NC 5 emitida (Industrial y Comercial Pite, obra Rosas) ↔ factura 165 anulada. Causa: ningún camino daba vuelta el estado de la NC misma salvo el sync, que **solo miraba recibidas**; las emitidas no tienen auto-link y se compensaban a mano (botón "Anula factura emitida"), dejando el estado atrás.

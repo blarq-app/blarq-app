@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-08 — NC: estado "aplicada" coherente + auto-compensación de NC emitidas en el sync
+
+- **Bug (MJ)**: al anular una factura con su NC, la factura quedaba "anulada" pero la NC seguía "pendiente". Caso real: NC 5 emitida (Industrial y Comercial Pite, obra Rosas) ↔ factura 165 anulada. Causa: ningún camino daba vuelta el estado de la NC misma salvo el sync, que **solo miraba recibidas**; las emitidas no tienen auto-link y se compensaban a mano (botón "Anula factura emitida"), dejando el estado atrás.
+- **Datos prod** (`scripts/fix-nc-compensada-pendiente.ts`, dry-run + backup, Δ$0): 4 NC con `compensationType` lleno pero `status="pendiente"` (2× f5 aplicadas a factura, 2 Icónica reembolso al banco) → "pagada" (aplicada). El estado no afecta `metrics.ts` (la NC ya resta por tipoDoc=61).
+- **Código** (`linkNcReferences.ts` + `siiRcv.ts` + `runSiiSync.ts`): el auto-link del sync ahora procesa **recibidas Y emitidas** — recibida por registro de COMPRA (contraparte = proveedor/rutIssuer), emitida por registro de VENTA (contraparte = cliente/rutReceiver). `getDteReferencias` acepta `operacion` (default COMPRA → callers intactos). `autoApplyNcCompensation` ya resolvía emitidas; solo faltaba alimentarlo. Aditivo y con candados (solo coincidencia exacta folio+RUT, solo estado, nunca montos); no-op si el SII no devuelve la referencia. Verificable solo en el sync real con cert (local).
+
 ## 2026-06-06 — Presupuesto: desglose = única verdad (catálogo opt-in, encabezado espejo, provisión y pérdida)
 
 - **Regla**: el total al cliente sale SIEMPRE del desglose; el encabezado es solo su espejo; el catálogo es biblioteca de moldes y NO propaga solo a otras cotizaciones (solo a cotizaciones futuras al agregar la partida).

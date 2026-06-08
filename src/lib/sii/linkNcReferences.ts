@@ -1,8 +1,17 @@
-// Auto-link de NCs recibidas a sus facturas referenciadas via SII.
+// Auto-link de NCs (recibidas Y emitidas) a sus facturas referenciadas via SII.
 //
 // Para cada NC en BD sin referenceFolioNumber, consulta el SII directamente
 // (getRcvDetalle + getDteReferencias) y setea los campos. Idempotente: si
 // la NC ya tiene referencia, la skip.
+//
+//   - Recibidas → registro de COMPRA. La contraparte en el registro es el
+//     PROVEEDOR que emitió la NC → se busca por rutIssuer.
+//   - Emitidas  → registro de VENTA. La NC la emitió BLARQ, así que la
+//     contraparte en el registro de ventas es el CLIENTE → rutReceiver.
+//
+// En ambos casos, tras setear la referencia se corre autoApplyNcCompensation,
+// que ya sabe resolver el objetivo por proveedor (recibida) o cliente
+// (emitida) y actualiza los estados (factura anulada/parcial, NC aplicada).
 //
 // Se invoca después del sync SII para cubrir las NCs nuevas que llegaron.
 // También se puede correr manualmente vía script para backfill.
@@ -40,16 +49,17 @@ function normalizeRut(rut: string): { rut: number; dv: string } {
 export async function linkNcReferences(opts?: {
   periodos?: string[]; // ["202604", "202605", ...]
   invoiceIds?: string[]; // limitar a estas invoices
+  types?: ("emitida" | "recibida")[]; // default = ambos
 }): Promise<LinkResult> {
   const where: {
     tipoDoc: number;
-    type: string;
+    type: { in: string[] };
     referenceFolioNumber: null;
     id?: { in: string[] };
     issueDate?: { gte: Date; lt: Date };
   } = {
     tipoDoc: 61,
-    type: "recibida",
+    type: { in: opts?.types ?? ["recibida", "emitida"] },
     referenceFolioNumber: null,
   };
   if (opts?.invoiceIds) {
@@ -60,8 +70,10 @@ export async function linkNcReferences(opts?: {
     where,
     select: {
       id: true,
+      type: true,
       folioNumber: true,
       rutIssuer: true,
+      rutReceiver: true,
       issueDate: true,
     },
   });
@@ -80,38 +92,53 @@ export async function linkNcReferences(opts?: {
     ? ncs.filter((n) => opts.periodos!.includes(periodOfDate(n.issueDate)))
     : ncs;
 
+  // Cache del RCV por (operacion, periodo): COMPRA y VENTA son registros
+  // distintos, no se pueden mezclar bajo la misma clave.
   const rcvCache = new Map<string, Awaited<ReturnType<typeof getRcvDetalle>>>();
 
   for (const nc of targetNcs) {
-    if (!nc.folioNumber || !nc.rutIssuer) continue;
+    // La contraparte con la que la NC figura en el registro depende del tipo:
+    //   - recibida → la emitió el proveedor → rutIssuer, registro de COMPRA.
+    //   - emitida  → la emitió BLARQ → en VENTAS la contraparte es el cliente
+    //     → rutReceiver.
+    const operacion: "COMPRA" | "VENTA" =
+      nc.type === "emitida" ? "VENTA" : "COMPRA";
+    const counterpartyRut =
+      nc.type === "emitida" ? nc.rutReceiver : nc.rutIssuer;
+    if (!nc.folioNumber || !counterpartyRut) continue;
     const periodo = periodOfDate(nc.issueDate);
+    const cacheKey = `${operacion}:${periodo}`;
 
     try {
-      let rcv = rcvCache.get(periodo);
+      let rcv = rcvCache.get(cacheKey);
       if (!rcv) {
-        rcv = await getRcvDetalle(BLARQ, periodo, "61", "COMPRA");
-        rcvCache.set(periodo, rcv);
+        rcv = await getRcvDetalle(BLARQ, periodo, "61", operacion);
+        rcvCache.set(cacheKey, rcv);
       }
 
-      const issuerNorm = normalizeRut(nc.rutIssuer);
+      const cpNorm = normalizeRut(counterpartyRut);
       const folioNum = parseInt(nc.folioNumber, 10);
       const rcvNc = rcv.find(
-        (r) => r.detRutDoc === issuerNorm.rut && r.detNroDoc === folioNum
+        (r) => r.detRutDoc === cpNorm.rut && r.detNroDoc === folioNum
       );
       if (!rcvNc) {
         result.notFoundInRcv++;
         continue;
       }
 
-      const det = await getDteReferencias(BLARQ, {
-        rcvPcarga: parseInt(periodo, 10),
-        rutDoc: rcvNc.detRutDoc,
-        dvDoc: rcvNc.detDvDoc,
-        dcvNroDoc: rcvNc.detNroDoc,
-        codTipoDoc: "61",
-        dhdrCodigo: rcvNc.dhdrCodigo,
-        detCodigo: rcvNc.detCodigo,
-      });
+      const det = await getDteReferencias(
+        BLARQ,
+        {
+          rcvPcarga: parseInt(periodo, 10),
+          rutDoc: rcvNc.detRutDoc,
+          dvDoc: rcvNc.detDvDoc,
+          dcvNroDoc: rcvNc.detNroDoc,
+          codTipoDoc: "61",
+          dhdrCodigo: rcvNc.dhdrCodigo,
+          detCodigo: rcvNc.detCodigo,
+        },
+        operacion
+      );
 
       if (det.dataReferencias.length === 0) {
         result.noRefs++;

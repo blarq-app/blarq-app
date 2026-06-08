@@ -224,7 +224,8 @@ export interface DteRecibidoId {
  */
 export async function getDteReferencias(
   contribuyente: RutDv,
-  dte: DteRecibidoId
+  dte: DteRecibidoId,
+  operacion: "COMPRA" | "VENTA" = "COMPRA"
 ): Promise<DteDetalle> {
   const token = await getSiiToken();
   const body = {
@@ -244,7 +245,8 @@ export async function getDteReferencias(
       codTipoDoc: dte.codTipoDoc,
       dhdrCodigo: dte.dhdrCodigo,
       detCodigo: dte.detCodigo,
-      operacion: "COMPRA",
+      // COMPRA para docs recibidos, VENTA para los emitidos por BLARQ.
+      operacion,
       rutAutenticado: String(contribuyente.rut),
     },
   };

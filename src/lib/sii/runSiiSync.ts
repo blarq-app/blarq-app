@@ -94,9 +94,9 @@ export async function runSiiSync(opts: SyncOptions): Promise<SyncResult> {
     }
   }
 
-  // Auto-link de NCs recibidas con sus facturas referenciadas usando el
-  // SII directo (cert digital). Solo procesa NCs sin reference todavía.
-  // En modo mock se skip — los datos sintéticos no existen en SII real.
+  // Auto-link de NCs (recibidas Y emitidas) con sus facturas referenciadas
+  // usando el SII directo (cert digital). Solo procesa NCs sin reference
+  // todavía. En modo mock se skip — los datos sintéticos no existen en SII real.
   let ncLinked = 0;
   if (useReal) {
     try {

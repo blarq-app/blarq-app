@@ -1319,17 +1319,25 @@ export default function ObraEditor({
                         <span className="text-force-11 text-gray-700">{item.unit}</span>
                       </td>
                       <td className="px-2 py-0.5 align-top">
+                        {/* Cantidad: guarda AL TERMINAR (al salir del campo o
+                            Enter), no en cada tecla. Sin esto, tipear cifras de
+                            varios dígitos recalculaba el total tecla a tecla y
+                            no dejaba escribir tranquila. `defaultValue` +
+                            `onBlur` = el número final es exactamente el escrito. */}
                         <input
                           type="number"
                           step="0.01"
-                          value={item.quantity}
-                          onChange={(e) =>
-                            handleUpdateItem(
-                              item.id,
-                              "quantity",
-                              parseFloat(e.target.value) || 0
-                            )
-                          }
+                          defaultValue={item.quantity}
+                          onBlur={(e) => {
+                            const v = parseFloat(e.target.value) || 0;
+                            if (v !== item.quantity) {
+                              handleUpdateItem(item.id, "quantity", v);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter")
+                              (e.target as HTMLInputElement).blur();
+                          }}
                           className="text-force-11 w-full min-w-0 bg-transparent border-0 p-0 text-right text-gray-900 tabular-nums focus:ring-0 outline-none"
                         />
                       </td>

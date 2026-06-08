@@ -37,6 +37,10 @@ export default async function EditFacturaPage({
     // /api/facturas/[id]/pdf. El overhead server-only es aceptable.
     prisma.invoice.findUnique({ where: { id } }),
     prisma.project.findMany({
+      // Solo proyectos asignables al conciliar: se esconden las cotizaciones
+      // no ganadas (status="cotizacion"). Los centros internos (BLARQ) se
+      // mantienen siempre, aunque no sean obras numeradas.
+      where: { NOT: { status: "cotizacion", isInternal: false } },
       orderBy: [{ numeroProyecto: "asc" }, { numeroCotizacion: "asc" }, { name: "asc" }],
       select: {
         id: true,

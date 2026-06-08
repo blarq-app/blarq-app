@@ -191,6 +191,9 @@ export default async function MovimientosPage({
     // Proyectos y categorías para el modal "pago sin factura" (asignar un
     // movimiento a un costo de proyecto sin que exista factura).
     prisma.project.findMany({
+      // Solo proyectos asignables: se esconden las cotizaciones no ganadas
+      // (status="cotizacion"). Los centros internos (BLARQ) se mantienen.
+      where: { NOT: { status: "cotizacion", isInternal: false } },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),

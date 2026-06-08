@@ -190,6 +190,10 @@ export default async function ProyectoFacturasPage({
     appliesTo: c.appliesTo,
   }));
   const allProjects = await prisma.project.findMany({
+    // Solo proyectos asignables al reasignar una factura: se esconden las
+    // cotizaciones no ganadas (status="cotizacion"). Internos (BLARQ) se
+    // mantienen siempre.
+    where: { NOT: { status: "cotizacion", isInternal: false } },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });

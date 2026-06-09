@@ -33,6 +33,15 @@ export default async function ProjectLayout({
 
   const status = PROJECT_STATUSES[project.status as ProjectStatus];
 
+  // La miga de pan se adapta al estado de la ficha: una ficha en estado
+  // "cotizacion" vive bajo el menú Cotizaciones, no Proyectos. Aunque la URL
+  // física es /proyectos/[id] (cotizaciones y proyectos comparten la misma
+  // entidad y el mismo detalle), el link de vuelta tiene que apuntar a la
+  // lista de donde realmente vino la usuaria, no llevarla siempre a Proyectos.
+  const esCotizacion = project.status === "cotizacion";
+  const volverHref = esCotizacion ? "/cotizaciones" : "/proyectos";
+  const volverLabel = esCotizacion ? "Cotizaciones" : "Proyectos";
+
   return (
     <div>
       {/* Header sticky del proyecto */}
@@ -41,10 +50,10 @@ export default async function ProjectLayout({
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
               <Link
-                href="/proyectos"
+                href={volverHref}
                 className="hover:text-gray-900 transition-colors"
               >
-                Proyectos
+                {volverLabel}
               </Link>
               <span className="text-gray-300">/</span>
               <span

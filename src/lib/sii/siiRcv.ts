@@ -70,7 +70,12 @@ interface RutDv {
 export async function getRcvResumen(
   contribuyente: RutDv,
   periodo: string,
-  operacion: "COMPRA" | "VENTA" = "COMPRA"
+  operacion: "COMPRA" | "VENTA" = "COMPRA",
+  // El SII separa las compras en bandejas por estado contable. "REGISTRO" son
+  // las firmes; "PENDIENTE" las recién emitidas dentro del plazo de acuse de
+  // recibo (~8 días) — a los pocos días pasan solas a REGISTRO. Default
+  // "REGISTRO" para no cambiar a los llamadores existentes; el sync pide ambas.
+  estadoContab: "REGISTRO" | "PENDIENTE" = "REGISTRO"
 ): Promise<RcvResumenItem[]> {
   const token = await getSiiToken();
   const body = {
@@ -84,7 +89,7 @@ export async function getRcvResumen(
       rutEmisor: String(contribuyente.rut),
       dvEmisor: contribuyente.dv,
       ptributario: periodo,
-      estadoContab: "REGISTRO",
+      estadoContab,
       operacion,
       busquedaInicial: true,
     },
@@ -127,7 +132,9 @@ export async function getRcvDetalle(
   contribuyente: RutDv,
   periodo: string,
   codTipoDoc: string,
-  operacion: "COMPRA" | "VENTA" = "COMPRA"
+  operacion: "COMPRA" | "VENTA" = "COMPRA",
+  // Ver nota en getRcvResumen: bandeja por estado contable. Default "REGISTRO".
+  estadoContab: "REGISTRO" | "PENDIENTE" = "REGISTRO"
 ): Promise<RcvDetalleItem[]> {
   const token = await getSiiToken();
   const metodo = operacion === "VENTA" ? "getDetalleVenta" : "getDetalleCompra";
@@ -144,7 +151,7 @@ export async function getRcvDetalle(
       ptributario: periodo,
       codTipoDoc,
       operacion,
-      estadoContab: "REGISTRO",
+      estadoContab,
       // Placeholders — el server no los valida en este flow auth.
       accionRecaptcha: "RCV_DETC",
       tokenRecaptcha: "t-o-k-e-n-web",

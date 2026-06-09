@@ -25,6 +25,8 @@ export const maxDuration = 60;
 interface RevisionRow {
   id: string;
   name: string;
+  detail: string | null;
+  brand: string | null;
   referenceLink: string;
   // Lo guardado hoy en el catálogo:
   storedListPrice: number;
@@ -55,6 +57,8 @@ export async function POST(request: NextRequest) {
       select: {
         id: true,
         name: true,
+        detail: true,
+        brand: true,
         referenceLink: true,
         listPrice: true,
         discountPercent: true,
@@ -68,6 +72,8 @@ export async function POST(request: NextRequest) {
         const base = {
           id: it.id,
           name: it.name,
+          detail: it.detail,
+          brand: it.brand,
           referenceLink: link,
           storedListPrice: it.listPrice,
           storedDiscount,

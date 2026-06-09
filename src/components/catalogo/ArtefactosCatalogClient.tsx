@@ -54,6 +54,8 @@ function clientTotal(it: {
 interface PriceReviewRow {
   id: string;
   name: string;
+  detail: string | null;
+  brand: string | null;
   referenceLink: string;
   storedListPrice: number;
   storedDiscount: number;
@@ -1074,8 +1076,18 @@ function PriceReviewPanel({
                   key={r.id}
                   className={`grid ${COLS} gap-2 px-3 py-2 border-t border-gray-100 text-xs items-center`}
                 >
-                  <div className="truncate text-gray-900" title={r.name}>
-                    {r.name}
+                  <div className="min-w-0" title={[r.name, r.brand, r.detail].filter(Boolean).join(" · ")}>
+                    <div className="truncate text-gray-900 font-medium">
+                      {r.name}
+                      {r.brand ? (
+                        <span className="text-gray-400 font-normal"> · {r.brand}</span>
+                      ) : null}
+                    </div>
+                    {r.detail ? (
+                      <div className="truncate text-[11px] text-gray-500">
+                        {r.detail}
+                      </div>
+                    ) : null}
                   </div>
                   <div className="text-right tabular-nums text-gray-700">
                     {r.webListPrice != null ? formatCLP(r.webListPrice) : "—"}

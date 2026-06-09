@@ -40,12 +40,14 @@ interface CatalogItem {
   lastPriceCheck: Date | string | null;
 }
 
-// Precio a cliente efectivo: si no se cargó uno propio, es el precio web.
-function effectiveClientPrice(it: {
-  clientPrice: number | null;
+// Total a cliente = precio lista menos el descuento. Es lo que paga el
+// cliente (como la columna TOTAL del Excel de MJ). Si no hay descuento,
+// el total es la lista tal cual.
+function clientTotal(it: {
   listPrice: number;
+  discountPercent: number | null;
 }): number {
-  return it.clientPrice ?? it.listPrice;
+  return Math.round(it.listPrice * (1 - (it.discountPercent ?? 0)));
 }
 
 // Fila que devuelve el endpoint "Revisar precios" (guardado vs web ahora).
@@ -71,7 +73,7 @@ const SUBCATEGORY_OPTIONS = ["sanitario", "cocina", "iluminacion"];
 // Layout de columnas compartido entre el encabezado y cada fila. La primera
 // columna angosta es la manija para arrastrar.
 const GRID_COLS =
-  "grid-cols-[1.5rem_4.5rem_minmax(0,1.1fr)_minmax(0,1.5fr)_7.5rem_12rem_3.5rem_2.5rem]";
+  "grid-cols-[1.5rem_3.5rem_minmax(0,1fr)_minmax(0,1.25fr)_6rem_5.5rem_3rem_6rem_6rem_5rem_2.5rem_2rem]";
 
 // Input numérico con separadores de miles.
 function ThousandsInput({
@@ -368,18 +370,12 @@ export default function ArtefactosCatalogClient({
     }
   }
 
-  // Aplica el precio web nuevo a un artefacto: actualiza listPrice y, si el
-  // precio a cliente venía igual al web (sin descuento compartido), lo sube
-  // también. El costo (realCostBlarq) NO se toca: es cotización aparte.
+  // Aplica el precio web nuevo a un artefacto: actualiza el precio lista.
+  // El descuento (dcto) y el costo (realCostBlarq) NO se tocan — el dcto lo
+  // maneja MJ y el costo es cotización aparte. El Total se recalcula solo.
   function applyReviewRow(row: PriceReviewRow) {
     if (row.webPrice == null) return;
-    const current = items.find((it) => it.id === row.id);
-    if (!current) return;
-    const clientWasTrackingWeb =
-      current.clientPrice == null || current.clientPrice === current.listPrice;
-    const patch: Partial<CatalogItem> = { listPrice: row.webPrice };
-    if (clientWasTrackingWeb) patch.clientPrice = row.webPrice;
-    updateItem(row.id, patch);
+    updateItem(row.id, { listPrice: row.webPrice });
     setReviewRows((prev) =>
       prev.map((r) => (r.id === row.id ? { ...r, applied: true } : r))
     );
@@ -636,20 +632,31 @@ export default function ArtefactosCatalogClient({
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                Precio web (lista)
+                Precio lista (sin dcto)
               </label>
               <ThousandsInput
                 value={newItem.listPrice}
-                onChange={(v) =>
-                  setNewItem((prev) => ({
-                    ...prev,
-                    listPrice: v,
-                    // Si el precio a cliente venía igual al web, lo seguimos.
-                    clientPrice:
-                      !prev.clientPrice || prev.clientPrice === prev.listPrice
-                        ? v
-                        : prev.clientPrice,
-                  }))
+                onChange={(v) => setNewItem({ ...newItem, listPrice: v })}
+                placeholder="0"
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm tabular-nums text-right outline-none focus:border-gray-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
+                Dcto % al cliente
+              </label>
+              <input
+                type="number"
+                value={
+                  newItem.discountPercent
+                    ? Math.round(newItem.discountPercent * 100)
+                    : ""
+                }
+                onChange={(e) =>
+                  setNewItem({
+                    ...newItem,
+                    discountPercent: (parseFloat(e.target.value) || 0) / 100,
+                  })
                 }
                 placeholder="0"
                 className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm tabular-nums text-right outline-none focus:border-gray-500"
@@ -657,18 +664,7 @@ export default function ArtefactosCatalogClient({
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                Precio a cliente
-              </label>
-              <ThousandsInput
-                value={newItem.clientPrice}
-                onChange={(v) => setNewItem({ ...newItem, clientPrice: v })}
-                placeholder="= precio web"
-                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm tabular-nums text-right outline-none focus:border-gray-500"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                Mi costo (para mí)
+                Mi costo (oculto al cliente)
               </label>
               <ThousandsInput
                 value={newItem.realCostBlarq}
@@ -733,7 +729,15 @@ export default function ArtefactosCatalogClient({
           <div>Nombre / marca</div>
           <div>Detalle</div>
           <div>Subcat. / tipo</div>
-          <div className="text-right">Web · cliente · mí</div>
+          <div className="text-right">Lista</div>
+          <div className="text-center">Dcto</div>
+          <div className="text-right">Total</div>
+          <div className="text-right bg-gray-100/70 -my-2 py-2 px-1" title="No lo ve el cliente">
+            Mi costo
+          </div>
+          <div className="text-right bg-gray-100/70 -my-2 py-2 px-1" title="No lo ve el cliente">
+            Gan.
+          </div>
           <div className="text-center">Std</div>
           <div></div>
         </div>
@@ -893,7 +897,70 @@ function CatalogItemRow({
         />
       </div>
 
-      <PriceCell item={item} onUpdate={onUpdate} />
+      {/* Precio lista (sin descuento) */}
+      <div>
+        <ThousandsInput
+          value={item.listPrice}
+          onChange={(v) => onUpdate({ listPrice: v })}
+          placeholder="0"
+          className="w-full bg-transparent border-0 p-0 text-right tabular-nums text-gray-700 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+        />
+      </div>
+
+      {/* Descuento al cliente (auto del web cuando lo haya; editable) */}
+      <div className="flex items-center justify-center gap-0.5">
+        <input
+          type="number"
+          value={
+            item.discountPercent
+              ? Math.round(item.discountPercent * 100)
+              : ""
+          }
+          onChange={(e) => {
+            const pct = parseFloat(e.target.value);
+            onUpdate({
+              discountPercent: pct ? pct / 100 : null,
+            });
+          }}
+          placeholder="0"
+          className="w-9 bg-transparent border-0 p-0 text-right tabular-nums text-gray-700 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+        />
+        <span className="text-gray-400 text-[10px]">%</span>
+      </div>
+
+      {/* Total = lo que paga el cliente (lista − dcto) */}
+      <div className="text-right tabular-nums font-semibold text-gray-900">
+        {formatCLP(clientTotal(item))}
+      </div>
+
+      {/* Mi costo (oculto al cliente) */}
+      <div className="bg-gray-50 -my-2 py-2 px-1">
+        <ThousandsInput
+          value={item.realCostBlarq ?? 0}
+          onChange={(v) => onUpdate({ realCostBlarq: v || null })}
+          placeholder="—"
+          className="w-full bg-transparent border-0 p-0 text-right tabular-nums text-gray-700 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+        />
+      </div>
+
+      {/* Ganancia = Total − Mi costo (oculto al cliente) */}
+      <div className="bg-gray-50 -my-2 py-2 px-1 text-right tabular-nums">
+        {item.realCostBlarq != null ? (
+          <span
+            className={
+              clientTotal(item) - item.realCostBlarq > 0
+                ? "text-green-700"
+                : clientTotal(item) - item.realCostBlarq < 0
+                ? "text-red-600"
+                : "text-gray-500"
+            }
+          >
+            {formatCLP(clientTotal(item) - item.realCostBlarq)}
+          </span>
+        ) : (
+          <span className="text-gray-300">—</span>
+        )}
+      </div>
 
       <div className="flex justify-center">
         <label className="cursor-pointer" title="Paleta estándar BLARQ">
@@ -914,71 +981,6 @@ function CatalogItemRow({
         >
           ×
         </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Celda de precios: web / a cliente / mi costo + ganancia ────────────
-function PriceCell({
-  item,
-  onUpdate,
-}: {
-  item: CatalogItem;
-  onUpdate: (patch: Partial<CatalogItem>) => void;
-}) {
-  const cliente = effectiveClientPrice(item);
-  const costo = item.realCostBlarq;
-  const gan = costo != null ? cliente - costo : null;
-  const inputCls =
-    "w-[5.5rem] bg-transparent border-0 p-0 text-right tabular-nums text-[11px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1";
-  const lblCls =
-    "text-[9px] uppercase tracking-wider text-gray-400 w-10 text-right shrink-0";
-
-  return (
-    <div className="space-y-0.5">
-      <div className="flex items-center justify-end gap-1">
-        <span className={lblCls}>web</span>
-        <ThousandsInput
-          value={item.listPrice}
-          onChange={(v) => onUpdate({ listPrice: v })}
-          placeholder="0"
-          className={`${inputCls} text-gray-500`}
-        />
-      </div>
-      <div className="flex items-center justify-end gap-1">
-        <span className={lblCls}>cliente</span>
-        <ThousandsInput
-          value={cliente}
-          onChange={(v) => onUpdate({ clientPrice: v || null })}
-          placeholder="0"
-          className={`${inputCls} font-semibold text-gray-900`}
-        />
-      </div>
-      <div className="flex items-center justify-end gap-1">
-        <span className={lblCls}>mí</span>
-        <ThousandsInput
-          value={costo ?? 0}
-          onChange={(v) => onUpdate({ realCostBlarq: v || null })}
-          placeholder="—"
-          className={`${inputCls} text-gray-700`}
-        />
-      </div>
-      <div className="flex items-center justify-end gap-1 border-t border-gray-100 pt-0.5">
-        <span className={lblCls}>gan</span>
-        <span
-          className={`w-[5.5rem] text-right tabular-nums text-[11px] font-medium ${
-            gan == null
-              ? "text-gray-300"
-              : gan > 0
-              ? "text-green-700"
-              : gan < 0
-              ? "text-red-600"
-              : "text-gray-500"
-          }`}
-        >
-          {gan == null ? "—" : formatCLP(gan)}
-        </span>
       </div>
     </div>
   );

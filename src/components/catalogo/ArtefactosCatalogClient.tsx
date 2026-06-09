@@ -56,8 +56,12 @@ interface PriceReviewRow {
   name: string;
   referenceLink: string;
   storedListPrice: number;
-  webPrice: number | null;
-  delta: number | null;
+  storedDiscount: number;
+  storedTotal: number;
+  webListPrice: number | null;
+  webDiscount: number | null; // decimal 0..1
+  webTotal: number | null; // lo que pagaría el cliente con el web de hoy
+  delta: number | null; // webTotal - storedTotal
   status: "ok" | "sin-precio" | "error";
   applied?: boolean; // marcada como aplicada en esta sesión
 }
@@ -370,12 +374,15 @@ export default function ArtefactosCatalogClient({
     }
   }
 
-  // Aplica el precio web nuevo a un artefacto: actualiza el precio lista.
-  // El descuento (dcto) y el costo (realCostBlarq) NO se tocan — el dcto lo
-  // maneja MJ y el costo es cotización aparte. El Total se recalcula solo.
+  // Aplica el precio del web a un artefacto: actualiza el precio lista y el
+  // descuento (los dos vienen del web). El Total se recalcula solo. El costo
+  // (realCostBlarq) NO se toca — es cotización aparte.
   function applyReviewRow(row: PriceReviewRow) {
-    if (row.webPrice == null) return;
-    updateItem(row.id, { listPrice: row.webPrice });
+    if (row.webListPrice == null) return;
+    updateItem(row.id, {
+      listPrice: row.webListPrice,
+      discountPercent: row.webDiscount && row.webDiscount > 0 ? row.webDiscount : null,
+    });
     setReviewRows((prev) =>
       prev.map((r) => (r.id === row.id ? { ...r, applied: true } : r))
     );
@@ -1002,7 +1009,7 @@ function PriceReviewPanel({
   onApplyAll: () => void;
   onClose: () => void;
 }) {
-  const COLS = "grid-cols-[minmax(0,1fr)_6rem_6rem_6rem_5rem]";
+  const COLS = "grid-cols-[minmax(0,1fr)_5.5rem_3.5rem_8rem_5rem]";
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
       <div className="flex items-center justify-between mb-3">
@@ -1054,9 +1061,9 @@ function PriceReviewPanel({
               className={`grid ${COLS} gap-2 px-3 py-2 bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500 font-semibold`}
             >
               <div>Artefacto</div>
-              <div className="text-right">Guardado</div>
-              <div className="text-right">Web ahora</div>
-              <div className="text-right">Dif.</div>
+              <div className="text-right">Lista web</div>
+              <div className="text-center">Dcto</div>
+              <div className="text-right">Total (antes → web)</div>
               <div></div>
             </div>
             {rows.map((r) => {
@@ -1070,30 +1077,39 @@ function PriceReviewPanel({
                   <div className="truncate text-gray-900" title={r.name}>
                     {r.name}
                   </div>
-                  <div className="text-right tabular-nums text-gray-500">
-                    {formatCLP(r.storedListPrice)}
+                  <div className="text-right tabular-nums text-gray-700">
+                    {r.webListPrice != null ? formatCLP(r.webListPrice) : "—"}
                   </div>
-                  <div className="text-right tabular-nums text-gray-900">
-                    {r.webPrice != null ? formatCLP(r.webPrice) : "—"}
+                  <div className="text-center tabular-nums text-gray-700">
+                    {r.webDiscount != null && r.webDiscount > 0
+                      ? `${Math.round(r.webDiscount * 100)}%`
+                      : r.status === "ok"
+                      ? "—"
+                      : ""}
                   </div>
-                  <div
-                    className={`text-right tabular-nums ${
-                      r.delta == null
-                        ? "text-gray-300"
-                        : r.delta < 0
-                        ? "text-green-700"
-                        : r.delta > 0
-                        ? "text-red-600"
-                        : "text-gray-400"
-                    }`}
-                  >
-                    {r.delta == null
-                      ? r.status === "error"
-                        ? "error"
-                        : "s/precio"
-                      : r.delta === 0
-                      ? "="
-                      : `${r.delta > 0 ? "+" : ""}${formatCLP(r.delta)}`}
+                  <div className="text-right tabular-nums">
+                    {r.status !== "ok" || r.webTotal == null ? (
+                      <span className="text-gray-300">
+                        {r.status === "error" ? "no se pudo leer" : "sin precio"}
+                      </span>
+                    ) : (
+                      <span>
+                        <span className="text-gray-400 line-through">
+                          {formatCLP(r.storedTotal)}
+                        </span>{" "}
+                        <span
+                          className={`font-semibold ${
+                            r.delta == null || r.delta === 0
+                              ? "text-gray-900"
+                              : r.delta < 0
+                              ? "text-green-700"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {formatCLP(r.webTotal)}
+                        </span>
+                      </span>
+                    )}
                   </div>
                   <div className="text-right">
                     {r.applied ? (
@@ -1116,8 +1132,8 @@ function PriceReviewPanel({
             })}
           </div>
           <p className="text-[10px] text-gray-400 mt-2">
-            Al aplicar se actualiza el precio web. Si el precio a cliente venía
-            igual al web, también sube. Tu costo no se toca (es cotización
+            Al aplicar se actualiza el precio lista y el descuento con lo del
+            web. El Total se recalcula. Tu costo no se toca (es cotización
             aparte).
           </p>
         </>

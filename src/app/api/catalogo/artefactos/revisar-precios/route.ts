@@ -4,23 +4,42 @@
  * POST /api/catalogo/artefactos/revisar-precios
  *   Body opcional: { subcategory?: string } para acotar a una pestaña.
  *
- * Para cada artefacto CON link, va a la web (scraping liviano vía
- * fetchArtefactoData — mk.cl / sodimac / easy) y trae el precio de hoy.
- * NO pisa nada: solo devuelve la comparación guardado-vs-web para que MJ
- * decida cuáles aplicar. La aplicación se hace después con el PUT por id.
+ * Para cada artefacto CON link trae el precio de hoy de la web:
+ *   - mk.cl (VTEX): vía API de catálogo → ListPrice (lista) + Price (con dcto).
+ *     De ahí sale el descuento del web automáticamente.
+ *   - otras tiendas: scraping liviano (fetchArtefactoData) → solo precio, dcto 0.
+ *
+ * NO pisa nada: devuelve la comparación guardado-vs-web (lista, dcto y total)
+ * para que MJ decida cuáles aplicar. La aplicación se hace con el PUT por id.
  */
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { fetchArtefactoData } from "@/lib/catalog/fetchArtefactoData";
+import { fetchMkVtexPrice, isMkUrl } from "@/lib/catalog/fetchMkPrice";
+
+// Vercel: el fetch a la web puede tardar; subimos el límite de la función
+// para que no se corte (default 10s) mientras consulta varios productos.
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 interface RevisionRow {
   id: string;
   name: string;
   referenceLink: string;
-  storedListPrice: number; // precio web guardado hoy en el catálogo
-  webPrice: number | null; // precio que trae la web ahora
-  delta: number | null; // webPrice - storedListPrice (null si no se pudo)
+  // Lo guardado hoy en el catálogo:
+  storedListPrice: number;
+  storedDiscount: number; // decimal 0..1
+  storedTotal: number; // lo que paga el cliente hoy
+  // Lo que trae la web ahora:
+  webListPrice: number | null; // precio lista del web
+  webDiscount: number | null; // descuento del web (decimal 0..1)
+  webTotal: number | null; // lo que pagaría el cliente con el web de hoy
+  delta: number | null; // webTotal - storedTotal
   status: "ok" | "sin-precio" | "error";
+}
+
+function total(listPrice: number, discount: number): number {
+  return Math.round(listPrice * (1 - discount));
 }
 
 export async function POST(request: NextRequest) {
@@ -33,53 +52,64 @@ export async function POST(request: NextRequest) {
         referenceLink: { not: null },
         ...(subcategory ? { subcategory } : {}),
       },
-      select: { id: true, name: true, referenceLink: true, listPrice: true },
+      select: {
+        id: true,
+        name: true,
+        referenceLink: true,
+        listPrice: true,
+        discountPercent: true,
+      },
     });
 
-    // Scraping en paralelo, tolerante a fallas (una tienda lenta no tumba
-    // al resto). allSettled + por item resolvemos status.
     const rows: RevisionRow[] = await Promise.all(
       items.map(async (it): Promise<RevisionRow> => {
         const link = it.referenceLink as string;
+        const storedDiscount = it.discountPercent ?? 0;
+        const base = {
+          id: it.id,
+          name: it.name,
+          referenceLink: link,
+          storedListPrice: it.listPrice,
+          storedDiscount,
+          storedTotal: total(it.listPrice, storedDiscount),
+        };
         try {
-          const data = await fetchArtefactoData(link);
-          const webPrice = data?.listPrice ?? null;
-          if (webPrice == null) {
-            return {
-              id: it.id,
-              name: it.name,
-              referenceLink: link,
-              storedListPrice: it.listPrice,
-              webPrice: null,
-              delta: null,
-              status: "sin-precio",
-            };
+          let webListPrice: number | null = null;
+          let webPrice: number | null = null; // precio de venta (con dcto)
+          if (isMkUrl(link)) {
+            const mk = await fetchMkVtexPrice(link);
+            if (mk) {
+              webListPrice = mk.listPrice;
+              webPrice = mk.price;
+            }
+          } else {
+            const data = await fetchArtefactoData(link);
+            if (data?.listPrice != null) {
+              // Sin API de descuento: tomamos el precio como lista, dcto 0.
+              webListPrice = data.listPrice;
+              webPrice = data.listPrice;
+            }
           }
+          if (webListPrice == null || webPrice == null) {
+            return { ...base, webListPrice: null, webDiscount: null, webTotal: null, delta: null, status: "sin-precio" };
+          }
+          const webDiscount =
+            webListPrice > 0 ? Math.max(0, 1 - webPrice / webListPrice) : 0;
           return {
-            id: it.id,
-            name: it.name,
-            referenceLink: link,
-            storedListPrice: it.listPrice,
-            webPrice,
-            delta: webPrice - it.listPrice,
+            ...base,
+            webListPrice,
+            webDiscount,
+            webTotal: webPrice,
+            delta: webPrice - base.storedTotal,
             status: "ok",
           };
         } catch {
-          return {
-            id: it.id,
-            name: it.name,
-            referenceLink: link,
-            storedListPrice: it.listPrice,
-            webPrice: null,
-            delta: null,
-            status: "error",
-          };
+          return { ...base, webListPrice: null, webDiscount: null, webTotal: null, delta: null, status: "error" };
         }
       })
     );
 
-    // Orden: primero los que cambiaron (mayor diferencia absoluta), después
-    // los iguales, al final los que no se pudieron leer.
+    // Primero los que más cambiaron; al final los no leídos.
     rows.sort((a, b) => {
       const da = a.delta == null ? -1 : Math.abs(a.delta);
       const db = b.delta == null ? -1 : Math.abs(b.delta);

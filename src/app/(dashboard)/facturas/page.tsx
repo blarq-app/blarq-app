@@ -183,6 +183,59 @@ export default async function FacturasPage({
     payments: { amountApplied: number }[];
   }) => Math.max(0, inv.totalAmount - paidOf(inv));
 
+  // Resolución de la factura original que referencia cada NC (61) / ND (56),
+  // para hacer clickeable el "ref F-…" de la lista. La referencia se guarda
+  // como folio en texto (referenceFolioNumber), no como id; la resolvemos por
+  // (type, folio, RUT del mismo emisor/receptor) contra factura/exenta (33/34).
+  // Una sola query batch para toda la página, no N+1. Si la original no está
+  // cargada en la app, el folio queda sin id y el "ref" se muestra sin link.
+  const refKeyOf = (
+    type: string,
+    folio: string | null,
+    rutIssuer: string | null,
+    rutReceiver: string | null
+  ) =>
+    // Recibidas: la original comparte rutIssuer (mismo proveedor). Emitidas:
+    // comparte rutReceiver (mismo cliente) — el rutIssuer sería siempre BLARQ.
+    type === "recibida"
+      ? `recibida|${folio ?? ""}|${rutIssuer ?? ""}`
+      : `emitida|${folio ?? ""}|${rutReceiver ?? ""}`;
+  const refNCs = invoices.filter(
+    (i) => i.referenceFolioNumber && (i.tipoDoc === 61 || i.tipoDoc === 56)
+  );
+  const referencedIdByNC = new Map<string, string>();
+  if (refNCs.length > 0) {
+    const originals = await prisma.invoice.findMany({
+      where: {
+        tipoDoc: { in: [33, 34] },
+        OR: refNCs.map((nc) => ({
+          type: nc.type,
+          folioNumber: nc.referenceFolioNumber,
+          ...(nc.type === "recibida"
+            ? { rutIssuer: nc.rutIssuer }
+            : { rutReceiver: nc.rutReceiver }),
+        })),
+      },
+      select: {
+        id: true,
+        type: true,
+        folioNumber: true,
+        rutIssuer: true,
+        rutReceiver: true,
+      },
+    });
+    const idByKey = new Map<string, string>();
+    for (const o of originals) {
+      idByKey.set(refKeyOf(o.type, o.folioNumber, o.rutIssuer, o.rutReceiver), o.id);
+    }
+    for (const nc of refNCs) {
+      const id = idByKey.get(
+        refKeyOf(nc.type, nc.referenceFolioNumber, nc.rutIssuer, nc.rutReceiver)
+      );
+      if (id) referencedIdByNC.set(nc.id, id);
+    }
+  }
+
   // Banner "saldo a favor": NC recibidas sin clasificar (no se sabe si la
   // plata volvió en efectivo, al banco, o se aplicó a otra factura).
   const ncSinClasificarAgg = await prisma.invoice.aggregate({
@@ -317,6 +370,7 @@ export default async function FacturasPage({
               status: inv.status,
               origin: inv.origin,
               referenceFolioNumber: inv.referenceFolioNumber,
+              referencedInvoiceId: referencedIdByNC.get(inv.id) ?? null,
               siiCodigo: inv.siiCodigo,
               project: inv.project ? { id: inv.project.id, name: inv.project.name } : null,
               category: inv.category ? { id: inv.category.id, name: inv.category.name } : null,

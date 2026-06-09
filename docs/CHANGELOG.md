@@ -4,7 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
-## 2026-06-08 — Conciliación: el desplegable de proyectos esconde las cotizaciones no ganadas
+## 2026-06-09 — Catálogo de artefactos: precio a cliente + mi costo + "Revisar precios"
+
+- **Dos precios en el catálogo** (antes solo "lista + un descuento"). El modelo de `ArtefactoCatalog` pasa a 3 montos explícitos: `listPrice` (precio web / lista), `clientPrice` (precio a cliente; null = igual al web) y `realCostBlarq` (mi costo, lo que paga BLARQ; manual, no visible al cliente). La ganancia se muestra = clientPrice − realCostBlarq. Calca el modelo que ya tenía `ArtefactoItem` en presupuestos.
+- **Lógica de MJ** (relevada): al cliente le vende al precio de internet (= web); su costo lo cotiza la vendedora con descuento variable por producto; a veces "comparte" descuento al cliente. El descuento viejo del catálogo (−20/−33%) se descartó por no confiable ("empezar de cero": `clientPrice = listPrice`, `discountPercent = null`). Migración: `scripts/migrar-precios-artefactos.ts` (idempotente).
+- **Botón "Revisar precios"**: `POST /api/catalogo/artefactos/revisar-precios` scrapea el precio web de hoy (reusa `fetchArtefactoData` — mk.cl/sodimac/easy) para los artefactos con link y muestra guardado vs web ahora; MJ aplica los que quiere (uno o todos). NO pisa nada solo. Al aplicar sube `listPrice` (y `clientPrice` si venía igual al web); el costo no se toca.
+- **DB**: agrega columnas `clientPrice` + `realCostBlarq` a `ArtefactoCatalog` (aditivo). Verificado en dev (modelo + endpoints + typecheck). Falta aplicar columnas + migración en prod.
 
 - **Bug (MJ)**: al asignar centro de costo a una factura/movimiento, el selector de proyecto listaba TODOS los proyectos, incluidas las cotizaciones (`status="cotizacion"`) que todavía no son obras.
 - **Fix**: las 4 superficies de asignación (`facturas/page.tsx`, `facturas/[id]/page.tsx`, `banco/movimientos/page.tsx`, `proyectos/[id]/facturas/page.tsx`) filtran con `where: { NOT: { status: "cotizacion", isInternal: false } }` — esconde solo las cotizaciones, mantiene obras en ejecución + terminadas + centros internos (BLARQ). Decisión de MJ: dejar también las terminadas (facturas tardías). Solo cambia las OPCIONES del desplegable; no toca asignaciones guardadas. Prod: esconde 5 cotizaciones, deja 26.

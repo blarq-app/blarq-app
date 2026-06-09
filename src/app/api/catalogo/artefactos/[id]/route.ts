@@ -34,6 +34,8 @@ export async function PUT(
         imageUrl: data.imageUrl,
         listPrice: data.listPrice,
         discountPercent: data.discountPercent,
+        clientPrice: data.clientPrice,
+        realCostBlarq: data.realCostBlarq,
         isStandard: data.isStandard,
         ...(updateLastCheck && { lastPriceCheck: new Date() }),
       },

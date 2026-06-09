@@ -31,11 +31,33 @@ interface CatalogItem {
   supplier: string | null;
   referenceLink: string | null;
   imageUrl: string | null;
-  listPrice: number;
-  discountPercent: number | null;
+  listPrice: number; // precio web / lista
+  discountPercent: number | null; // legacy
+  clientPrice: number | null; // precio a cliente (null = igual al web)
+  realCostBlarq: number | null; // mi costo (lo que paga BLARQ)
   isStandard: boolean;
   sortOrder: number;
   lastPriceCheck: Date | string | null;
+}
+
+// Precio a cliente efectivo: si no se cargó uno propio, es el precio web.
+function effectiveClientPrice(it: {
+  clientPrice: number | null;
+  listPrice: number;
+}): number {
+  return it.clientPrice ?? it.listPrice;
+}
+
+// Fila que devuelve el endpoint "Revisar precios" (guardado vs web ahora).
+interface PriceReviewRow {
+  id: string;
+  name: string;
+  referenceLink: string;
+  storedListPrice: number;
+  webPrice: number | null;
+  delta: number | null;
+  status: "ok" | "sin-precio" | "error";
+  applied?: boolean; // marcada como aplicada en esta sesión
 }
 
 const SUBCATEGORY_LABELS: Record<string, string> = {
@@ -49,7 +71,7 @@ const SUBCATEGORY_OPTIONS = ["sanitario", "cocina", "iluminacion"];
 // Layout de columnas compartido entre el encabezado y cada fila. La primera
 // columna angosta es la manija para arrastrar.
 const GRID_COLS =
-  "grid-cols-[1.5rem_5rem_minmax(0,1.2fr)_minmax(0,2fr)_9rem_7rem_5rem_3rem]";
+  "grid-cols-[1.5rem_4.5rem_minmax(0,1.1fr)_minmax(0,1.5fr)_7.5rem_12rem_3.5rem_2.5rem]";
 
 // Input numérico con separadores de miles.
 function ThousandsInput({
@@ -109,11 +131,23 @@ export default function ArtefactosCatalogClient({
     referenceLink: "",
     imageUrl: "",
     listPrice: 0,
+    clientPrice: 0,
+    realCostBlarq: 0,
     discountPercent: 0,
     isStandard: false,
   });
   const [extractingForNew, setExtractingForNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ── "Revisar precios" ─────────────────────────────────────────────────
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewRows, setReviewRows] = useState<PriceReviewRow[]>([]);
+  const [reviewResumen, setReviewResumen] = useState<{
+    conLink: number;
+    cambiaron: number;
+    noLeidos: number;
+  } | null>(null);
 
   // ── Conteo por pestaña (sobre el universo completo, sin filtros) ──────
   const countsByTab = useMemo(() => {
@@ -259,6 +293,8 @@ export default function ArtefactosCatalogClient({
         referenceLink: "",
         imageUrl: "",
         listPrice: 0,
+        clientPrice: 0,
+        realCostBlarq: 0,
         discountPercent: 0,
         isStandard: false,
       });
@@ -294,11 +330,66 @@ export default function ArtefactosCatalogClient({
         detail: data.name ?? prev.detail,
         brand: data.brand ?? prev.brand,
         listPrice: data.listPrice ?? prev.listPrice,
+        // El precio a cliente arranca = precio web (vende al precio internet).
+        clientPrice:
+          data.listPrice != null && !prev.clientPrice
+            ? data.listPrice
+            : prev.clientPrice,
       }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");
     } finally {
       setExtractingForNew(false);
+    }
+  }
+
+  // ── Revisar precios: trae el precio web de hoy y compara ──────────────
+  async function handleRevisarPrecios() {
+    setReviewOpen(true);
+    setReviewLoading(true);
+    setReviewRows([]);
+    setReviewResumen(null);
+    try {
+      const res = await fetch("/api/catalogo/artefactos/revisar-precios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error");
+      setReviewRows(data.rows ?? []);
+      setReviewResumen(data.resumen ?? null);
+    } catch {
+      setReviewRows([]);
+      setReviewResumen(null);
+      alert("No se pudieron revisar los precios.");
+    } finally {
+      setReviewLoading(false);
+    }
+  }
+
+  // Aplica el precio web nuevo a un artefacto: actualiza listPrice y, si el
+  // precio a cliente venía igual al web (sin descuento compartido), lo sube
+  // también. El costo (realCostBlarq) NO se toca: es cotización aparte.
+  function applyReviewRow(row: PriceReviewRow) {
+    if (row.webPrice == null) return;
+    const current = items.find((it) => it.id === row.id);
+    if (!current) return;
+    const clientWasTrackingWeb =
+      current.clientPrice == null || current.clientPrice === current.listPrice;
+    const patch: Partial<CatalogItem> = { listPrice: row.webPrice };
+    if (clientWasTrackingWeb) patch.clientPrice = row.webPrice;
+    updateItem(row.id, patch);
+    setReviewRows((prev) =>
+      prev.map((r) => (r.id === row.id ? { ...r, applied: true } : r))
+    );
+  }
+
+  function applyAllChanged() {
+    for (const row of reviewRows) {
+      if (row.status === "ok" && row.delta != null && row.delta !== 0 && !row.applied) {
+        applyReviewRow(row);
+      }
     }
   }
 
@@ -382,16 +473,36 @@ export default function ArtefactosCatalogClient({
           Solo paleta estándar BLARQ
         </label>
         <button
+          onClick={handleRevisarPrecios}
+          disabled={reviewLoading}
+          className="ml-auto text-sm border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium hover:border-gray-500 disabled:opacity-50"
+          title="Trae el precio web de hoy para los artefactos con link y te muestra los cambios"
+        >
+          {reviewLoading ? "Revisando…" : "Revisar precios"}
+        </button>
+        <button
           onClick={() => {
             // El formulario nuevo arranca en la pestaña activa.
             setNewItem((prev) => ({ ...prev, subcategory: activeTab }));
             setAdding(!adding);
           }}
-          className="ml-auto text-sm bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800"
+          className="text-sm bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800"
         >
           {adding ? "Cancelar" : "+ Nuevo artefacto"}
         </button>
       </div>
+
+      {/* Panel de revisión de precios */}
+      {reviewOpen && (
+        <PriceReviewPanel
+          loading={reviewLoading}
+          rows={reviewRows}
+          resumen={reviewResumen}
+          onApply={applyReviewRow}
+          onApplyAll={applyAllChanged}
+          onClose={() => setReviewOpen(false)}
+        />
+      )}
 
       {/* Formulario de creación */}
       {adding && (
@@ -525,33 +636,44 @@ export default function ArtefactosCatalogClient({
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                Precio lista
+                Precio web (lista)
               </label>
               <ThousandsInput
                 value={newItem.listPrice}
-                onChange={(v) => setNewItem({ ...newItem, listPrice: v })}
+                onChange={(v) =>
+                  setNewItem((prev) => ({
+                    ...prev,
+                    listPrice: v,
+                    // Si el precio a cliente venía igual al web, lo seguimos.
+                    clientPrice:
+                      !prev.clientPrice || prev.clientPrice === prev.listPrice
+                        ? v
+                        : prev.clientPrice,
+                  }))
+                }
                 placeholder="0"
                 className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm tabular-nums text-right outline-none focus:border-gray-500"
               />
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                % descuento típico
+                Precio a cliente
               </label>
-              <input
-                type="number"
-                value={
-                  newItem.discountPercent
-                    ? Math.round(newItem.discountPercent * 100)
-                    : ""
-                }
-                onChange={(e) =>
-                  setNewItem({
-                    ...newItem,
-                    discountPercent: (parseFloat(e.target.value) || 0) / 100,
-                  })
-                }
-                placeholder="0"
+              <ThousandsInput
+                value={newItem.clientPrice}
+                onChange={(v) => setNewItem({ ...newItem, clientPrice: v })}
+                placeholder="= precio web"
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm tabular-nums text-right outline-none focus:border-gray-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
+                Mi costo (para mí)
+              </label>
+              <ThousandsInput
+                value={newItem.realCostBlarq}
+                onChange={(v) => setNewItem({ ...newItem, realCostBlarq: v })}
+                placeholder="lo que pago"
                 className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm tabular-nums text-right outline-none focus:border-gray-500"
               />
             </div>
@@ -611,7 +733,7 @@ export default function ArtefactosCatalogClient({
           <div>Nombre / marca</div>
           <div>Detalle</div>
           <div>Subcat. / tipo</div>
-          <div className="text-right">Precio lista / dcto</div>
+          <div className="text-right">Web · cliente · mí</div>
           <div className="text-center">Std</div>
           <div></div>
         </div>
@@ -771,16 +893,7 @@ function CatalogItemRow({
         />
       </div>
 
-      <div className="text-right">
-        <div className="tabular-nums font-medium text-gray-900">
-          {formatCLP(item.listPrice)}
-        </div>
-        <div className="text-[11px] text-gray-500">
-          {item.discountPercent
-            ? `-${Math.round(item.discountPercent * 100)}%`
-            : "—"}
-        </div>
-      </div>
+      <PriceCell item={item} onUpdate={onUpdate} />
 
       <div className="flex justify-center">
         <label className="cursor-pointer" title="Paleta estándar BLARQ">
@@ -802,6 +915,211 @@ function CatalogItemRow({
           ×
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Celda de precios: web / a cliente / mi costo + ganancia ────────────
+function PriceCell({
+  item,
+  onUpdate,
+}: {
+  item: CatalogItem;
+  onUpdate: (patch: Partial<CatalogItem>) => void;
+}) {
+  const cliente = effectiveClientPrice(item);
+  const costo = item.realCostBlarq;
+  const gan = costo != null ? cliente - costo : null;
+  const inputCls =
+    "w-[5.5rem] bg-transparent border-0 p-0 text-right tabular-nums text-[11px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1";
+  const lblCls =
+    "text-[9px] uppercase tracking-wider text-gray-400 w-10 text-right shrink-0";
+
+  return (
+    <div className="space-y-0.5">
+      <div className="flex items-center justify-end gap-1">
+        <span className={lblCls}>web</span>
+        <ThousandsInput
+          value={item.listPrice}
+          onChange={(v) => onUpdate({ listPrice: v })}
+          placeholder="0"
+          className={`${inputCls} text-gray-500`}
+        />
+      </div>
+      <div className="flex items-center justify-end gap-1">
+        <span className={lblCls}>cliente</span>
+        <ThousandsInput
+          value={cliente}
+          onChange={(v) => onUpdate({ clientPrice: v || null })}
+          placeholder="0"
+          className={`${inputCls} font-semibold text-gray-900`}
+        />
+      </div>
+      <div className="flex items-center justify-end gap-1">
+        <span className={lblCls}>mí</span>
+        <ThousandsInput
+          value={costo ?? 0}
+          onChange={(v) => onUpdate({ realCostBlarq: v || null })}
+          placeholder="—"
+          className={`${inputCls} text-gray-700`}
+        />
+      </div>
+      <div className="flex items-center justify-end gap-1 border-t border-gray-100 pt-0.5">
+        <span className={lblCls}>gan</span>
+        <span
+          className={`w-[5.5rem] text-right tabular-nums text-[11px] font-medium ${
+            gan == null
+              ? "text-gray-300"
+              : gan > 0
+              ? "text-green-700"
+              : gan < 0
+              ? "text-red-600"
+              : "text-gray-500"
+          }`}
+        >
+          {gan == null ? "—" : formatCLP(gan)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Panel "Revisar precios": guardado vs web ahora ─────────────────────
+function PriceReviewPanel({
+  loading,
+  rows,
+  resumen,
+  onApply,
+  onApplyAll,
+  onClose,
+}: {
+  loading: boolean;
+  rows: PriceReviewRow[];
+  resumen: { conLink: number; cambiaron: number; noLeidos: number } | null;
+  onApply: (row: PriceReviewRow) => void;
+  onApplyAll: () => void;
+  onClose: () => void;
+}) {
+  const COLS = "grid-cols-[minmax(0,1fr)_6rem_6rem_6rem_5rem]";
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
+          Revisar precios
+        </h2>
+        <button
+          onClick={onClose}
+          className="text-xs text-gray-500 hover:text-gray-900"
+        >
+          Cerrar
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-gray-500 py-6 text-center">
+          Trayendo precios de la web…
+        </p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-gray-500 py-6 text-center">
+          No hay artefactos con link para revisar.
+        </p>
+      ) : (
+        <>
+          {resumen && (
+            <div className="flex items-center justify-between mb-3 text-xs text-gray-600">
+              <span>
+                {resumen.conLink} con link ·{" "}
+                <span className="text-gray-900 font-medium">
+                  {resumen.cambiaron} cambiaron
+                </span>
+                {resumen.noLeidos > 0
+                  ? ` · ${resumen.noLeidos} no se pudieron leer`
+                  : ""}
+              </span>
+              {resumen.cambiaron > 0 && (
+                <button
+                  onClick={onApplyAll}
+                  className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded hover:bg-gray-800"
+                >
+                  Aplicar todos los cambios
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <div
+              className={`grid ${COLS} gap-2 px-3 py-2 bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500 font-semibold`}
+            >
+              <div>Artefacto</div>
+              <div className="text-right">Guardado</div>
+              <div className="text-right">Web ahora</div>
+              <div className="text-right">Dif.</div>
+              <div></div>
+            </div>
+            {rows.map((r) => {
+              const changed =
+                r.status === "ok" && r.delta != null && r.delta !== 0;
+              return (
+                <div
+                  key={r.id}
+                  className={`grid ${COLS} gap-2 px-3 py-2 border-t border-gray-100 text-xs items-center`}
+                >
+                  <div className="truncate text-gray-900" title={r.name}>
+                    {r.name}
+                  </div>
+                  <div className="text-right tabular-nums text-gray-500">
+                    {formatCLP(r.storedListPrice)}
+                  </div>
+                  <div className="text-right tabular-nums text-gray-900">
+                    {r.webPrice != null ? formatCLP(r.webPrice) : "—"}
+                  </div>
+                  <div
+                    className={`text-right tabular-nums ${
+                      r.delta == null
+                        ? "text-gray-300"
+                        : r.delta < 0
+                        ? "text-green-700"
+                        : r.delta > 0
+                        ? "text-red-600"
+                        : "text-gray-400"
+                    }`}
+                  >
+                    {r.delta == null
+                      ? r.status === "error"
+                        ? "error"
+                        : "s/precio"
+                      : r.delta === 0
+                      ? "="
+                      : `${r.delta > 0 ? "+" : ""}${formatCLP(r.delta)}`}
+                  </div>
+                  <div className="text-right">
+                    {r.applied ? (
+                      <span className="text-[11px] text-green-700">
+                        aplicado
+                      </span>
+                    ) : changed ? (
+                      <button
+                        onClick={() => onApply(r)}
+                        className="text-[11px] border border-gray-300 rounded px-2 py-0.5 hover:border-gray-500"
+                      >
+                        aplicar
+                      </button>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-gray-400 mt-2">
+            Al aplicar se actualiza el precio web. Si el precio a cliente venía
+            igual al web, también sube. Tu costo no se toca (es cotización
+            aparte).
+          </p>
+        </>
+      )}
     </div>
   );
 }

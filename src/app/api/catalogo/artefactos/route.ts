@@ -75,6 +75,10 @@ export async function POST(request: NextRequest) {
         imageUrl: data.imageUrl ?? null,
         listPrice: data.listPrice ?? 0,
         discountPercent: data.discountPercent ?? null,
+        // Precio a cliente: si no llega, arranca = precio web (listPrice).
+        clientPrice: data.clientPrice ?? data.listPrice ?? 0,
+        // Mi costo real (lo que paga BLARQ): manual, puede venir vacío.
+        realCostBlarq: data.realCostBlarq ?? null,
         isStandard: !!data.isStandard,
         sortOrder: nextSortOrder,
         lastPriceCheck: data.listPrice && data.listPrice > 0 ? new Date() : null,

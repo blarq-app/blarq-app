@@ -114,27 +114,47 @@ export async function fetchDTEsFromSII(opts: FetchOptions): Promise<RemoteDTE[]>
   const toDate = opts.toDate ?? new Date().toISOString().slice(0, 10);
   const periods = periodsInRange(opts.fromDate, toDate);
 
+  // El SII separa las compras en bandejas por estado contable. Las facturas
+  // que un proveedor emite recién caen en "PENDIENTE" (plazo de acuse de
+  // recibo, ~8 días) y solo después pasan a "REGISTRO". El sync histórico
+  // leía solo REGISTRO, así que esas facturas nuevas no aparecían hasta que
+  // venciera el plazo. Leemos ambas bandejas para traerlas apenas se emiten.
+  // En ventas (DTEs emitidos por BLARQ) no existe la bandeja de pendientes —
+  // todo está en REGISTRO — así que solo iteramos PENDIENTE para compras.
+  // El upsert es idempotente (unique key folio+RUT): cuando una factura pasa
+  // de PENDIENTE a REGISTRO, el sync la reconoce como la misma, no duplica.
+  const estados: ("REGISTRO" | "PENDIENTE")[] =
+    operacion === "COMPRA" ? ["REGISTRO", "PENDIENTE"] : ["REGISTRO"];
+
   const out: RemoteDTE[] = [];
   for (const periodo of periods) {
-    // 1. Resumen del mes — qué tipos de doc tienen movimiento.
-    const resumen = await getRcvResumen(contribuyente, periodo, operacion);
-    const tiposConDocs = resumen
-      .filter((r) => r.rsmnTotDoc > 0)
-      .map((r) => r.rsmnTipoDocInteger);
-
-    // 2. Detalle por cada tipo de doc con movimiento.
-    for (const tipoDoc of tiposConDocs) {
-      const detalle = await getRcvDetalle(
+    for (const estado of estados) {
+      // 1. Resumen del mes — qué tipos de doc tienen movimiento en esta bandeja.
+      const resumen = await getRcvResumen(
         contribuyente,
         periodo,
-        String(tipoDoc),
-        operacion
+        operacion,
+        estado
       );
-      for (const d of detalle) {
-        // Saltar documentos basura sin fecha (ej. tipoDoc 48 "comprobante de
-        // pago" sin RUT ni fecha que aparece en el Registro de Ventas).
-        if (!d.detFchDoc) continue;
-        out.push(toRemoteDTE(d, tipoDoc, opts.type));
+      const tiposConDocs = resumen
+        .filter((r) => r.rsmnTotDoc > 0)
+        .map((r) => r.rsmnTipoDocInteger);
+
+      // 2. Detalle por cada tipo de doc con movimiento.
+      for (const tipoDoc of tiposConDocs) {
+        const detalle = await getRcvDetalle(
+          contribuyente,
+          periodo,
+          String(tipoDoc),
+          operacion,
+          estado
+        );
+        for (const d of detalle) {
+          // Saltar documentos basura sin fecha (ej. tipoDoc 48 "comprobante de
+          // pago" sin RUT ni fecha que aparece en el Registro de Ventas).
+          if (!d.detFchDoc) continue;
+          out.push(toRemoteDTE(d, tipoDoc, opts.type));
+        }
       }
     }
   }

@@ -271,7 +271,7 @@ export default async function EditFacturaPage({
                     <td className="py-2 text-right">
                       <div className="flex items-center gap-3 justify-end">
                         <Link
-                          href={`/banco/movimientos?status=todos&q=${encodeURIComponent(p.bankMovement.description.slice(0, 20))}`}
+                          href={`/banco/movimientos?status=all&id=${p.bankMovement.id}`}
                           className="text-xs text-gray-500 hover:text-gray-900 underline"
                           title="Ver en /banco/movimientos"
                         >

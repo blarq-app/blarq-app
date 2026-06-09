@@ -20,7 +20,9 @@ export default function MovementsSearch({
     const t = setTimeout(() => {
       const params = new URLSearchParams();
       for (const [k, v] of Object.entries(sp)) {
-        if (k !== "q" && v) params.set(k, v);
+        // `id` es un drill-down efímero (ver un movimiento puntual): al buscar
+        // se vuelve a la navegación normal, no se arrastra.
+        if (k !== "q" && k !== "id" && v) params.set(k, v);
       }
       const trimmed = value.trim();
       if (trimmed) params.set("q", trimmed);

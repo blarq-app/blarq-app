@@ -11,6 +11,10 @@ type SearchParams = {
   accountId?: string;
   status?: string;
   q?: string;
+  // Drill-down a UN movimiento puntual (link "ver" desde el historial de pagos
+  // de una factura). No es un filtro persistente: cualquier tab/búsqueda lo
+  // suelta (ver FilterLink). Se sale con el cartelito "limpiar".
+  id?: string;
   showInternal?: string;
   // Filtros avanzados (panel expandible) — todos opcionales.
   rut?: string;
@@ -63,6 +67,8 @@ export default async function MovimientosPage({
   const where: Record<string, unknown> = {};
   const andFilters: Record<string, unknown>[] = [];
   if (sp.accountId) where.bankAccountId = sp.accountId;
+  // Drill-down a un movimiento puntual: si viene `id`, mostramos solo ese.
+  if (sp.id) where.id = sp.id;
   // Estado de asignación: el filtro avanzado (sp.estado) pisa al de las tabs.
   // "all" = elección explícita de "Todos" → sin filtro de status (lo que MJ
   // ve cuando hace click en la tab "Todos"). Sin filtro = vista por defecto:
@@ -153,6 +159,9 @@ export default async function MovimientosPage({
   // status (los stats SON el desglose por status).
   const statsWhere: Record<string, unknown> = {};
   if (sp.accountId) statsWhere.bankAccountId = sp.accountId;
+  // En drill-down por `id`, las tarjetas de totales también reflejan solo ese
+  // movimiento (si no, mostrarían "86 movimientos" mientras la lista muestra 1).
+  if (sp.id) statsWhere.id = sp.id;
   if (q) statsWhere.OR = where.OR;
   if (andFilters.length > 0) statsWhere.AND = andFilters;
 
@@ -338,6 +347,19 @@ export default async function MovimientosPage({
         <AutoConciliarPendientesButton pendientesCount={conciliablesAprox} />
       </div>
 
+      {/* Drill-down a un movimiento puntual: link discreto para salir del filtro
+          y volver a la lista completa. Sin texto explicativo — MJ ya lo sabe. */}
+      {sp.id && (
+        <div className="mb-4 text-xs">
+          <Link
+            href="/banco/movimientos?status=all"
+            className="text-gray-500 hover:text-gray-900 underline"
+          >
+            limpiar
+          </Link>
+        </div>
+      )}
+
       {/* Stats arriba — conteo + desglose ingresos/egresos por estado */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
         <StatCard
@@ -441,7 +463,9 @@ function FilterLink({
 }) {
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(sp)) {
-    if (k !== field && v) params.set(k, v as string);
+    // `id` es un drill-down efímero (ver un movimiento puntual): cualquier
+    // click en una tab vuelve a la navegación normal, no lo arrastra.
+    if (k !== field && k !== "id" && v) params.set(k, v as string);
   }
   if (value) params.set(field, value);
   const href = `/banco/movimientos${params.toString() ? "?" + params.toString() : ""}`;
@@ -461,7 +485,7 @@ function FilterLink({
 function ShowInternalToggle({ sp, active }: { sp: SearchParams; active: boolean }) {
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(sp)) {
-    if (k !== "showInternal" && v) params.set(k, v as string);
+    if (k !== "showInternal" && k !== "id" && v) params.set(k, v as string);
   }
   if (!active) params.set("showInternal", "1");
   const href = `/banco/movimientos${params.toString() ? "?" + params.toString() : ""}`;

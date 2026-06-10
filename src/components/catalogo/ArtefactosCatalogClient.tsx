@@ -398,37 +398,17 @@ export default function ArtefactosCatalogClient({
     }
   }
 
-  // ── Render: filas + encabezados de grupo por tag ──────────────────────
-  // Recorremos la lista visible y, cada vez que el tag cambia respecto a la
-  // fila anterior, insertamos un encabezado con el tipo. Las filas sin tag
-  // no muestran encabezado (evita ruido).
-  const rows: ReactNode[] = [];
-  let prevTag = " "; // centinela imposible para forzar el primer chequeo
-  for (const item of visible) {
-    const tagKey = (item.tag ?? "").trim();
-    if (tagKey !== prevTag) {
-      if (tagKey) {
-        rows.push(
-          <div
-            key={`hdr-${item.id}`}
-            className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-500 uppercase tracking-wider"
-          >
-            {tagKey}
-          </div>
-        );
-      }
-      prevTag = tagKey;
-    }
-    rows.push(
-      <CatalogItemRow
-        key={item.id}
-        item={item}
-        canReorder={!isFiltering}
-        onUpdate={(patch) => updateItem(item.id, patch)}
-        onDelete={() => deleteItem(item.id)}
-      />
-    );
-  }
+  // Orden libre: las filas van en el orden que MJ les da arrastrando (manija),
+  // sin encabezados automaticos por tipo.
+  const rows: ReactNode[] = visible.map((item) => (
+    <CatalogItemRow
+      key={item.id}
+      item={item}
+      canReorder={!isFiltering}
+      onUpdate={(patch) => updateItem(item.id, patch)}
+      onDelete={() => deleteItem(item.id)}
+    />
+  ));
 
   return (
     <div>
@@ -754,7 +734,6 @@ export default function ArtefactosCatalogClient({
         {!isFiltering && tabItems.length > 1 && (
           <div className="px-4 py-1.5 bg-white border-b border-gray-100 text-[11px] text-gray-400">
             Arrastrá una fila desde la manija (⋮⋮) para ordenarla a tu gusto.
-            Las filas con el mismo tipo se agrupan solas con un encabezado.
           </div>
         )}
 

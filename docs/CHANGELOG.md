@@ -4,6 +4,10 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-10 — Catálogo de artefactos: orden libre (se quitan los encabezados por tipo)
+
+- A pedido de MJ: la tabla deja de armar **encabezados automáticos por tipo** (tag). Ahora el orden es 100% libre — MJ arrastra las filas desde la manija (⋮⋮) y las deja como quiera, sin que se agrupen solas. El campo "tipo" sigue existiendo (editable y buscable), pero ya no inserta separadores. Solo UI; el arrastre + `sortOrder` no cambian.
+
 ## 2026-06-09 — Catálogo de artefactos: columnas Lista / Dcto / Total + costo oculto + "Revisar precios"
 
 - **Layout como el Excel de MJ**: la tabla muestra, por fila, **Precio lista (sin dcto) · Dcto % · Total** (lo que paga el cliente = lista × (1 − dcto)), y aparte **Mi costo · Ganancia** en columnas con fondo gris (NO las ve el cliente; ganancia = Total − Mi costo). El dcto es editable (auto del web cuando la tienda lo exponga; si no, en blanco). El costo se carga a mano (a futuro: subir el PDF de la vendedora y autocompletar). Total y ganancia se calculan solos.

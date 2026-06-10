@@ -142,7 +142,17 @@ export default function RichTextEditor({
           "[&_p.is-editor-empty:first-child]:before:pointer-events-none",
       },
     },
-    onUpdate: ({ editor }) => {
+    // Guarda AL TERMINAR (al salir del campo / blur), NO en cada tecla. Mismo
+    // criterio que MoneyInput (PR #102): mientras MJ escribe, el texto vive
+    // dentro del editor (Tiptap maneja su estado interno) y NO se dispara
+    // `onChange`. Antes cada pulsación llamaba onChange → el padre (ObraEditor)
+    // hacía setItems y re-renderizaba TODA la tabla de partidas en cada tecla,
+    // por eso escribir una descripción larga se sentía lento y "letra por
+    // letra". Al soltar el campo se confirma el HTML final, idéntico al que se
+    // escribió: esto cambia CUÁNDO se guarda, no QUÉ se guarda. Los botones del
+    // menú flotante usan preventDefault en mousedown → NO cuentan como blur, así
+    // que dar negrita/color a una selección no corta la edición ni guarda antes.
+    onBlur: ({ editor }) => {
       const html = editor.getHTML();
       onChange(isRichTextEmpty(html) ? "" : html);
     },

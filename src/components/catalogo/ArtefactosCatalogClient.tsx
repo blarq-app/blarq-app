@@ -80,12 +80,12 @@ const SUBCATEGORY_OPTIONS = ["sanitario", "cocina", "iluminacion"];
 // "tag" del modelo; los artefactos del mismo tipo se juntan bajo un
 // encabezado. "" = sin tipo (van sueltos, sin encabezado).
 const TIPO_OPTIONS = [
-  "accesorio",
-  "grifería",
-  "ducha",
-  "mueble",
-  "mampara",
-  "wc",
+  "Accesorios",
+  "Griferías",
+  "Duchas",
+  "Muebles",
+  "Mamparas",
+  "WC",
 ];
 
 // Layout de columnas compartido entre el encabezado y cada fila. La primera

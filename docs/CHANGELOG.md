@@ -4,7 +4,11 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
-## 2026-06-10 — Catálogo de artefactos: tipo como desplegable + foto/proveedor editables + cuadro de edición + anchos
+## 2026-06-10 — Catálogo de artefactos: tipo desplegable + edición + anchos + 3 ajustes UX
+
+- **Foto rota → "+"**: si una imageUrl no carga (ej. links viejos de mk.cl / mkchile.vtexassets.com que ya no existen o están bloqueados), la fila muestra el "+" para subir otra, en vez del ícono de imagen rota. `onError` en el `<img>`.
+- **Enter guarda el formulario**: el cuadro de alta/edición pasa a ser un `<form>` con `e.preventDefault()` + botón submit; "Extraer" y "Cancelar" quedan `type="button"`. Antes Enter no hacía nada.
+- **Descripción (detalle) en 2 líneas y tipografía chica** (`textarea rows=2`, `text-[11px]`): los modelos largos no entraban en una sola línea.
 
 - **Anchos de columna**: los nombres largos (ej. "PORTARROLLO ATLAS BRUSHED") se truncaban porque las columnas numéricas de la derecha se llevaban mucho ancho. Se apretaron las columnas de la derecha (lista/dcto/total/costo/gan/std/editar), se redujo el `gap` y el padding, y se le dio prioridad al nombre. Además la tabla tiene **scroll horizontal** de red de seguridad con un mínimo en nombre/detalle: en pantalla ancha entra todo sin scroll; en pantallas angostas/zoom, el nombre se ve completo y se scrollea el resto. Imagen de fila a 48px.
 

@@ -646,9 +646,16 @@ export default function ArtefactosCatalogClient({
         />
       )}
 
-      {/* Formulario de alta / edición */}
+      {/* Formulario de alta / edición. Es un <form> para que Enter guarde. */}
       {(adding || editingId) && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (editingId) handleSaveEdit();
+            else handleAddNew();
+          }}
+          className="bg-white rounded-xl border border-gray-200 p-5 mb-4"
+        >
           <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-4">
             {editingId ? "Editar artefacto" : "Nuevo artefacto"}
           </h2>
@@ -669,6 +676,7 @@ export default function ArtefactosCatalogClient({
                 className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs outline-none focus:border-gray-500"
               />
               <button
+                type="button"
                 onClick={handleExtractForNew}
                 disabled={extractingForNew || !newItem.referenceLink}
                 className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded hover:bg-gray-800 disabled:opacity-50 whitespace-nowrap"
@@ -888,19 +896,20 @@ export default function ArtefactosCatalogClient({
 
           <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
             <button
+              type="button"
               onClick={closeForm}
               className="text-xs text-gray-600 px-3 py-1.5 hover:text-gray-900"
             >
               Cancelar
             </button>
             <button
-              onClick={editingId ? handleSaveEdit : handleAddNew}
+              type="submit"
               className="text-xs bg-gray-900 text-white px-4 py-1.5 rounded hover:bg-gray-800"
             >
               {editingId ? "Guardar cambios" : "Guardar en catálogo"}
             </button>
           </div>
-        </div>
+        </form>
       )}
 
       {/* Tabla de items */}
@@ -1001,6 +1010,9 @@ function CatalogItemRow({
   const sortable = useSortable({ id: item.id, disabled: !canReorder });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  // URL de imagen que no cargó (rota): mostramos el "+" para subir otra en vez
+  // del ícono roto. Ej.: links de mk.cl que ya no existen o están bloqueados.
+  const [failedImg, setFailedImg] = useState<string | null>(null);
 
   // Sube una foto desde la compu: la achica a miniatura y la guarda.
   async function handlePhotoFile(file: File | undefined | null) {
@@ -1069,11 +1081,12 @@ function CatalogItemRow({
           title="Click para subir / cambiar la foto"
           className="group relative w-12 h-12"
         >
-          {item.imageUrl ? (
+          {item.imageUrl && failedImg !== item.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={item.imageUrl}
               alt={item.name}
+              onError={() => setFailedImg(item.imageUrl)}
               className="w-12 h-12 object-contain bg-white border border-gray-200 rounded"
             />
           ) : (
@@ -1110,13 +1123,14 @@ function CatalogItemRow({
         />
       </div>
 
-      <div>
-        <input
-          type="text"
+      <div className="min-w-0">
+        {/* Detalle: tipografía chica y hasta 2 líneas (los modelos son largos). */}
+        <textarea
+          rows={2}
           value={item.detail ?? ""}
           placeholder="modelo / detalle"
           onChange={(e) => onUpdate({ detail: e.target.value })}
-          className="w-full bg-transparent border-0 p-0 text-gray-700 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+          className="w-full bg-transparent border-0 p-0 text-gray-700 text-[11px] leading-tight resize-none outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
         />
         {item.referenceLink && (
           <a

@@ -4,7 +4,10 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
-## 2026-06-10 — Catálogo de artefactos: tipo desplegable + edición + anchos + 3 ajustes UX
+## 2026-06-10 — Catálogo de artefactos: proxy de imágenes (fotos que no cargaban)
+
+- **Fotos que no cargaban**: las imágenes viven en el CDN de mk.cl (`mkchile.vtexassets.com` / `vteximg.com.br`). Cargan bien por HTTP (verificado: 23/24 daban 200), pero a MJ se le veían "todas rotas" — casi seguro un bloqueador del navegador que filtra ese CDN. Fix robusto del lado app: nuevo endpoint `GET /api/catalogo/img-proxy?u=<url>` que trae la imagen del CDN desde el servidor y la sirve por NUESTRO dominio, con whitelist de hosts (mk.cl/vtexassets/sodimac/easy…) para evitar SSRF y cache agresivo. El componente manda las imágenes externas por el proxy (`imgSrc()`); las subidas (data:) van directo. Así el navegador nunca le pide nada al CDN → no hay nada que bloquear.
+- **Foto muerta de MEZCLADOR** (era la única con URL 404, `GKL-03-0061` vieja): re-buscada la imagen actual en la API de VTEX y actualizada en prod.
 
 - **Foto rota → "+"**: si una imageUrl no carga (ej. links viejos de mk.cl / mkchile.vtexassets.com que ya no existen o están bloqueados), la fila muestra el "+" para subir otra, en vez del ícono de imagen rota. `onError` en el `<img>`.
 - **Enter guarda el formulario**: el cuadro de alta/edición pasa a ser un `<form>` con `e.preventDefault()` + botón submit; "Extraer" y "Cancelar" quedan `type="button"`. Antes Enter no hacía nada.

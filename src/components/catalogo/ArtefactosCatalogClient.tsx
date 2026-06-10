@@ -50,6 +50,16 @@ function clientTotal(it: {
   return Math.round(it.listPrice * (1 - (it.discountPercent ?? 0)));
 }
 
+// Src a usar para mostrar una imagen. Las externas (mk.cl / CDN de la tienda)
+// se sirven a través de NUESTRO proxy, para que ningún bloqueador del
+// navegador las frene. Las subidas (data:) y las relativas van directo.
+function imgSrc(url: string): string {
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return `/api/catalogo/img-proxy?u=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
 // Fila que devuelve el endpoint "Revisar precios" (guardado vs web ahora).
 interface PriceReviewRow {
   id: string;
@@ -840,7 +850,7 @@ export default function ArtefactosCatalogClient({
                 {newItem.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={newItem.imageUrl}
+                    src={imgSrc(newItem.imageUrl)}
                     alt="preview"
                     className="w-12 h-12 object-contain bg-white border border-gray-200 rounded shrink-0"
                   />
@@ -1084,7 +1094,7 @@ function CatalogItemRow({
           {item.imageUrl && failedImg !== item.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={item.imageUrl}
+              src={imgSrc(item.imageUrl)}
               alt={item.name}
               onError={() => setFailedImg(item.imageUrl)}
               className="w-12 h-12 object-contain bg-white border border-gray-200 rounded"

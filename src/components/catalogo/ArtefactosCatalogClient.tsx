@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
 import {
@@ -128,6 +128,43 @@ function ThousandsInput({
       className={className}
     />
   );
+}
+
+// Toma un archivo de imagen y lo achica a una miniatura comprimida (JPEG),
+// devuelta como data URL para guardar directo en imageUrl. Evita subir fotos
+// de 3-5 MB: las deja en ~40-100 KB. Sin almacenamiento externo.
+function fileToThumbnailDataUrl(
+  file: File,
+  maxSize = 600,
+  quality = 0.8
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Archivo de imagen inválido"));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxSize) {
+          height = Math.round((height * maxSize) / width);
+          width = maxSize;
+        } else if (height >= width && height > maxSize) {
+          width = Math.round((width * maxSize) / height);
+          height = maxSize;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("No se pudo procesar la imagen"));
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function ArtefactosCatalogClient({
@@ -701,17 +738,50 @@ export default function ArtefactosCatalogClient({
             </div>
             <div className="col-span-2">
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                URL de imagen (manual)
+                Foto — subí un archivo o pegá una URL
               </label>
-              <input
-                type="url"
-                value={newItem.imageUrl}
-                onChange={(e) =>
-                  setNewItem({ ...newItem, imageUrl: e.target.value })
-                }
-                placeholder="https://…/imagen.jpg"
-                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500"
-              />
+              <div className="flex items-center gap-2">
+                {newItem.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={newItem.imageUrl}
+                    alt="preview"
+                    className="w-12 h-12 object-contain bg-white border border-gray-200 rounded shrink-0"
+                  />
+                ) : (
+                  <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center text-gray-300 shrink-0">
+                    —
+                  </div>
+                )}
+                <label className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded hover:bg-gray-800 cursor-pointer whitespace-nowrap">
+                  Subir foto
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
+                      try {
+                        const dataUrl = await fileToThumbnailDataUrl(file);
+                        setNewItem((prev) => ({ ...prev, imageUrl: dataUrl }));
+                      } catch {
+                        setError("No se pudo procesar la imagen.");
+                      }
+                    }}
+                  />
+                </label>
+                <input
+                  type="url"
+                  value={newItem.imageUrl.startsWith("data:") ? "" : newItem.imageUrl}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, imageUrl: e.target.value })
+                  }
+                  placeholder="…o pegá https://…/imagen.jpg"
+                  className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500"
+                />
+              </div>
             </div>
             <div className="col-span-2">
               <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
@@ -814,6 +884,22 @@ function CatalogItemRow({
   onDelete: () => void;
 }) {
   const sortable = useSortable({ id: item.id, disabled: !canReorder });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Sube una foto desde la compu: la achica a miniatura y la guarda.
+  async function handlePhotoFile(file: File | undefined | null) {
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const dataUrl = await fileToThumbnailDataUrl(file);
+      onUpdate({ imageUrl: dataUrl });
+    } catch {
+      alert("No se pudo procesar la imagen. Probá con otra.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
   const style = {
     transform: CSS.Transform.toString(sortable.transform),
     transition: sortable.transition,
@@ -850,19 +936,22 @@ function CatalogItemRow({
       </div>
 
       <div className="flex justify-center">
-        {/* La foto se edita con click: abre un campo para pegar la URL.
-            (Cambiar/agregar foto a mano, como pidió MJ.) */}
+        {/* Subir foto desde la compu: click abre el selector de archivo; la
+            imagen se achica a miniatura y se guarda (como pidió MJ). */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            handlePhotoFile(e.target.files?.[0]);
+            e.target.value = ""; // permite re-subir el mismo archivo
+          }}
+        />
         <button
           type="button"
-          onClick={() => {
-            const url = window.prompt(
-              "Pegá la URL de la foto (dejá vacío para quitarla):",
-              item.imageUrl ?? ""
-            );
-            if (url === null) return; // canceló
-            onUpdate({ imageUrl: url.trim() || null });
-          }}
-          title="Click para cambiar la foto"
+          onClick={() => fileInputRef.current?.click()}
+          title="Click para subir / cambiar la foto"
           className="group relative w-14 h-14"
         >
           {item.imageUrl ? (
@@ -877,8 +966,8 @@ function CatalogItemRow({
               +
             </div>
           )}
-          <span className="absolute inset-0 hidden group-hover:flex items-center justify-center bg-black/40 rounded text-white text-[9px] uppercase tracking-wider">
-            cambiar
+          <span className="absolute inset-0 hidden group-hover:flex items-center justify-center bg-black/40 rounded text-white text-[9px] uppercase tracking-wider text-center leading-tight px-0.5">
+            {uploadingPhoto ? "subiendo…" : "subir foto"}
           </span>
         </button>
       </div>

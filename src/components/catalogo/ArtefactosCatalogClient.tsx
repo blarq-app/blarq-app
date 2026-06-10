@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
 import {
@@ -257,15 +257,20 @@ export default function ArtefactosCatalogClient({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  async function onDragEnd(e: DragEndEvent) {
+  // Arrastrar reordena DENTRO de un grupo (mismo tipo). El orden de los
+  // grupos lo fija el tipo (TIPO_OPTIONS), no el arrastre; para mover un
+  // artefacto de tipo se usa el desplegable de "tipo".
+  async function onDragEndGroup(e: DragEndEvent, groupItems: CatalogItem[]) {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const oldIdx = tabItems.findIndex((it) => it.id === active.id);
-    const newIdx = tabItems.findIndex((it) => it.id === over.id);
+    const oldIdx = groupItems.findIndex((it) => it.id === active.id);
+    const newIdx = groupItems.findIndex((it) => it.id === over.id);
     if (oldIdx < 0 || newIdx < 0) return;
-    const reordered = arrayMove(tabItems, oldIdx, newIdx);
+    const reordered = arrayMove(groupItems, oldIdx, newIdx);
 
-    // Optimista: reasigna sortOrder consecutivo a toda la pestaña.
+    // Optimista: reasigna sortOrder 0..n a los items de ESTE grupo. (El
+    // solapamiento de sortOrder entre grupos no importa: el display ordena
+    // primero por grupo y después por sortOrder dentro del grupo.)
     const orderMap = new Map(reordered.map((it, i) => [it.id, i]));
     setItems((prev) =>
       prev.map((it) =>
@@ -273,7 +278,6 @@ export default function ArtefactosCatalogClient({
       )
     );
 
-    // Persistir.
     try {
       await fetch("/api/catalogo/artefactos/reorder", {
         method: "PATCH",
@@ -535,38 +539,28 @@ export default function ArtefactosCatalogClient({
     }
   }
 
-  // ── Render: filas + encabezados de grupo por tag ──────────────────────
-  // Recorremos la lista visible y, cada vez que el tag cambia respecto a la
-  // fila anterior, insertamos un encabezado con el tipo. Las filas sin tag
-  // no muestran encabezado (evita ruido).
-  const rows: ReactNode[] = [];
-  let prevTag: string | null = null; // centinela imposible para forzar el primer chequeo
-  for (const item of visible) {
-    const tagKey = (item.tag ?? "").trim();
-    if (tagKey !== prevTag) {
-      if (tagKey) {
-        rows.push(
-          <div
-            key={`hdr-${item.id}`}
-            className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-500 uppercase tracking-wider"
-          >
-            {tagKey}
-          </div>
-        );
-      }
-      prevTag = tagKey;
+  // ── Agrupado real por tipo ────────────────────────────────────────────
+  // Junta TODOS los artefactos del mismo tipo bajo un solo encabezado (no
+  // importa dónde estén). Orden de grupos: el del desplegable (TIPO_OPTIONS),
+  // después tipos viejos no estándar, y "sin tipo" al final. Dentro de cada
+  // grupo, el orden es por sortOrder (lo que MJ arrastra).
+  const groups: { tag: string; items: CatalogItem[] }[] = (() => {
+    const byTag = new Map<string, CatalogItem[]>();
+    for (const it of visible) {
+      const key = (it.tag ?? "").trim();
+      const arr = byTag.get(key);
+      if (arr) arr.push(it);
+      else byTag.set(key, [it]);
     }
-    rows.push(
-      <CatalogItemRow
-        key={item.id}
-        item={item}
-        canReorder={!isFiltering}
-        onUpdate={(patch) => updateItem(item.id, patch)}
-        onEdit={() => openEdit(item)}
-        onDelete={() => deleteItem(item.id)}
-      />
-    );
-  }
+    const rank = (tag: string) => {
+      if (tag === "") return 100000; // sin tipo, al final
+      const idx = TIPO_OPTIONS.indexOf(tag);
+      return idx >= 0 ? idx : 50000; // tipos viejos no estándar, antes de "sin tipo"
+    };
+    return [...byTag.entries()]
+      .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
+      .map(([tag, items]) => ({ tag, items }));
+  })();
 
   return (
     <div>
@@ -934,8 +928,9 @@ export default function ArtefactosCatalogClient({
 
         {!isFiltering && tabItems.length > 1 && (
           <div className="px-4 py-1.5 bg-white border-b border-gray-100 text-[11px] text-gray-400">
-            Arrastrá una fila desde la manija (⋮⋮) para ordenarla a tu gusto.
-            Las filas con el mismo tipo se agrupan solas con un encabezado.
+            Los artefactos del mismo tipo quedan juntos bajo su encabezado.
+            Dentro de cada tipo, arrastrá desde la manija (⋮⋮) para ordenarlos.
+            Para cambiar de tipo, usá el desplegable de la fila.
           </div>
         )}
 
@@ -946,19 +941,43 @@ export default function ArtefactosCatalogClient({
               : "No hay resultados con esos filtros."}
           </div>
         ) : (
-          <DndContext
-            id="artefactos-catalog-dnd"
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={onDragEnd}
-          >
-            <SortableContext
-              items={visible.map((it) => it.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              {rows}
-            </SortableContext>
-          </DndContext>
+          groups.map((g) => (
+            <div key={g.tag || "__sin_tipo__"}>
+              {g.tag ? (
+                <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                  {g.tag}
+                </div>
+              ) : (
+                groups.length > 1 && (
+                  <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                    Sin tipo
+                  </div>
+                )
+              )}
+              <DndContext
+                id={`artefactos-dnd-${g.tag || "sin-tipo"}`}
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(e) => onDragEndGroup(e, g.items)}
+              >
+                <SortableContext
+                  items={g.items.map((it) => it.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {g.items.map((item) => (
+                    <CatalogItemRow
+                      key={item.id}
+                      item={item}
+                      canReorder={!isFiltering}
+                      onUpdate={(patch) => updateItem(item.id, patch)}
+                      onEdit={() => openEdit(item)}
+                      onDelete={() => deleteItem(item.id)}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+            </div>
+          ))
         )}
       </div>
     </div>

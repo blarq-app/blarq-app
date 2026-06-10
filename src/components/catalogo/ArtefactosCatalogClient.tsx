@@ -91,7 +91,7 @@ const TIPO_OPTIONS = [
 // Layout de columnas compartido entre el encabezado y cada fila. La primera
 // columna angosta es la manija para arrastrar.
 const GRID_COLS =
-  "grid-cols-[1.5rem_3.5rem_minmax(0,1fr)_minmax(0,1.25fr)_6rem_5.5rem_3rem_6rem_6rem_5rem_2.5rem_2rem]";
+  "grid-cols-[1.5rem_3.5rem_minmax(0,1fr)_minmax(0,1.25fr)_6rem_5.5rem_3rem_6rem_6rem_5rem_2.5rem_5rem]";
 
 // Input numérico con separadores de miles.
 function ThousandsInput({
@@ -178,6 +178,8 @@ export default function ArtefactosCatalogClient({
   const [query, setQuery] = useState("");
   const [onlyStandard, setOnlyStandard] = useState(false);
   const [adding, setAdding] = useState(false);
+  // Si está seteado, el formulario está editando ese artefacto (no creando).
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [newItem, setNewItem] = useState({
     name: "",
     detail: "",
@@ -362,6 +364,92 @@ export default function ArtefactosCatalogClient({
     }
   }
 
+  // Cierra el formulario (sea de alta o edición) y lo deja en blanco.
+  function closeForm() {
+    setAdding(false);
+    setEditingId(null);
+    setError(null);
+    setNewItem({
+      name: "",
+      detail: "",
+      brand: "",
+      subcategory: activeTab,
+      tag: "",
+      supplier: "",
+      referenceLink: "",
+      imageUrl: "",
+      listPrice: 0,
+      clientPrice: 0,
+      realCostBlarq: 0,
+      discountPercent: 0,
+      isStandard: false,
+    });
+  }
+
+  // Abre el formulario completo cargado con los datos de un artefacto.
+  function openEdit(item: CatalogItem) {
+    setAdding(false);
+    setError(null);
+    setEditingId(item.id);
+    setNewItem({
+      name: item.name,
+      detail: item.detail ?? "",
+      brand: item.brand ?? "",
+      subcategory: item.subcategory,
+      tag: item.tag ?? "",
+      supplier: item.supplier ?? "",
+      referenceLink: item.referenceLink ?? "",
+      imageUrl: item.imageUrl ?? "",
+      listPrice: item.listPrice ?? 0,
+      clientPrice: item.clientPrice ?? 0,
+      realCostBlarq: item.realCostBlarq ?? 0,
+      discountPercent: item.discountPercent ?? 0,
+      isStandard: item.isStandard,
+    });
+  }
+
+  // Guarda los cambios del artefacto en edición (PUT).
+  async function handleSaveEdit() {
+    if (!editingId) return;
+    if (!newItem.name.trim()) {
+      setError("El nombre es obligatorio.");
+      return;
+    }
+    setError(null);
+    const patch = {
+      name: newItem.name,
+      detail: newItem.detail || null,
+      brand: newItem.brand || null,
+      subcategory: newItem.subcategory,
+      tag: newItem.tag || null,
+      supplier: newItem.supplier || null,
+      referenceLink: newItem.referenceLink || null,
+      imageUrl: newItem.imageUrl || null,
+      listPrice: newItem.listPrice,
+      discountPercent: newItem.discountPercent || null,
+      realCostBlarq: newItem.realCostBlarq || null,
+      isStandard: newItem.isStandard,
+    };
+    try {
+      const res = await fetch(`/api/catalogo/artefactos/${editingId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Error al guardar");
+      }
+      setItems((prev) =>
+        prev.map((it) => (it.id === editingId ? { ...it, ...patch } : it))
+      );
+      setActiveTab(newItem.subcategory);
+      closeForm();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error inesperado");
+    }
+  }
+
   // Extraer datos al pegar URL en el formulario de "nuevo item".
   async function handleExtractForNew() {
     if (!newItem.referenceLink) {
@@ -474,6 +562,7 @@ export default function ArtefactosCatalogClient({
         item={item}
         canReorder={!isFiltering}
         onUpdate={(patch) => updateItem(item.id, patch)}
+        onEdit={() => openEdit(item)}
         onDelete={() => deleteItem(item.id)}
       />
     );
@@ -536,9 +625,14 @@ export default function ArtefactosCatalogClient({
         </button>
         <button
           onClick={() => {
-            // El formulario nuevo arranca en la pestaña activa.
+            if (adding) {
+              closeForm();
+              return;
+            }
+            // Abrir alta en blanco (cierra una edición si la había).
+            closeForm();
             setNewItem((prev) => ({ ...prev, subcategory: activeTab }));
-            setAdding(!adding);
+            setAdding(true);
           }}
           className="text-sm bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800"
         >
@@ -558,11 +652,11 @@ export default function ArtefactosCatalogClient({
         />
       )}
 
-      {/* Formulario de creación */}
-      {adding && (
+      {/* Formulario de alta / edición */}
+      {(adding || editingId) && (
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
           <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-4">
-            Nuevo artefacto
+            {editingId ? "Editar artefacto" : "Nuevo artefacto"}
           </h2>
 
           {/* Atajo: link del producto + extraer */}
@@ -800,16 +894,16 @@ export default function ArtefactosCatalogClient({
 
           <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
             <button
-              onClick={() => setAdding(false)}
+              onClick={closeForm}
               className="text-xs text-gray-600 px-3 py-1.5 hover:text-gray-900"
             >
               Cancelar
             </button>
             <button
-              onClick={handleAddNew}
+              onClick={editingId ? handleSaveEdit : handleAddNew}
               className="text-xs bg-gray-900 text-white px-4 py-1.5 rounded hover:bg-gray-800"
             >
-              Guardar en catálogo
+              {editingId ? "Guardar cambios" : "Guardar en catálogo"}
             </button>
           </div>
         </div>
@@ -876,11 +970,13 @@ function CatalogItemRow({
   item,
   canReorder,
   onUpdate,
+  onEdit,
   onDelete,
 }: {
   item: CatalogItem;
   canReorder: boolean;
   onUpdate: (patch: Partial<CatalogItem>) => void;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   const sortable = useSortable({ id: item.id, disabled: !canReorder });
@@ -1124,10 +1220,17 @@ function CatalogItemRow({
         </label>
       </div>
 
-      <div className="text-center">
+      <div className="flex items-center justify-center gap-1.5">
+        <button
+          onClick={onEdit}
+          className="text-[10px] text-gray-500 border border-gray-300 rounded px-1.5 py-0.5 hover:border-gray-500 hover:text-gray-900"
+          title="Editar (abre el cuadro completo)"
+        >
+          Editar
+        </button>
         <button
           onClick={onDelete}
-          className="text-gray-300 hover:text-red-600 text-lg"
+          className="text-gray-300 hover:text-red-600 text-lg leading-none"
           title="Borrar"
         >
           ×

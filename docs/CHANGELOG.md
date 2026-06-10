@@ -4,7 +4,9 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
-## 2026-06-10 — Catálogo de artefactos: tipo como desplegable + foto y proveedor editables
+## 2026-06-10 — Catálogo de artefactos: tipo como desplegable + foto/proveedor editables + cuadro de edición
+
+- **Cuadro de edición completo** (MJ se arrepintió de la edición solo-inline): cada fila tiene un botón "Editar" que abre el mismo formulario del alta, pre-llenado con TODOS los campos — incluido el **link** y el **tipo**, que no se podían editar en la tabla. Reusa `newItem` + `editingId`; guarda con PUT. La edición inline en la tabla se mantiene como atajo (pendiente: decidir si la tabla pasa a solo-lectura).
 
 - **"Tipo" pasa a desplegable cerrado** (accesorio, grifería, ducha, mueble, mampara, wc + "sin tipo"), en la fila y en el alta. Sigue agrupando: los del mismo tipo se juntan bajo un encabezado (MJ confirmó querer el agrupado, no el orden libre). Aplica a las 3 pestañas (Baños/Cocina/Iluminación) por ser la misma pantalla.
 - **Editar directo en la tabla** (no formulario aparte): se suman dos campos editables inline que faltaban — **proveedor/tienda** (debajo de la marca; resuelve el caso "marca CHC vs tienda MK") y **foto**. El resto (nombre, marca, detalle, precios, dcto, std, subcategoría) ya era editable inline.

@@ -7,6 +7,10 @@ import {
   buildArtefactosFooter,
 } from "@/lib/pdf/ArtefactosPDF.html";
 import { renderPDF } from "@/lib/pdf/renderPDF";
+import {
+  getObraBaselineItems,
+  computeChangeMarkers,
+} from "@/lib/presupuesto/versionDiff";
 
 // Forzar Node runtime (no edge) — Puppeteer/Chromium necesita Node.
 export const runtime = "nodejs";
@@ -55,6 +59,11 @@ export async function GET(
     const baseName = budget.project.name.replace(/\s+/g, "_");
 
     if (budget.type === "obra") {
+      // Marca de cambio por partida contra la última versión enviada al
+      // cliente. Si no hay versión base (ej. V1), markers quedan todos null
+      // y no se pinta nada. Ver src/lib/presupuesto/versionDiff.ts.
+      const baseline = await getObraBaselineItems(budget);
+      const markers = computeChangeMarkers(budget.obraItems, baseline);
       html = renderObraHTML({
         project: budget.project,
         budget: {
@@ -63,7 +72,10 @@ export async function GET(
           ggPercentage: budget.ggPercentage,
           utilityPercentage: budget.utilityPercentage,
         },
-        items: budget.obraItems,
+        items: budget.obraItems.map((it) => ({
+          ...it,
+          changeMarker: markers.get(it.lineageId)?.marker ?? null,
+        })),
         paymentTerms: budget.paymentTerms.map((t) => ({
           stage: t.stage,
           percentage: t.percentage,

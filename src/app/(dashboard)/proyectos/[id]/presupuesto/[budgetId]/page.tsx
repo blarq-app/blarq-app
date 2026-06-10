@@ -4,6 +4,7 @@ import Link from "next/link";
 import ObraEditor from "@/components/presupuesto/ObraEditor";
 import MueblesEditor from "@/components/presupuesto/MueblesEditor";
 import ArtefactosEditor from "@/components/presupuesto/ArtefactosEditor";
+import { getObraBaselineItems } from "@/lib/presupuesto/versionDiff";
 
 export default async function PresupuestoDetailPage({
   params,
@@ -43,6 +44,12 @@ export default async function PresupuestoDetailPage({
   });
 
   if (!budget) notFound();
+
+  // Base de comparación entre versiones: items de la foto de la última versión
+  // enviada al cliente (o null si no hay). El editor calcula las marcas al
+  // vuelo contra esto, así se actualizan mientras MJ edita. Solo obra.
+  const baselineItems =
+    budget.type === "obra" ? await getObraBaselineItems(budget) : null;
 
   return (
     <div>
@@ -91,7 +98,11 @@ export default async function PresupuestoDetailPage({
       </div>
 
       {budget.type === "obra" && (
-        <ObraEditor budget={budget} projectId={project.id} />
+        <ObraEditor
+          budget={budget}
+          projectId={project.id}
+          baselineItems={baselineItems}
+        />
       )}
       {budget.type === "muebles" && (
         <MueblesEditor budget={budget} projectId={project.id} />

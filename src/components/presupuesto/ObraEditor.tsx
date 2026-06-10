@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Fragment, useCallback } from "react";
+import { useState, useEffect, useRef, Fragment, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { OBRA_CHAPTERS, ObraChapter, formatCLP } from "@/lib/utils";
 import MoneyInput from "@/components/ui/MoneyInput";
@@ -28,6 +28,11 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import {
+  computeChangeMarkers,
+  type BaselineItem,
+  type ChangeResult,
+} from "@/lib/presupuesto/versionDiff";
 
 // Props que SortableRow le pasa a la fila (via render-prop) para enganchar
 // el arrastre: ref del nodo, estilo con el transform de dnd-kit, y los
@@ -111,6 +116,7 @@ interface ObraItemComponent {
 
 interface ObraItem {
   id: string;
+  lineageId: string;
   chapter: string;
   subChapter: string | null;
   itemNumber: string;
@@ -188,12 +194,28 @@ const DEFAULT_PAYMENT_TERMS = [
 export default function ObraEditor({
   budget: initialBudget,
   projectId,
+  baselineItems = null,
 }: {
   budget: Budget;
   projectId: string;
+  // Items de la foto de la última versión enviada al cliente. Null si no hay
+  // versión base. Se usa para marcar qué partidas subieron/bajaron/son nuevas.
+  baselineItems?: BaselineItem[] | null;
 }) {
   const router = useRouter();
   const [items, setItems] = useState<ObraItem[]>(initialBudget.obraItems);
+
+  // Marcas de cambio (subió/bajó/nuevo) por partida, contra la versión base.
+  // Se recalcula en vivo cuando MJ edita: usa el total actual de cada item.
+  // Mapa lineageId -> { marker, prevTotal }. Ver versionDiff.ts.
+  const changeMarkers = useMemo<Map<string, ChangeResult>>(
+    () =>
+      computeChangeMarkers(
+        items.map((it) => ({ lineageId: it.lineageId, total: it.total })),
+        baselineItems
+      ),
+    [items, baselineItems]
+  );
   const [ggPercent, setGgPercent] = useState(initialBudget.ggPercentage || 20);
   const [utilPercent, setUtilPercent] = useState(
     initialBudget.utilityPercentage || 5
@@ -1083,6 +1105,7 @@ export default function ObraEditor({
                 <tbody className="divide-y divide-gray-50">
                   {chapter.items.map((item, itemIdx) => {
                     const prevItem = itemIdx > 0 ? chapter.items[itemIdx - 1] : null;
+                    const chg = changeMarkers.get(item.lineageId);
                     const showSubHeader =
                       item.subChapter &&
                       (!prevItem || prevItem.subChapter !== item.subChapter);
@@ -1211,6 +1234,41 @@ export default function ObraEditor({
                         >
                           {expandedItems[item.id] ? "▾" : "▸"}
                         </button>
+                        {/* Marca de cambio vs. la última versión enviada al
+                            cliente: flecha (subió/bajó) o "nuevo". Monocromática;
+                            tooltip con el antes → ahora. */}
+                        {chg?.marker === "up" && (
+                          <span
+                            className="mr-1 font-bold text-gray-900 align-middle"
+                            title={
+                              chg.prevTotal != null
+                                ? `Subió · antes ${formatCLP(chg.prevTotal)} → ahora ${formatCLP(item.total)}`
+                                : "Subió respecto a la versión enviada"
+                            }
+                          >
+                            ↑
+                          </span>
+                        )}
+                        {chg?.marker === "down" && (
+                          <span
+                            className="mr-1 font-bold text-gray-900 align-middle"
+                            title={
+                              chg.prevTotal != null
+                                ? `Bajó · antes ${formatCLP(chg.prevTotal)} → ahora ${formatCLP(item.total)}`
+                                : "Bajó respecto a la versión enviada"
+                            }
+                          >
+                            ↓
+                          </span>
+                        )}
+                        {chg?.marker === "added" && (
+                          <span
+                            className="mr-1 inline-block rounded-full border border-gray-900 px-1 text-[8px] font-semibold uppercase tracking-wide text-gray-900 align-middle"
+                            title="Partida nueva — no estaba en la versión enviada al cliente"
+                          >
+                            Nuevo
+                          </span>
+                        )}
                         {chapter.index}.{itemIdx + 1}
                         {/* Zona (subChapter) — selector inline. Si la partida
                             no tiene zona, muestra "+ zona" muy discreto al

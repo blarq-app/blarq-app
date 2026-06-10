@@ -4,7 +4,11 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
-## 2026-06-09 — Catálogo de artefactos: columnas Lista / Dcto / Total + costo oculto + "Revisar precios"
+## 2026-06-10 — Catálogo de artefactos: tipo como desplegable + foto y proveedor editables
+
+- **"Tipo" pasa a desplegable cerrado** (accesorio, grifería, ducha, mueble, mampara, wc + "sin tipo"), en la fila y en el alta. Sigue agrupando: los del mismo tipo se juntan bajo un encabezado (MJ confirmó querer el agrupado, no el orden libre). Aplica a las 3 pestañas (Baños/Cocina/Iluminación) por ser la misma pantalla.
+- **Editar directo en la tabla** (no formulario aparte): se suman dos campos editables inline que faltaban — **proveedor/tienda** (debajo de la marca; resuelve el caso "marca CHC vs tienda MK") y **foto** (click en la celda de imagen → pega la URL; "+" si no hay). El resto (nombre, marca, detalle, precios, dcto, std, subcategoría) ya era editable inline.
+- Limpieza: se eliminó un byte nulo viejo en el sentinel `prevTag` (hacía que git/grep trataran el archivo como binario). Solo UI; sin cambios de schema ni de datos. Verificado: typecheck limpio + visual con mock (agrupado, desplegable, proveedor, foto).
 
 - **Layout como el Excel de MJ**: la tabla muestra, por fila, **Precio lista (sin dcto) · Dcto % · Total** (lo que paga el cliente = lista × (1 − dcto)), y aparte **Mi costo · Ganancia** en columnas con fondo gris (NO las ve el cliente; ganancia = Total − Mi costo). El dcto es editable (auto del web cuando la tienda lo exponga; si no, en blanco). El costo se carga a mano (a futuro: subir el PDF de la vendedora y autocompletar). Total y ganancia se calculan solos.
 - **Modelo**: `listPrice` (lista sin dcto) + `discountPercent` (dcto al cliente, ahora el driver) + `realCostBlarq` (mi costo, manual). Se agregaron columnas `clientPrice` (queda sin uso por ahora) + `realCostBlarq` a `ArtefactoCatalog` (aditivo). El par `listPrice`+`discountPercent` es el mismo que ya consumen los presupuestos (`ArtefactoItem`).

@@ -76,6 +76,18 @@ const SUBCATEGORY_LABELS: Record<string, string> = {
 
 const SUBCATEGORY_OPTIONS = ["sanitario", "cocina", "iluminacion"];
 
+// Tipos para agrupar (desplegable cerrado, definido con MJ). Es el campo
+// "tag" del modelo; los artefactos del mismo tipo se juntan bajo un
+// encabezado. "" = sin tipo (van sueltos, sin encabezado).
+const TIPO_OPTIONS = [
+  "accesorio",
+  "grifería",
+  "ducha",
+  "mueble",
+  "mampara",
+  "wc",
+];
+
 // Layout de columnas compartido entre el encabezado y cada fila. La primera
 // columna angosta es la manija para arrastrar.
 const GRID_COLS =
@@ -403,7 +415,7 @@ export default function ArtefactosCatalogClient({
   // fila anterior, insertamos un encabezado con el tipo. Las filas sin tag
   // no muestran encabezado (evita ruido).
   const rows: ReactNode[] = [];
-  let prevTag = " "; // centinela imposible para forzar el primer chequeo
+  let prevTag: string | null = null; // centinela imposible para forzar el primer chequeo
   for (const item of visible) {
     const tagKey = (item.tag ?? "").trim();
     if (tagKey !== prevTag) {
@@ -627,17 +639,22 @@ export default function ArtefactosCatalogClient({
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                Tipo (opcional, para agrupar)
+                Tipo (para agrupar)
               </label>
-              <input
-                type="text"
+              <select
                 value={newItem.tag}
                 onChange={(e) =>
                   setNewItem({ ...newItem, tag: e.target.value })
                 }
-                placeholder="grifería, muebles, WC…"
-                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500"
-              />
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500 bg-white"
+              >
+                <option value="">Sin tipo</option>
+                {TIPO_OPTIONS.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
@@ -833,18 +850,37 @@ function CatalogItemRow({
       </div>
 
       <div className="flex justify-center">
-        {item.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={item.imageUrl}
-            alt={item.name}
-            className="w-14 h-14 object-contain bg-white border border-gray-200 rounded"
-          />
-        ) : (
-          <div className="w-14 h-14 bg-gray-100 rounded flex items-center justify-center text-gray-300 text-lg">
-            —
-          </div>
-        )}
+        {/* La foto se edita con click: abre un campo para pegar la URL.
+            (Cambiar/agregar foto a mano, como pidió MJ.) */}
+        <button
+          type="button"
+          onClick={() => {
+            const url = window.prompt(
+              "Pegá la URL de la foto (dejá vacío para quitarla):",
+              item.imageUrl ?? ""
+            );
+            if (url === null) return; // canceló
+            onUpdate({ imageUrl: url.trim() || null });
+          }}
+          title="Click para cambiar la foto"
+          className="group relative w-14 h-14"
+        >
+          {item.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={item.imageUrl}
+              alt={item.name}
+              className="w-14 h-14 object-contain bg-white border border-gray-200 rounded"
+            />
+          ) : (
+            <div className="w-14 h-14 bg-gray-100 rounded flex items-center justify-center text-gray-300 text-lg">
+              +
+            </div>
+          )}
+          <span className="absolute inset-0 hidden group-hover:flex items-center justify-center bg-black/40 rounded text-white text-[9px] uppercase tracking-wider">
+            cambiar
+          </span>
+        </button>
       </div>
 
       <div>
@@ -860,6 +896,13 @@ function CatalogItemRow({
           placeholder="marca"
           onChange={(e) => onUpdate({ brand: e.target.value })}
           className="w-full bg-transparent border-0 p-0 text-gray-500 text-[11px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5 mt-0.5"
+        />
+        <input
+          type="text"
+          value={item.supplier ?? ""}
+          placeholder="proveedor / tienda"
+          onChange={(e) => onUpdate({ supplier: e.target.value })}
+          className="w-full bg-transparent border-0 p-0 text-gray-400 text-[10px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
         />
       </div>
 
@@ -897,13 +940,23 @@ function CatalogItemRow({
             </option>
           ))}
         </select>
-        <input
-          type="text"
+        {/* Tipo: desplegable cerrado. Define el grupo (encabezado). */}
+        <select
           value={item.tag ?? ""}
-          placeholder="tipo (grifería, muebles…)"
-          onChange={(e) => onUpdate({ tag: e.target.value })}
-          className="w-full bg-transparent border-0 p-0 text-gray-500 text-[11px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5 mt-0.5"
-        />
+          onChange={(e) => onUpdate({ tag: e.target.value || null })}
+          className="w-full bg-transparent border-0 p-0 text-gray-500 text-[11px] outline-none cursor-pointer focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5 mt-0.5"
+          title="Tipo (agrupa los artefactos)"
+        >
+          <option value="">sin tipo</option>
+          {TIPO_OPTIONS.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+          {item.tag && !TIPO_OPTIONS.includes(item.tag) && (
+            <option value={item.tag}>{item.tag}</option>
+          )}
+        </select>
       </div>
 
       {/* Precio lista (sin descuento) */}

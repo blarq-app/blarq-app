@@ -4,7 +4,9 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
-## 2026-06-10 — Catálogo de artefactos: tipo como desplegable + foto/proveedor editables + cuadro de edición
+## 2026-06-10 — Catálogo de artefactos: tipo como desplegable + foto/proveedor editables + cuadro de edición + anchos
+
+- **Anchos de columna**: los nombres largos (ej. "PORTARROLLO ATLAS BRUSHED") se truncaban porque las columnas numéricas de la derecha se llevaban mucho ancho. Se apretaron las columnas de la derecha (lista/dcto/total/costo/gan/std/editar), se redujo el `gap` y el padding, y se le dio prioridad al nombre. Además la tabla tiene **scroll horizontal** de red de seguridad con un mínimo en nombre/detalle: en pantalla ancha entra todo sin scroll; en pantallas angostas/zoom, el nombre se ve completo y se scrollea el resto. Imagen de fila a 48px.
 
 - **Cuadro de edición completo** (MJ se arrepintió de la edición solo-inline): cada fila tiene un botón "Editar" que abre el mismo formulario del alta, pre-llenado con TODOS los campos — incluido el **link** y el **tipo**, que no se podían editar en la tabla. Reusa `newItem` + `editingId`; guarda con PUT. La edición inline en la tabla se mantiene como atajo.
 - **Agrupado real por tipo** (antes el encabezado salía "cada vez que cambiaba el tipo en el orden" → si había items del mismo tipo separados, aparecían encabezados duplicados, ej. "DUCHA" dos veces; y los "sin tipo" colgaban del grupo anterior). Ahora se juntan TODOS los del mismo tipo bajo un solo encabezado; los sin tipo van a su propia sección "Sin tipo" al final. Orden de grupos por `TIPO_OPTIONS`. El arrastre pasa a ser **dentro de cada grupo** (para cambiar de tipo se usa el desplegable). Etiquetas finales: Accesorios · Griferías · Duchas · Muebles · Mamparas · WC (+ normalización de los tags viejos de prod).

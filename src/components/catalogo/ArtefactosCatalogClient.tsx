@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
 import {
@@ -91,7 +91,7 @@ const TIPO_OPTIONS = [
 // Layout de columnas compartido entre el encabezado y cada fila. La primera
 // columna angosta es la manija para arrastrar.
 const GRID_COLS =
-  "grid-cols-[1.5rem_3.5rem_minmax(0,1fr)_minmax(0,1.25fr)_6rem_5.5rem_3rem_6rem_6rem_5rem_2.5rem_5rem]";
+  "grid-cols-[1.25rem_3.25rem_minmax(13rem,1.8fr)_minmax(7.5rem,1.2fr)_5.25rem_4.5rem_2.5rem_5rem_4.75rem_4.5rem_2rem_4.25rem]";
 
 // Input numérico con separadores de miles.
 function ThousandsInput({
@@ -904,9 +904,9 @@ export default function ArtefactosCatalogClient({
       )}
 
       {/* Tabla de items */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div
-          className={`grid ${GRID_COLS} items-center gap-3 px-4 py-2 border-b border-gray-200 bg-gray-50 text-[10px] font-semibold text-gray-500 uppercase tracking-wider`}
+          className={`grid ${GRID_COLS} items-center gap-2 px-3 py-2 border-b border-gray-200 bg-gray-50 text-[10px] font-semibold text-gray-500 uppercase tracking-wider`}
         >
           <div></div>
           <div className="text-center">Img</div>
@@ -942,7 +942,7 @@ export default function ArtefactosCatalogClient({
           </div>
         ) : (
           groups.map((g) => (
-            <div key={g.tag || "__sin_tipo__"}>
+            <Fragment key={g.tag || "__sin_tipo__"}>
               {g.tag ? (
                 <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                   {g.tag}
@@ -976,7 +976,7 @@ export default function ArtefactosCatalogClient({
                   ))}
                 </SortableContext>
               </DndContext>
-            </div>
+            </Fragment>
           ))
         )}
       </div>
@@ -1027,7 +1027,7 @@ function CatalogItemRow({
     <div
       ref={sortable.setNodeRef}
       style={style}
-      className={`grid ${GRID_COLS} items-center gap-3 px-4 py-2 border-b border-gray-100 last:border-b-0 text-xs hover:bg-gray-50`}
+      className={`grid ${GRID_COLS} items-center gap-2 px-3 py-2 border-b border-gray-100 last:border-b-0 text-xs hover:bg-gray-50`}
     >
       {/* Manija de arrastre */}
       <div className="flex justify-center">
@@ -1067,17 +1067,17 @@ function CatalogItemRow({
           type="button"
           onClick={() => fileInputRef.current?.click()}
           title="Click para subir / cambiar la foto"
-          className="group relative w-14 h-14"
+          className="group relative w-12 h-12"
         >
           {item.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={item.imageUrl}
               alt={item.name}
-              className="w-14 h-14 object-contain bg-white border border-gray-200 rounded"
+              className="w-12 h-12 object-contain bg-white border border-gray-200 rounded"
             />
           ) : (
-            <div className="w-14 h-14 bg-gray-100 rounded flex items-center justify-center text-gray-300 text-lg">
+            <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center text-gray-300 text-lg">
               +
             </div>
           )}

@@ -28,6 +28,7 @@ const ALLOWED_HOSTS = [
   "easy.cl",
   "falabella.com",
   "scene7.com",
+  "cdn.shopify.com", // Kitchen House (Teka) — su tienda corre en Shopify
 ];
 
 const BROWSER_UA =

@@ -378,6 +378,13 @@ const TARJETA_MERCHANTS: { id: string; glosa: RegExp; name: RegExp }[] = [
   // la variante pegada ("CASAMUSA"). Misma máquina conservadora que el resto:
   // mismo monto + ventana de fecha + candidato único.
   { id: "casamusa", glosa: /casa\s*musa/, name: /casa\s*musa/ },
+  // Ferretería J. Garachena: compra con tarjeta sin RUT. El banco trunca la
+  // glosa a "Compra FERRETERIA J.GARA" (sin espacio tras el punto); la factura
+  // la emite "FERRETERIA J. GARACHENA SA." (con espacio). El \.?\s* tolera las
+  // dos formas y "gara" engancha tanto "j.gara" como "j. garachena". Mismo
+  // candado conservador: dos facturas del mismo monto en la ventana → ambiguo,
+  // queda pendiente (esta ferretería emite muchas boletas chicas).
+  { id: "garachena", glosa: /ferreteria j\.?\s*gara/, name: /ferreteria j\.?\s*gara/ },
 ];
 const normTxt = (s: string | null) =>
   (s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");

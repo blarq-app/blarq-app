@@ -92,6 +92,24 @@ check("compra CASA MUSA concilia con factura Casa Musa", decideMovementInvoiceMa
   candidates: [C("F1", "93689000-8", "Casa Musa Electronica S.A.")],
 })), { invoiceId: "F1" });
 
+// 9c. Caso real Ferretería J. Garachena (09-10/06/2026): glosa del banco
+//     TRUNCADA "Compra FERRETERIA J.GARA" (sin espacio tras el punto), factura
+//     "FERRETERIA J. GARACHENA SA." (con espacio) del mismo monto → concilia.
+check("compra FERRETERIA J.GARA (truncada) concilia con Garachena", decideMovementInvoiceMatch(cargo({
+  movDescription: "Compra FERRETERIA J.GARA",
+  candidates: [C("F1", "76123456-7", "FERRETERIA J. GARACHENA SA.")],
+})), { invoiceId: "F1" });
+
+// 9d. Dos facturas Garachena del MISMO monto en la ventana → ambiguo, no
+//     adivina (la ferretería emite muchas boletas chicas).
+check("dos facturas Garachena mismo monto es ambiguo", decideMovementInvoiceMatch(cargo({
+  movDescription: "Compra FERRETERIA J.GARA",
+  candidates: [
+    C("F1", "76123456-7", "FERRETERIA J. GARACHENA SA."),
+    C("F2", "76123456-7", "FERRETERIA J. GARACHENA SA."),
+  ],
+})), { reason: "ambiguous_merchant" });
+
 // 10. El local Sherwin factura como "Vespucio Oriente" en la glosa.
 check("VESPUCIO ORIENTE concilia con Sherwin", decideMovementInvoiceMatch(cargo({
   movDescription: "Compra VESPUCIO ORIENTE",

@@ -113,6 +113,21 @@ const TIPO_OPTIONS_BY_SUB: Record<string, string[]> = {
 const tipoOptionsFor = (sub: string): string[] =>
   TIPO_OPTIONS_BY_SUB[sub] ?? [];
 
+// Sugerencia de "nombre corto" a partir del título extraído del producto.
+// Saca la marca del final (ej. "... Teka") y lo pasa a mayúsculas, igual que
+// los nombres de la carga automática. Es solo una sugerencia: MJ la edita.
+function sugerirNombreCorto(
+  titulo?: string | null,
+  marca?: string | null
+): string {
+  if (!titulo) return "";
+  let s = titulo.trim();
+  if (marca && s.toLowerCase().endsWith(marca.toLowerCase())) {
+    s = s.slice(0, -marca.length).trim();
+  }
+  return s.toUpperCase().replace(/\s+/g, " ").trim();
+}
+
 // Layout de columnas compartido entre el encabezado y cada fila. La primera
 // columna angosta es la manija para arrastrar.
 const GRID_COLS =
@@ -500,6 +515,10 @@ export default function ArtefactosCatalogClient({
       }
       setNewItem((prev) => ({
         ...prev,
+        // Sugerir el nombre corto SOLO si está vacío (no pisa lo que MJ escribió).
+        name: prev.name.trim()
+          ? prev.name
+          : sugerirNombreCorto(data.name, data.brand),
         imageUrl: data.imageUrl ?? prev.imageUrl,
         detail: data.name ?? prev.detail,
         brand: data.brand ?? prev.brand,

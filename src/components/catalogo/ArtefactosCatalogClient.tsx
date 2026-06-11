@@ -132,8 +132,11 @@ function sugerirNombreCorto(
 
 // Layout de columnas compartido entre el encabezado y cada fila. La primera
 // columna angosta es la manija para arrastrar.
+// 14 columnas: manija · img · nombre/marca · detalle · subcat/tipo · LÍNEA ·
+// COLOR · lista · dcto · total · mi costo · gan · std · editar. Nombre y detalle
+// envuelven a 2 líneas (no se cortan) en vez de truncar.
 const GRID_COLS =
-  "grid-cols-[1.25rem_3.25rem_minmax(13rem,1.8fr)_minmax(7.5rem,1.2fr)_5.25rem_4.5rem_2.5rem_5rem_4.75rem_4.5rem_2rem_4.25rem]";
+  "grid-cols-[1.25rem_3.25rem_minmax(9rem,1.5fr)_minmax(6rem,1.1fr)_5rem_4.5rem_4.5rem_4.25rem_2.5rem_5rem_4.5rem_4.5rem_2rem_4.25rem]";
 
 // Input numérico con separadores de miles.
 function ThousandsInput({
@@ -645,6 +648,18 @@ export default function ArtefactosCatalogClient({
 
   return (
     <div>
+      {/* Sugerencias para los campos Línea / Color (filas y formulario). */}
+      <datalist id="lineas-list">
+        {linesInTab.map((l) => (
+          <option key={l} value={l} />
+        ))}
+      </datalist>
+      <datalist id="colores-list">
+        {finishesInTab.map((f) => (
+          <option key={f} value={f} />
+        ))}
+      </datalist>
+
       {/* Pestañas de subcategoría */}
       <div className="flex items-center gap-2 mb-4">
         {SUBCATEGORY_OPTIONS.map((s) => {
@@ -714,64 +729,6 @@ export default function ArtefactosCatalogClient({
           {adding ? "Cancelar" : "+ Nuevo artefacto"}
         </button>
       </div>
-
-      {/* Filtros por línea y color (chips). Solo aparecen si la pestaña tiene
-          esos datos. Sirven para armar un baño "por línea + color". */}
-      {(linesInTab.length > 0 || finishesInTab.length > 0) && (
-        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 mb-4 space-y-2">
-          {linesInTab.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] uppercase tracking-wider text-gray-500 mr-1 w-12">
-                Línea
-              </span>
-              {linesInTab.map((l) => (
-                <button
-                  key={l}
-                  onClick={() => setFilterLine(filterLine === l ? null : l)}
-                  className={`text-xs px-2.5 py-1 rounded-full border ${
-                    filterLine === l
-                      ? "bg-gray-900 text-white border-gray-900"
-                      : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
-                  }`}
-                >
-                  {l}
-                </button>
-              ))}
-            </div>
-          )}
-          {finishesInTab.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] uppercase tracking-wider text-gray-500 mr-1 w-12">
-                Color
-              </span>
-              {finishesInTab.map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setFilterFinish(filterFinish === f ? null : f)}
-                  className={`text-xs px-2.5 py-1 rounded-full border ${
-                    filterFinish === f
-                      ? "bg-gray-900 text-white border-gray-900"
-                      : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
-                  }`}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-          )}
-          {(filterLine || filterFinish) && (
-            <button
-              onClick={() => {
-                setFilterLine(null);
-                setFilterFinish(null);
-              }}
-              className="text-[11px] text-gray-500 hover:text-gray-900 underline"
-            >
-              limpiar filtros
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Panel de revisión de precios */}
       {reviewOpen && (
@@ -891,11 +848,6 @@ export default function ArtefactosCatalogClient({
                 placeholder="Urban, Stellar, Asis…"
                 className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500"
               />
-              <datalist id="lineas-list">
-                {linesInTab.map((l) => (
-                  <option key={l} value={l} />
-                ))}
-              </datalist>
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
@@ -911,11 +863,6 @@ export default function ArtefactosCatalogClient({
                 placeholder="Cromo, Brushed, Gun Grey…"
                 className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500"
               />
-              <datalist id="colores-list">
-                {finishesInTab.map((f) => (
-                  <option key={f} value={f} />
-                ))}
-              </datalist>
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
@@ -1101,6 +1048,40 @@ export default function ArtefactosCatalogClient({
           <div>Nombre / marca</div>
           <div>Detalle</div>
           <div>Subcat. / tipo</div>
+          {/* Línea — encabezado con desplegable de filtro. */}
+          <div className="leading-tight">
+            Línea
+            <select
+              value={filterLine ?? ""}
+              onChange={(e) => setFilterLine(e.target.value || null)}
+              className="mt-0.5 w-full bg-white border border-gray-200 rounded text-[10px] font-normal normal-case tracking-normal text-gray-600 px-0.5 py-0.5 outline-none cursor-pointer focus:border-gray-400"
+              title="Filtrar por línea"
+            >
+              <option value="">todas</option>
+              {linesInTab.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Color — encabezado con desplegable de filtro. */}
+          <div className="leading-tight">
+            Color
+            <select
+              value={filterFinish ?? ""}
+              onChange={(e) => setFilterFinish(e.target.value || null)}
+              className="mt-0.5 w-full bg-white border border-gray-200 rounded text-[10px] font-normal normal-case tracking-normal text-gray-600 px-0.5 py-0.5 outline-none cursor-pointer focus:border-gray-400"
+              title="Filtrar por color"
+            >
+              <option value="">todos</option>
+              {finishesInTab.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="text-right">Lista</div>
           <div className="text-center">Dcto</div>
           <div className="text-right">Total</div>
@@ -1279,19 +1260,20 @@ function CatalogItemRow({
         </button>
       </div>
 
-      <div>
-        <input
-          type="text"
+      <div className="min-w-0">
+        {/* Nombre: textarea a 2 líneas para que los nombres largos no se corten. */}
+        <textarea
+          rows={2}
           value={item.name}
           onChange={(e) => onUpdate({ name: e.target.value })}
-          className="w-full bg-transparent border-0 p-0 font-semibold text-gray-900 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+          className="w-full bg-transparent border-0 p-0 font-semibold text-gray-900 text-[11px] leading-tight resize-none outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
         />
         <input
           type="text"
           value={item.brand ?? ""}
           placeholder="marca"
           onChange={(e) => onUpdate({ brand: e.target.value })}
-          className="w-full bg-transparent border-0 p-0 text-gray-500 text-[11px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5 mt-0.5"
+          className="w-full bg-transparent border-0 p-0 text-gray-500 text-[10px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
         />
         <input
           type="text"
@@ -1300,12 +1282,6 @@ function CatalogItemRow({
           onChange={(e) => onUpdate({ supplier: e.target.value })}
           className="w-full bg-transparent border-0 p-0 text-gray-400 text-[10px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
         />
-        {/* Línea · color (se edita en el form "Editar"). */}
-        {(item.line || item.finish) && (
-          <div className="text-[10px] text-gray-500 mt-0.5">
-            {[item.line, item.finish].filter(Boolean).join(" · ")}
-          </div>
-        )}
       </div>
 
       <div className="min-w-0">
@@ -1360,6 +1336,30 @@ function CatalogItemRow({
             <option value={item.tag}>{item.tag}</option>
           )}
         </select>
+      </div>
+
+      {/* Línea (editable, con sugerencias). */}
+      <div className="min-w-0">
+        <input
+          type="text"
+          list="lineas-list"
+          value={item.line ?? ""}
+          placeholder="—"
+          onChange={(e) => onUpdate({ line: e.target.value || null })}
+          className="w-full bg-transparent border-0 p-0 text-gray-600 text-[11px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+        />
+      </div>
+
+      {/* Color / terminación (editable, con sugerencias). */}
+      <div className="min-w-0">
+        <input
+          type="text"
+          list="colores-list"
+          value={item.finish ?? ""}
+          placeholder="—"
+          onChange={(e) => onUpdate({ finish: e.target.value || null })}
+          className="w-full bg-transparent border-0 p-0 text-gray-600 text-[11px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+        />
       </div>
 
       {/* Precio lista (sin descuento) */}

@@ -37,6 +37,11 @@ type Invoice = {
   status: string;
   origin: string;
   referenceFolioNumber: string | null;
+  // id de la factura original que esta NC/ND referencia, ya resuelto en el
+  // server (page.tsx) a partir de (type, folio referenciado, RUT). Si la
+  // original no existe en la app, viene null y el "ref" queda como texto
+  // plano no clickeable.
+  referencedInvoiceId: string | null;
   // Indica si tenemos el PDF oficial del SII bajado (vía sync local).
   // Cuando está set, el endpoint /pdf sirve el PDF oficial; sino, el resumen.
   siiCodigo: string | null;
@@ -184,11 +189,21 @@ export default function FacturasTable({
                       ND
                     </span>
                   )}
-                  {inv.referenceFolioNumber && (
-                    <div className="text-[10px] text-gray-500 mt-0.5">
-                      ↩ ref F-{inv.referenceFolioNumber}
-                    </div>
-                  )}
+                  {inv.referenceFolioNumber &&
+                    (inv.referencedInvoiceId ? (
+                      <Link
+                        href={`/facturas/${inv.referencedInvoiceId}?from=${encodeURIComponent(returnTo)}`}
+                        className="block text-[10px] text-gray-500 hover:text-gray-900 hover:underline mt-0.5"
+                      >
+                        ↩ ref F-{inv.referenceFolioNumber}
+                      </Link>
+                    ) : (
+                      // La factura original no está cargada en la app: dejamos
+                      // el texto plano, sin link a una página inexistente.
+                      <div className="text-[10px] text-gray-400 mt-0.5">
+                        ↩ ref F-{inv.referenceFolioNumber}
+                      </div>
+                    ))}
                 </td>
                 <td className="px-4 py-2 text-gray-600 whitespace-nowrap">
                   {formatDate(inv.issueDate)}

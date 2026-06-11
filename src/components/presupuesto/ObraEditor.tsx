@@ -1328,7 +1328,15 @@ export default function ObraEditor({
                       </td>
                       <td className="px-3 py-0.5 align-top">
                         {/* PARTIDA — textarea auto-altura, sin cap. Muestra
-                            todo el nombre aunque sea largo (la fila crece). */}
+                            todo el nombre aunque sea largo (la fila crece).
+                            Guarda AL TERMINAR (al salir del campo / blur), no en
+                            cada tecla — mismo criterio que la celda Cantidad de
+                            al lado y que MoneyInput (PR #102). Con `defaultValue`
+                            (no `value`) MJ escribe el nombre completo sin que
+                            cada tecla dispare setItems + el re-render de toda la
+                            tabla. El onChange solo ajusta el alto del textarea
+                            (visual); el guardado ocurre en onBlur. Cambia CUÁNDO
+                            se guarda, no QUÉ se guarda. */}
                         <textarea
                           ref={(el) => {
                             if (el) {
@@ -1336,11 +1344,15 @@ export default function ObraEditor({
                               el.style.height = `${el.scrollHeight}px`;
                             }
                           }}
-                          value={item.name}
+                          defaultValue={item.name}
                           onChange={(e) => {
-                            handleUpdateItem(item.id, "name", e.target.value);
                             e.currentTarget.style.height = "auto";
                             e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                          }}
+                          onBlur={(e) => {
+                            if (e.target.value !== item.name) {
+                              handleUpdateItem(item.id, "name", e.target.value);
+                            }
                           }}
                           rows={1}
                           className="text-force-11 w-full resize-none bg-transparent border-0 p-0 text-gray-900 focus:ring-0 outline-none uppercase leading-snug overflow-hidden"

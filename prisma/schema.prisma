@@ -388,8 +388,16 @@ model ArtefactoCatalog {
   supplier          String?  // MK, CHC, Kitchen House, LED Studio, etc.
   referenceLink     String?  // URL del producto en la tienda
   imageUrl          String?  // URL de la imagen
-  listPrice         Float    @default(0) // Precio lista
-  discountPercent   Float?   // % descuento típico (decimal 0..1)
+  listPrice         Float    @default(0) // Precio web / lista: lo que el cliente pagaría comprando online (con IVA). Lo refresca "Revisar precios".
+  discountPercent   Float?   // Legacy. Dejó de ser el driver del precio (rediseño precios 2026-06): ahora el precio a cliente y el costo van como montos explícitos abajo. Se conserva por compat.
+  // Precio que MJ le cobra al cliente. Por defecto = listPrice (vende al
+  // precio de internet); editable cuando le "comparte" algo de descuento.
+  // Si queda null, se interpreta como = listPrice.
+  clientPrice       Float?
+  // Lo que realmente paga BLARQ: la vendedora le cotiza con un descuento
+  // variable por producto (no hay nada fijo). Interno, NO visible al
+  // cliente, y se carga a mano. La ganancia = clientPrice − realCostBlarq.
+  realCostBlarq     Float?
   isStandard        Boolean  @default(false) // Parte de la paleta base BLARQ
   // Orden manual dentro de cada subcategoría (pestaña). MJ arrastra las
   // filas a su gusto y este número fija el orden; default 0 = todos los

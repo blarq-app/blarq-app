@@ -84,6 +84,14 @@ check("dos facturas Sodimac es ambiguo", decideMovementInvoiceMatch(cargo({
   candidates: [C("F1", "96792430-K", "SODIMAC S.A."), C("F2", "96792430-K", "SODIMAC S.A.")],
 })), { reason: "ambiguous_merchant" });
 
+// 9b. Caso real Casa Musa (08/06/2026): compra con tarjeta sin RUT, glosa
+//     "Compra CASA MUSA", factura recibida de "Casa Musa Electronica S.A."
+//     del mismo monto y mismo día → concilia por comercio.
+check("compra CASA MUSA concilia con factura Casa Musa", decideMovementInvoiceMatch(cargo({
+  movDescription: "Compra CASA MUSA",
+  candidates: [C("F1", "93689000-8", "Casa Musa Electronica S.A.")],
+})), { invoiceId: "F1" });
+
 // 10. El local Sherwin factura como "Vespucio Oriente" en la glosa.
 check("VESPUCIO ORIENTE concilia con Sherwin", decideMovementInvoiceMatch(cargo({
   movDescription: "Compra VESPUCIO ORIENTE",

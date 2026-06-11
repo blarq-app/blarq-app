@@ -371,6 +371,13 @@ const TARJETA_MERCHANTS: { id: string; glosa: RegExp; name: RegExp }[] = [
   // dice "ERPYME" pero la factura la emite "MAXXA SOFTWARE SPA". Cargo mensual
   // de monto exacto, candidato único → seguro para auto-conciliar.
   { id: "maxxa", glosa: /erpyme/, name: /maxxa/ },
+  // Casa Musa: tienda de electrónica donde MJ compra con tarjeta. Como toda
+  // compra con tarjeta, el banco NO manda el RUT (glosa "Compra CASA MUSA"),
+  // así que el match por RUT nunca la engancha. La factura la emite "Casa Musa
+  // Electronica S.A.". Glosa y razón social comparten "casa musa"; el \s* cubre
+  // la variante pegada ("CASAMUSA"). Misma máquina conservadora que el resto:
+  // mismo monto + ventana de fecha + candidato único.
+  { id: "casamusa", glosa: /casa\s*musa/, name: /casa\s*musa/ },
 ];
 const normTxt = (s: string | null) =>
   (s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");

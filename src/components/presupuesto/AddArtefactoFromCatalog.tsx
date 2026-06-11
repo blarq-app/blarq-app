@@ -192,10 +192,12 @@ export default function AddArtefactoFromCatalog({
             )}
             {!loading &&
               results.map((it) => (
-                <button
+                // Fila NO clickeable entera: así MJ puede revisar (abrir el
+                // link del producto) sin agregar sin querer. Solo "+ agregar"
+                // suma el item.
+                <div
                   key={it.id}
-                  onClick={() => handleAddFromCatalog(it, qty)}
-                  className={`w-full grid grid-cols-[3rem_minmax(0,1fr)_minmax(0,1.5fr)_6rem_4rem] items-center gap-3 px-3 py-2 border-b border-gray-100 last:border-b-0 text-xs text-left hover:bg-gray-50 ${
+                  className={`grid grid-cols-[3rem_minmax(0,1fr)_minmax(0,1.5fr)_6rem_4rem] items-center gap-3 px-3 py-2 border-b border-gray-100 last:border-b-0 text-xs text-left hover:bg-gray-50 ${
                     selectedId === it.id ? "bg-gray-50" : ""
                   }`}
                   onMouseEnter={() => setSelectedId(it.id)}
@@ -210,7 +212,7 @@ export default function AddArtefactoFromCatalog({
                   ) : (
                     <div className="w-10 h-10 bg-gray-100 rounded border border-gray-200" />
                   )}
-                  <div>
+                  <div className="min-w-0">
                     <div className="font-semibold text-gray-900 truncate">
                       {it.name}
                       {it.isStandard && (
@@ -222,6 +224,17 @@ export default function AddArtefactoFromCatalog({
                     <div className="text-[10px] text-gray-500 truncate">
                       {it.brand || "—"}
                       {it.supplier ? ` · ${it.supplier}` : ""}
+                      {it.referenceLink && (
+                        <a
+                          href={it.referenceLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-1.5 text-gray-500 hover:text-gray-900 underline"
+                          title="Abrir el producto en la tienda (revisar detalles)"
+                        >
+                          ↗ ver
+                        </a>
+                      )}
                     </div>
                   </div>
                   <div className="text-gray-600 truncate">{it.detail ?? ""}</div>
@@ -235,10 +248,13 @@ export default function AddArtefactoFromCatalog({
                         : "lista"}
                     </div>
                   </div>
-                  <div className="text-right text-gray-900 font-medium">
+                  <button
+                    onClick={() => handleAddFromCatalog(it, qty)}
+                    className="text-right text-gray-900 font-medium hover:text-gray-600"
+                  >
                     + agregar
-                  </div>
-                </button>
+                  </button>
+                </div>
               ))}
           </div>
         </div>

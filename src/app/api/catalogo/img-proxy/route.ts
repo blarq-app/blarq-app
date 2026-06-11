@@ -29,6 +29,7 @@ const ALLOWED_HOSTS = [
   "falabella.com",
   "scene7.com",
   "cdn.shopify.com", // Kitchen House (Teka) — su tienda corre en Shopify
+  "kitchenhouse.cl", // Kitchen House sirve las mismas fotos por su dominio (/cdn/shop/...), p.ej. al usar "Extraer"
 ];
 
 const BROWSER_UA =

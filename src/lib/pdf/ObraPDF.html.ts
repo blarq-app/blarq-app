@@ -50,6 +50,11 @@ export interface ObraItemInput {
   quantity: number;
   unitPrice: number;
   total: number;
+  // Marca de cambio respecto a la última versión enviada al cliente.
+  // "added" = NUEVO · "up" = subió el total · "down" = bajó · null/undefined =
+  // sin cambio (no se muestra nada). Se calcula al vuelo en el route, no se
+  // guarda. Ver src/lib/presupuesto/versionDiff.ts.
+  changeMarker?: "added" | "up" | "down" | null;
 }
 
 export interface PaymentTermInput {
@@ -288,10 +293,13 @@ const CSS = `
     white-space: nowrap;
   }
 
-  /* Anchos de columna (suman 100%). TOTAL en peso regular per spec. */
+  /* Anchos de columna (suman 100%). TOTAL en peso regular per spec.
+     La col-chg (marca de cambio) es una columna estrecha a la IZQUIERDA del
+     número de ítem; se le saca el ancho a partida + descripción. */
+  .col-chg    { width: 5%;  text-align: right; white-space: nowrap; vertical-align: middle; padding-right: 2pt; }
   .col-item   { width: 4%;  text-align: center; white-space: nowrap; }
-  .col-name   { width: 28%; text-align: left; }
-  .col-desc   { width: 37%; text-align: left; }
+  .col-name   { width: 26%; text-align: left; }
+  .col-desc   { width: 34%; text-align: left; }
   /* Descripción con formato (negrita/cursiva/listas/color del editor). */
   .col-desc p  { margin: 0; }
   .col-desc ul { margin: 0; padding-left: 14px; list-style: disc; }
@@ -303,6 +311,28 @@ const CSS = `
   .col-qty    { width: 7%;  text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .col-pu     { width: 8%;  text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
   .col-total  { width: 10%; text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ── Marca de cambio entre versiones — monocromática ──────────
+     Flecha negra para subió/bajó; pastilla con borde para "NUEVO".
+     Sin color semántico: rojo/verde están reservados a otros usos. */
+  .chg-arrow {
+    font-weight: 700;
+    color: #1A1A1A;
+    font-size: 8pt;
+    line-height: 1;
+  }
+  .chg-new {
+    display: inline-block;
+    border: 0.4pt solid #1A1A1A;
+    border-radius: 999px;
+    padding: 0.3pt 2.5pt;
+    font-size: 4.5pt;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #1A1A1A;
+    white-space: nowrap;
+  }
 
   /* ── Totals — apilado vertical, 55% ancho derecha (spec MJ) ──── */
   .totals-wrap {
@@ -437,6 +467,15 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   const fmtNum = (n: number) => Math.round(n).toLocaleString("es-CL");
   const fmtMoney = (n: number) => "$ " + Math.round(n).toLocaleString("es-CL");
 
+  // Marca de cambio a la izquierda del número de ítem. Flecha (subió/bajó)
+  // o pastilla "NUEVO"; vacío si no cambió o no hay versión base.
+  const renderMarker = (m?: "added" | "up" | "down" | null) => {
+    if (m === "up") return `<span class="chg-arrow">&#8593;</span>`;
+    if (m === "down") return `<span class="chg-arrow">&#8595;</span>`;
+    if (m === "added") return `<span class="chg-new">Nuevo</span>`;
+    return "";
+  };
+
   const tableRows = chapters
     .map((ch) => {
       // Subtotales por zona dentro del capítulo, para mostrar al cierre
@@ -452,6 +491,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
       const showZoneSubtotals = distinctZones.size > 1;
       return `
         <tr class="chapter-row">
+          <td class="col-chg"></td>
           <td class="col-item">${ch.index}</td>
           <td class="col-name">${esc(ch.label)}</td>
           <td class="col-desc"></td>
@@ -478,12 +518,13 @@ export function renderObraHTML(data: ObraHTMLInput): string {
           ${
             showSub
               ? `<tr class="sub-chapter-row">
-                  <td colspan="6">${esc(item.subChapter!)}</td>
+                  <td colspan="7">${esc(item.subChapter!)}</td>
                   <td class="col-total">${subValue}</td>
                 </tr>`
               : ""
           }
           <tr>
+            <td class="col-chg">${renderMarker(item.changeMarker)}</td>
             <td class="col-item">${ch.index}.${idx + 1}</td>
             <td class="col-name">${esc(item.name)}</td>
             <td class="col-desc">${sanitizeRichTextHtml(item.descriptionCliente)}</td>
@@ -566,6 +607,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   <table class="partidas">
     <thead>
       <tr>
+        <th class="col-chg"></th>
         <th class="col-item">ITEM</th>
         <th class="col-name">PARTIDA</th>
         <th class="col-desc">DESCRIPCION</th>

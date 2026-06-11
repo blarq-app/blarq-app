@@ -392,22 +392,6 @@ export default function ArtefactosEditor({
     }
   }
 
-  // Desvincula un item del catálogo BLARQ (catalogId → null). Después de
-  // esto, editarlo NO afecta a otras copias ni al catálogo global — es un
-  // item suelto de esta cotización. Solo toca ESTE item; las otras copias
-  // del mismo catalogId quedan linkeadas como estaban.
-  function unlinkFromCatalog(item: ArtefactoItem) {
-    if (!item.catalogId) return;
-    const ok = confirm(
-      `¿Desvincular "${item.name}" del catálogo BLARQ?\n\n` +
-        "Vas a poder editarlo sin que el cambio se propague a otras " +
-        "cotizaciones ni al catálogo. Las otras copias de esta misma " +
-        "cotización no se tocan."
-    );
-    if (!ok) return;
-    updateItem(item.id, { catalogId: null });
-  }
-
   async function deleteItem(itemId: string) {
     try {
       await fetch(
@@ -486,37 +470,6 @@ export default function ArtefactosEditor({
     }
   }
 
-  // Promueve un item existente del budget al catálogo BLARQ. Si el item
-  // ya viene del catálogo, no hace nada.
-  async function saveToCatalog(item: ArtefactoItem) {
-    if (item.catalogId) {
-      alert("Este item ya está en el catálogo.");
-      return;
-    }
-    try {
-      const res = await fetch("/api/catalogo/artefactos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: item.name,
-          detail: item.detail,
-          brand: item.brand,
-          subcategory: item.subcategory,
-          referenceLink: item.referenceLink,
-          imageUrl: item.imageUrl,
-          listPrice: item.listPrice,
-          discountPercent: item.discountPercent,
-        }),
-      });
-      if (!res.ok) throw new Error("Error");
-      const created = await res.json();
-      // Linkeamos el item del budget al recién creado del catálogo
-      updateItem(item.id, { catalogId: created.id });
-      alert(`"${item.name}" guardado en el catálogo BLARQ.`);
-    } catch {
-      alert("Error al guardar en catálogo.");
-    }
-  }
 
   async function handleSave() {
     setSaving(true);
@@ -657,11 +610,6 @@ export default function ArtefactosEditor({
                       gridCls={gridCls}
                       onUpdate={(patch) => updateItem(item.id, patch)}
                       onDelete={() => deleteItem(item.id)}
-                      onToggleCatalog={() =>
-                        item.catalogId
-                          ? unlinkFromCatalog(item)
-                          : saveToCatalog(item)
-                      }
                     />
                   ))}
                 </SortableContext>
@@ -1042,9 +990,9 @@ function AgregarArtefactosModal({
 
 // ─── Componente: fila de artefacto (arrastrable) ─────────────────────────
 //
-// La fila se puede arrastrar de la manija "⋮⋮" (a la derecha, junto a ★ y ×)
-// para reordenar DENTRO del room. Borrar (×) queda visible. El resto de las
-// celdas son los inputs editables de siempre.
+// La fila se puede arrastrar de la manija "⋮⋮" (a la derecha, junto a ×) para
+// reordenar DENTRO del room. Borrar (×) queda visible. El resto de las celdas
+// son los inputs editables de siempre.
 function SortableArtefactoRow({
   item,
   projectId,
@@ -1052,7 +1000,6 @@ function SortableArtefactoRow({
   gridCls,
   onUpdate,
   onDelete,
-  onToggleCatalog,
 }: {
   item: ArtefactoItem;
   projectId: string;
@@ -1060,7 +1007,6 @@ function SortableArtefactoRow({
   gridCls: string;
   onUpdate: (patch: Partial<ArtefactoItem>) => void;
   onDelete: () => void;
-  onToggleCatalog: () => void;
 }) {
   const sortable = useSortable({ id: item.id });
   const style = {
@@ -1158,21 +1104,6 @@ function SortableArtefactoRow({
         </>
       )}
       <div className="flex items-center gap-1.5 justify-end">
-        <button
-          onClick={onToggleCatalog}
-          className={`text-xs leading-none ${
-            item.catalogId
-              ? "text-green-600 hover:text-gray-400"
-              : "text-gray-300 hover:text-gray-900"
-          }`}
-          title={
-            item.catalogId
-              ? "En catálogo BLARQ — click para desvincular"
-              : "Guardar en catálogo BLARQ"
-          }
-        >
-          ★
-        </button>
         <button
           onClick={onDelete}
           className="text-gray-400 hover:text-red-600 text-sm leading-none"

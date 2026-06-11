@@ -135,6 +135,35 @@ function calcClientPrice(listPrice: number, discount: number | null): number {
   return listPrice * (1 - (discount ?? 0));
 }
 
+// Línea (serie) y color/terminación a partir del nombre del artefacto. Los
+// artefactos vienen del catálogo, donde el nombre ya trae la línea y el color;
+// acá los derivamos solo para MOSTRARLOS como columnas en la cotización (no se
+// guardan). Misma lógica que el parser del catálogo. Línea en MAYÚSCULA.
+const LINEA_RULES: Array<[RegExp, string]> = [
+  [/NEW DELFOS/, "New Delfos"], [/NEW HOME/, "New Home"], [/STYLE-?N|\bSTYLE\b/, "Style"],
+  [/ASIS/, "Asis"], [/URBAN/, "Urban"], [/STELLAR/, "Stellar"], [/ATLAS/, "Atlas"],
+  [/\bHOME\b/, "Home"], [/LUXOR/, "Luxor"], [/TRENTO/, "Trento"], [/\bZEN\b/, "Zen"],
+  [/BROOKLIN/, "Brooklin"], [/NIZA/, "Niza"], [/BRIZO/, "Brizo"], [/ATENAS/, "Atenas"],
+  [/ALBANY/, "Albany"], [/DELFOS/, "Delfos"], [/QUEEN/, "Queen"], [/NEPAL/, "Nepal"],
+  [/AMANTIA/, "Amantia"], [/ARES/, "Ares"], [/ASTORIA/, "Astoria"],
+];
+const COLOR_RULES: Array<[RegExp, string]> = [
+  [/BRUSHED NICKEL/, "Brushed Nickel"], [/GUN GREY/, "Gun Grey"], [/NEGRO MATE/, "Negro Mate"],
+  [/RUSTIC OAK/, "Rustic Oak"], [/WHITE OAK/, "White Oak"], [/MINK GREY/, "Mink Grey"],
+  [/MOON GREY/, "Moon Grey"], [/BRUSHED/, "Brushed"], [/CROMAD[OA]|CROMO/, "Cromo"],
+  [/BLANCO/, "Blanco"], [/\bINOX|INOXIDABLE/, "Inox"],
+];
+function lineaDe(name: string): string {
+  const n = name.toUpperCase();
+  for (const [re, v] of LINEA_RULES) if (re.test(n)) return v;
+  return "";
+}
+function colorDe(name: string, detail?: string | null): string {
+  const n = `${name} ${detail ?? ""}`.toUpperCase();
+  for (const [re, v] of COLOR_RULES) if (re.test(n)) return v;
+  return "";
+}
+
 export default function ArtefactosEditor({
   budget: initialBudget,
   projectId,
@@ -505,9 +534,9 @@ export default function ArtefactosEditor({
   // para que el tree-shaking las detecte. Por eso las defino como strings
   // constantes y no las interpolo.
   const gridColsCost =
-    "grid grid-cols-[3.25rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_5.5rem_5rem_3.5rem]";
+    "grid grid-cols-[3.25rem_minmax(0,1.2fr)_4.5rem_4.5rem_minmax(0,1.8fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_5.5rem_5rem_3.5rem]";
   const gridColsClean =
-    "grid grid-cols-[3.25rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_3.5rem]";
+    "grid grid-cols-[3.25rem_minmax(0,1.2fr)_4.5rem_4.5rem_minmax(0,1.8fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_3.5rem]";
   const gridCls = showCost ? gridColsCost : gridColsClean;
 
   return (
@@ -576,6 +605,8 @@ export default function ArtefactosEditor({
               >
                 <div className="text-center">Img</div>
                 <div>Item</div>
+                <div>Línea</div>
+                <div>Color</div>
                 <div>Detalle</div>
                 <div>Marca</div>
                 <div className="text-center">Cant.</div>
@@ -619,7 +650,7 @@ export default function ArtefactosEditor({
               <div
                 className={`${gridCls} items-center gap-3 px-4 py-2 bg-gray-50 border-t border-gray-900 text-xs font-semibold`}
               >
-                <div className="col-span-7 text-gray-600 uppercase tracking-wider text-[10px]">
+                <div className="col-span-9 text-gray-600 uppercase tracking-wider text-[10px]">
                   Total artefactos {room.label.toLowerCase()}
                 </div>
                 <div className="text-right tabular-nums text-gray-900">
@@ -673,7 +704,7 @@ export default function ArtefactosEditor({
           <div
             className={`${gridCls} items-center gap-3 px-4 py-2.5 bg-gray-100 border-t-2 border-gray-900 text-xs font-bold uppercase tracking-wider`}
           >
-            <div className="col-span-7 text-gray-900">Total {sub.label.toLowerCase()}</div>
+            <div className="col-span-9 text-gray-900">Total {sub.label.toLowerCase()}</div>
             <div className="text-right tabular-nums text-gray-900 text-sm">
               {formatCLP(sub.subtotal)}
             </div>
@@ -1031,18 +1062,28 @@ function SortableArtefactoRow({
         item={item}
         onUpdate={onUpdate}
       />
-      <input
-        type="text"
+      {/* Item: textarea a 2 líneas para que el nombre no se corte. */}
+      <textarea
+        rows={2}
         value={item.name}
         onChange={(e) => onUpdate({ name: e.target.value })}
-        className="w-full bg-transparent border-0 p-0 font-semibold text-gray-900 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+        className="w-full bg-transparent border-0 p-0 font-semibold text-gray-900 text-[11px] leading-tight resize-none outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
       />
-      <input
-        type="text"
+      {/* Línea (derivada del nombre, en MAYÚSCULA) — solo lectura. */}
+      <div className="text-[11px] font-medium text-gray-700 uppercase leading-tight">
+        {lineaDe(item.name) || "—"}
+      </div>
+      {/* Color (derivado del nombre/detalle) — solo lectura. */}
+      <div className="text-[11px] text-gray-600 leading-tight">
+        {colorDe(item.name, item.detail) || "—"}
+      </div>
+      {/* Detalle: 2 líneas para que el modelo largo no se corte. */}
+      <textarea
+        rows={2}
         value={item.detail ?? ""}
         placeholder="modelo…"
         onChange={(e) => onUpdate({ detail: e.target.value })}
-        className="w-full bg-transparent border-0 p-0 text-gray-700 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+        className="w-full bg-transparent border-0 p-0 text-gray-700 text-[11px] leading-tight resize-none outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
       />
       <input
         type="text"

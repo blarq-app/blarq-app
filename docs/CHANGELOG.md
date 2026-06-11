@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-11 — Catálogo de artefactos: tipos por pestaña (cocina con sus propios tipos)
+
+- **PR #112**: el desplegable de "tipo" y el orden de los grupos pasan a depender de la **subcategoría/pestaña** (antes era global, solo con los tipos de baño → cocina no se podía organizar). `TIPO_OPTIONS_BY_SUB`: **cocina** = Lavaplatos·Griferías·Hornos·Encimeras·Campanas·Refrigeración·Lavavajillas·Microondas; **baños** = los de antes; **iluminación** = sin tipos por ahora. El agrupado se calcula sobre la pestaña activa, así que "Griferías" en cocina y en baños no se mezclan.
+- **Datos (prod + dev)**: `scripts/taggear-cocina.cjs` asignó el tipo a los 24 artefactos de cocina por nombre, con prioridad (GRIFO LAVAPLATOS → Griferías; LAVAPLATOS BAJO ENCIMERA → Lavaplatos). 24/24 agrupados, 0 sin match. Rama `feat/cocina-tipos`.
+- Pendiente relacionado (chip): subdividir "Duchas" (baños) en ducha/receptáculo vs tina.
+
 ## 2026-06-11 — Catálogo de artefactos: agrupar por tipo (PR #107) + carga de 50 artefactos de cotizaciones a prod
 
 - **PR #107 mergeado a prod** (`feat(artefactos): tipo desplegable + foto y proveedor editables`): tipo como desplegable (Accesorios·Griferías·Duchas·Muebles·Mamparas·WC), **agrupar de verdad por tipo** (un encabezado por tipo, ordenado por el desplegable — resuelve los encabezados repetidos cuando los items del mismo tipo no eran contiguos), proveedor editable, subir foto desde el computador, formulario completo de edición, Enter guarda, descripción en 2 líneas, e `img-proxy` para que las fotos del CDN no las bloquee el ad-blocker.

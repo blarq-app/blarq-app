@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
 import {
@@ -50,6 +50,16 @@ function clientTotal(it: {
   return Math.round(it.listPrice * (1 - (it.discountPercent ?? 0)));
 }
 
+// Src a usar para mostrar una imagen. Las externas (mk.cl / CDN de la tienda)
+// se sirven a través de NUESTRO proxy, para que ningún bloqueador del
+// navegador las frene. Las subidas (data:) y las relativas van directo.
+function imgSrc(url: string): string {
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return `/api/catalogo/img-proxy?u=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
 // Fila que devuelve el endpoint "Revisar precios" (guardado vs web ahora).
 interface PriceReviewRow {
   id: string;
@@ -76,10 +86,22 @@ const SUBCATEGORY_LABELS: Record<string, string> = {
 
 const SUBCATEGORY_OPTIONS = ["sanitario", "cocina", "iluminacion"];
 
+// Tipos para agrupar (desplegable cerrado, definido con MJ). Es el campo
+// "tag" del modelo; los artefactos del mismo tipo se juntan bajo un
+// encabezado. "" = sin tipo (van sueltos, sin encabezado).
+const TIPO_OPTIONS = [
+  "Accesorios",
+  "Griferías",
+  "Duchas",
+  "Muebles",
+  "Mamparas",
+  "WC",
+];
+
 // Layout de columnas compartido entre el encabezado y cada fila. La primera
 // columna angosta es la manija para arrastrar.
 const GRID_COLS =
-  "grid-cols-[1.5rem_3.5rem_minmax(0,1fr)_minmax(0,1.25fr)_6rem_5.5rem_3rem_6rem_6rem_5rem_2.5rem_2rem]";
+  "grid-cols-[1.25rem_3.25rem_minmax(13rem,1.8fr)_minmax(7.5rem,1.2fr)_5.25rem_4.5rem_2.5rem_5rem_4.75rem_4.5rem_2rem_4.25rem]";
 
 // Input numérico con separadores de miles.
 function ThousandsInput({
@@ -118,6 +140,43 @@ function ThousandsInput({
   );
 }
 
+// Toma un archivo de imagen y lo achica a una miniatura comprimida (JPEG),
+// devuelta como data URL para guardar directo en imageUrl. Evita subir fotos
+// de 3-5 MB: las deja en ~40-100 KB. Sin almacenamiento externo.
+function fileToThumbnailDataUrl(
+  file: File,
+  maxSize = 600,
+  quality = 0.8
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Archivo de imagen inválido"));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxSize) {
+          height = Math.round((height * maxSize) / width);
+          width = maxSize;
+        } else if (height >= width && height > maxSize) {
+          width = Math.round((width * maxSize) / height);
+          height = maxSize;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("No se pudo procesar la imagen"));
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function ArtefactosCatalogClient({
   initialItems,
 }: {
@@ -129,6 +188,8 @@ export default function ArtefactosCatalogClient({
   const [query, setQuery] = useState("");
   const [onlyStandard, setOnlyStandard] = useState(false);
   const [adding, setAdding] = useState(false);
+  // Si está seteado, el formulario está editando ese artefacto (no creando).
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [newItem, setNewItem] = useState({
     name: "",
     detail: "",
@@ -206,15 +267,20 @@ export default function ArtefactosCatalogClient({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  async function onDragEnd(e: DragEndEvent) {
+  // Arrastrar reordena DENTRO de un grupo (mismo tipo). El orden de los
+  // grupos lo fija el tipo (TIPO_OPTIONS), no el arrastre; para mover un
+  // artefacto de tipo se usa el desplegable de "tipo".
+  async function onDragEndGroup(e: DragEndEvent, groupItems: CatalogItem[]) {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const oldIdx = tabItems.findIndex((it) => it.id === active.id);
-    const newIdx = tabItems.findIndex((it) => it.id === over.id);
+    const oldIdx = groupItems.findIndex((it) => it.id === active.id);
+    const newIdx = groupItems.findIndex((it) => it.id === over.id);
     if (oldIdx < 0 || newIdx < 0) return;
-    const reordered = arrayMove(tabItems, oldIdx, newIdx);
+    const reordered = arrayMove(groupItems, oldIdx, newIdx);
 
-    // Optimista: reasigna sortOrder consecutivo a toda la pestaña.
+    // Optimista: reasigna sortOrder 0..n a los items de ESTE grupo. (El
+    // solapamiento de sortOrder entre grupos no importa: el display ordena
+    // primero por grupo y después por sortOrder dentro del grupo.)
     const orderMap = new Map(reordered.map((it, i) => [it.id, i]));
     setItems((prev) =>
       prev.map((it) =>
@@ -222,7 +288,6 @@ export default function ArtefactosCatalogClient({
       )
     );
 
-    // Persistir.
     try {
       await fetch("/api/catalogo/artefactos/reorder", {
         method: "PATCH",
@@ -313,6 +378,92 @@ export default function ArtefactosCatalogClient({
     }
   }
 
+  // Cierra el formulario (sea de alta o edición) y lo deja en blanco.
+  function closeForm() {
+    setAdding(false);
+    setEditingId(null);
+    setError(null);
+    setNewItem({
+      name: "",
+      detail: "",
+      brand: "",
+      subcategory: activeTab,
+      tag: "",
+      supplier: "",
+      referenceLink: "",
+      imageUrl: "",
+      listPrice: 0,
+      clientPrice: 0,
+      realCostBlarq: 0,
+      discountPercent: 0,
+      isStandard: false,
+    });
+  }
+
+  // Abre el formulario completo cargado con los datos de un artefacto.
+  function openEdit(item: CatalogItem) {
+    setAdding(false);
+    setError(null);
+    setEditingId(item.id);
+    setNewItem({
+      name: item.name,
+      detail: item.detail ?? "",
+      brand: item.brand ?? "",
+      subcategory: item.subcategory,
+      tag: item.tag ?? "",
+      supplier: item.supplier ?? "",
+      referenceLink: item.referenceLink ?? "",
+      imageUrl: item.imageUrl ?? "",
+      listPrice: item.listPrice ?? 0,
+      clientPrice: item.clientPrice ?? 0,
+      realCostBlarq: item.realCostBlarq ?? 0,
+      discountPercent: item.discountPercent ?? 0,
+      isStandard: item.isStandard,
+    });
+  }
+
+  // Guarda los cambios del artefacto en edición (PUT).
+  async function handleSaveEdit() {
+    if (!editingId) return;
+    if (!newItem.name.trim()) {
+      setError("El nombre es obligatorio.");
+      return;
+    }
+    setError(null);
+    const patch = {
+      name: newItem.name,
+      detail: newItem.detail || null,
+      brand: newItem.brand || null,
+      subcategory: newItem.subcategory,
+      tag: newItem.tag || null,
+      supplier: newItem.supplier || null,
+      referenceLink: newItem.referenceLink || null,
+      imageUrl: newItem.imageUrl || null,
+      listPrice: newItem.listPrice,
+      discountPercent: newItem.discountPercent || null,
+      realCostBlarq: newItem.realCostBlarq || null,
+      isStandard: newItem.isStandard,
+    };
+    try {
+      const res = await fetch(`/api/catalogo/artefactos/${editingId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Error al guardar");
+      }
+      setItems((prev) =>
+        prev.map((it) => (it.id === editingId ? { ...it, ...patch } : it))
+      );
+      setActiveTab(newItem.subcategory);
+      closeForm();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error inesperado");
+    }
+  }
+
   // Extraer datos al pegar URL en el formulario de "nuevo item".
   async function handleExtractForNew() {
     if (!newItem.referenceLink) {
@@ -398,37 +549,28 @@ export default function ArtefactosCatalogClient({
     }
   }
 
-  // ── Render: filas + encabezados de grupo por tag ──────────────────────
-  // Recorremos la lista visible y, cada vez que el tag cambia respecto a la
-  // fila anterior, insertamos un encabezado con el tipo. Las filas sin tag
-  // no muestran encabezado (evita ruido).
-  const rows: ReactNode[] = [];
-  let prevTag = " "; // centinela imposible para forzar el primer chequeo
-  for (const item of visible) {
-    const tagKey = (item.tag ?? "").trim();
-    if (tagKey !== prevTag) {
-      if (tagKey) {
-        rows.push(
-          <div
-            key={`hdr-${item.id}`}
-            className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-500 uppercase tracking-wider"
-          >
-            {tagKey}
-          </div>
-        );
-      }
-      prevTag = tagKey;
+  // ── Agrupado real por tipo ────────────────────────────────────────────
+  // Junta TODOS los artefactos del mismo tipo bajo un solo encabezado (no
+  // importa dónde estén). Orden de grupos: el del desplegable (TIPO_OPTIONS),
+  // después tipos viejos no estándar, y "sin tipo" al final. Dentro de cada
+  // grupo, el orden es por sortOrder (lo que MJ arrastra).
+  const groups: { tag: string; items: CatalogItem[] }[] = (() => {
+    const byTag = new Map<string, CatalogItem[]>();
+    for (const it of visible) {
+      const key = (it.tag ?? "").trim();
+      const arr = byTag.get(key);
+      if (arr) arr.push(it);
+      else byTag.set(key, [it]);
     }
-    rows.push(
-      <CatalogItemRow
-        key={item.id}
-        item={item}
-        canReorder={!isFiltering}
-        onUpdate={(patch) => updateItem(item.id, patch)}
-        onDelete={() => deleteItem(item.id)}
-      />
-    );
-  }
+    const rank = (tag: string) => {
+      if (tag === "") return 100000; // sin tipo, al final
+      const idx = TIPO_OPTIONS.indexOf(tag);
+      return idx >= 0 ? idx : 50000; // tipos viejos no estándar, antes de "sin tipo"
+    };
+    return [...byTag.entries()]
+      .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
+      .map(([tag, items]) => ({ tag, items }));
+  })();
 
   return (
     <div>
@@ -487,9 +629,14 @@ export default function ArtefactosCatalogClient({
         </button>
         <button
           onClick={() => {
-            // El formulario nuevo arranca en la pestaña activa.
+            if (adding) {
+              closeForm();
+              return;
+            }
+            // Abrir alta en blanco (cierra una edición si la había).
+            closeForm();
             setNewItem((prev) => ({ ...prev, subcategory: activeTab }));
-            setAdding(!adding);
+            setAdding(true);
           }}
           className="text-sm bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800"
         >
@@ -509,11 +656,18 @@ export default function ArtefactosCatalogClient({
         />
       )}
 
-      {/* Formulario de creación */}
-      {adding && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+      {/* Formulario de alta / edición. Es un <form> para que Enter guarde. */}
+      {(adding || editingId) && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (editingId) handleSaveEdit();
+            else handleAddNew();
+          }}
+          className="bg-white rounded-xl border border-gray-200 p-5 mb-4"
+        >
           <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-4">
-            Nuevo artefacto
+            {editingId ? "Editar artefacto" : "Nuevo artefacto"}
           </h2>
 
           {/* Atajo: link del producto + extraer */}
@@ -532,6 +686,7 @@ export default function ArtefactosCatalogClient({
                 className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs outline-none focus:border-gray-500"
               />
               <button
+                type="button"
                 onClick={handleExtractForNew}
                 disabled={extractingForNew || !newItem.referenceLink}
                 className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded hover:bg-gray-800 disabled:opacity-50 whitespace-nowrap"
@@ -627,17 +782,22 @@ export default function ArtefactosCatalogClient({
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                Tipo (opcional, para agrupar)
+                Tipo (para agrupar)
               </label>
-              <input
-                type="text"
+              <select
                 value={newItem.tag}
                 onChange={(e) =>
                   setNewItem({ ...newItem, tag: e.target.value })
                 }
-                placeholder="grifería, muebles, WC…"
-                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500"
-              />
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500 bg-white"
+              >
+                <option value="">Sin tipo</option>
+                {TIPO_OPTIONS.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
@@ -684,17 +844,50 @@ export default function ArtefactosCatalogClient({
             </div>
             <div className="col-span-2">
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                URL de imagen (manual)
+                Foto — subí un archivo o pegá una URL
               </label>
-              <input
-                type="url"
-                value={newItem.imageUrl}
-                onChange={(e) =>
-                  setNewItem({ ...newItem, imageUrl: e.target.value })
-                }
-                placeholder="https://…/imagen.jpg"
-                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500"
-              />
+              <div className="flex items-center gap-2">
+                {newItem.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={imgSrc(newItem.imageUrl)}
+                    alt="preview"
+                    className="w-12 h-12 object-contain bg-white border border-gray-200 rounded shrink-0"
+                  />
+                ) : (
+                  <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center text-gray-300 shrink-0">
+                    —
+                  </div>
+                )}
+                <label className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded hover:bg-gray-800 cursor-pointer whitespace-nowrap">
+                  Subir foto
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
+                      try {
+                        const dataUrl = await fileToThumbnailDataUrl(file);
+                        setNewItem((prev) => ({ ...prev, imageUrl: dataUrl }));
+                      } catch {
+                        setError("No se pudo procesar la imagen.");
+                      }
+                    }}
+                  />
+                </label>
+                <input
+                  type="url"
+                  value={newItem.imageUrl.startsWith("data:") ? "" : newItem.imageUrl}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, imageUrl: e.target.value })
+                  }
+                  placeholder="…o pegá https://…/imagen.jpg"
+                  className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500"
+                />
+              </div>
             </div>
             <div className="col-span-2">
               <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
@@ -713,25 +906,26 @@ export default function ArtefactosCatalogClient({
 
           <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
             <button
-              onClick={() => setAdding(false)}
+              type="button"
+              onClick={closeForm}
               className="text-xs text-gray-600 px-3 py-1.5 hover:text-gray-900"
             >
               Cancelar
             </button>
             <button
-              onClick={handleAddNew}
+              type="submit"
               className="text-xs bg-gray-900 text-white px-4 py-1.5 rounded hover:bg-gray-800"
             >
-              Guardar en catálogo
+              {editingId ? "Guardar cambios" : "Guardar en catálogo"}
             </button>
           </div>
-        </div>
+        </form>
       )}
 
       {/* Tabla de items */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div
-          className={`grid ${GRID_COLS} items-center gap-3 px-4 py-2 border-b border-gray-200 bg-gray-50 text-[10px] font-semibold text-gray-500 uppercase tracking-wider`}
+          className={`grid ${GRID_COLS} items-center gap-2 px-3 py-2 border-b border-gray-200 bg-gray-50 text-[10px] font-semibold text-gray-500 uppercase tracking-wider`}
         >
           <div></div>
           <div className="text-center">Img</div>
@@ -753,8 +947,9 @@ export default function ArtefactosCatalogClient({
 
         {!isFiltering && tabItems.length > 1 && (
           <div className="px-4 py-1.5 bg-white border-b border-gray-100 text-[11px] text-gray-400">
-            Arrastrá una fila desde la manija (⋮⋮) para ordenarla a tu gusto.
-            Las filas con el mismo tipo se agrupan solas con un encabezado.
+            Los artefactos del mismo tipo quedan juntos bajo su encabezado.
+            Dentro de cada tipo, arrastrá desde la manija (⋮⋮) para ordenarlos.
+            Para cambiar de tipo, usá el desplegable de la fila.
           </div>
         )}
 
@@ -765,19 +960,43 @@ export default function ArtefactosCatalogClient({
               : "No hay resultados con esos filtros."}
           </div>
         ) : (
-          <DndContext
-            id="artefactos-catalog-dnd"
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={onDragEnd}
-          >
-            <SortableContext
-              items={visible.map((it) => it.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              {rows}
-            </SortableContext>
-          </DndContext>
+          groups.map((g) => (
+            <Fragment key={g.tag || "__sin_tipo__"}>
+              {g.tag ? (
+                <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                  {g.tag}
+                </div>
+              ) : (
+                groups.length > 1 && (
+                  <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                    Sin tipo
+                  </div>
+                )
+              )}
+              <DndContext
+                id={`artefactos-dnd-${g.tag || "sin-tipo"}`}
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(e) => onDragEndGroup(e, g.items)}
+              >
+                <SortableContext
+                  items={g.items.map((it) => it.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {g.items.map((item) => (
+                    <CatalogItemRow
+                      key={item.id}
+                      item={item}
+                      canReorder={!isFiltering}
+                      onUpdate={(patch) => updateItem(item.id, patch)}
+                      onEdit={() => openEdit(item)}
+                      onDelete={() => deleteItem(item.id)}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+            </Fragment>
+          ))
         )}
       </div>
     </div>
@@ -789,14 +1008,35 @@ function CatalogItemRow({
   item,
   canReorder,
   onUpdate,
+  onEdit,
   onDelete,
 }: {
   item: CatalogItem;
   canReorder: boolean;
   onUpdate: (patch: Partial<CatalogItem>) => void;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   const sortable = useSortable({ id: item.id, disabled: !canReorder });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  // URL de imagen que no cargó (rota): mostramos el "+" para subir otra en vez
+  // del ícono roto. Ej.: links de mk.cl que ya no existen o están bloqueados.
+  const [failedImg, setFailedImg] = useState<string | null>(null);
+
+  // Sube una foto desde la compu: la achica a miniatura y la guarda.
+  async function handlePhotoFile(file: File | undefined | null) {
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const dataUrl = await fileToThumbnailDataUrl(file);
+      onUpdate({ imageUrl: dataUrl });
+    } catch {
+      alert("No se pudo procesar la imagen. Probá con otra.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
   const style = {
     transform: CSS.Transform.toString(sortable.transform),
     transition: sortable.transition,
@@ -809,7 +1049,7 @@ function CatalogItemRow({
     <div
       ref={sortable.setNodeRef}
       style={style}
-      className={`grid ${GRID_COLS} items-center gap-3 px-4 py-2 border-b border-gray-100 last:border-b-0 text-xs hover:bg-gray-50`}
+      className={`grid ${GRID_COLS} items-center gap-2 px-3 py-2 border-b border-gray-100 last:border-b-0 text-xs hover:bg-gray-50`}
     >
       {/* Manija de arrastre */}
       <div className="flex justify-center">
@@ -833,18 +1073,41 @@ function CatalogItemRow({
       </div>
 
       <div className="flex justify-center">
-        {item.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={item.imageUrl}
-            alt={item.name}
-            className="w-14 h-14 object-contain bg-white border border-gray-200 rounded"
-          />
-        ) : (
-          <div className="w-14 h-14 bg-gray-100 rounded flex items-center justify-center text-gray-300 text-lg">
-            —
-          </div>
-        )}
+        {/* Subir foto desde la compu: click abre el selector de archivo; la
+            imagen se achica a miniatura y se guarda (como pidió MJ). */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            handlePhotoFile(e.target.files?.[0]);
+            e.target.value = ""; // permite re-subir el mismo archivo
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          title="Click para subir / cambiar la foto"
+          className="group relative w-12 h-12"
+        >
+          {item.imageUrl && failedImg !== item.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imgSrc(item.imageUrl)}
+              alt={item.name}
+              onError={() => setFailedImg(item.imageUrl)}
+              className="w-12 h-12 object-contain bg-white border border-gray-200 rounded"
+            />
+          ) : (
+            <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center text-gray-300 text-lg">
+              +
+            </div>
+          )}
+          <span className="absolute inset-0 hidden group-hover:flex items-center justify-center bg-black/40 rounded text-white text-[9px] uppercase tracking-wider text-center leading-tight px-0.5">
+            {uploadingPhoto ? "subiendo…" : "subir foto"}
+          </span>
+        </button>
       </div>
 
       <div>
@@ -861,15 +1124,23 @@ function CatalogItemRow({
           onChange={(e) => onUpdate({ brand: e.target.value })}
           className="w-full bg-transparent border-0 p-0 text-gray-500 text-[11px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5 mt-0.5"
         />
-      </div>
-
-      <div>
         <input
           type="text"
+          value={item.supplier ?? ""}
+          placeholder="proveedor / tienda"
+          onChange={(e) => onUpdate({ supplier: e.target.value })}
+          className="w-full bg-transparent border-0 p-0 text-gray-400 text-[10px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+        />
+      </div>
+
+      <div className="min-w-0">
+        {/* Detalle: tipografía chica y hasta 2 líneas (los modelos son largos). */}
+        <textarea
+          rows={2}
           value={item.detail ?? ""}
           placeholder="modelo / detalle"
           onChange={(e) => onUpdate({ detail: e.target.value })}
-          className="w-full bg-transparent border-0 p-0 text-gray-700 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+          className="w-full bg-transparent border-0 p-0 text-gray-700 text-[11px] leading-tight resize-none outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
         />
         {item.referenceLink && (
           <a
@@ -897,13 +1168,23 @@ function CatalogItemRow({
             </option>
           ))}
         </select>
-        <input
-          type="text"
+        {/* Tipo: desplegable cerrado. Define el grupo (encabezado). */}
+        <select
           value={item.tag ?? ""}
-          placeholder="tipo (grifería, muebles…)"
-          onChange={(e) => onUpdate({ tag: e.target.value })}
-          className="w-full bg-transparent border-0 p-0 text-gray-500 text-[11px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5 mt-0.5"
-        />
+          onChange={(e) => onUpdate({ tag: e.target.value || null })}
+          className="w-full bg-transparent border-0 p-0 text-gray-500 text-[11px] outline-none cursor-pointer focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5 mt-0.5"
+          title="Tipo (agrupa los artefactos)"
+        >
+          <option value="">sin tipo</option>
+          {TIPO_OPTIONS.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+          {item.tag && !TIPO_OPTIONS.includes(item.tag) && (
+            <option value={item.tag}>{item.tag}</option>
+          )}
+        </select>
       </div>
 
       {/* Precio lista (sin descuento) */}
@@ -982,10 +1263,17 @@ function CatalogItemRow({
         </label>
       </div>
 
-      <div className="text-center">
+      <div className="flex items-center justify-center gap-1.5">
+        <button
+          onClick={onEdit}
+          className="text-[10px] text-gray-500 border border-gray-300 rounded px-1.5 py-0.5 hover:border-gray-500 hover:text-gray-900"
+          title="Editar (abre el cuadro completo)"
+        >
+          Editar
+        </button>
         <button
           onClick={onDelete}
-          className="text-gray-300 hover:text-red-600 text-lg"
+          className="text-gray-300 hover:text-red-600 text-lg leading-none"
           title="Borrar"
         >
           ×

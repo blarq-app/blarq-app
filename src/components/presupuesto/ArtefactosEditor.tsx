@@ -3,6 +3,23 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import AddArtefactoFromCatalog, {
   type ArtefactoFromCatalog,
 } from "./AddArtefactoFromCatalog";
@@ -150,6 +167,11 @@ export default function ArtefactosEditor({
   // Modal de "Agregar del catálogo" de nivel superior (sirve también cuando
   // la cotización está vacía, donde no hay rooms con su botón "+ agregar").
   const [showAgregar, setShowAgregar] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   // ── Totales globales ─────────────────────────────────────────────────
   const totalCliente = items.reduce(
@@ -398,6 +420,30 @@ export default function ArtefactosEditor({
     }
   }
 
+  // Arrastrar reordena DENTRO de un room (mismo ambiente y subcategoría). El
+  // sortOrder es global pero el display agrupa por subcategoría→room y ordena
+  // por sortOrder dentro del grupo, así que reasignar 0..n por room alcanza.
+  // Persiste con el PUT por ítem (ya guarda sortOrder).
+  async function onDragEndRoom(e: DragEndEvent, roomItems: ArtefactoItem[]) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIdx = roomItems.findIndex((it) => it.id === active.id);
+    const newIdx = roomItems.findIndex((it) => it.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(roomItems, oldIdx, newIdx);
+    const orderMap = new Map(reordered.map((it, i) => [it.id, i]));
+    // Optimista: reasigna sortOrder a los ítems de ESTE room.
+    setItems((prev) =>
+      prev.map((it) =>
+        orderMap.has(it.id) ? { ...it, sortOrder: orderMap.get(it.id)! } : it
+      )
+    );
+    // Persistir cada ítem movido (PUT por ítem).
+    for (const it of reordered) {
+      persistItem({ ...it, sortOrder: orderMap.get(it.id)! });
+    }
+  }
+
   // Agrega un item al budget desde el payload del componente
   // AddArtefactoFromCatalog (puede venir del catálogo o tipeado manual).
   async function addItemFromPayload(
@@ -506,9 +552,9 @@ export default function ArtefactosEditor({
   // para que el tree-shaking las detecte. Por eso las defino como strings
   // constantes y no las interpolo.
   const gridColsCost =
-    "grid grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_5.5rem_5rem_2rem]";
+    "grid grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_5.5rem_5rem_3.5rem]";
   const gridColsClean =
-    "grid grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_2rem]";
+    "grid grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_3.5rem]";
   const gridCls = showCost ? gridColsCost : gridColsClean;
 
   return (
@@ -592,136 +638,34 @@ export default function ArtefactosEditor({
                 <div></div>
               </div>
 
-              {/* Items del room */}
-              {room.items.map((item) => {
-                const totalCliente = item.clientPrice * item.quantity;
-                const totalCosto =
-                  (item.realCostBlarq ?? 0) * item.quantity;
-                const utilidad = totalCliente - totalCosto;
-                return (
-                  <div
-                    key={item.id}
-                    className={`${gridCls} items-center gap-3 px-4 py-1.5 border-b border-gray-100 last:border-b-0 text-xs hover:bg-gray-50`}
-                  >
-                    <ItemImageCell
-                      projectId={projectId}
+              {/* Items del room — arrastrables (manija ⋮⋮ a la derecha) */}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(e) => onDragEndRoom(e, room.items)}
+              >
+                <SortableContext
+                  items={room.items.map((i) => i.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {room.items.map((item) => (
+                    <SortableArtefactoRow
+                      key={item.id}
                       item={item}
+                      projectId={projectId}
+                      showCost={showCost}
+                      gridCls={gridCls}
                       onUpdate={(patch) => updateItem(item.id, patch)}
-                    />
-                    <input
-                      type="text"
-                      value={item.name}
-                      onChange={(e) =>
-                        updateItem(item.id, { name: e.target.value })
+                      onDelete={() => deleteItem(item.id)}
+                      onToggleCatalog={() =>
+                        item.catalogId
+                          ? unlinkFromCatalog(item)
+                          : saveToCatalog(item)
                       }
-                      className="w-full bg-transparent border-0 p-0 font-semibold text-gray-900 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
                     />
-                    <input
-                      type="text"
-                      value={item.detail ?? ""}
-                      placeholder="modelo…"
-                      onChange={(e) =>
-                        updateItem(item.id, { detail: e.target.value })
-                      }
-                      className="w-full bg-transparent border-0 p-0 text-gray-700 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
-                    />
-                    <input
-                      type="text"
-                      value={item.brand ?? ""}
-                      onChange={(e) =>
-                        updateItem(item.id, { brand: e.target.value })
-                      }
-                      className="w-full bg-transparent border-0 p-0 text-gray-600 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
-                    />
-                    <input
-                      type="number"
-                      value={item.quantity}
-                      onChange={(e) =>
-                        updateItem(item.id, {
-                          quantity: parseInt(e.target.value) || 1,
-                        })
-                      }
-                      className="w-full bg-transparent border-0 p-0 text-center tabular-nums text-gray-900 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
-                    />
-                    <ThousandsInput
-                      value={item.listPrice}
-                      onChange={(v) => updateItem(item.id, { listPrice: v })}
-                      placeholder="0"
-                      className="w-full bg-transparent border-0 p-0 text-right tabular-nums text-gray-900 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
-                    />
-                    <div className="flex items-center justify-end gap-0.5">
-                      <input
-                        type="number"
-                        step="1"
-                        value={
-                          item.discountPercent !== null
-                            ? Math.round(item.discountPercent * 100)
-                            : ""
-                        }
-                        placeholder="0"
-                        onChange={(e) =>
-                          updateItem(item.id, {
-                            discountPercent:
-                              (parseFloat(e.target.value) || 0) / 100,
-                          })
-                        }
-                        className="w-8 bg-transparent border-0 p-0 text-right tabular-nums text-gray-600 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
-                      />
-                      <span className="text-gray-400">%</span>
-                    </div>
-                    <div className="text-right tabular-nums font-semibold text-gray-900">
-                      {formatCLP(totalCliente)}
-                    </div>
-                    {showCost && (
-                      <>
-                        <ThousandsInput
-                          value={item.realCostBlarq ?? 0}
-                          onChange={(v) =>
-                            updateItem(item.id, { realCostBlarq: v })
-                          }
-                          placeholder="—"
-                          className="w-full bg-transparent border-0 p-0 text-right tabular-nums text-red-700 outline-none focus:bg-white focus:border focus:border-red-300 focus:rounded focus:px-1 focus:py-0.5"
-                        />
-                        <div
-                          className={`text-right tabular-nums font-semibold ${
-                            utilidad >= 0 ? "text-green-700" : "text-red-700"
-                          }`}
-                        >
-                          {formatCLP(utilidad)}
-                        </div>
-                      </>
-                    )}
-                    <div className="flex items-center gap-1 justify-end">
-                      <button
-                        onClick={() =>
-                          item.catalogId
-                            ? unlinkFromCatalog(item)
-                            : saveToCatalog(item)
-                        }
-                        className={`text-xs leading-none ${
-                          item.catalogId
-                            ? "text-green-600 hover:text-gray-400"
-                            : "text-gray-300 hover:text-gray-900"
-                        }`}
-                        title={
-                          item.catalogId
-                            ? "En catálogo BLARQ — click para desvincular"
-                            : "Guardar en catálogo BLARQ"
-                        }
-                      >
-                        ★
-                      </button>
-                      <button
-                        onClick={() => deleteItem(item.id)}
-                        className="text-gray-300 hover:text-red-600 text-xs"
-                        title="Eliminar"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+                  ))}
+                </SortableContext>
+              </DndContext>
 
               {/* Subtotal del room */}
               <div
@@ -1091,6 +1035,159 @@ function AgregarArtefactosModal({
           }}
           onCancel={onClose}
         />
+      </div>
+    </div>
+  );
+}
+
+// ─── Componente: fila de artefacto (arrastrable) ─────────────────────────
+//
+// La fila se puede arrastrar de la manija "⋮⋮" (a la derecha, junto a ★ y ×)
+// para reordenar DENTRO del room. Borrar (×) queda visible. El resto de las
+// celdas son los inputs editables de siempre.
+function SortableArtefactoRow({
+  item,
+  projectId,
+  showCost,
+  gridCls,
+  onUpdate,
+  onDelete,
+  onToggleCatalog,
+}: {
+  item: ArtefactoItem;
+  projectId: string;
+  showCost: boolean;
+  gridCls: string;
+  onUpdate: (patch: Partial<ArtefactoItem>) => void;
+  onDelete: () => void;
+  onToggleCatalog: () => void;
+}) {
+  const sortable = useSortable({ id: item.id });
+  const style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.5 : 1,
+    zIndex: sortable.isDragging ? 10 : ("auto" as const),
+    background: sortable.isDragging ? "#FAFAFA" : undefined,
+  };
+  const totalCliente = item.clientPrice * item.quantity;
+  const totalCosto = (item.realCostBlarq ?? 0) * item.quantity;
+  const utilidad = totalCliente - totalCosto;
+
+  return (
+    <div
+      ref={sortable.setNodeRef}
+      style={style}
+      className={`${gridCls} items-center gap-3 px-4 py-1.5 border-b border-gray-100 last:border-b-0 text-xs hover:bg-gray-50`}
+    >
+      <ItemImageCell
+        projectId={projectId}
+        item={item}
+        onUpdate={onUpdate}
+      />
+      <input
+        type="text"
+        value={item.name}
+        onChange={(e) => onUpdate({ name: e.target.value })}
+        className="w-full bg-transparent border-0 p-0 font-semibold text-gray-900 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+      />
+      <input
+        type="text"
+        value={item.detail ?? ""}
+        placeholder="modelo…"
+        onChange={(e) => onUpdate({ detail: e.target.value })}
+        className="w-full bg-transparent border-0 p-0 text-gray-700 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+      />
+      <input
+        type="text"
+        value={item.brand ?? ""}
+        onChange={(e) => onUpdate({ brand: e.target.value })}
+        className="w-full bg-transparent border-0 p-0 text-gray-600 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+      />
+      <input
+        type="number"
+        value={item.quantity}
+        onChange={(e) =>
+          onUpdate({ quantity: parseInt(e.target.value) || 1 })
+        }
+        className="w-full bg-transparent border-0 p-0 text-center tabular-nums text-gray-900 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+      />
+      <ThousandsInput
+        value={item.listPrice}
+        onChange={(v) => onUpdate({ listPrice: v })}
+        placeholder="0"
+        className="w-full bg-transparent border-0 p-0 text-right tabular-nums text-gray-900 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+      />
+      <div className="flex items-center justify-end gap-0.5">
+        <input
+          type="number"
+          step="1"
+          value={
+            item.discountPercent !== null
+              ? Math.round(item.discountPercent * 100)
+              : ""
+          }
+          placeholder="0"
+          onChange={(e) =>
+            onUpdate({
+              discountPercent: (parseFloat(e.target.value) || 0) / 100,
+            })
+          }
+          className="w-8 bg-transparent border-0 p-0 text-right tabular-nums text-gray-600 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+        />
+        <span className="text-gray-400">%</span>
+      </div>
+      <div className="text-right tabular-nums font-semibold text-gray-900">
+        {formatCLP(totalCliente)}
+      </div>
+      {showCost && (
+        <>
+          <ThousandsInput
+            value={item.realCostBlarq ?? 0}
+            onChange={(v) => onUpdate({ realCostBlarq: v })}
+            placeholder="—"
+            className="w-full bg-transparent border-0 p-0 text-right tabular-nums text-red-700 outline-none focus:bg-white focus:border focus:border-red-300 focus:rounded focus:px-1 focus:py-0.5"
+          />
+          <div
+            className={`text-right tabular-nums font-semibold ${
+              utilidad >= 0 ? "text-green-700" : "text-red-700"
+            }`}
+          >
+            {formatCLP(utilidad)}
+          </div>
+        </>
+      )}
+      <div className="flex items-center gap-1.5 justify-end">
+        <button
+          onClick={onToggleCatalog}
+          className={`text-xs leading-none ${
+            item.catalogId
+              ? "text-green-600 hover:text-gray-400"
+              : "text-gray-300 hover:text-gray-900"
+          }`}
+          title={
+            item.catalogId
+              ? "En catálogo BLARQ — click para desvincular"
+              : "Guardar en catálogo BLARQ"
+          }
+        >
+          ★
+        </button>
+        <button
+          onClick={onDelete}
+          className="text-gray-400 hover:text-red-600 text-sm leading-none"
+          title="Eliminar fila"
+        >
+          ×
+        </button>
+        <span
+          {...sortable.attributes}
+          {...sortable.listeners}
+          className="cursor-grab text-gray-300 hover:text-gray-700 select-none leading-none"
+          title="Arrastrar para reordenar"
+        >
+          ⋮⋮
+        </span>
       </div>
     </div>
   );

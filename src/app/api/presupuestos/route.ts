@@ -31,8 +31,13 @@ export async function POST(request: NextRequest) {
     // EXCEPCIÓN: en modo plantilla (importar desde otro proyecto), no hay
     // lineage — la versión nueva nace de cero estructuralmente aunque copió
     // los nombres de partidas.
+    //
+    // baseId SOLO se setea si se pide explícitamente una versión base
+    // (botón "Duplicar" o importar). El botón "+ Nueva" NO manda baseVersionId
+    // → versión VACÍA. Antes caía a la última versión (existing[0]) y copiaba
+    // todo, así que "Nueva" venía prellenada igual que "Duplicar" (bug).
     const isTemplateMode = !!data.resetQuantities;
-    const baseId = data.baseVersionId || (existing.length > 0 ? existing[0].id : null);
+    const baseId = data.baseVersionId || null;
     const parentForNew = isTemplateMode ? null : baseId;
 
     // Si se duplica/importa desde una versión base, heredar GG/Util de esa

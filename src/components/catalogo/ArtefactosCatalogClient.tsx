@@ -89,14 +89,29 @@ const SUBCATEGORY_OPTIONS = ["sanitario", "cocina", "iluminacion"];
 // Tipos para agrupar (desplegable cerrado, definido con MJ). Es el campo
 // "tag" del modelo; los artefactos del mismo tipo se juntan bajo un
 // encabezado. "" = sin tipo (van sueltos, sin encabezado).
-const TIPO_OPTIONS = [
-  "Accesorios",
-  "Griferías",
-  "Duchas",
-  "Muebles",
-  "Mamparas",
-  "WC",
-];
+//
+// Los tipos dependen de la pestaña (subcategoría): baños y cocina no comparten
+// vocabulario (un "Horno" no tiene sentido en baños, ni una "Mampara" en
+// cocina). El desplegable y el orden de los grupos usan la lista de la pestaña
+// activa. Iluminación todavía no tiene tipos (todo "sin tipo").
+const TIPO_OPTIONS_BY_SUB: Record<string, string[]> = {
+  sanitario: ["Accesorios", "Griferías", "Duchas", "Muebles", "Mamparas", "WC"],
+  cocina: [
+    "Lavaplatos",
+    "Griferías",
+    "Hornos",
+    "Encimeras",
+    "Campanas",
+    "Refrigeración",
+    "Lavavajillas",
+    "Microondas",
+  ],
+  iluminacion: [],
+};
+
+// Helper: tipos de una subcategoría (vacío si no está definida).
+const tipoOptionsFor = (sub: string): string[] =>
+  TIPO_OPTIONS_BY_SUB[sub] ?? [];
 
 // Layout de columnas compartido entre el encabezado y cada fila. La primera
 // columna angosta es la manija para arrastrar.
@@ -268,7 +283,7 @@ export default function ArtefactosCatalogClient({
   );
 
   // Arrastrar reordena DENTRO de un grupo (mismo tipo). El orden de los
-  // grupos lo fija el tipo (TIPO_OPTIONS), no el arrastre; para mover un
+  // grupos lo fija el tipo (los de la pestaña), no el arrastre; para mover un
   // artefacto de tipo se usa el desplegable de "tipo".
   async function onDragEndGroup(e: DragEndEvent, groupItems: CatalogItem[]) {
     const { active, over } = e;
@@ -551,7 +566,7 @@ export default function ArtefactosCatalogClient({
 
   // ── Agrupado real por tipo ────────────────────────────────────────────
   // Junta TODOS los artefactos del mismo tipo bajo un solo encabezado (no
-  // importa dónde estén). Orden de grupos: el del desplegable (TIPO_OPTIONS),
+  // importa dónde estén). Orden de grupos: el del desplegable de la pestaña,
   // después tipos viejos no estándar, y "sin tipo" al final. Dentro de cada
   // grupo, el orden es por sortOrder (lo que MJ arrastra).
   const groups: { tag: string; items: CatalogItem[] }[] = (() => {
@@ -562,9 +577,10 @@ export default function ArtefactosCatalogClient({
       if (arr) arr.push(it);
       else byTag.set(key, [it]);
     }
+    const orden = tipoOptionsFor(activeTab); // tipos de la pestaña activa
     const rank = (tag: string) => {
       if (tag === "") return 100000; // sin tipo, al final
-      const idx = TIPO_OPTIONS.indexOf(tag);
+      const idx = orden.indexOf(tag);
       return idx >= 0 ? idx : 50000; // tipos viejos no estándar, antes de "sin tipo"
     };
     return [...byTag.entries()]
@@ -792,7 +808,7 @@ export default function ArtefactosCatalogClient({
                 className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500 bg-white"
               >
                 <option value="">Sin tipo</option>
-                {TIPO_OPTIONS.map((t) => (
+                {tipoOptionsFor(newItem.subcategory).map((t) => (
                   <option key={t} value={t}>
                     {t}
                   </option>
@@ -1176,12 +1192,12 @@ function CatalogItemRow({
           title="Tipo (agrupa los artefactos)"
         >
           <option value="">sin tipo</option>
-          {TIPO_OPTIONS.map((t) => (
+          {tipoOptionsFor(item.subcategory).map((t) => (
             <option key={t} value={t}>
               {t}
             </option>
           ))}
-          {item.tag && !TIPO_OPTIONS.includes(item.tag) && (
+          {item.tag && !tipoOptionsFor(item.subcategory).includes(item.tag) && (
             <option value={item.tag}>{item.tag}</option>
           )}
         </select>

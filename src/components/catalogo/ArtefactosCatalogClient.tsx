@@ -132,11 +132,11 @@ function sugerirNombreCorto(
 
 // Layout de columnas compartido entre el encabezado y cada fila. La primera
 // columna angosta es la manija para arrastrar.
-// 14 columnas: manija · img · nombre/marca · detalle · subcat/tipo · LÍNEA ·
-// COLOR · lista · dcto · total · mi costo · gan · std · editar. Nombre y detalle
-// envuelven a 2 líneas (no se cortan) en vez de truncar.
+// 14 columnas: manija · img · nombre/marca · LÍNEA · COLOR · detalle/link ·
+// subcat/tipo · lista · dcto · total · mi costo · gan · std · editar. Nombre y
+// detalle envuelven a 2 líneas (no se cortan) en vez de truncar.
 const GRID_COLS =
-  "grid-cols-[1.25rem_3.25rem_minmax(9rem,1.5fr)_minmax(6rem,1.1fr)_5rem_4.5rem_4.5rem_4.25rem_2.5rem_5rem_4.5rem_4.5rem_2rem_4.25rem]";
+  "grid-cols-[1.25rem_3.25rem_minmax(9rem,1.5fr)_4.5rem_4.5rem_minmax(6rem,1.1fr)_5rem_4.25rem_2.5rem_5rem_4.5rem_4.5rem_2rem_4.25rem]";
 
 // Input numérico con separadores de miles.
 function ThousandsInput({
@@ -1046,8 +1046,6 @@ export default function ArtefactosCatalogClient({
           <div></div>
           <div className="text-center">Img</div>
           <div>Nombre / marca</div>
-          <div>Detalle</div>
-          <div>Subcat. / tipo</div>
           {/* Línea — encabezado con desplegable de filtro. */}
           <div className="leading-tight">
             Línea
@@ -1082,6 +1080,8 @@ export default function ArtefactosCatalogClient({
               ))}
             </select>
           </div>
+          <div>Detalle</div>
+          <div>Subcat. / tipo</div>
           <div className="text-right">Lista</div>
           <div className="text-center">Dcto</div>
           <div className="text-right">Total</div>
@@ -1284,6 +1284,30 @@ function CatalogItemRow({
         />
       </div>
 
+      {/* Línea (editable, con sugerencias). Se muestra en MAYÚSCULA. */}
+      <div className="min-w-0">
+        <input
+          type="text"
+          list="lineas-list"
+          value={item.line ?? ""}
+          placeholder="—"
+          onChange={(e) => onUpdate({ line: e.target.value || null })}
+          className="w-full bg-transparent border-0 p-0 text-gray-700 text-[11px] font-medium uppercase outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+        />
+      </div>
+
+      {/* Color / terminación (editable, con sugerencias). */}
+      <div className="min-w-0">
+        <input
+          type="text"
+          list="colores-list"
+          value={item.finish ?? ""}
+          placeholder="—"
+          onChange={(e) => onUpdate({ finish: e.target.value || null })}
+          className="w-full bg-transparent border-0 p-0 text-gray-600 text-[11px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+        />
+      </div>
+
       <div className="min-w-0">
         {/* Detalle: tipografía chica y hasta 2 líneas (los modelos son largos). */}
         <textarea
@@ -1336,30 +1360,6 @@ function CatalogItemRow({
             <option value={item.tag}>{item.tag}</option>
           )}
         </select>
-      </div>
-
-      {/* Línea (editable, con sugerencias). */}
-      <div className="min-w-0">
-        <input
-          type="text"
-          list="lineas-list"
-          value={item.line ?? ""}
-          placeholder="—"
-          onChange={(e) => onUpdate({ line: e.target.value || null })}
-          className="w-full bg-transparent border-0 p-0 text-gray-600 text-[11px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
-        />
-      </div>
-
-      {/* Color / terminación (editable, con sugerencias). */}
-      <div className="min-w-0">
-        <input
-          type="text"
-          list="colores-list"
-          value={item.finish ?? ""}
-          placeholder="—"
-          onChange={(e) => onUpdate({ finish: e.target.value || null })}
-          className="w-full bg-transparent border-0 p-0 text-gray-600 text-[11px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
-        />
       </div>
 
       {/* Precio lista (sin descuento) */}

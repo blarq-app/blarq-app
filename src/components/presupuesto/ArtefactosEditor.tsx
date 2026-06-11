@@ -505,9 +505,9 @@ export default function ArtefactosEditor({
   // para que el tree-shaking las detecte. Por eso las defino como strings
   // constantes y no las interpolo.
   const gridColsCost =
-    "grid grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_5.5rem_5rem_3.5rem]";
+    "grid grid-cols-[3.25rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_5.5rem_5rem_3.5rem]";
   const gridColsClean =
-    "grid grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_3.5rem]";
+    "grid grid-cols-[3.25rem_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_3.5rem]";
   const gridCls = showCost ? gridColsCost : gridColsClean;
 
   return (
@@ -1024,7 +1024,7 @@ function SortableArtefactoRow({
     <div
       ref={sortable.setNodeRef}
       style={style}
-      className={`${gridCls} items-center gap-3 px-4 py-1.5 border-b border-gray-100 last:border-b-0 text-xs hover:bg-gray-50`}
+      className={`${gridCls} items-center gap-3 px-4 py-1 border-b border-gray-100 last:border-b-0 text-xs hover:bg-gray-50`}
     >
       <ItemImageCell
         projectId={projectId}
@@ -1223,7 +1223,7 @@ function ItemImageCell({
       <button
         type="button"
         onClick={openPopover}
-        className="w-20 h-20 mx-auto rounded border border-gray-200 hover:border-gray-500 bg-white flex items-center justify-center overflow-hidden transition-colors"
+        className="w-11 h-11 mx-auto rounded border border-gray-200 hover:border-gray-500 bg-white flex items-center justify-center overflow-hidden transition-colors"
         title={item.imageUrl ? "Editar imagen" : "Agregar imagen"}
       >
         {item.imageUrl ? (

@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-11 — Artefactos: "Extraer" sugiere nombre, foto KH, "+ Nueva" vacía, links LED
+
+- **PR #115 — "Extraer" sugiere el nombre corto**: al autocompletar pegando un link, propone el `Nombre (corto)` desde el título (saca la marca + mayúsculas), solo si está vacío (no pisa lo escrito). **+ foto Kitchen House por "Extraer"**: se agregó `kitchenhouse.cl` a la whitelist del img-proxy (el "Extraer" trae la foto por el dominio de la tienda, no por cdn.shopify.com → antes la bloqueaba y se veía el "+").
+- **PR #116 — "+ Nueva" versión viene vacía**: bug — al crear una "+ Nueva" cotización (obra/muebles/artefactos) venía prellenada con la versión anterior. Causa: `/api/presupuestos` POST hacía `baseId = baseVersionId || existing[0].id`, y "+ Nueva" no manda `baseVersionId` → copiaba la última. Fix: `baseId = baseVersionId || null` → "+ Nueva" vacía, "Duplicar" copia, importar-desde-otro-proyecto (resetQuantities) sigue igual. Alcance: los 3 tipos.
+- **Links LED Studio**: los 3 artefactos de iluminación tenían foto pero no link; se completó el `referenceLink` desde ledstudio.cl (VTEX, por RefId). Ahora todos los proveedores publicados (MK, Kitchen House, LED Studio) están linkeados; sin link quedan solo los 9 de MK que no están online.
+
 ## 2026-06-11 — Catálogo de artefactos: links de Kitchen House + limpieza de nombres genéricos
 
 - **Links Kitchen House (20)**: los artefactos Teka se cargaron con foto y precio pero sin link. Se completó el `referenceLink` con la página de kitchenhouse.cl de cada uno, matcheando contra la **foto guardada** (SKU verificado) para que el link apunte al mismo producto que la foto (`scripts/arreglar-catalogo.cjs`, `kh-links-*`). El 403 al abrir las páginas por script es anti-bot del sitio, no link inválido.

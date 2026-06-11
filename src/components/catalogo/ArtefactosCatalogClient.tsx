@@ -28,6 +28,8 @@ interface CatalogItem {
   brand: string | null;
   subcategory: string;
   tag: string | null;
+  line: string | null; // línea comercial (Asis, Urban, Stellar…)
+  finish: string | null; // color/terminación (Cromo, Brushed, Gun Grey…)
   supplier: string | null;
   referenceLink: string | null;
   imageUrl: string | null;
@@ -218,6 +220,9 @@ export default function ArtefactosCatalogClient({
   const [query, setQuery] = useState("");
   const [onlyStandard, setOnlyStandard] = useState(false);
   const [adding, setAdding] = useState(false);
+  // Filtros por línea y color (se eligen del listado de la pestaña activa).
+  const [filterLine, setFilterLine] = useState<string | null>(null);
+  const [filterFinish, setFilterFinish] = useState<string | null>(null);
   // Si está seteado, el formulario está editando ese artefacto (no creando).
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newItem, setNewItem] = useState({
@@ -226,6 +231,8 @@ export default function ArtefactosCatalogClient({
     brand: "",
     subcategory: "sanitario",
     tag: "",
+    line: "",
+    finish: "",
     supplier: "",
     referenceLink: "",
     imageUrl: "",
@@ -265,16 +272,35 @@ export default function ArtefactosCatalogClient({
       .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
   }, [items, activeTab]);
 
-  // Si hay búsqueda o el filtro de estándares está activo, no se puede
-  // arrastrar (estaríamos reordenando sobre una vista parcial). El arrastre
-  // se hace sobre la lista completa de la pestaña.
-  const isFiltering = query.trim() !== "" || onlyStandard;
+  // Si hay búsqueda, filtro de estándares, o filtro de línea/color activo, no
+  // se puede arrastrar (estaríamos reordenando sobre una vista parcial). El
+  // arrastre se hace sobre la lista completa de la pestaña.
+  const isFiltering =
+    query.trim() !== "" || onlyStandard || !!filterLine || !!filterFinish;
 
-  // ── Lista visible: aplica búsqueda + estándares sobre tabItems ────────
+  // Líneas y colores disponibles en la pestaña activa (para los chips).
+  const linesInTab = useMemo(
+    () =>
+      Array.from(new Set(tabItems.map((it) => it.line).filter(Boolean))).sort(
+        (a, b) => (a as string).localeCompare(b as string)
+      ) as string[],
+    [tabItems]
+  );
+  const finishesInTab = useMemo(
+    () =>
+      Array.from(new Set(tabItems.map((it) => it.finish).filter(Boolean))).sort(
+        (a, b) => (a as string).localeCompare(b as string)
+      ) as string[],
+    [tabItems]
+  );
+
+  // ── Lista visible: búsqueda + estándares + línea + color sobre tabItems ─
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return tabItems.filter((it) => {
       if (onlyStandard && !it.isStandard) return false;
+      if (filterLine && it.line !== filterLine) return false;
+      if (filterFinish && it.finish !== filterFinish) return false;
       if (q) {
         const hay = [
           it.name,
@@ -282,6 +308,8 @@ export default function ArtefactosCatalogClient({
           it.brand ?? "",
           it.supplier ?? "",
           it.tag ?? "",
+          it.line ?? "",
+          it.finish ?? "",
         ]
           .join(" ")
           .toLowerCase();
@@ -289,7 +317,7 @@ export default function ArtefactosCatalogClient({
       }
       return true;
     });
-  }, [tabItems, query, onlyStandard]);
+  }, [tabItems, query, onlyStandard, filterLine, filterFinish]);
 
   // ── Drag & drop ───────────────────────────────────────────────────────
   const sensors = useSensors(
@@ -392,6 +420,8 @@ export default function ArtefactosCatalogClient({
         brand: "",
         subcategory: activeTab,
         tag: "",
+        line: "",
+        finish: "",
         supplier: "",
         referenceLink: "",
         imageUrl: "",
@@ -419,6 +449,8 @@ export default function ArtefactosCatalogClient({
       brand: "",
       subcategory: activeTab,
       tag: "",
+      line: "",
+      finish: "",
       supplier: "",
       referenceLink: "",
       imageUrl: "",
@@ -441,6 +473,8 @@ export default function ArtefactosCatalogClient({
       brand: item.brand ?? "",
       subcategory: item.subcategory,
       tag: item.tag ?? "",
+      line: item.line ?? "",
+      finish: item.finish ?? "",
       supplier: item.supplier ?? "",
       referenceLink: item.referenceLink ?? "",
       imageUrl: item.imageUrl ?? "",
@@ -466,6 +500,8 @@ export default function ArtefactosCatalogClient({
       brand: newItem.brand || null,
       subcategory: newItem.subcategory,
       tag: newItem.tag || null,
+      line: newItem.line || null,
+      finish: newItem.finish || null,
       supplier: newItem.supplier || null,
       referenceLink: newItem.referenceLink || null,
       imageUrl: newItem.imageUrl || null,
@@ -679,6 +715,64 @@ export default function ArtefactosCatalogClient({
         </button>
       </div>
 
+      {/* Filtros por línea y color (chips). Solo aparecen si la pestaña tiene
+          esos datos. Sirven para armar un baño "por línea + color". */}
+      {(linesInTab.length > 0 || finishesInTab.length > 0) && (
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 mb-4 space-y-2">
+          {linesInTab.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] uppercase tracking-wider text-gray-500 mr-1 w-12">
+                Línea
+              </span>
+              {linesInTab.map((l) => (
+                <button
+                  key={l}
+                  onClick={() => setFilterLine(filterLine === l ? null : l)}
+                  className={`text-xs px-2.5 py-1 rounded-full border ${
+                    filterLine === l
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
+                  }`}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          )}
+          {finishesInTab.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] uppercase tracking-wider text-gray-500 mr-1 w-12">
+                Color
+              </span>
+              {finishesInTab.map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilterFinish(filterFinish === f ? null : f)}
+                  className={`text-xs px-2.5 py-1 rounded-full border ${
+                    filterFinish === f
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+          )}
+          {(filterLine || filterFinish) && (
+            <button
+              onClick={() => {
+                setFilterLine(null);
+                setFilterFinish(null);
+              }}
+              className="text-[11px] text-gray-500 hover:text-gray-900 underline"
+            >
+              limpiar filtros
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Panel de revisión de precios */}
       {reviewOpen && (
         <PriceReviewPanel
@@ -782,6 +876,46 @@ export default function ArtefactosCatalogClient({
                 placeholder="KLIPEN"
                 className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500"
               />
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
+                Línea
+              </label>
+              <input
+                type="text"
+                list="lineas-list"
+                value={newItem.line}
+                onChange={(e) =>
+                  setNewItem({ ...newItem, line: e.target.value })
+                }
+                placeholder="Urban, Stellar, Asis…"
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500"
+              />
+              <datalist id="lineas-list">
+                {linesInTab.map((l) => (
+                  <option key={l} value={l} />
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
+                Color / terminación
+              </label>
+              <input
+                type="text"
+                list="colores-list"
+                value={newItem.finish}
+                onChange={(e) =>
+                  setNewItem({ ...newItem, finish: e.target.value })
+                }
+                placeholder="Cromo, Brushed, Gun Grey…"
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500"
+              />
+              <datalist id="colores-list">
+                {finishesInTab.map((f) => (
+                  <option key={f} value={f} />
+                ))}
+              </datalist>
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
@@ -1166,6 +1300,12 @@ function CatalogItemRow({
           onChange={(e) => onUpdate({ supplier: e.target.value })}
           className="w-full bg-transparent border-0 p-0 text-gray-400 text-[10px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
         />
+        {/* Línea · color (se edita en el form "Editar"). */}
+        {(item.line || item.finish) && (
+          <div className="text-[10px] text-gray-500 mt-0.5">
+            {[item.line, item.finish].filter(Boolean).join(" · ")}
+          </div>
+        )}
       </div>
 
       <div className="min-w-0">

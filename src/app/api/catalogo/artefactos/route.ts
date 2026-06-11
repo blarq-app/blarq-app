@@ -70,6 +70,8 @@ export async function POST(request: NextRequest) {
         brand: data.brand ?? null,
         subcategory: data.subcategory,
         tag: data.tag ?? null,
+        line: data.line ?? null,
+        finish: data.finish ?? null,
         supplier: data.supplier ?? null,
         referenceLink: data.referenceLink ?? null,
         imageUrl: data.imageUrl ?? null,

@@ -147,6 +147,9 @@ export default function ArtefactosEditor({
   >(null);
   const [showRevisar, setShowRevisar] = useState(false);
   const [showDuplicar, setShowDuplicar] = useState(false);
+  // Modal de "Agregar del catálogo" de nivel superior (sirve también cuando
+  // la cotización está vacía, donde no hay rooms con su botón "+ agregar").
+  const [showAgregar, setShowAgregar] = useState(false);
 
   // ── Totales globales ─────────────────────────────────────────────────
   const totalCliente = items.reduce(
@@ -523,6 +526,12 @@ export default function ArtefactosEditor({
         </label>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setShowAgregar(true)}
+            className="text-sm bg-gray-900 text-white px-3 py-2 rounded-lg font-medium hover:bg-gray-800"
+          >
+            + Agregar del catálogo
+          </button>
+          <button
             onClick={() => setShowDuplicar(true)}
             className="text-sm border border-gray-300 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-50"
           >
@@ -799,8 +808,17 @@ export default function ArtefactosEditor({
 
       {/* Si no hay items todavía, ofrecemos arrancar */}
       {subcats.length === 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-sm text-gray-500">
-          No hay artefactos cargados. Importá desde un Excel o agregá manualmente.
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+          <p className="text-sm text-gray-500 mb-4">
+            No hay artefactos cargados. Agregá del catálogo, traé de otra
+            cotización o importá desde un Excel.
+          </p>
+          <button
+            onClick={() => setShowAgregar(true)}
+            className="text-sm bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800"
+          >
+            + Agregar del catálogo
+          </button>
         </div>
       )}
 
@@ -958,6 +976,122 @@ export default function ArtefactosEditor({
           }}
         />
       )}
+
+      {/* Modal: agregar del catálogo (nivel superior — sirve con la
+          cotización vacía). Elegís el ambiente y vas agregando varios. */}
+      {showAgregar && (
+        <AgregarArtefactosModal
+          onAdd={addItemFromPayload}
+          onClose={() => setShowAgregar(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Modal: agregar artefactos del catálogo ──────────────────────────────
+//
+// Punto de entrada de nivel superior para sumar artefactos al presupuesto.
+// A diferencia del botón "+ agregar" de cada room (que vive dentro de un
+// grupo y necesita que ya haya items), este modal se puede abrir siempre —
+// incluido el caso de cotización vacía. MJ elige el AMBIENTE (baño, cocina…)
+// y el TIPO (sanitario/cocina/iluminación), busca en el catálogo y va
+// agregando; el modal queda abierto para sumar varios de una.
+function AgregarArtefactosModal({
+  onAdd,
+  onClose,
+}: {
+  onAdd: (
+    subcategory: string,
+    room: string,
+    payload: ArtefactoFromCatalog
+  ) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [room, setRoom] = useState("bano_principal");
+  const [sub, setSub] = useState("sanitario");
+  const [count, setCount] = useState(0);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-xl max-w-2xl w-full my-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
+            Agregar del catálogo
+            {count > 0 && (
+              <span className="ml-2 text-[11px] font-normal text-green-700 normal-case tracking-normal">
+                {count} agregado{count === 1 ? "" : "s"}
+              </span>
+            )}
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-sm bg-gray-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-gray-800"
+          >
+            Listo
+          </button>
+        </div>
+
+        {/* Selectores: ambiente + tipo */}
+        <div className="flex flex-wrap items-end gap-4 px-5 py-3 bg-gray-50 border-b border-gray-200">
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
+              Ambiente
+            </label>
+            <select
+              value={room}
+              onChange={(e) => setRoom(e.target.value)}
+              className="px-2 py-1.5 border border-gray-300 rounded text-xs bg-white outline-none focus:border-gray-500"
+            >
+              {ROOM_ORDER.map((r) => (
+                <option key={r} value={r}>
+                  {ROOM_LABELS[r]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
+              Tipo
+            </label>
+            <div className="flex items-center gap-1">
+              {SUBCATEGORY_ORDER.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSub(s)}
+                  className={`text-[11px] px-2.5 py-1.5 rounded ${
+                    sub === s
+                      ? "bg-gray-900 text-white"
+                      : "bg-white border border-gray-300 text-gray-600 hover:border-gray-400"
+                  }`}
+                >
+                  {SUBCATEGORY_LABELS[s]?.replace("Artefactos ", "") ?? s}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Buscador del catálogo (reusa el componente existente). Cambia de
+            subcategoría al tocar el tab → vuelve a buscar. */}
+        <AddArtefactoFromCatalog
+          key={sub}
+          roomLabel={ROOM_LABELS[room] ?? room}
+          defaultSubcategory={sub}
+          onAdd={async (payload) => {
+            await onAdd(sub, room, payload);
+            setCount((c) => c + 1);
+          }}
+          onCancel={onClose}
+        />
+      </div>
     </div>
   );
 }

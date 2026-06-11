@@ -296,7 +296,7 @@ const CSS = `
   /* Anchos de columna (suman 100%). TOTAL en peso regular per spec.
      La col-chg (marca de cambio) es una columna estrecha a la IZQUIERDA del
      número de ítem; se le saca el ancho a partida + descripción. */
-  .col-chg    { width: 5%;  text-align: center; white-space: nowrap; vertical-align: middle; }
+  .col-chg    { width: 5%;  text-align: right; white-space: nowrap; vertical-align: middle; padding-right: 2pt; }
   .col-item   { width: 4%;  text-align: center; white-space: nowrap; }
   .col-name   { width: 26%; text-align: left; }
   .col-desc   { width: 34%; text-align: left; }

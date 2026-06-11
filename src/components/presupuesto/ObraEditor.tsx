@@ -1235,41 +1235,45 @@ export default function ObraEditor({
                           {expandedItems[item.id] ? "▾" : "▸"}
                         </button>
                         {/* Marca de cambio vs. la última versión enviada al
-                            cliente: flecha (subió/bajó) o "nuevo". Monocromática;
-                            tooltip con el antes → ahora. */}
-                        {chg?.marker === "up" && (
-                          <span
-                            className="mr-1 font-bold text-gray-900 align-middle"
-                            title={
-                              chg.prevTotal != null
-                                ? `Subió · antes ${formatCLP(chg.prevTotal)} → ahora ${formatCLP(item.total)}`
-                                : "Subió respecto a la versión enviada"
-                            }
-                          >
-                            ↑
-                          </span>
-                        )}
-                        {chg?.marker === "down" && (
-                          <span
-                            className="mr-1 font-bold text-gray-900 align-middle"
-                            title={
-                              chg.prevTotal != null
-                                ? `Bajó · antes ${formatCLP(chg.prevTotal)} → ahora ${formatCLP(item.total)}`
-                                : "Bajó respecto a la versión enviada"
-                            }
-                          >
-                            ↓
-                          </span>
-                        )}
-                        {chg?.marker === "added" && (
-                          <span
-                            className="mr-1 inline-block rounded-full border border-gray-900 px-1 text-[8px] font-semibold uppercase tracking-wide text-gray-900 align-middle"
-                            title="Partida nueva — no estaba en la versión enviada al cliente"
-                          >
-                            Nuevo
-                          </span>
-                        )}
-                        {chapter.index}.{itemIdx + 1}
+                            cliente: flecha (subió/bajó) o "nuevo". El número
+                            queda fijo en su lugar (alineado entre filas) y la
+                            marca cuelga hacia la IZQUIERDA con posición absoluta
+                            — así NUEVO no corre el número. Tooltip antes → ahora. */}
+                        <span className="relative inline-block">
+                          {chg?.marker === "up" && (
+                            <span
+                              className="absolute right-full top-1/2 -translate-y-1/2 mr-1 font-bold leading-none text-gray-900"
+                              title={
+                                chg.prevTotal != null
+                                  ? `Subió · antes ${formatCLP(chg.prevTotal)} → ahora ${formatCLP(item.total)}`
+                                  : "Subió respecto a la versión enviada"
+                              }
+                            >
+                              ↑
+                            </span>
+                          )}
+                          {chg?.marker === "down" && (
+                            <span
+                              className="absolute right-full top-1/2 -translate-y-1/2 mr-1 font-bold leading-none text-gray-900"
+                              title={
+                                chg.prevTotal != null
+                                  ? `Bajó · antes ${formatCLP(chg.prevTotal)} → ahora ${formatCLP(item.total)}`
+                                  : "Bajó respecto a la versión enviada"
+                              }
+                            >
+                              ↓
+                            </span>
+                          )}
+                          {chg?.marker === "added" && (
+                            <span
+                              className="absolute right-full top-1/2 -translate-y-1/2 mr-1 inline-block whitespace-nowrap rounded-full border border-gray-900 px-1 text-[8px] font-semibold uppercase leading-none tracking-wide text-gray-900"
+                              title="Partida nueva — no estaba en la versión enviada al cliente"
+                            >
+                              Nuevo
+                            </span>
+                          )}
+                          {chapter.index}.{itemIdx + 1}
+                        </span>
                         {/* Zona (subChapter) — selector inline. Si la partida
                             no tiene zona, muestra "+ zona" muy discreto al
                             hover de la fila. Si la tiene, no se muestra acá

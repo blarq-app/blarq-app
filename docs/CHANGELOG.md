@@ -4,6 +4,11 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-11 — Catálogo de artefactos: links de Kitchen House + limpieza de nombres genéricos
+
+- **Links Kitchen House (20)**: los artefactos Teka se cargaron con foto y precio pero sin link. Se completó el `referenceLink` con la página de kitchenhouse.cl de cada uno, matcheando contra la **foto guardada** (SKU verificado) para que el link apunte al mismo producto que la foto (`scripts/arreglar-catalogo.cjs`, `kh-links-*`). El 403 al abrir las páginas por script es anti-bot del sitio, no link inválido.
+- **Sin duplicados reales**: revisión por código MK, link KH y similitud de nombre. NINGÚN producto estaba cargado dos veces. Lo que parecía repetido eran **nombres genéricos** del catálogo viejo (distintos productos con el mismo nombre vago). Se **renombraron 8** usando el detalle: DESAGUE→Infloor Line 600, MAMPARA→Fija Brooklin 100, PLATO DUCHA→Luxor Redondo 25, WC→Atenas Two Piece Muro, UNION MURO ×2 (Trento Cromo / New Home Brushed), SET BARRA DUCHA ×2 (Luxor Cromada / New Home Brushed). Las 2 encimeras HLX 540 (IX BUT vs Inox Natural) resultaron correctas (SKUs 112620022/112620023 distintos) — falsa alarma. Prod sigue en 86, 0 nombres idénticos.
+
 ## 2026-06-11 — Catálogo de artefactos: tipos por pestaña (cocina con sus propios tipos)
 
 - **PR #112**: el desplegable de "tipo" y el orden de los grupos pasan a depender de la **subcategoría/pestaña** (antes era global, solo con los tipos de baño → cocina no se podía organizar). `TIPO_OPTIONS_BY_SUB`: **cocina** = Lavaplatos·Griferías·Hornos·Encimeras·Campanas·Refrigeración·Lavavajillas·Microondas; **baños** = los de antes; **iluminación** = sin tipos por ahora. El agrupado se calcula sobre la pestaña activa, así que "Griferías" en cocina y en baños no se mezclan.

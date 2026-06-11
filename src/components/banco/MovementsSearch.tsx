@@ -17,6 +17,13 @@ export default function MovementsSearch({
   const [value, setValue] = useState(defaultQ);
 
   useEffect(() => {
+    // Solo navegamos cuando MJ realmente cambió el texto. Sin este guard, el
+    // efecto disparaba un router.replace en el primer render (al montar) que
+    // borraba el `id` del drill-down (link "ver" de un pago) y "rebotaba" a la
+    // lista completa a los 300ms. Comparar contra el valor inicial (defaultQ,
+    // que viene del ?q= de la URL) es no-op cuando no hubo cambio y aguanta el
+    // doble montaje de React en dev (a diferencia de un flag de "primer render").
+    if (value === defaultQ) return;
     const t = setTimeout(() => {
       const params = new URLSearchParams();
       for (const [k, v] of Object.entries(sp)) {

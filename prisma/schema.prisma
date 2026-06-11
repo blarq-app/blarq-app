@@ -385,6 +385,12 @@ model ArtefactoCatalog {
   brand             String?
   subcategory       String   // sanitario | cocina | iluminacion
   tag               String?  // wc-piso, griferia-9cm, mueble-vanitorio-80, etc.
+  // Línea comercial (familia de productos) y color/terminación. Sirven sobre
+  // todo en sanitario, donde MJ compra "por línea" (Asis, Urban, Stellar…) y
+  // por color (cromo, brushed, gun grey…). Se rellenan parseando el nombre y
+  // quedan editables. Nullable: cocina/iluminación suelen no tener línea.
+  line              String?  // Asis, Urban, Stellar, New Home, Atlas, Atenas, Delfos…
+  finish            String?  // Cromo, Brushed, Gun Grey, Negro Mate, Blanco…
   supplier          String?  // MK, CHC, Kitchen House, LED Studio, etc.
   referenceLink     String?  // URL del producto en la tienda
   imageUrl          String?  // URL de la imagen

@@ -29,6 +29,8 @@ export async function PUT(
         brand: data.brand,
         subcategory: data.subcategory,
         tag: data.tag,
+        line: data.line,
+        finish: data.finish,
         supplier: data.supplier,
         referenceLink: data.referenceLink,
         imageUrl: data.imageUrl,

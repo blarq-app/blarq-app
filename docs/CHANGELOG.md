@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-11 — Artefactos: agregar del catálogo, editar (link/borrar/arrastrar), línea+color
+
+- **Agregar del catálogo desde el presupuesto (PR #118)**: botón "+ Agregar del catálogo" de nivel superior en el editor de artefactos del presupuesto (servía solo desde el "+ agregar" de cada room, que no existe con la cotización vacía → no se podía cargar el primero). Modal con selector de ambiente + tipo + buscador del catálogo; queda abierto para sumar varios. Reusa `AddArtefactoFromCatalog`.
+- **Links/precios LED Studio**: los 3 de iluminación tenían foto pero no link ni precio web. Se completó `referenceLink` y `listPrice` desde ledstudio.cl (VTEX, por RefId).
+- **Editor de artefactos (PR #119 + #120)**: en el buscador del catálogo, link "↗ ver" al producto + la fila deja de ser un botón completo (solo "+ agregar" suma). En las filas del presupuesto: **borrar (×) visible** y **arrastrar (⋮⋮) para reordenar** dentro del room (dnd-kit, persiste por el PUT por ítem). Se **sacó la estrella** ★ (link/unlink al catálogo) que confundía: lo que se agrega del catálogo queda ligado solo; lo suelto se sube desde la pantalla del catálogo.
+- **Línea + Color en el catálogo (PR #121)**: campos `line` (Asis/Urban/Stellar…) y `finish` (Cromo/Brushed/Gun Grey…) en `ArtefactoCatalog` (nullable, aditivo). **Chips de filtro** por línea y color en el catálogo, se ven en cada fila y se editan en "Editar". `scripts/parse-linea-color.cjs` los rellena parseando el nombre (línea solo del nombre para no agarrar el lavamanos del detalle; color de nombre+detalle). Aplicado en prod (schema + parse): 91 artefactos, 58 con línea/color. Pendiente sugerido: sumar los mismos filtros al buscador del presupuesto (`AddArtefactoFromCatalog`).
+
 ## 2026-06-11 — Artefactos: "Extraer" sugiere nombre, foto KH, "+ Nueva" vacía, links LED
 
 - **PR #115 — "Extraer" sugiere el nombre corto**: al autocompletar pegando un link, propone el `Nombre (corto)` desde el título (saca la marca + mayúsculas), solo si está vacío (no pisa lo escrito). **+ foto Kitchen House por "Extraer"**: se agregó `kitchenhouse.cl` a la whitelist del img-proxy (el "Extraer" trae la foto por el dominio de la tienda, no por cdn.shopify.com → antes la bloqueaba y se veía el "+").

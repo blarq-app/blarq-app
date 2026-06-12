@@ -433,6 +433,60 @@ export default function ArtefactosEditor({
     }
   }
 
+  // Duplica un artefacto dentro de su mismo ambiente: crea una copia con
+  // todos sus campos (incluido el costo BLARQ y el link al catálogo) y la
+  // deja pegada al original. Reasigna el sortOrder de ese room para que la
+  // copia quede justo debajo (el display ordena por sortOrder dentro del
+  // room). MJ después la edita o le cambia la cantidad como cualquier fila.
+  async function duplicateItem(source: ArtefactoItem) {
+    try {
+      const res = await fetch(
+        `/api/presupuestos/${initialBudget.id}/artefactos`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subcategory: source.subcategory,
+            room: source.room,
+            name: source.name,
+            detail: source.detail,
+            brand: source.brand,
+            quantity: source.quantity,
+            listPrice: source.listPrice,
+            discountPercent: source.discountPercent,
+            clientPrice: source.clientPrice,
+            realCostBlarq: source.realCostBlarq,
+            referenceLink: source.referenceLink,
+            imageUrl: source.imageUrl,
+            catalogId: source.catalogId,
+          }),
+        }
+      );
+      if (!res.ok) throw new Error("Error");
+      const created: ArtefactoItem = await res.json();
+
+      // Inserta la copia justo después del original y renumera el sortOrder
+      // de las filas de ese ambiente para que el orden quede prolijo.
+      const idx = items.findIndex((i) => i.id === source.id);
+      const withCopy = [
+        ...items.slice(0, idx + 1),
+        created,
+        ...items.slice(idx + 1),
+      ];
+      const inRoom = (it: ArtefactoItem) =>
+        it.room === source.room && it.subcategory === source.subcategory;
+      let counter = 0;
+      const reordered = withCopy.map((it) =>
+        inRoom(it) ? { ...it, sortOrder: counter++ } : it
+      );
+      setItems(reordered);
+      // Persistir el nuevo orden del room (PUT por ítem, ya guarda sortOrder).
+      reordered.filter(inRoom).forEach((it) => persistItem(it));
+    } catch {
+      alert("Error al duplicar");
+    }
+  }
+
   // Arrastrar reordena DENTRO de un room (mismo ambiente y subcategoría). El
   // sortOrder es global pero el display agrupa por subcategoría→room y ordena
   // por sortOrder dentro del grupo, así que reasignar 0..n por room alcanza.
@@ -641,6 +695,7 @@ export default function ArtefactosEditor({
                       gridCls={gridCls}
                       onUpdate={(patch) => updateItem(item.id, patch)}
                       onDelete={() => deleteItem(item.id)}
+                      onDuplicate={() => duplicateItem(item)}
                     />
                   ))}
                 </SortableContext>
@@ -1058,6 +1113,7 @@ function SortableArtefactoRow({
   gridCls,
   onUpdate,
   onDelete,
+  onDuplicate,
 }: {
   item: ArtefactoItem;
   projectId: string;
@@ -1065,6 +1121,7 @@ function SortableArtefactoRow({
   gridCls: string;
   onUpdate: (patch: Partial<ArtefactoItem>) => void;
   onDelete: () => void;
+  onDuplicate: () => void;
 }) {
   const sortable = useSortable({ id: item.id });
   const style = {
@@ -1172,6 +1229,13 @@ function SortableArtefactoRow({
         </>
       )}
       <div className="flex items-center gap-1.5 justify-end">
+        <button
+          onClick={onDuplicate}
+          className="text-gray-400 hover:text-gray-900 text-sm leading-none"
+          title="Duplicar fila (otra igual en este ambiente)"
+        >
+          ⎘
+        </button>
         <button
           onClick={onDelete}
           className="text-gray-400 hover:text-red-600 text-sm leading-none"

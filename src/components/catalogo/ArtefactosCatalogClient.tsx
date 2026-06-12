@@ -146,7 +146,7 @@ function sugerirNombreCorto(
 // subcat/tipo · lista · dcto · total · mi costo · gan · std · editar. Nombre y
 // detalle envuelven a 2 líneas (no se cortan) en vez de truncar.
 const GRID_COLS =
-  "grid-cols-[1.25rem_3.25rem_minmax(9rem,1.5fr)_4.5rem_4.5rem_minmax(6rem,1.1fr)_5rem_4.25rem_2.5rem_5rem_4.5rem_4.5rem_2rem_4.25rem]";
+  "grid-cols-[1.25rem_3.25rem_minmax(9rem,1.5fr)_4.5rem_4.5rem_minmax(6rem,1.1fr)_4.25rem_2.5rem_5rem_4.5rem_4.5rem_2rem_4.25rem]";
 
 // Input numérico con separadores de miles.
 function ThousandsInput({
@@ -232,7 +232,8 @@ export default function ArtefactosCatalogClient({
   const [activeTab, setActiveTab] = useState<string>("sanitario");
   const [onlyStandard, setOnlyStandard] = useState(false);
   const [adding, setAdding] = useState(false);
-  // Filtros por línea y color (se eligen del listado de la pestaña activa).
+  // Filtros por tipo, línea y color (se eligen del listado de la pestaña activa).
+  const [filterTag, setFilterTag] = useState<string | null>(null);
   const [filterLine, setFilterLine] = useState<string | null>(null);
   const [filterFinish, setFilterFinish] = useState<string | null>(null);
   // Si está seteado, el formulario está editando ese artefacto (no creando).
@@ -287,7 +288,8 @@ export default function ArtefactosCatalogClient({
   // Si hay búsqueda, filtro de estándares, o filtro de línea/color activo, no
   // se puede arrastrar (estaríamos reordenando sobre una vista parcial). El
   // arrastre se hace sobre la lista completa de la pestaña.
-  const isFiltering = onlyStandard || !!filterLine || !!filterFinish;
+  const isFiltering =
+    !!filterTag || onlyStandard || !!filterLine || !!filterFinish;
 
   // Líneas y colores disponibles en la pestaña activa (para los chips).
   const linesInTab = useMemo(
@@ -304,16 +306,30 @@ export default function ArtefactosCatalogClient({
       ) as string[],
     [tabItems]
   );
+  // Tipos presentes en la pestaña activa, en el orden del desplegable de la
+  // pestaña (para el filtro "Tipo": Accesorios, Griferías, WC…).
+  const tagsInTab = useMemo(() => {
+    const present = Array.from(
+      new Set(tabItems.map((it) => (it.tag ?? "").trim()).filter(Boolean))
+    );
+    const orden = tipoOptionsFor(activeTab);
+    return present.sort((a, b) => {
+      const ia = orden.indexOf(a);
+      const ib = orden.indexOf(b);
+      return (ia >= 0 ? ia : 9999) - (ib >= 0 ? ib : 9999) || a.localeCompare(b);
+    });
+  }, [tabItems, activeTab]);
 
   // ── Lista visible: estándares + línea + color sobre tabItems ───────────
   const visible = useMemo(() => {
     return tabItems.filter((it) => {
       if (onlyStandard && !it.isStandard) return false;
+      if (filterTag && (it.tag ?? "").trim() !== filterTag) return false;
       if (filterLine && it.line !== filterLine) return false;
       if (filterFinish && it.finish !== filterFinish) return false;
       return true;
     });
-  }, [tabItems, onlyStandard, filterLine, filterFinish]);
+  }, [tabItems, onlyStandard, filterTag, filterLine, filterFinish]);
 
   // ── Drag & drop ───────────────────────────────────────────────────────
   const sensors = useSensors(
@@ -660,7 +676,14 @@ export default function ArtefactosCatalogClient({
           return (
             <button
               key={s}
-              onClick={() => setActiveTab(s)}
+              onClick={() => {
+                setActiveTab(s);
+                // Los tipos/líneas/colores difieren por pestaña: limpiamos los
+                // filtros para no esconder todo con un filtro de otra pestaña.
+                setFilterTag(null);
+                setFilterLine(null);
+                setFilterFinish(null);
+              }}
               className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
                 active
                   ? "bg-gray-900 text-white border-gray-900"
@@ -683,6 +706,23 @@ export default function ArtefactosCatalogClient({
       {/* Toolbar: filtros + nuevo. La búsqueda por texto se sacó (pedido de
           MJ): se filtra por pestaña/tipo y por las columnas Línea/Color. */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap items-center gap-3">
+        {/* Filtro por tipo (Accesorios, Griferías, WC…) de la pestaña activa. */}
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <span className="text-gray-500">Tipo</span>
+          <select
+            value={filterTag ?? ""}
+            onChange={(e) => setFilterTag(e.target.value || null)}
+            className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white outline-none cursor-pointer focus:border-gray-500"
+            title="Mostrar solo un tipo"
+          >
+            <option value="">Todos</option>
+            {tagsInTab.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
           <input
             type="checkbox"
@@ -1068,7 +1108,6 @@ export default function ArtefactosCatalogClient({
             </select>
           </div>
           <div>Detalle</div>
-          <div>Subcat. / tipo</div>
           <div className="text-right">Lista</div>
           <div className="text-center">Dcto</div>
           <div className="text-right">Total</div>
@@ -1086,7 +1125,7 @@ export default function ArtefactosCatalogClient({
           <div className="px-4 py-1.5 bg-white border-b border-gray-100 text-[11px] text-gray-400">
             Los artefactos del mismo tipo quedan juntos bajo su encabezado.
             Dentro de cada tipo, arrastrá desde la manija (⋮⋮) para ordenarlos.
-            Para cambiar de tipo, usá el desplegable de la fila.
+            Para cambiar un artefacto de tipo o de pestaña, usá el botón Editar.
           </div>
         )}
 
@@ -1319,41 +1358,6 @@ function CatalogItemRow({
             ↗ {item.referenceLink.replace(/^https?:\/\//, "").slice(0, 40)}
           </a>
         )}
-      </div>
-
-      <div>
-        {/* Selector de subcategoría: permite mover el artefacto de pestaña.
-            Letra chica y gris: el tipo ya se ve en el encabezado de la
-            sección, así que esta columna queda como control discreto. */}
-        <select
-          value={item.subcategory}
-          onChange={(e) => onUpdate({ subcategory: e.target.value })}
-          className="w-full bg-transparent border-0 p-0 text-gray-500 text-[10px] outline-none cursor-pointer focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
-          title="Mover a otra pestaña"
-        >
-          {SUBCATEGORY_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {SUBCATEGORY_LABELS[s]}
-            </option>
-          ))}
-        </select>
-        {/* Tipo: desplegable cerrado. Define el grupo (encabezado). */}
-        <select
-          value={item.tag ?? ""}
-          onChange={(e) => onUpdate({ tag: e.target.value || null })}
-          className="w-full bg-transparent border-0 p-0 text-gray-400 text-[10px] outline-none cursor-pointer focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5 mt-0.5"
-          title="Tipo (agrupa los artefactos)"
-        >
-          <option value="">sin tipo</option>
-          {tipoOptionsFor(item.subcategory).map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-          {item.tag && !tipoOptionsFor(item.subcategory).includes(item.tag) && (
-            <option value={item.tag}>{item.tag}</option>
-          )}
-        </select>
       </div>
 
       {/* Precio lista (sin descuento) */}

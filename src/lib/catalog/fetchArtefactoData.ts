@@ -12,9 +12,13 @@
  *   - sodimac.cl
  *   - easy.cl
  *
- * Otros sitios (Falabella, Ripley, casamusa, ledstudio) devuelven null —
- * para esos, MJ pega los campos manual. La idea es cubrir el ~80% más
- * común sin meter una dependencia de scraping pesada (Puppeteer, etc).
+ * Otros sitios (Falabella, Ripley, casamusa) devuelven null — para esos,
+ * MJ pega los campos manual. La idea es cubrir el ~80% más común sin
+ * meter una dependencia de scraping pesada (Puppeteer, etc).
+ *
+ * OJO: en tiendas VTEX (mk.cl, ledstudio.cl) el PRECIO no está en el HTML
+ * (lo dibuja JavaScript) — para precio usar fetchVtexPrice; este scraper
+ * sirve igual para foto/nombre/marca.
  *
  * Estrategia general:
  *   - Fetch del HTML con User-Agent de navegador.

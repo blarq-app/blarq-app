@@ -230,7 +230,6 @@ export default function ArtefactosCatalogClient({
   const router = useRouter();
   const [items, setItems] = useState<CatalogItem[]>(initialItems);
   const [activeTab, setActiveTab] = useState<string>("sanitario");
-  const [query, setQuery] = useState("");
   const [onlyStandard, setOnlyStandard] = useState(false);
   const [adding, setAdding] = useState(false);
   // Filtros por línea y color (se eligen del listado de la pestaña activa).
@@ -288,8 +287,7 @@ export default function ArtefactosCatalogClient({
   // Si hay búsqueda, filtro de estándares, o filtro de línea/color activo, no
   // se puede arrastrar (estaríamos reordenando sobre una vista parcial). El
   // arrastre se hace sobre la lista completa de la pestaña.
-  const isFiltering =
-    query.trim() !== "" || onlyStandard || !!filterLine || !!filterFinish;
+  const isFiltering = onlyStandard || !!filterLine || !!filterFinish;
 
   // Líneas y colores disponibles en la pestaña activa (para los chips).
   const linesInTab = useMemo(
@@ -307,30 +305,15 @@ export default function ArtefactosCatalogClient({
     [tabItems]
   );
 
-  // ── Lista visible: búsqueda + estándares + línea + color sobre tabItems ─
+  // ── Lista visible: estándares + línea + color sobre tabItems ───────────
   const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
     return tabItems.filter((it) => {
       if (onlyStandard && !it.isStandard) return false;
       if (filterLine && it.line !== filterLine) return false;
       if (filterFinish && it.finish !== filterFinish) return false;
-      if (q) {
-        const hay = [
-          it.name,
-          it.detail ?? "",
-          it.brand ?? "",
-          it.supplier ?? "",
-          it.tag ?? "",
-          it.line ?? "",
-          it.finish ?? "",
-        ]
-          .join(" ")
-          .toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
       return true;
     });
-  }, [tabItems, query, onlyStandard, filterLine, filterFinish]);
+  }, [tabItems, onlyStandard, filterLine, filterFinish]);
 
   // ── Drag & drop ───────────────────────────────────────────────────────
   const sensors = useSensors(
@@ -697,15 +680,9 @@ export default function ArtefactosCatalogClient({
         })}
       </div>
 
-      {/* Toolbar: búsqueda + filtros + nuevo */}
+      {/* Toolbar: filtros + nuevo. La búsqueda por texto se sacó (pedido de
+          MJ): se filtra por pestaña/tipo y por las columnas Línea/Color. */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap items-center gap-3">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar por nombre, marca, proveedor…"
-          className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-gray-500"
-        />
         <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
           <input
             type="checkbox"

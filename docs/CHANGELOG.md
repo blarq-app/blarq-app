@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-11 — Artefactos: línea/color como columnas (catálogo y cotización) + lista compacta
+
+- **Catálogo (PR #123/#124)**: Línea y Color dejan de ser chips arriba y pasan a **columnas** editables; el filtro es un **desplegable en el encabezado** de cada una. Nombre y detalle envuelven a 2 líneas (no se cortan). Orden de columnas: foto · nombre · LÍNEA · COLOR · detalle/link · subcat/tipo · resto. La línea se muestra en MAYÚSCULA.
+- **Cotización — editor de artefactos (PR #125/#127/#128)**: lista más **compacta** (foto 80→44px, fila más baja → ~el doble de filas por pantalla). Item y detalle a 2 líneas (no se cortan). Se agregan columnas **Línea** (mayúscula) y **Color**, derivadas del nombre con el mismo parser del catálogo (solo lectura, no se guardan en `ArtefactoItem`; si hay que corregir línea/color de un producto se hace en el catálogo). Ajuste de anchos: item más ancho, cantidad más apretada.
+- Verificado en vivo en prod (Chrome de MJ): filtros del catálogo, agregar del catálogo, ↗ver, borrar, arrastrar, y las columnas/compactado de la cotización.
+
 ## 2026-06-11 — Artefactos: agregar del catálogo, editar (link/borrar/arrastrar), línea+color
 
 - **Agregar del catálogo desde el presupuesto (PR #118)**: botón "+ Agregar del catálogo" de nivel superior en el editor de artefactos del presupuesto (servía solo desde el "+ agregar" de cada room, que no existe con la cotización vacía → no se podía cargar el primero). Modal con selector de ambiente + tipo + buscador del catálogo; queda abierto para sumar varios. Reusa `AddArtefactoFromCatalog`.

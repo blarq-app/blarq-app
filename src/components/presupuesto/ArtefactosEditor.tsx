@@ -941,7 +941,7 @@ function AgregarArtefactosModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-xl max-w-2xl w-full my-8"
+        className="bg-white rounded-xl shadow-xl max-w-4xl w-full my-8"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

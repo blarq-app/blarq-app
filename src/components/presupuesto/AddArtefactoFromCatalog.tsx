@@ -284,7 +284,7 @@ export default function AddArtefactoFromCatalog({
                 // suma el item.
                 <div
                   key={it.id}
-                  className={`grid grid-cols-[3rem_minmax(0,1fr)_5rem_5rem_minmax(0,1.2fr)_6rem_4rem] items-center gap-3 px-3 py-2 border-b border-gray-100 last:border-b-0 text-xs text-left hover:bg-gray-50 ${
+                  className={`grid grid-cols-[3rem_minmax(0,1.5fr)_4.5rem_4.5rem_minmax(0,1.1fr)_5.5rem_4rem] items-start gap-3 px-3 py-2 border-b border-gray-100 last:border-b-0 text-xs text-left hover:bg-gray-50 ${
                     selectedId === it.id ? "bg-gray-50" : ""
                   }`}
                   onMouseEnter={() => setSelectedId(it.id)}
@@ -300,7 +300,7 @@ export default function AddArtefactoFromCatalog({
                     <div className="w-10 h-10 bg-gray-100 rounded border border-gray-200" />
                   )}
                   <div className="min-w-0">
-                    <div className="font-semibold text-gray-900 truncate">
+                    <div className="font-semibold text-gray-900 leading-tight break-words">
                       {it.name}
                       {it.isStandard && (
                         <span className="ml-1.5 text-[9px] text-gray-500 uppercase tracking-wider">
@@ -308,7 +308,7 @@ export default function AddArtefactoFromCatalog({
                         </span>
                       )}
                     </div>
-                    <div className="text-[10px] text-gray-500 truncate">
+                    <div className="text-[10px] text-gray-500 leading-tight break-words">
                       {it.brand || "—"}
                       {it.supplier ? ` · ${it.supplier}` : ""}
                       {it.referenceLink && (
@@ -325,13 +325,15 @@ export default function AddArtefactoFromCatalog({
                     </div>
                   </div>
                   {/* Línea en MAYÚSCULA y color, igual que en el catálogo. */}
-                  <div className="text-[10px] text-gray-700 uppercase truncate">
+                  <div className="text-[10px] text-gray-700 uppercase leading-tight break-words">
                     {it.line ?? "—"}
                   </div>
-                  <div className="text-[10px] text-gray-600 truncate">
+                  <div className="text-[10px] text-gray-600 leading-tight break-words">
                     {it.finish ?? "—"}
                   </div>
-                  <div className="text-gray-600 truncate">{it.detail ?? ""}</div>
+                  <div className="text-gray-600 leading-tight break-words">
+                    {it.detail ?? ""}
+                  </div>
                   <div className="text-right tabular-nums">
                     <div className="text-gray-900 font-medium">
                       {formatCLP(it.listPrice)}

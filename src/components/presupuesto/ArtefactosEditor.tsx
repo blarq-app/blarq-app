@@ -932,8 +932,18 @@ function AgregarArtefactosModal({
   onClose: () => void;
 }) {
   const [room, setRoom] = useState("bano_principal");
+  const [customRoom, setCustomRoom] = useState("");
   const [sub, setSub] = useState("sanitario");
   const [count, setCount] = useState(0);
+
+  // Ambiente efectivo: si MJ eligió "+ Otro ambiente…" usa el nombre que
+  // escribió (texto libre, ej. "Baño 3", "Terraza"). El ambiente se guarda
+  // como texto en la BD, así que no hace falta una lista cerrada de opciones.
+  const isCustomRoom = room === "__custom__";
+  const effectiveRoom = isCustomRoom ? customRoom.trim() : room;
+  const effectiveRoomLabel = isCustomRoom
+    ? customRoom.trim() || "nuevo ambiente"
+    : ROOM_LABELS[room] ?? room;
 
   return (
     <div
@@ -968,17 +978,30 @@ function AgregarArtefactosModal({
             <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
               Ambiente
             </label>
-            <select
-              value={room}
-              onChange={(e) => setRoom(e.target.value)}
-              className="px-2 py-1.5 border border-gray-300 rounded text-xs bg-white outline-none focus:border-gray-500"
-            >
-              {ROOM_ORDER.map((r) => (
-                <option key={r} value={r}>
-                  {ROOM_LABELS[r]}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={room}
+                onChange={(e) => setRoom(e.target.value)}
+                className="px-2 py-1.5 border border-gray-300 rounded text-xs bg-white outline-none focus:border-gray-500"
+              >
+                {ROOM_ORDER.map((r) => (
+                  <option key={r} value={r}>
+                    {ROOM_LABELS[r]}
+                  </option>
+                ))}
+                <option value="__custom__">+ Otro ambiente…</option>
+              </select>
+              {isCustomRoom && (
+                <input
+                  autoFocus
+                  type="text"
+                  value={customRoom}
+                  onChange={(e) => setCustomRoom(e.target.value)}
+                  placeholder="Ej. Baño 3, Baño suite, Terraza"
+                  className="w-48 px-2 py-1.5 border border-gray-300 rounded text-xs bg-white outline-none focus:border-gray-500"
+                />
+              )}
+            </div>
           </div>
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
@@ -1006,10 +1029,14 @@ function AgregarArtefactosModal({
             subcategoría al tocar el tab → vuelve a buscar. */}
         <AddArtefactoFromCatalog
           key={sub}
-          roomLabel={ROOM_LABELS[room] ?? room}
+          roomLabel={effectiveRoomLabel}
           defaultSubcategory={sub}
           onAdd={async (payload) => {
-            await onAdd(sub, room, payload);
+            if (!effectiveRoom) {
+              alert("Escribí el nombre del nuevo ambiente.");
+              return;
+            }
+            await onAdd(sub, effectiveRoom, payload);
             setCount((c) => c + 1);
           }}
           onCancel={onClose}

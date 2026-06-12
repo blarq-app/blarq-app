@@ -534,9 +534,9 @@ export default function ArtefactosEditor({
   // para que el tree-shaking las detecte. Por eso las defino como strings
   // constantes y no las interpolo.
   const gridColsCost =
-    "grid grid-cols-[3.25rem_minmax(0,1.2fr)_4.5rem_4.5rem_minmax(0,1.8fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_5.5rem_5rem_3.5rem]";
+    "grid grid-cols-[3.25rem_minmax(0,1.9fr)_4.5rem_4.5rem_minmax(0,1.4fr)_minmax(0,0.7fr)_2.25rem_5.5rem_3rem_6rem_5.5rem_5rem_3.5rem]";
   const gridColsClean =
-    "grid grid-cols-[3.25rem_minmax(0,1.2fr)_4.5rem_4.5rem_minmax(0,1.8fr)_minmax(0,0.7fr)_3rem_5.5rem_3rem_6rem_3.5rem]";
+    "grid grid-cols-[3.25rem_minmax(0,1.9fr)_4.5rem_4.5rem_minmax(0,1.4fr)_minmax(0,0.7fr)_2.25rem_5.5rem_3rem_6rem_3.5rem]";
   const gridCls = showCost ? gridColsCost : gridColsClean;
 
   return (

@@ -97,7 +97,17 @@ const SUBCATEGORY_OPTIONS = ["sanitario", "cocina", "iluminacion"];
 // cocina). El desplegable y el orden de los grupos usan la lista de la pestaña
 // activa. Iluminación todavía no tiene tipos (todo "sin tipo").
 const TIPO_OPTIONS_BY_SUB: Record<string, string[]> = {
-  sanitario: ["Accesorios", "Griferías", "Duchas", "Muebles", "Mamparas", "WC"],
+  // "Duchas" se partió en dos (pedido MJ 2026-06-12): Ducha/Receptáculo
+  // (columnas, griferías de ducha, platos, receptáculos, desagües) y Tina.
+  sanitario: [
+    "Accesorios",
+    "Griferías",
+    "Ducha/Receptáculo",
+    "Tina",
+    "Muebles",
+    "Mamparas",
+    "WC",
+  ],
   cocina: [
     "Lavaplatos",
     "Griferías",

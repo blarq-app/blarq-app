@@ -230,7 +230,6 @@ export default function ArtefactosCatalogClient({
   const router = useRouter();
   const [items, setItems] = useState<CatalogItem[]>(initialItems);
   const [activeTab, setActiveTab] = useState<string>("sanitario");
-  const [query, setQuery] = useState("");
   const [onlyStandard, setOnlyStandard] = useState(false);
   const [adding, setAdding] = useState(false);
   // Filtros por línea y color (se eligen del listado de la pestaña activa).
@@ -288,8 +287,7 @@ export default function ArtefactosCatalogClient({
   // Si hay búsqueda, filtro de estándares, o filtro de línea/color activo, no
   // se puede arrastrar (estaríamos reordenando sobre una vista parcial). El
   // arrastre se hace sobre la lista completa de la pestaña.
-  const isFiltering =
-    query.trim() !== "" || onlyStandard || !!filterLine || !!filterFinish;
+  const isFiltering = onlyStandard || !!filterLine || !!filterFinish;
 
   // Líneas y colores disponibles en la pestaña activa (para los chips).
   const linesInTab = useMemo(
@@ -307,30 +305,15 @@ export default function ArtefactosCatalogClient({
     [tabItems]
   );
 
-  // ── Lista visible: búsqueda + estándares + línea + color sobre tabItems ─
+  // ── Lista visible: estándares + línea + color sobre tabItems ───────────
   const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
     return tabItems.filter((it) => {
       if (onlyStandard && !it.isStandard) return false;
       if (filterLine && it.line !== filterLine) return false;
       if (filterFinish && it.finish !== filterFinish) return false;
-      if (q) {
-        const hay = [
-          it.name,
-          it.detail ?? "",
-          it.brand ?? "",
-          it.supplier ?? "",
-          it.tag ?? "",
-          it.line ?? "",
-          it.finish ?? "",
-        ]
-          .join(" ")
-          .toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
       return true;
     });
-  }, [tabItems, query, onlyStandard, filterLine, filterFinish]);
+  }, [tabItems, onlyStandard, filterLine, filterFinish]);
 
   // ── Drag & drop ───────────────────────────────────────────────────────
   const sensors = useSensors(
@@ -697,15 +680,9 @@ export default function ArtefactosCatalogClient({
         })}
       </div>
 
-      {/* Toolbar: búsqueda + filtros + nuevo */}
+      {/* Toolbar: filtros + nuevo. La búsqueda por texto se sacó (pedido de
+          MJ): se filtra por pestaña/tipo y por las columnas Línea/Color. */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap items-center gap-3">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar por nombre, marca, proveedor…"
-          className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-gray-500"
-        />
         <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
           <input
             type="checkbox"
@@ -1271,27 +1248,32 @@ function CatalogItemRow({
       </div>
 
       <div className="min-w-0">
-        {/* Nombre: textarea a 2 líneas para que los nombres largos no se corten. */}
+        {/* Nombre: la caja crece sola a su contenido (field-sizing:content) para
+            que el nombre completo se vea sin scroll, por largo que sea. */}
         <textarea
-          rows={2}
+          rows={1}
           value={item.name}
           onChange={(e) => onUpdate({ name: e.target.value })}
-          className="w-full bg-transparent border-0 p-0 font-semibold text-gray-900 text-[11px] leading-tight resize-none outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+          className="w-full bg-transparent border-0 p-0 font-semibold text-gray-900 text-[11px] leading-tight resize-none [field-sizing:content] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
         />
-        <input
-          type="text"
-          value={item.brand ?? ""}
-          placeholder="marca"
-          onChange={(e) => onUpdate({ brand: e.target.value })}
-          className="w-full bg-transparent border-0 p-0 text-gray-500 text-[10px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
-        />
-        <input
-          type="text"
-          value={item.supplier ?? ""}
-          placeholder="proveedor / tienda"
-          onChange={(e) => onUpdate({ supplier: e.target.value })}
-          className="w-full bg-transparent border-0 p-0 text-gray-400 text-[10px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
-        />
+        {/* Marca y proveedor lado a lado (no apilados). */}
+        <div className="flex items-center gap-1.5">
+          <input
+            type="text"
+            value={item.brand ?? ""}
+            placeholder="marca"
+            onChange={(e) => onUpdate({ brand: e.target.value })}
+            className="flex-1 min-w-0 bg-transparent border-0 p-0 text-gray-500 text-[10px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+          />
+          <span className="text-gray-300 text-[10px] select-none">·</span>
+          <input
+            type="text"
+            value={item.supplier ?? ""}
+            placeholder="proveedor"
+            onChange={(e) => onUpdate({ supplier: e.target.value })}
+            className="flex-1 min-w-0 bg-transparent border-0 p-0 text-gray-400 text-[10px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+          />
+        </div>
       </div>
 
       {/* Línea (editable, con sugerencias). Se muestra en MAYÚSCULA. */}
@@ -1319,13 +1301,13 @@ function CatalogItemRow({
       </div>
 
       <div className="min-w-0">
-        {/* Detalle: tipografía chica y hasta 2 líneas (los modelos son largos). */}
+        {/* Detalle: la caja crece sola a su contenido para verlo completo. */}
         <textarea
-          rows={2}
+          rows={1}
           value={item.detail ?? ""}
           placeholder="modelo / detalle"
           onChange={(e) => onUpdate({ detail: e.target.value })}
-          className="w-full bg-transparent border-0 p-0 text-gray-700 text-[11px] leading-tight resize-none outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+          className="w-full bg-transparent border-0 p-0 text-gray-700 text-[11px] leading-tight resize-none [field-sizing:content] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
         />
         {item.referenceLink && (
           <a
@@ -1340,11 +1322,13 @@ function CatalogItemRow({
       </div>
 
       <div>
-        {/* Selector de subcategoría: permite mover el artefacto de pestaña. */}
+        {/* Selector de subcategoría: permite mover el artefacto de pestaña.
+            Letra chica y gris: el tipo ya se ve en el encabezado de la
+            sección, así que esta columna queda como control discreto. */}
         <select
           value={item.subcategory}
           onChange={(e) => onUpdate({ subcategory: e.target.value })}
-          className="w-full bg-transparent border-0 p-0 text-gray-700 font-medium outline-none cursor-pointer focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+          className="w-full bg-transparent border-0 p-0 text-gray-500 text-[10px] outline-none cursor-pointer focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
           title="Mover a otra pestaña"
         >
           {SUBCATEGORY_OPTIONS.map((s) => (
@@ -1357,7 +1341,7 @@ function CatalogItemRow({
         <select
           value={item.tag ?? ""}
           onChange={(e) => onUpdate({ tag: e.target.value || null })}
-          className="w-full bg-transparent border-0 p-0 text-gray-500 text-[11px] outline-none cursor-pointer focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5 mt-0.5"
+          className="w-full bg-transparent border-0 p-0 text-gray-400 text-[10px] outline-none cursor-pointer focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5 mt-0.5"
           title="Tipo (agrupa los artefactos)"
         >
           <option value="">sin tipo</option>

@@ -132,6 +132,35 @@ function fmtDate(d: string | Date): string {
   return `${day}-${month}-${year}`;
 }
 
+// Línea (serie) y color/terminación derivados del nombre del artefacto, igual
+// que en el editor de la cotización (ArtefactosEditor): el nombre ya trae la
+// línea y el color, acá solo los extraemos para mostrarlos como columnas en el
+// PDF. Línea en MAYÚSCULA. NO se guardan en la BD.
+const LINEA_RULES: Array<[RegExp, string]> = [
+  [/NEW DELFOS/, "New Delfos"], [/NEW HOME/, "New Home"], [/STYLE-?N|\bSTYLE\b/, "Style"],
+  [/ASIS/, "Asis"], [/URBAN/, "Urban"], [/STELLAR/, "Stellar"], [/ATLAS/, "Atlas"],
+  [/\bHOME\b/, "Home"], [/LUXOR/, "Luxor"], [/TRENTO/, "Trento"], [/\bZEN\b/, "Zen"],
+  [/BROOKLIN/, "Brooklin"], [/NIZA/, "Niza"], [/BRIZO/, "Brizo"], [/ATENAS/, "Atenas"],
+  [/ALBANY/, "Albany"], [/DELFOS/, "Delfos"], [/QUEEN/, "Queen"], [/NEPAL/, "Nepal"],
+  [/AMANTIA/, "Amantia"], [/ARES/, "Ares"], [/ASTORIA/, "Astoria"],
+];
+const COLOR_RULES: Array<[RegExp, string]> = [
+  [/BRUSHED NICKEL/, "Brushed Nickel"], [/GUN GREY/, "Gun Grey"], [/NEGRO MATE/, "Negro Mate"],
+  [/RUSTIC OAK/, "Rustic Oak"], [/WHITE OAK/, "White Oak"], [/MINK GREY/, "Mink Grey"],
+  [/MOON GREY/, "Moon Grey"], [/BRUSHED/, "Brushed"], [/CROMAD[OA]|CROMO/, "Cromo"],
+  [/BLANCO/, "Blanco"], [/\bINOX|INOXIDABLE/, "Inox"],
+];
+function lineaDe(name: string, detail?: string | null): string {
+  const n = `${name} ${detail ?? ""}`.toUpperCase();
+  for (const [re, v] of LINEA_RULES) if (re.test(n)) return v;
+  return "";
+}
+function colorDe(name: string, detail?: string | null): string {
+  const n = `${name} ${detail ?? ""}`.toUpperCase();
+  for (const [re, v] of COLOR_RULES) if (re.test(n)) return v;
+  return "";
+}
+
 function getLogoDataUri(): string {
   const logoPath = path.join(
     process.cwd(),
@@ -159,7 +188,7 @@ const CSS = `
     margin: 0;
     padding: 0;
     font-family: 'Montserrat', sans-serif;
-    font-size: 9pt;
+    font-size: 7pt;
     font-weight: 400;
     color: #1A1A1A;
     -webkit-font-smoothing: antialiased;
@@ -177,16 +206,25 @@ const CSS = `
   .header-left  { text-align: left; }
   .header-right { text-align: right; }
 
-  .logo { display: block; height: 36px; width: auto; margin-bottom: 8px; }
+  .logo { display: block; height: 45px; width: auto; margin-bottom: 2pt; }
 
+  /* Título e subtítulo: mismas specs que el PDF de obra (18pt / 9pt, gris). */
   .doc-title {
     font-family: 'Montserrat', sans-serif;
-    font-size: 13pt;
-    font-weight: 500;
+    font-size: 18pt;
+    font-weight: 400;
     color: #808080;
-    line-height: 1.1;
-    margin: 0 0 8px 0;
+    line-height: 1;
+    margin: 0;
     letter-spacing: 0.02em;
+  }
+  .doc-subtitle {
+    font-size: 9pt;
+    font-weight: 400;
+    color: #808080;
+    letter-spacing: 0.06em;
+    margin: 0 0 6px 0;
+    text-transform: uppercase;
   }
 
   .meta {
@@ -205,22 +243,25 @@ const CSS = `
     line-height: 1.4;
   }
   .meta .m-value {
-    font-size: 7.5pt;
+    font-size: 8pt;
     font-weight: 500;
     color: #1A1A1A;
-    line-height: 1.4;
+    line-height: 1.3;
+    text-transform: uppercase;
   }
 
   /* ── Subcategoría: banner "ARTEFACTOS SANITARIOS" ──────────────────── */
+  /* Banner de subcategoría — mismo gris que las filas de capítulo del PDF
+     de obra (#E5E5E5), no negro, para que los dos documentos se lean igual. */
   .subcat-banner {
     margin-top: 12px;
-    padding: 5px 8px;
-    background: #1A1A1A;
-    color: #fff;
-    font-size: 8pt;
-    font-weight: 600;
+    padding: 4px 6px;
+    background: #E5E5E5;
+    color: #1A1A1A;
+    font-size: 7.5pt;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
   }
 
   /* ── Tabla por subcategoría ────────────────────────────────────────── */
@@ -231,25 +272,30 @@ const CSS = `
     font-size: 7.5pt;
     page-break-inside: auto;
   }
+  /* Banner de ambiente (BAÑO PRINCIPAL…) — gris claro como las filas de
+     sub-capítulo (zona) del PDF de obra. */
   .artefactos thead tr.h-room td {
-    background: #E5E5E5;
-    color: #1A1A1A;
-    font-weight: 700;
-    font-size: 7.5pt;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: 4px 6px;
-    border-bottom: 0.5pt solid #999;
-  }
-  .artefactos thead tr.h-cols th {
     background: #F5F5F5;
     color: #555;
-    font-weight: 600;
+    font-weight: 500;
+    font-size: 6.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 3px 6px;
+    border-bottom: 0.25pt solid #E5E5E5;
+  }
+  /* Encabezado de columnas — sin relleno, con regla arriba y abajo, igual
+     que el thead del PDF de obra. */
+  .artefactos thead tr.h-cols th {
+    background: transparent;
+    color: #1A1A1A;
+    font-weight: 500;
     font-size: 6.5pt;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    padding: 3px 6px;
-    border-bottom: 0.5pt solid #999;
+    padding: 2pt 6px;
+    border-top: 0.5pt solid #1A1A1A;
+    border-bottom: 0.5pt solid #1A1A1A;
     text-align: left;
   }
   .artefactos tbody td {
@@ -279,15 +325,17 @@ const CSS = `
      referencia renderiza imágenes entre 20mm y 30mm — apuntamos al
      extremo superior (~32mm = ~120px) para que el cliente identifique
      el producto sin tener que abrir el link. */
-  .col-img      { width: 18%; text-align: center; padding: 8px 4px; vertical-align: middle; }
+  .col-img      { width: 16%; text-align: center; padding: 8px 4px; vertical-align: middle; }
   .col-img img  { max-width: 120px; max-height: 120px; object-fit: contain; display: block; margin: 0 auto; }
-  .col-name     { width: 13%; font-weight: 600; }
-  .col-detail   { width: 23%; color: #333; }
-  .col-brand    { width: 8%; color: #555; }
-  .col-qty      { width: 5%;  text-align: center; font-variant-numeric: tabular-nums; }
-  .col-list     { width: 10%; text-align: right; font-variant-numeric: tabular-nums; }
-  .col-discount { width: 6%;  text-align: right; font-variant-numeric: tabular-nums; color: #555; }
-  .col-price    { width: 13%; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .col-name     { width: 12%; font-weight: 600; }
+  .col-line     { width: 7%;  color: #1A1A1A; font-weight: 500; text-transform: uppercase; }
+  .col-finish   { width: 7%;  color: #555; }
+  .col-detail   { width: 17%; color: #333; }
+  .col-brand    { width: 7%;  color: #555; }
+  .col-qty      { width: 4%;  text-align: center; font-variant-numeric: tabular-nums; }
+  .col-list     { width: 9%;  text-align: right; font-variant-numeric: tabular-nums; }
+  .col-discount { width: 5%;  text-align: right; font-variant-numeric: tabular-nums; color: #555; }
+  .col-price    { width: 12%; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
   /* Las filas con imagen son más altas — alineamos verticalmente al medio
      todas las celdas para que el texto quede centrado contra la foto. */
   .artefactos tbody td { vertical-align: middle; }
@@ -456,11 +504,13 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
         <table class="artefactos">
           <thead>
             <tr class="h-room">
-              <td colspan="8">${esc(r.label)}</td>
+              <td colspan="10">${esc(r.label)}</td>
             </tr>
             <tr class="h-cols">
               <th class="col-img"></th>
               <th class="col-name">Item</th>
+              <th class="col-line">Línea</th>
+              <th class="col-finish">Color</th>
               <th class="col-detail">Detalle</th>
               <th class="col-brand">Marca</th>
               <th class="col-qty">Cant.</th>
@@ -480,6 +530,8 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
                     : ""
                 }</td>
                 <td class="col-name">${esc(it.name)}</td>
+                <td class="col-line">${esc(lineaDe(it.name, it.detail) || "—")}</td>
+                <td class="col-finish">${esc(colorDe(it.name, it.detail) || "—")}</td>
                 <td class="col-detail">${esc(it.detail || "")}</td>
                 <td class="col-brand">${esc(it.brand || "—")}</td>
                 <td class="col-qty">${it.quantity}</td>
@@ -492,7 +544,7 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
               )
               .join("")}
             <tr class="subtotal-room">
-              <td colspan="7">Total artefactos ${esc(r.label.toLowerCase())}</td>
+              <td colspan="9">Total artefactos ${esc(r.label.toLowerCase())}</td>
               <td class="col-price">${fmtCLP(r.subtotal)}</td>
             </tr>
           </tbody>
@@ -506,7 +558,7 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
         <table class="artefactos">
           <tbody>
             <tr class="subtotal-sub">
-              <td colspan="7">Total ${esc(sub.label.toLowerCase())}</td>
+              <td colspan="9">Total ${esc(sub.label.toLowerCase())}</td>
               <td class="col-price">${fmtCLP(sub.subtotal)}</td>
             </tr>
           </tbody>
@@ -539,7 +591,8 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
       </div>
     </div>
     <div class="header-right">
-      <h1 class="doc-title">${esc(budget.version)} COTIZACIÓN ARTEFACTOS</h1>
+      <h1 class="doc-title">${esc(budget.version)} COTIZACIÓN</h1>
+      <div class="doc-subtitle">Artefactos</div>
       <div class="meta">
         <div class="m-value">${esc(PROFESSIONAL)}</div>
         <div class="m-label">Profesional</div>

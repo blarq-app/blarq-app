@@ -19,6 +19,7 @@
  */
 
 import { fetchArtefactoData } from "./fetchArtefactoData";
+import { fetchVtexPrice, isVtexStoreUrl } from "./fetchVtexPrice";
 
 // Item mínimo que necesitamos para revisar — calza con ArtefactoItem.
 export interface RevisableArtefacto {
@@ -107,17 +108,27 @@ export async function revisarArtefactosOnline(
       error: null,
     };
     try {
+      // En tiendas VTEX (mk, ledstudio) el precio NO viene en el HTML (lo
+      // dibuja JavaScript) — se pregunta a su API. El scraper igual corre
+      // para traer foto/nombre/marca, que sí están en el HTML.
+      const vtexPrice = isVtexStoreUrl(link)
+        ? await fetchVtexPrice(link)
+        : null;
       const data = await fetchArtefactoData(link);
-      if (!data || (!data.imageUrl && !data.name && !data.listPrice)) {
+      if (
+        !vtexPrice &&
+        (!data || (!data.imageUrl && !data.name && !data.listPrice))
+      ) {
         diff.error =
           "El link no respondió o el sitio no expone datos del producto.";
         return diff;
       }
       diff.fetched = {
-        listPrice: data.listPrice,
-        imageUrl: data.imageUrl,
-        name: data.name,
-        brand: data.brand,
+        // El precio de la API manda sobre el scrapeado (es el vigente real).
+        listPrice: vtexPrice?.listPrice ?? data?.listPrice ?? null,
+        imageUrl: data?.imageUrl ?? null,
+        name: data?.name ?? null,
+        brand: data?.brand ?? null,
       };
     } catch {
       diff.error = "Error al abrir el link del producto.";

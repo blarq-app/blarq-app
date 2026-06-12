@@ -153,8 +153,8 @@ const COLOR_RULES: Array<[RegExp, string]> = [
   [/MOON GREY/, "Moon Grey"], [/BRUSHED/, "Brushed"], [/CROMAD[OA]|CROMO/, "Cromo"],
   [/BLANCO/, "Blanco"], [/\bINOX|INOXIDABLE/, "Inox"],
 ];
-function lineaDe(name: string): string {
-  const n = name.toUpperCase();
+function lineaDe(name: string, detail?: string | null): string {
+  const n = `${name} ${detail ?? ""}`.toUpperCase();
   for (const [re, v] of LINEA_RULES) if (re.test(n)) return v;
   return "";
 }
@@ -1155,7 +1155,7 @@ function SortableArtefactoRow({
       />
       {/* Línea (derivada del nombre, en MAYÚSCULA) — solo lectura. */}
       <div className="text-[11px] font-medium text-gray-700 uppercase leading-tight">
-        {lineaDe(item.name) || "—"}
+        {lineaDe(item.name, item.detail) || "—"}
       </div>
       {/* Color (derivado del nombre/detalle) — solo lectura. */}
       <div className="text-[11px] text-gray-600 leading-tight">

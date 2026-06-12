@@ -192,6 +192,7 @@ Los ADRs detallados viven en [`/docs/decisions/`](decisions/). Resumen de las ac
 | Sync de PDFs SII solo local (no Vercel). | (pendiente — escribir al referenciar) |
 | Migración SQLite → Postgres + cutover Vercel. | (pendiente — referencia: `docs/MIGRATION_POSTGRES.md`) |
 | `metrics.ts` única fuente de verdad. | (pendiente — referencia: commit `fb377b1`) |
+| No cargar `pdfContent` (Bytes) en queries de UI. | `2026-06-12-no-cargar-bytes-pesados-en-ui.md` |
 | Salida de Maxxa, mediano plazo. | (pendiente, decisión de proveedor en standby) |
 
 Detalles operativos del cutover Postgres histórico: [MIGRATION_POSTGRES.md](MIGRATION_POSTGRES.md). Reviews críticos del estado pasado: [REVIEW_navegacion_2026-04-27.md](REVIEW_navegacion_2026-04-27.md), [REVIEW_autorevision_2026-04-29.md](REVIEW_autorevision_2026-04-29.md).

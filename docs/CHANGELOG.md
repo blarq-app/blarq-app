@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-12 — Rendimiento: excluir el PDF crudo (`pdfContent`) de las queries de métricas
+
+- **Causa (auditoría 2026-06-12)**: el Dashboard, `/proyectos`, `/cotizaciones` y `/proyectos/[id]/resumen` traían el campo `Invoice.pdfContent` (Bytes — el PDF oficial del SII cacheado en BD, ~100-200 KB c/u) de **todas** las facturas, aunque `computeProjectMetrics` no lo usa ni se muestra. Cada carga del Dashboard descargaba decenas/cientos de MB desde Neon y los descartaba.
+- **Fix**: `omit: { pdfContent: true }` en el include de `invoices` de `PROJECT_METRICS_INCLUDE` (`src/lib/projects/metrics.ts`) y en la query del Resumen (`proyectos/[id]/resumen/page.tsx`). Mismo patrón que `/facturas` ya usaba. Solo display/carga — **no cambia ningún cálculo** (verificado: métricas idénticas con y sin el campo).
+- **Alcance acotado**: no se agregaron índices ni caché (otros hallazgos de la auditoría, en sesiones aparte). La ficha de factura individual sigue cargando `pdfContent` a propósito (lo sirve al PDF, server-only). ADR: `docs/decisions/2026-06-12-no-cargar-bytes-pesados-en-ui.md`.
+
 ## 2026-06-11 — Artefactos: línea/color como columnas (catálogo y cotización) + lista compacta
 
 - **Catálogo (PR #123/#124)**: Línea y Color dejan de ser chips arriba y pasan a **columnas** editables; el filtro es un **desplegable en el encabezado** de cada una. Nombre y detalle envuelven a 2 líneas (no se cortan). Orden de columnas: foto · nombre · LÍNEA · COLOR · detalle/link · subcat/tipo · resto. La línea se muestra en MAYÚSCULA.

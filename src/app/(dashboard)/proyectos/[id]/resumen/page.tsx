@@ -41,6 +41,7 @@ export default async function ResultadosPage({
     where: { id },
     include: {
       invoices: {
+        omit: { pdfContent: true },
         include: {
           category: { include: { parent: true } },
           payments: {

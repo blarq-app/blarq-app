@@ -10,6 +10,7 @@ import type { Prisma } from "@prisma/client";
 // correcto.
 const projectMetricsInclude = {
   invoices: {
+    omit: { pdfContent: true },
     include: {
       category: { include: { parent: true } },
     },

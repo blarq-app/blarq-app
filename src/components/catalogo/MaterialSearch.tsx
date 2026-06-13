@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { formatCLP } from "@/lib/utils";
 import MaterialOffersDrawer from "./MaterialOffersDrawer";
 
@@ -52,10 +53,54 @@ export default function MaterialSearch({
   // Offers drawer
   const [offersMaterial, setOffersMaterial] = useState<Material | null>(null);
 
+  // Foco desde el catálogo de partidas: cuando se llega con ?focus=<id>
+  // (al apretar el nombre de un material en el desglose de una partida),
+  // abrimos ese material en modo edición, hacemos scroll a su fila y la
+  // resaltamos un par de segundos para ubicarla.
+  const searchParams = useSearchParams();
+  const focusId = searchParams.get("focus");
+  const handledFocusRef = useRef<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+
   useEffect(() => {
     const timer = setTimeout(() => fetchMaterials(), 300);
     return () => clearTimeout(timer);
   }, [query, category]);
+
+  useEffect(() => {
+    if (!focusId || handledFocusRef.current === focusId || materials.length === 0)
+      return;
+    const mat = materials.find((m) => m.id === focusId);
+    if (!mat) return;
+    handledFocusRef.current = focusId;
+    startEdit(mat);
+    setHighlightId(mat.id);
+  }, [focusId, materials]);
+
+  // El scroll va en su propio effect, disparado cuando highlightId ya quedó
+  // seteado: para entonces la fila en modo edición ya está montada en el DOM,
+  // así que scrollIntoView la encuentra (hacerlo en el effect de arriba con un
+  // setTimeout era racy y a veces no centraba nada). El resaltado se apaga solo.
+  useEffect(() => {
+    if (!highlightId) return;
+    // Scroll instantáneo (no "smooth"): la animación del smooth se cancela en
+    // cuanto hay un re-render durante el medio segundo que dura, y el listado
+    // se está montando/refetcheando justo entonces, así que nunca llegaba a
+    // destino. El salto directo es inmediato y queda firme.
+    const scrollToRow = () =>
+      document
+        .getElementById(`mat-${highlightId}`)
+        ?.scrollIntoView({ block: "center" });
+    scrollToRow();
+    // Segundo intento diferido por si un refetch tardío (StrictMode en dev)
+    // re-monta el listado y resetea el scroll. En prod es un no-op.
+    const reT = setTimeout(scrollToRow, 500);
+    const fadeT = setTimeout(() => setHighlightId(null), 2500);
+    return () => {
+      clearTimeout(reT);
+      clearTimeout(fadeT);
+    };
+  }, [highlightId]);
 
   async function fetchMaterials() {
     setLoading(true);
@@ -283,7 +328,13 @@ export default function MaterialSearch({
               <tbody className="divide-y divide-gray-50">
                 {group.items.map((mat) =>
                   editingId === mat.id ? (
-                    <tr key={mat.id} className="bg-blue-50">
+                    <tr
+                      key={mat.id}
+                      id={`mat-${mat.id}`}
+                      className={`bg-blue-50 ${
+                        highlightId === mat.id ? "ring-2 ring-inset ring-gray-900" : ""
+                      }`}
+                    >
                       <td className="px-4 py-2">
                         <input
                           type="text"
@@ -359,7 +410,13 @@ export default function MaterialSearch({
                       </td>
                     </tr>
                   ) : (
-                    <tr key={mat.id} className="hover:bg-gray-50 group">
+                    <tr
+                      key={mat.id}
+                      id={`mat-${mat.id}`}
+                      className={`hover:bg-gray-50 group ${
+                        highlightId === mat.id ? "ring-2 ring-inset ring-gray-900" : ""
+                      }`}
+                    >
                       <td className="px-4 py-2 text-gray-900">
                         <span>{mat.name}</span>
                         {mat.isProvision && (

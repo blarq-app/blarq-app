@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { formatCLP } from "@/lib/utils";
 import {
   DndContext,
@@ -1034,7 +1035,21 @@ function ViewPanel({
                       </span>
                     </td>
                     <td className="py-1 px-2 text-gray-900">
-                      {c.description}
+                      {/* Si el material está ligado al catálogo (materialId),
+                          su nombre lleva a la ficha en /materiales para editarlo
+                          (cambiar precio, link, nombre). Distinto de la flecha ↗,
+                          que abre el producto en la tienda externa. */}
+                      {c.type === "material" && c.materialId ? (
+                        <Link
+                          href={`/catalogo/materiales?focus=${c.materialId}`}
+                          className="hover:underline decoration-gray-400 underline-offset-2 cursor-pointer"
+                          title="Editar este material en el catálogo"
+                        >
+                          {c.description}
+                        </Link>
+                      ) : (
+                        c.description
+                      )}
                       {/* La flecha (link a producto) solo tiene sentido para
                           materiales/herramientas/subcontrato. Pérdida, margen
                           y leyes sociales NO son productos linkeables. */}

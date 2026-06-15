@@ -359,6 +359,7 @@ export default async function ProyectoFacturasPage({
                 <th className="text-right px-4 py-2">Total <span className="block text-[9px] text-gray-400 normal-case font-normal">c/IVA</span></th>
                 <th className="text-left px-4 py-2">Estado</th>
                 <th className="text-left px-4 py-2">Origen</th>
+                <th className="w-8"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -466,6 +467,12 @@ export default async function ProyectoFacturasPage({
                       {inv.origin === "sii_automatica" ? "SII" : "manual"}
                     </span>
                   </td>
+                  {/* Flechita que indica que la fila se abre. Gris tenue, se
+                      oscurece al pasar el mouse por la fila (group-hover). Es
+                      texto (›) porque el proyecto no usa lucide-react. */}
+                  <td className="px-3 py-2 text-right">
+                    <span className="text-base leading-none text-gray-300 group-hover:text-gray-600">›</span>
+                  </td>
                 </ClickableInvoiceRow>
               ))}
               {/* Fila de total al pie de la tabla */}
@@ -476,7 +483,7 @@ export default async function ProyectoFacturasPage({
                 <td className="px-4 py-2 text-right tabular-nums text-gray-900">
                   {formatCLP(invoices.reduce((s, i) => s + sign(i) * i.totalAmount, 0))}
                 </td>
-                <td colSpan={2}></td>
+                <td colSpan={3}></td>
               </tr>
             </tbody>
           </table>

@@ -31,7 +31,7 @@ export default function ClickableInvoiceRow({
   }
 
   return (
-    <tr onClick={handleClick} className="hover:bg-gray-50 cursor-pointer">
+    <tr onClick={handleClick} className="group hover:bg-gray-50 cursor-pointer">
       {children}
     </tr>
   );

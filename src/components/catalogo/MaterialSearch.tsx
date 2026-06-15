@@ -1,9 +1,20 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { useSearchParams } from "next/navigation";
 import { formatCLP } from "@/lib/utils";
 import MaterialOffersDrawer from "./MaterialOffersDrawer";
+import BulkPriceUpdateModal from "./BulkPriceUpdateModal";
+
+// Tiendas de las que la app sabe leer el precio actual desde el link guardado
+// (mismo criterio que usa el panel de Precios). Solo en estas mostramos el
+// botón "Actualizar", porque para Sodimac/Easy/mK existe scraping; para el
+// resto el link es solo de referencia y no se puede leer el precio automático.
+function isFetchableLink(link: string | null): boolean {
+  if (!link) return false;
+  const l = link.toLowerCase();
+  return ["sodimac", "easy", "mk.cl"].some((s) => l.includes(s));
+}
 
 interface Material {
   id: string;
@@ -52,6 +63,26 @@ export default function MaterialSearch({
 
   // Offers drawer
   const [offersMaterial, setOffersMaterial] = useState<Material | null>(null);
+
+  // Actualizar precio desde el link guardado (botón ↻ por fila).
+  // - refreshingId: fila con request en curso (revisando o guardando).
+  // - refreshPreview: precio nuevo distinto, a la espera de confirmación.
+  // - refreshNote: aviso de "sin cambios" o de error para esa fila.
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [refreshPreview, setRefreshPreview] = useState<{
+    id: string;
+    oldNet: number;
+    newNet: number;
+    source: string;
+  } | null>(null);
+  const [refreshNote, setRefreshNote] = useState<{
+    id: string;
+    kind: "same" | "error";
+    msg: string;
+  } | null>(null);
+
+  // Modal "Actualizar todos los precios"
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   // Foco desde el catálogo de partidas: cuando se llega con ?focus=<id>
   // (al apretar el nombre de un material en el desglose de una partida),
@@ -162,6 +193,85 @@ export default function MaterialSearch({
     }
   }
 
+  // Revisa el precio actual en la tienda usando el link YA guardado del
+  // material. No guarda nada: si cambió, deja un preview a confirmar; si es
+  // igual o falla, deja un aviso en la fila.
+  async function refreshPriceFromLink(mat: Material) {
+    if (!mat.referenceLink) return;
+    setRefreshingId(mat.id);
+    setRefreshPreview(null);
+    setRefreshNote(null);
+    try {
+      const res = await fetch("/api/catalogo/fetch-price", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: mat.referenceLink }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setRefreshNote({
+          id: mat.id,
+          kind: "error",
+          msg: data.error || "No se pudo obtener el precio",
+        });
+        return;
+      }
+      const newNet = Math.round(data.netPrice);
+      if (newNet === mat.netPrice) {
+        setRefreshNote({
+          id: mat.id,
+          kind: "same",
+          msg: `Sin cambios (${data.source}): sigue en ${formatCLP(newNet)} neto`,
+        });
+      } else {
+        setRefreshPreview({
+          id: mat.id,
+          oldNet: mat.netPrice,
+          newNet,
+          source: data.source,
+        });
+      }
+    } catch {
+      setRefreshNote({
+        id: mat.id,
+        kind: "error",
+        msg: "Error de red al consultar el link",
+      });
+    } finally {
+      setRefreshingId(null);
+    }
+  }
+
+  // Confirma el precio nuevo: lo guarda en el material (mismo PUT que la
+  // edición manual; respeta nombre, unidad y link).
+  async function applyRefresh(mat: Material, newNet: number) {
+    setRefreshingId(mat.id);
+    try {
+      const res = await fetch(`/api/catalogo/materiales/${mat.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: mat.name,
+          unit: mat.unit,
+          netPrice: newNet,
+          referenceLink: mat.referenceLink || null,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const updated = await res.json();
+      setMaterials((prev) => prev.map((m) => (m.id === mat.id ? updated : m)));
+      setRefreshPreview(null);
+    } catch {
+      setRefreshNote({
+        id: mat.id,
+        kind: "error",
+        msg: "No se pudo guardar el precio nuevo",
+      });
+    } finally {
+      setRefreshingId(null);
+    }
+  }
+
   async function handleDeleteMaterial(id: string) {
     if (!confirm("Eliminar este material del catalogo?")) return;
     try {
@@ -222,6 +332,13 @@ export default function MaterialSearch({
             </option>
           ))}
         </select>
+        <button
+          onClick={() => setBulkOpen(true)}
+          className="px-4 py-3 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
+          title="Revisar el precio actual en la web de todos los materiales con link de Sodimac/Easy/mK"
+        >
+          ↻ Actualizar precios
+        </button>
         <button
           onClick={() => setShowNewCategory(true)}
           className="px-4 py-3 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors whitespace-nowrap"
@@ -410,8 +527,8 @@ export default function MaterialSearch({
                       </td>
                     </tr>
                   ) : (
+                    <Fragment key={mat.id}>
                     <tr
-                      key={mat.id}
                       id={`mat-${mat.id}`}
                       className={`hover:bg-gray-50 group ${
                         highlightId === mat.id ? "ring-2 ring-inset ring-gray-900" : ""
@@ -446,6 +563,18 @@ export default function MaterialSearch({
                       </td>
                       <td className="px-4 py-2">
                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {isFetchableLink(mat.referenceLink) && (
+                            <button
+                              onClick={() => refreshPriceFromLink(mat)}
+                              disabled={refreshingId === mat.id}
+                              className="text-gray-500 hover:text-gray-900 text-xs disabled:opacity-50 whitespace-nowrap"
+                              title="Revisar el precio actual en la tienda y actualizarlo"
+                            >
+                              {refreshingId === mat.id && refreshPreview?.id !== mat.id
+                                ? "Revisando…"
+                                : "↻ Actualizar"}
+                            </button>
+                          )}
                           {!mat.isProvision && (
                             <button
                               onClick={() => setOffersMaterial(mat)}
@@ -470,6 +599,66 @@ export default function MaterialSearch({
                         </div>
                       </td>
                     </tr>
+                    {/* Confirmación del precio nuevo: antes → después */}
+                    {refreshPreview?.id === mat.id && (
+                      <tr className="bg-amber-50">
+                        <td colSpan={6} className="px-4 py-2">
+                          <div className="flex items-center justify-between gap-3 text-sm">
+                            <div className="min-w-0">
+                              <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500 mr-2">
+                                {refreshPreview.source}
+                              </span>
+                              <span className="tabular-nums text-gray-500 line-through">
+                                {formatCLP(refreshPreview.oldNet)}
+                              </span>
+                              <span className="mx-2 text-gray-400">→</span>
+                              <span
+                                className={`tabular-nums font-semibold ${
+                                  refreshPreview.newNet > refreshPreview.oldNet
+                                    ? "text-red-600"
+                                    : "text-green-700"
+                                }`}
+                              >
+                                {formatCLP(refreshPreview.newNet)}
+                              </span>
+                              <span className="text-xs text-gray-400 ml-1">neto</span>
+                            </div>
+                            <div className="flex gap-2 shrink-0">
+                              <button
+                                onClick={() => applyRefresh(mat, refreshPreview.newNet)}
+                                disabled={refreshingId === mat.id}
+                                className="bg-gray-900 text-white rounded px-3 py-1 text-xs hover:bg-gray-700 disabled:opacity-50"
+                              >
+                                {refreshingId === mat.id ? "Guardando…" : "Guardar precio"}
+                              </button>
+                              <button
+                                onClick={() => setRefreshPreview(null)}
+                                className="text-gray-500 hover:text-gray-800 text-xs px-2"
+                              >
+                                Descartar
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {/* Aviso "sin cambios" o error */}
+                    {refreshNote?.id === mat.id && (
+                      <tr>
+                        <td colSpan={6} className="px-4 pb-2 pt-0">
+                          <span
+                            className={`inline-block text-xs px-2 py-1 rounded ${
+                              refreshNote.kind === "error"
+                                ? "bg-red-50 text-red-600"
+                                : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {refreshNote.msg}
+                          </span>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   )
                 )}
               </tbody>
@@ -577,6 +766,16 @@ export default function MaterialSearch({
           material={offersMaterial}
           onClose={() => setOffersMaterial(null)}
           onChanged={() => fetchMaterials()}
+        />
+      )}
+
+      {bulkOpen && (
+        <BulkPriceUpdateModal
+          materials={materials.filter(
+            (m) => !m.isProvision && isFetchableLink(m.referenceLink)
+          )}
+          onClose={() => setBulkOpen(false)}
+          onApplied={() => fetchMaterials()}
         />
       )}
     </div>

@@ -319,7 +319,7 @@ export default function MaterialSearch({
                   <th className="text-right px-4 py-2 text-xs text-gray-500 w-32">
                     c/IVA
                   </th>
-                  <th className="text-left px-4 py-2 text-xs text-gray-500 w-24">
+                  <th className="text-left px-4 py-2 text-xs text-gray-500 w-36">
                     Link
                   </th>
                   <th className="w-20"></th>

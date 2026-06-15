@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { parseRut } from "@/lib/clients/rut";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 // PATCH para edición parcial de un proyecto. Útil para inline-edit en
 // listados (ej: editar solo name o clientName). A diferencia de PUT,
@@ -9,6 +10,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
     const data = (await request.json()) as Partial<{
@@ -100,6 +104,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
     const data = await request.json();
@@ -158,6 +165,9 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
 

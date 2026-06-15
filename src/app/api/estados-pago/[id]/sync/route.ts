@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { buildPrevAccumulators, findLatestObraBudget } from "@/lib/ep/snapshot";
 import { computeSyncDiff } from "@/lib/ep/sync";
+import { requireSession } from "@/lib/apiAuth";
 
 // Sincroniza los items del EP con el presupuesto de obra más reciente.
 // Matchea partidas por `lineageId` (identidad estable a través de versiones).
@@ -19,6 +20,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
 

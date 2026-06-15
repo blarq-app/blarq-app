@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { tryAutoMatchInvoiceWithExistingMovs } from "@/lib/banco/invoicePayments";
 import { applyInvoiceRule } from "@/lib/facturas/categorizationRules";
+import { requireSession } from "@/lib/apiAuth";
 
 // Listar facturas con filtros opcionales:
 //   ?type=emitida|recibida
@@ -12,6 +13,9 @@ import { applyInvoiceRule } from "@/lib/facturas/categorizationRules";
 //   ?q=<texto> (busca en folioNumber, businessName, rutIssuer, notes)
 //   ?from=YYYY-MM-DD&to=YYYY-MM-DD
 export async function GET(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type");
   const status = searchParams.get("status");
@@ -63,6 +67,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const data = await request.json();
 

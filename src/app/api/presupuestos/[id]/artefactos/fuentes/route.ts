@@ -10,11 +10,15 @@
 
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id: budgetVersionId } = await params;
 

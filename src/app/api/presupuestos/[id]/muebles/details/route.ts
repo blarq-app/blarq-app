@@ -1,11 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 // Crear detalle bajo un MuebleItem (componente: CUERPO INTERIOR / TRASERA / etc).
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     await params; // consume
     const data = await request.json();

@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchStoreProducts, VTEX_STORES } from "@/lib/catalog/fetchPrice";
+import { requireSession } from "@/lib/apiAuth";
 
 // POST /api/catalogo/buscar-precio — búsqueda en vivo de productos en una
 // tienda, por texto. Devuelve candidatos con precio y stock de HOY para que
 // MJ elija cuál linkear cuando el producto viejo se movió o quiere cambiar
 // de fuente. Hoy solo tiendas VTEX (mK).
 export async function POST(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { store, query } = await request.json();
 

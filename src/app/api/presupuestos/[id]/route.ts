@@ -1,12 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { buildBudgetSnapshot } from "@/lib/catalog/budgetSnapshot";
+import { requireSession } from "@/lib/apiAuth";
 
 // Actualizar presupuesto (observaciones, GG%, utilidad%, estado)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
     const data = await request.json();
@@ -100,6 +104,9 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
 

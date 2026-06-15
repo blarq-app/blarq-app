@@ -1,7 +1,7 @@
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { compareSync, hashSync } from "bcryptjs";
 import { NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 // POST /api/account/change-password
 //
@@ -11,8 +11,11 @@ import { NextResponse } from "next/server";
 //
 // Body: { currentPassword: string, newPassword: string }
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user?.email) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
+  const email = gate.user?.email;
+  if (!email) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
@@ -30,7 +33,7 @@ export async function POST(request: Request) {
   }
 
   const user = await prisma.user.findUnique({
-    where: { email: session.user.email },
+    where: { email },
   });
   if (!user) {
     return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });

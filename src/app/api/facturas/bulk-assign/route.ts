@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { upsertInvoiceRule } from "@/lib/facturas/categorizationRules";
+import { requireSession } from "@/lib/apiAuth";
 
 // POST /api/facturas/bulk-assign
 //
@@ -20,6 +21,9 @@ import { upsertInvoiceRule } from "@/lib/facturas/categorizationRules";
 //
 // Responde con stats: cuántas se actualizaron + reglas creadas/actualizadas.
 export async function POST(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const body = (await request.json()) as {
       invoiceIds: string[];

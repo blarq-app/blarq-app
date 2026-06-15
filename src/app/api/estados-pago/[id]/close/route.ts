@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { buildPrevAccumulators } from "@/lib/ep/snapshot";
+import { requireSession } from "@/lib/apiAuth";
 
 // Cierra un EP en borrador. Genera snapshot inmutable de amountPaid por partida.
 //   amountPaid = (quantityExecuted - prevExecutedQuantity) × laborUnitPrice
@@ -9,6 +10,9 @@ export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
 

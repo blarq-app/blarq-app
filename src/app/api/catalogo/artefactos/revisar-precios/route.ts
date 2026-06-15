@@ -16,6 +16,7 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { fetchArtefactoData } from "@/lib/catalog/fetchArtefactoData";
 import { fetchMkVtexPrice, isMkUrl } from "@/lib/catalog/fetchMkPrice";
+import { requireSession } from "@/lib/apiAuth";
 
 // Vercel: el fetch a la web puede tardar; subimos el límite de la función
 // para que no se corte (default 10s) mientras consulta varios productos.
@@ -45,6 +46,9 @@ function total(listPrice: number, discount: number): number {
 }
 
 export async function POST(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const body = await request.json().catch(() => ({}));
     const subcategory: string | undefined = body?.subcategory;

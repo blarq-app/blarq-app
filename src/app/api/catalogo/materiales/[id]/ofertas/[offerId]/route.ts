@@ -1,11 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { syncMaterialToComponents } from "@/lib/catalog/syncMaterial";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; offerId: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   const { id, offerId } = await params;
   const data = await req.json();
 
@@ -55,6 +59,9 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; offerId: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   const { offerId } = await params;
   await prisma.materialPriceOffer.delete({ where: { id: offerId } });
   return NextResponse.json({ ok: true });

@@ -1,12 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import { syncMaterialToComponents } from "@/lib/catalog/syncMaterial";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 // GET: listar ofertas del material
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   const { id } = await params;
   const offers = await prisma.materialPriceOffer.findMany({
     where: { materialId: id },
@@ -20,6 +24,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   const { id } = await params;
   const data = await req.json();
 

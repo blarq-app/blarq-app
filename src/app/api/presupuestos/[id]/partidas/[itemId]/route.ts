@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 // Devuelve los totales actuales de la partida. Lo usa el editor para refrescar
 // los campos de arriba (Material/Mano de obra/Margen/total) después de editar
@@ -8,6 +9,9 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { itemId } = await params;
     const item = await prisma.obraItem.findUnique({
@@ -39,6 +43,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { itemId } = await params;
     const data = await request.json();
@@ -120,6 +127,9 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { itemId } = await params;
     await prisma.obraItem.delete({ where: { id: itemId } });

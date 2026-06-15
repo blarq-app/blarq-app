@@ -15,6 +15,7 @@ import {
   recalcObraItemFromComponents,
   seedObraItemComponentsFromLumps,
 } from "@/lib/catalog/recalcObraItem";
+import { requireSession } from "@/lib/apiAuth";
 
 // Edición manual permitida en borrador Y en enviado (la enviada está
 // deslinkada del catálogo pero sigue editable a mano). Ver nota en
@@ -39,6 +40,9 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { itemId } = await params;
     const components = await prisma.obraItemComponent.findMany({
@@ -57,6 +61,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { itemId } = await params;
     const guard = await assertBorrador(itemId);

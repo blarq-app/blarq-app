@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { recomputeInvoiceStatus } from "@/lib/banco/invoicePayments";
 import { upsertRuleFromMovement } from "@/lib/banco/categorizationRules";
+import { requireSession } from "@/lib/apiAuth";
 
 // PATCH /api/banco/movimientos/[id]
 //
@@ -33,6 +34,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
     const body = (await request.json()) as Partial<{

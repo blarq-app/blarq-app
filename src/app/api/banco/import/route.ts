@@ -4,6 +4,7 @@ import { parseCartolaSantander } from "@/lib/banco/santanderParser";
 import { tryAutoMatchMovementWithInvoices } from "@/lib/banco/invoicePayments";
 import { applyRulesToMovement } from "@/lib/banco/categorizationRules";
 import { planImportDedup } from "@/lib/banco/dedup";
+import { requireSession } from "@/lib/apiAuth";
 
 // El dedup del import vive en `planImportDedup` (src/lib/banco/dedup.ts).
 // Identifica cada movimiento por una huella estable (fecha + monto +
@@ -35,6 +36,9 @@ import { planImportDedup } from "@/lib/banco/dedup";
 //   6. Devuelve resumen.
 
 export async function POST(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const url = new URL(request.url);
     const dryRun = url.searchParams.get("dryRun") === "1";

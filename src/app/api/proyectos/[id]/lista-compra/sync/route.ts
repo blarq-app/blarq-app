@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 // Recalcula qtyNeeded agregando componentes de tipo "material" de cada partida
 // del presupuesto de obra más reciente (aprobado si existe).
@@ -12,6 +13,9 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id: projectId } = await params;
 

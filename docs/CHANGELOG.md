@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-15 — Seguridad: toda la API exige sesión por defecto (H1) + secret de Telegram obligatorio (H17)
+
+- **Causa (auditoría 2026-06-15, hallazgo H1 CRÍTICO)**: la API estaba sin autenticación — 84 de 85 endpoints `/api` respondían sin login. El login protegía las páginas, no las rutas API → se podía borrar facturas, mover plata, disparar sync o cerrar EPs salteándose el login.
+- **Fix (negar por defecto)**: helper `requireSession()` (`src/lib/apiAuth.ts`) llamado como primera línea de cada uno de los 88 endpoints protegidos (126 handlers). El control vive **dentro del handler**, no en middleware/proxy — a prueba del bypass del **CVE-2025-29927**. Allowlist de 2 exentos: `auth/[...nextauth]` (login) y `telegram/webhook` (secret propio). `img-proxy` quedó gateado (solo lo usa el catálogo logueado; los PDF no lo usan).
+- **Guardián en el build**: `scripts/check-api-auth.mjs` corre antes de `next build` (`"build": "node scripts/check-api-auth.mjs && next build"`) → un endpoint nuevo sin `requireSession` **hace fallar el deploy de Vercel**.
+- **H17**: el secret del webhook de Telegram pasó de condicional (`if (secret)`) a **obligatorio** (sin variable → 503). Ya está seteado en Vercel Production.
+- Sin `proxy.ts` (no es la cerradura). `tsc` limpio; verificado en dev (sin login → 401 en endpoints/PDF/destructivos; logueada → todo normal, fotos del catálogo cargan). ADR: `docs/decisions/2026-06-15-api-requiere-sesion-por-defecto.md`.
+
 ## 2026-06-12 — Rendimiento: excluir el PDF crudo (`pdfContent`) de las queries de métricas
 
 - **Causa (auditoría 2026-06-12)**: el Dashboard, `/proyectos`, `/cotizaciones` y `/proyectos/[id]/resumen` traían el campo `Invoice.pdfContent` (Bytes — el PDF oficial del SII cacheado en BD, ~100-200 KB c/u) de **todas** las facturas, aunque `computeProjectMetrics` no lo usa ni se muestra. Cada carga del Dashboard descargaba decenas/cientos de MB desde Neon y los descartaba.

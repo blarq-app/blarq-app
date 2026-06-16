@@ -143,6 +143,11 @@ export default function MovementsTable({
                     0,
                     Math.abs(m.amount) - sumApplied
                   );
+                  // Sobreimputado: la suma de pagos supera el monto del
+                  // movimiento (±$10 de tolerancia por redondeo de IVA). No
+                  // debería pasar — la app lo impide al imputar — pero si queda
+                  // dato viejo o se edita la base a mano, lo marcamos en rojo.
+                  const overImputed = sumApplied - Math.abs(m.amount) > 10;
                   const isInternal = m.status === "interno";
                   const isSelected = selectedIds.has(m.id);
                   const hint = matchHints[m.id];
@@ -208,6 +213,14 @@ export default function MovementsTable({
                             {m.payments.length > 2 && (
                               <span className="text-[10px] text-gray-400">
                                 + {m.payments.length - 2} más
+                              </span>
+                            )}
+                            {overImputed && (
+                              <span
+                                className="inline-block text-[9px] uppercase tracking-wide bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded"
+                                title={`Este movimiento tiene ${formatCLP(sumApplied)} imputados, más que su monto de ${formatCLP(Math.abs(m.amount))}. Revisá las imputaciones.`}
+                              >
+                                ⚠ imputado de más {formatCLP(sumApplied - Math.abs(m.amount))}
                               </span>
                             )}
                           </div>

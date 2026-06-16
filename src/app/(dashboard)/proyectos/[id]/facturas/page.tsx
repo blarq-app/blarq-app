@@ -467,11 +467,12 @@ export default async function ProyectoFacturasPage({
                       {inv.origin === "sii_automatica" ? "SII" : "manual"}
                     </span>
                   </td>
-                  {/* Flechita que indica que la fila se abre. Gris tenue, se
+                  {/* Flechita que indica que la fila se abre. Gris medio para
+                      que se vea (el gris-300 anterior era casi invisible); se
                       oscurece al pasar el mouse por la fila (group-hover). Es
                       texto (›) porque el proyecto no usa lucide-react. */}
                   <td className="px-3 py-2 text-right">
-                    <span className="text-base leading-none text-gray-300 group-hover:text-gray-600">›</span>
+                    <span className="text-lg leading-none text-gray-500 group-hover:text-gray-900">›</span>
                   </td>
                 </ClickableInvoiceRow>
               ))}

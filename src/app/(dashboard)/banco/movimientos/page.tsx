@@ -66,24 +66,16 @@ export default async function MovimientosPage({
   // Drill-down a un movimiento puntual: si viene `id`, mostramos solo ese.
   if (sp.id) where.id = sp.id;
   // Estado de asignación: el filtro avanzado (sp.estado) pisa al de las tabs.
-  // "all" = elección explícita de "Todos" → SIN ningún filtro de status:
-  // muestra TODO, incluidas las transferencias internas (que igual van
-  // etiquetadas como "Transfer interna" en la columna Estado). Antes "Todos"
-  // escondía las internas salvo que se prendiera un toggle — confuso, porque
-  // la pestaña que dice "Todos" era la única que ocultaba algo. Las demás
-  // pestañas filtran por su propio estado, así que las internas no aparecen
-  // ahí de todos modos. Sin filtro = vista por defecto: pendientes
-  // (sin_asignar + parcial), porque MJ entra a /banco/movimientos típicamente
-  // para conciliar.
+  // Vista por defecto (sin filtro) = TODOS los movimientos. Las pestañas de
+  // estado van separadas (Pendiente, Parcial, Conciliado, ...) — MJ prefiere
+  // filtrar cada una por su cuenta, sin una pestaña combinada "Pendientes"
+  // que junte sin_asignar + parcial. "all" se mantiene como alias explícito
+  // de "sin filtro" (lo usan links de drill-down ?status=all). Cualquier otro
+  // valor filtra por ese status. Las transferencias internas igual aparecen
+  // solo en "Todos" o en su propia pestaña (las demás filtran por su estado).
   const effectiveStatus = sp.estado || sp.status;
-  const isDefaultPendientes = !effectiveStatus;
-  if (effectiveStatus === "all") {
-    // sin filtro de status: TODO
-  } else if (effectiveStatus) {
+  if (effectiveStatus && effectiveStatus !== "all") {
     where.status = effectiveStatus;
-  } else {
-    // Default: solo pendientes (sin_asignar + parcial).
-    where.status = { in: ["sin_asignar", "parcial"] };
   }
   if (q) {
     // Búsqueda libre: descripción + nombre contraparte + RUT contraparte.
@@ -344,9 +336,6 @@ export default async function MovimientosPage({
           <h1 className="text-2xl font-bold text-gray-900 mt-1">Movimientos</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {movements.length} mostrados de {totalCount} total{totalCount !== 1 ? "es" : ""}
-            {isDefaultPendientes && (
-              <span className="ml-1 text-amber-700">· solo pendientes</span>
-            )}
           </p>
         </div>
         <AutoConciliarPendientesButton pendientesCount={conciliablesAprox} />
@@ -405,9 +394,9 @@ export default async function MovimientosPage({
           ))}
         </div>
         <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
-          {/* Default (sin params) = pendientes. "Todos" es elección explícita. */}
-          <FilterLink sp={sp} field="status" value={undefined} label="Pendientes" />
-          <FilterLink sp={sp} field="status" value="all" label="Todos" />
+          {/* Default (sin params) = Todos. Las pestañas de estado van
+              separadas (Pendiente, Parcial, ...), sin una combinada. */}
+          <FilterLink sp={sp} field="status" value={undefined} label="Todos" />
           {Object.entries(STATUS_LABEL).map(([key, { label }]) => (
             <FilterLink
               key={key}

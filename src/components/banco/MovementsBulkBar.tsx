@@ -43,7 +43,7 @@ export default function MovementsBulkBar({
 }: {
   selected: SelectedMovement[];
   onClear: () => void;
-  projects: { id: string; name: string }[];
+  projects: { id: string; name: string; numeroProyecto: number | null }[];
   categories: { id: string; label: string }[];
 }) {
   const router = useRouter();
@@ -271,7 +271,7 @@ function PagoSinFacturaModal({
   movementCount: number;
   totalNeto: number;
   busy: boolean;
-  projects: { id: string; name: string }[];
+  projects: { id: string; name: string; numeroProyecto: number | null }[];
   categories: { id: string; label: string }[];
   onClose: () => void;
   onConfirm: (projectId: string, categoryId: string) => void;
@@ -321,6 +321,7 @@ function PagoSinFacturaModal({
               <option value="">Elegí un proyecto…</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
+                  {p.numeroProyecto ? `${p.numeroProyecto} · ` : ""}
                   {p.name}
                 </option>
               ))}

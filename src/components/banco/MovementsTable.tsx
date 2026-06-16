@@ -54,7 +54,7 @@ export default function MovementsTable({
   statusLabels: Record<string, { label: string; tone: string }>;
   categoryLabels: Record<string, string>;
   blarqRutDigits: string;
-  projects: { id: string; name: string }[];
+  projects: { id: string; name: string; numeroProyecto: number | null }[];
   categories: { id: string; label: string }[];
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());

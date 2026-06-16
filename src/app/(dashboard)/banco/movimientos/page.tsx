@@ -70,21 +70,19 @@ export default async function MovimientosPage({
   // Drill-down a un movimiento puntual: si viene `id`, mostramos solo ese.
   if (sp.id) where.id = sp.id;
   // Estado de asignación: el filtro avanzado (sp.estado) pisa al de las tabs.
-  // "all" = elección explícita de "Todos" → sin filtro de status (lo que MJ
-  // ve cuando hace click en la tab "Todos"). Sin filtro = vista por defecto:
-  // pendientes (sin_asignar + parcial), porque MJ entra a /banco/movimientos
-  // típicamente para conciliar.
+  // Default (sin filtro) = TODOS los movimientos — "Ver movimientos" muestra
+  // todo, y para conciliar MJ entra por "Ver pendientes" (status=sin_asignar).
+  // "all" es lo mismo que el default (lo dejamos por compatibilidad de links
+  // viejos). Cualquier otro status filtra por ese estado puntual.
   const effectiveStatus = sp.estado || sp.status;
-  const isDefaultPendientes = !effectiveStatus;
-  if (effectiveStatus === "all") {
+  if (effectiveStatus && effectiveStatus !== "all") {
+    where.status = effectiveStatus;
+  } else {
+    // Todos: las transferencias internas BLARQ↔BLARQ se ocultan salvo que se
+    // pidan explícitamente (toggle "Mostrar internas" o filtro tipo=interno).
     if (!showInternal && !tipoIsInterno) {
       where.status = { not: "interno" };
     }
-  } else if (effectiveStatus) {
-    where.status = effectiveStatus;
-  } else {
-    // Default: solo pendientes (sin_asignar + parcial).
-    where.status = { in: ["sin_asignar", "parcial"] };
   }
   if (q) {
     // Búsqueda libre: descripción + nombre contraparte + RUT contraparte.
@@ -203,7 +201,7 @@ export default async function MovimientosPage({
       // Solo proyectos asignables: se esconden las cotizaciones no ganadas
       // (status="cotizacion"). Los centros internos (BLARQ) se mantienen.
       where: { NOT: { status: "cotizacion", isInternal: false } },
-      select: { id: true, name: true },
+      select: { id: true, name: true, numeroProyecto: true },
       orderBy: { name: "asc" },
     }),
     prisma.costCategory.findMany({
@@ -339,9 +337,6 @@ export default async function MovimientosPage({
           <h1 className="text-2xl font-bold text-gray-900 mt-1">Movimientos</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {movements.length} mostrados de {totalCount} total{totalCount !== 1 ? "es" : ""}
-            {isDefaultPendientes && (
-              <span className="ml-1 text-amber-700">· solo pendientes</span>
-            )}
           </p>
         </div>
         <AutoConciliarPendientesButton pendientesCount={conciliablesAprox} />
@@ -400,9 +395,9 @@ export default async function MovimientosPage({
           ))}
         </div>
         <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
-          {/* Default (sin params) = pendientes. "Todos" es elección explícita. */}
-          <FilterLink sp={sp} field="status" value={undefined} label="Pendientes" />
-          <FilterLink sp={sp} field="status" value="all" label="Todos" />
+          {/* Default (sin params) = Todos. Cada estado es una pestaña propia;
+              ya no hay un combinado "Pendientes" (sin_asignar + parcial). */}
+          <FilterLink sp={sp} field="status" value={undefined} label="Todos" />
           {Object.entries(STATUS_LABEL).map(([key, { label }]) => (
             <FilterLink
               key={key}

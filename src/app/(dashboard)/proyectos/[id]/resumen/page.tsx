@@ -6,7 +6,9 @@ import Link from "next/link";
 import CentroCostoView from "@/components/proyecto/CentroCostoView";
 import { computeProjectMetrics } from "@/lib/projects/metrics";
 import { computeFondoSueldos, type ProjectWithFondo } from "@/lib/banco/fondoSueldos";
+import { computeUtilidadPorCobro, type ProjectWithUtilidad } from "@/lib/banco/utilidadPorCobro";
 import FondoSueldosCard from "@/components/proyecto/FondoSueldosCard";
+import UtilidadPorCobroCard from "@/components/proyecto/UtilidadPorCobroCard";
 import CuadroResumen from "@/components/proyecto/CuadroResumen";
 
 // Mapa: nombre de CostCategory -> campo de desglose en ObraItem.
@@ -677,6 +679,10 @@ export default async function ResultadosPage({
 
       {/* Fondo Sueldos generado por este proyecto */}
       <FondoSueldosCard fondo={computeFondoSueldos(project as unknown as ProjectWithFondo)} />
+
+      {/* Utilidad por cobro (interno) — desglose cobro a cobro + sugerencia de
+          traspaso a Sueldos + etiquetado de concepto. NUNCA va al cliente. */}
+      <UtilidadPorCobroCard data={computeUtilidadPorCobro(project as unknown as ProjectWithUtilidad)} />
 
       {/* Avance Obra por Capítulo (compacto, al final) */}
       {chapterRows.length > 0 && (

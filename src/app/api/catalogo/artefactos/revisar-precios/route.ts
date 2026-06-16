@@ -5,8 +5,8 @@
  *   Body opcional: { subcategory?: string } para acotar a una pestaña.
  *
  * Para cada artefacto CON link trae el precio de hoy de la web:
- *   - mk.cl (VTEX): vía API de catálogo → ListPrice (lista) + Price (con dcto).
- *     De ahí sale el descuento del web automáticamente.
+ *   - tiendas VTEX (mk.cl, ledstudio.cl): vía API de catálogo → ListPrice
+ *     (lista) + Price (con dcto). De ahí sale el descuento del web solo.
  *   - otras tiendas: scraping liviano (fetchArtefactoData) → solo precio, dcto 0.
  *
  * NO pisa nada: devuelve la comparación guardado-vs-web (lista, dcto y total)
@@ -15,7 +15,8 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { fetchArtefactoData } from "@/lib/catalog/fetchArtefactoData";
-import { fetchMkVtexPrice, isMkUrl } from "@/lib/catalog/fetchMkPrice";
+import { fetchVtexPrice, isVtexStoreUrl } from "@/lib/catalog/fetchVtexPrice";
+import { requireSession } from "@/lib/apiAuth";
 
 // Vercel: el fetch a la web puede tardar; subimos el límite de la función
 // para que no se corte (default 10s) mientras consulta varios productos.
@@ -45,6 +46,9 @@ function total(listPrice: number, discount: number): number {
 }
 
 export async function POST(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const body = await request.json().catch(() => ({}));
     const subcategory: string | undefined = body?.subcategory;
@@ -82,11 +86,11 @@ export async function POST(request: NextRequest) {
         try {
           let webListPrice: number | null = null;
           let webPrice: number | null = null; // precio de venta (con dcto)
-          if (isMkUrl(link)) {
-            const mk = await fetchMkVtexPrice(link);
-            if (mk) {
-              webListPrice = mk.listPrice;
-              webPrice = mk.price;
+          if (isVtexStoreUrl(link)) {
+            const vtex = await fetchVtexPrice(link);
+            if (vtex) {
+              webListPrice = vtex.listPrice;
+              webPrice = vtex.price;
             }
           } else {
             const data = await fetchArtefactoData(link);

@@ -2,11 +2,15 @@ import { prisma } from "@/lib/prisma";
 import { syncMaterialToComponents } from "@/lib/catalog/syncMaterial";
 import { fetchPriceFromUrl } from "@/lib/catalog/fetchPrice";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
     const data = await request.json();
@@ -86,6 +90,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
     await prisma.materialCatalog.delete({ where: { id } });

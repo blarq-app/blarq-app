@@ -11,6 +11,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { recalcObraItemFromComponents } from "@/lib/catalog/recalcObraItem";
+import { requireSession } from "@/lib/apiAuth";
 
 // Edición manual permitida en borrador Y en enviado: una versión enviada
 // queda DESLIGADA del catálogo (el sync no la toca) pero MJ igual puede
@@ -38,6 +39,9 @@ export async function PUT(
     params,
   }: { params: Promise<{ id: string; itemId: string; compId: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { itemId, compId } = await params;
     const guard = await assertBorrador(itemId);
@@ -95,6 +99,9 @@ export async function DELETE(
     params,
   }: { params: Promise<{ id: string; itemId: string; compId: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { itemId, compId } = await params;
     const guard = await assertBorrador(itemId);

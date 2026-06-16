@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runSiiSync, getDefaultSyncFrom } from "@/lib/sii/runSiiSync";
+import { requireSession } from "@/lib/apiAuth";
 
 // Botón "Sincronizar SII" en /facturas. Lee los DTEs directo del Registro de
 // Compras y Ventas del SII (cert digital) y los upserta. Toda la lógica vive
@@ -11,6 +12,9 @@ import { runSiiSync, getDefaultSyncFrom } from "@/lib/sii/runSiiSync";
 //   ?to=YYYY-MM-DD    (opcional, default = hoy)
 //   ?type=emitida|recibida (opcional, si falta hace ambos)
 export async function POST(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { searchParams } = new URL(request.url);
     // Sin ?from el botón no manda fecha: la app calcula sola desde cuándo

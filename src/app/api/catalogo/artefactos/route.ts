@@ -13,8 +13,12 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function GET(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   const sp = request.nextUrl.searchParams;
   const q = sp.get("q")?.trim();
   const subcategory = sp.get("subcategory")?.trim();
@@ -47,6 +51,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const data = await request.json();
     if (!data.name || !data.subcategory) {

@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchPriceFromUrl } from "@/lib/catalog/fetchPrice";
+import { requireSession } from "@/lib/apiAuth";
 
 // POST /api/catalogo/fetch-price — scraping liviano de Sodimac/Easy.
 // La lógica de scraping vive en src/lib/catalog/fetchPrice.ts para que se
 // pueda reutilizar desde el PUT del material (auto-fetch al cambiar link).
 export async function POST(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { url } = await request.json();
     if (!url || typeof url !== "string") {

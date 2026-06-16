@@ -4,6 +4,7 @@ import {
   recomputeInvoiceStatus,
   getMovementAppliedAmount,
 } from "@/lib/banco/invoicePayments";
+import { requireSession } from "@/lib/apiAuth";
 
 /**
  * Borra una imputación específica de una factura (mov bancario → factura).
@@ -19,6 +20,9 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string; paymentId: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id: invoiceId, paymentId } = await params;
 

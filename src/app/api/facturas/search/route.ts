@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 // GET /api/facturas/search
 //
@@ -31,6 +32,9 @@ function rutBody(rut: string | null | undefined): string {
 }
 
 export async function GET(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const url = new URL(request.url);
     const q = (url.searchParams.get("q") ?? "").trim();

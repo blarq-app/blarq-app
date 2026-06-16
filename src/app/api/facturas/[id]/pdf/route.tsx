@@ -2,11 +2,15 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { renderInvoiceHtml } from "@/lib/pdf/InvoicePDF.html";
 import { renderPDF } from "@/lib/pdf/renderPDF";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
     const invoice = await prisma.invoice.findUnique({

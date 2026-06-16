@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { buildPrevAccumulators, findLatestObraBudget } from "@/lib/ep/snapshot";
 import { computeSyncDiff } from "@/lib/ep/sync";
+import { requireSession } from "@/lib/apiAuth";
 
 // Devuelve el diff entre el EP actual y la versión más nueva del presupuesto
 // SIN mutar nada. La UI lo usa para mostrar checkboxes y dejar que el usuario
@@ -10,6 +11,9 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
 

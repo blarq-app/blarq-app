@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 // GET /api/banco/movimientos
 // Listado liviano de movimientos bancarios para selectors (ej. picker
@@ -11,6 +12,9 @@ import { NextRequest, NextResponse } from "next/server";
 //   amount   = monto exacto (entero, sin separadores). Tolerancia ±$10.
 //   limit    = max resultados (default 100)
 export async function GET(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   const sp = request.nextUrl.searchParams;
   const status = sp.get("status");
   const type = sp.get("type");

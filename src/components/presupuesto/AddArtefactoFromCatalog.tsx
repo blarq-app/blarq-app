@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatCLP } from "@/lib/utils";
 
 // Item del catálogo BLARQ — shape que devuelve /api/catalogo/artefactos
@@ -11,6 +11,8 @@ interface CatalogItem {
   brand: string | null;
   subcategory: string;
   tag: string | null;
+  line: string | null; // línea comercial (Asis, Urban, Stellar…)
+  finish: string | null; // color/terminación (Cromo, Brushed, Gun Grey…)
   supplier: string | null;
   referenceLink: string | null;
   imageUrl: string | null;
@@ -57,10 +59,14 @@ export default function AddArtefactoFromCatalog({
 }) {
   const [mode, setMode] = useState<"search" | "new">("search");
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<CatalogItem[]>([]);
+  const [items, setItems] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [qty, setQty] = useState(1);
+  // Filtros por línea/color — sirven para armar un baño completo de una
+  // misma línea (ej: toda la grifería Asis Cromo) sin tipear cada vez.
+  const [filterLine, setFilterLine] = useState<string | null>(null);
+  const [filterFinish, setFilterFinish] = useState<string | null>(null);
 
   // Form manual (modo "new")
   const [manualName, setManualName] = useState("");
@@ -69,26 +75,65 @@ export default function AddArtefactoFromCatalog({
   const [manualListPrice, setManualListPrice] = useState(0);
   const [manualDiscount, setManualDiscount] = useState(0);
 
-  // Cargar resultados al cambiar query (con debounce simple)
+  // Se trae UNA vez todo el catálogo de la pestaña (son ~100 items, liviano)
+  // y el filtrado pasa a ser local. Así los desplegables de línea/color
+  // muestran siempre las opciones completas de la pestaña, aunque haya algo
+  // tipeado en la búsqueda (igual que en la página del catálogo).
   useEffect(() => {
     if (mode !== "search") return;
-    const timer = setTimeout(async () => {
+    let cancelled = false;
+    (async () => {
       setLoading(true);
       try {
         const params = new URLSearchParams();
-        if (query.trim()) params.set("q", query.trim());
         params.set("subcategory", defaultSubcategory);
         const res = await fetch(
           `/api/catalogo/artefactos?${params.toString()}`
         );
         const data = await res.json();
-        setResults(Array.isArray(data) ? data : []);
+        if (!cancelled) setItems(Array.isArray(data) ? data : []);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [query, defaultSubcategory, mode]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [defaultSubcategory, mode]);
+
+  // Líneas y colores disponibles en la pestaña (para los desplegables).
+  const linesAvailable = useMemo(
+    () =>
+      Array.from(new Set(items.map((it) => it.line).filter(Boolean))).sort() as string[],
+    [items]
+  );
+  const finishesAvailable = useMemo(
+    () =>
+      Array.from(new Set(items.map((it) => it.finish).filter(Boolean))).sort() as string[],
+    [items]
+  );
+
+  // Mismo criterio de búsqueda que la página del catálogo: texto contra
+  // nombre/detalle/marca/proveedor/línea/color, más los filtros exactos.
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return items.filter((it) => {
+      if (filterLine && it.line !== filterLine) return false;
+      if (filterFinish && it.finish !== filterFinish) return false;
+      if (!q) return true;
+      return [
+        it.name,
+        it.detail ?? "",
+        it.brand ?? "",
+        it.supplier ?? "",
+        it.line ?? "",
+        it.finish ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [items, query, filterLine, filterFinish]);
 
   async function handleAddFromCatalog(item: CatalogItem, q: number) {
     await onAdd({
@@ -166,6 +211,46 @@ export default function AddArtefactoFromCatalog({
               placeholder="Buscar WC, griferia, mueble, marca…"
               className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs outline-none focus:border-gray-500"
             />
+            {/* Filtro por línea — solo aparece si la pestaña tiene líneas. */}
+            {linesAvailable.length > 0 && (
+              <select
+                value={filterLine ?? ""}
+                onChange={(e) => setFilterLine(e.target.value || null)}
+                className={`px-2 py-1.5 border rounded text-xs outline-none cursor-pointer focus:border-gray-500 ${
+                  filterLine
+                    ? "border-gray-500 text-gray-900 font-medium"
+                    : "border-gray-300 text-gray-600"
+                }`}
+                title="Filtrar por línea"
+              >
+                <option value="">Línea: todas</option>
+                {linesAvailable.map((l) => (
+                  <option key={l} value={l}>
+                    {l.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            )}
+            {/* Filtro por color/terminación. */}
+            {finishesAvailable.length > 0 && (
+              <select
+                value={filterFinish ?? ""}
+                onChange={(e) => setFilterFinish(e.target.value || null)}
+                className={`px-2 py-1.5 border rounded text-xs outline-none cursor-pointer focus:border-gray-500 ${
+                  filterFinish
+                    ? "border-gray-500 text-gray-900 font-medium"
+                    : "border-gray-300 text-gray-600"
+                }`}
+                title="Filtrar por color / terminación"
+              >
+                <option value="">Color: todos</option>
+                {finishesAvailable.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+            )}
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] text-gray-500 uppercase">cant.</span>
               <input
@@ -186,8 +271,10 @@ export default function AddArtefactoFromCatalog({
             {!loading && results.length === 0 && (
               <div className="px-3 py-4 text-xs text-gray-500 text-center">
                 No hay items en el catálogo
-                {query ? " con esa búsqueda" : ""}. Apretá "Crear nuevo" para
-                agregar uno desde cero.
+                {query || filterLine || filterFinish
+                  ? " con esa búsqueda o filtro"
+                  : ""}
+                . Apretá "Crear nuevo" para agregar uno desde cero.
               </div>
             )}
             {!loading &&
@@ -197,7 +284,7 @@ export default function AddArtefactoFromCatalog({
                 // suma el item.
                 <div
                   key={it.id}
-                  className={`grid grid-cols-[3rem_minmax(0,1fr)_minmax(0,1.5fr)_6rem_4rem] items-center gap-3 px-3 py-2 border-b border-gray-100 last:border-b-0 text-xs text-left hover:bg-gray-50 ${
+                  className={`grid grid-cols-[3rem_minmax(0,1.5fr)_4.5rem_4.5rem_minmax(0,1.1fr)_5.5rem_4rem] items-start gap-3 px-3 py-2 border-b border-gray-100 last:border-b-0 text-xs text-left hover:bg-gray-50 ${
                     selectedId === it.id ? "bg-gray-50" : ""
                   }`}
                   onMouseEnter={() => setSelectedId(it.id)}
@@ -213,7 +300,7 @@ export default function AddArtefactoFromCatalog({
                     <div className="w-10 h-10 bg-gray-100 rounded border border-gray-200" />
                   )}
                   <div className="min-w-0">
-                    <div className="font-semibold text-gray-900 truncate">
+                    <div className="font-semibold text-gray-900 leading-tight break-words">
                       {it.name}
                       {it.isStandard && (
                         <span className="ml-1.5 text-[9px] text-gray-500 uppercase tracking-wider">
@@ -221,7 +308,7 @@ export default function AddArtefactoFromCatalog({
                         </span>
                       )}
                     </div>
-                    <div className="text-[10px] text-gray-500 truncate">
+                    <div className="text-[10px] text-gray-500 leading-tight break-words">
                       {it.brand || "—"}
                       {it.supplier ? ` · ${it.supplier}` : ""}
                       {it.referenceLink && (
@@ -237,7 +324,16 @@ export default function AddArtefactoFromCatalog({
                       )}
                     </div>
                   </div>
-                  <div className="text-gray-600 truncate">{it.detail ?? ""}</div>
+                  {/* Línea en MAYÚSCULA y color, igual que en el catálogo. */}
+                  <div className="text-[10px] text-gray-700 uppercase leading-tight break-words">
+                    {it.line ?? "—"}
+                  </div>
+                  <div className="text-[10px] text-gray-600 leading-tight break-words">
+                    {it.finish ?? "—"}
+                  </div>
+                  <div className="text-gray-600 leading-tight break-words">
+                    {it.detail ?? ""}
+                  </div>
                   <div className="text-right tabular-nums">
                     <div className="text-gray-900 font-medium">
                       {formatCLP(it.listPrice)}

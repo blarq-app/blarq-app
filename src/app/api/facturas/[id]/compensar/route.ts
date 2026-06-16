@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { recomputeInvoiceStatus } from "@/lib/banco/invoicePayments";
+import { requireSession } from "@/lib/apiAuth";
 
 // Compensar una NC (tipoDoc=61) de tres maneras:
 //   - other_invoice: la NC se aplica a OTRA factura como medio de pago.
@@ -19,6 +20,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
     const data = await request.json();

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 /**
  * Devuelve todos los reembolsadores con su lista de aliases incluida.
@@ -7,6 +8,9 @@ import { NextRequest, NextResponse } from "next/server";
  * armar el filtro de RUTs cuando un reembolsador tiene aliases.
  */
 export async function GET() {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   const items = await prisma.reembolsador.findMany({
     orderBy: { nombre: "asc" },
     include: { aliases: { orderBy: { createdAt: "asc" } } },
@@ -24,6 +28,9 @@ export async function GET() {
  * `rutAlias` y `businessName` (se convierten en un alias).
  */
 export async function POST(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const data = await request.json();
     const nombre = String(data.nombre ?? "").trim();

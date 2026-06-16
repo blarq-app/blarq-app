@@ -23,8 +23,12 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { getFrozenLineageIds } from "@/lib/catalog/frozenLineage";
 import type { AuditChange } from "@/lib/catalog/auditChanges";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function GET(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     // Si se pasa ?budgetId=xxx limitamos al presupuesto puntual (lo usa el
     // panel del editor de presupuesto). Sin parámetro, lista todos los

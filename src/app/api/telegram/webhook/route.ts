@@ -100,12 +100,22 @@ function listarOpciones(cands: NamedMatch[]): string {
 export async function POST(request: NextRequest) {
   // 1. Validar que el request venga de Telegram. Telegram manda el secret
   //    que registramos con setWebhook en este header.
+  //
+  //    H17: el secret es OBLIGATORIO. Antes se validaba solo "si existía"
+  //    (if (secret)) — si la variable se borraba, la puerta quedaba abierta
+  //    sin aviso (la única barrera habría sido la lista de IDs, falsificable
+  //    desde el cuerpo). Ahora, sin variable configurada, el webhook se niega
+  //    en vez de procesar. El secret YA está seteado en Vercel Production.
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (secret) {
-    const got = request.headers.get("x-telegram-bot-api-secret-token");
-    if (got !== secret) {
-      return NextResponse.json({ ok: false }, { status: 401 });
-    }
+  if (!secret) {
+    console.error(
+      "TELEGRAM_WEBHOOK_SECRET no configurado — webhook deshabilitado"
+    );
+    return NextResponse.json({ ok: false }, { status: 503 });
+  }
+  const got = request.headers.get("x-telegram-bot-api-secret-token");
+  if (got !== secret) {
+    return NextResponse.json({ ok: false }, { status: 401 });
   }
 
   let update: TgUpdate;

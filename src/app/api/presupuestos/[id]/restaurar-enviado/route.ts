@@ -6,11 +6,15 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { restoreObraFromSnapshot } from "@/lib/catalog/budgetSnapshot";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
     const bv = await prisma.budgetVersion.findUnique({

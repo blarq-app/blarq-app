@@ -13,6 +13,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { revisarArtefactosOnline } from "@/lib/catalog/revisarArtefactos";
+import { requireSession } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
 // El scraper puede tardar — damos margen amplio.
@@ -22,6 +23,9 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id: budgetVersionId } = await params;
 

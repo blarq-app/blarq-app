@@ -1,7 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function GET() {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   const maestros = await prisma.maestro.findMany({
     orderBy: { name: "asc" },
   });
@@ -9,6 +13,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const data = await request.json();
     if (!data.name) {

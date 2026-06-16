@@ -6,6 +6,7 @@ import {
 } from "@/lib/pdf/ObraMaestroPDF.html";
 import { buildObraMaestroXLSX } from "@/lib/xlsx/ObraMaestroXLSX";
 import { renderPDF } from "@/lib/pdf/renderPDF";
+import { requireSession } from "@/lib/apiAuth";
 
 // Puppeteer/Chromium necesita Node runtime; XLSX tambien.
 export const runtime = "nodejs";
@@ -21,6 +22,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
     const format = request.nextUrl.searchParams.get("format") ?? "pdf";

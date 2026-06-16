@@ -1,11 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { parseRut } from "@/lib/clients/rut";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 // GET /api/proyectos
 // Listado liviano de proyectos para selectors (modal asignar pagos, etc).
 // Devuelve id + name + numeroProyecto + isInternal, ordenado por número.
 export async function GET() {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   const projects = await prisma.project.findMany({
     select: {
       id: true,
@@ -19,6 +23,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const data = await request.json();
 

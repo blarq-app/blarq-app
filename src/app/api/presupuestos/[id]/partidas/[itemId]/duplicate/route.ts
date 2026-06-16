@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 // Duplica una partida completa (con su snapshot de componentes). Se usa para
 // partir partidas mixtas en dos zonas distintas — MJ duplica, edita la
@@ -16,6 +17,9 @@ export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id: budgetVersionId, itemId } = await params;
 

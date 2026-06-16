@@ -8,10 +8,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { fetchArtefactoData } from "@/lib/catalog/fetchArtefactoData";
+import { requireSession } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   const url = request.nextUrl.searchParams.get("url");
   if (!url) {
     return NextResponse.json(

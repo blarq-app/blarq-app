@@ -1,10 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; compId: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { compId } = await params;
     const data = await request.json();
@@ -47,6 +51,9 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string; compId: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { compId } = await params;
     await prisma.partidaComponent.delete({ where: { id: compId } });

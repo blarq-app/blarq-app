@@ -5,6 +5,7 @@ import {
   loadReembolsadores,
   loadCandidateInvoices,
 } from "@/lib/banco/invoicePayments";
+import { requireSession } from "@/lib/apiAuth";
 
 // POST /api/banco/auto-conciliar-pendientes
 //
@@ -42,6 +43,9 @@ interface MatchDetail {
 
 // Devuelve: { tried, matched, byReason: {...}, matches: MatchDetail[] }
 export async function POST() {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   // Traemos los movimientos COMPLETOS (no solo los ids) en UNA sola query,
   // con los campos que el match necesita + sus pagos. Así la función no hace
   // un findUnique por movimiento (eran cientos de viajes a la BD remota).

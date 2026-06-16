@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 // Crear item bajo un capítulo de muebles. Auto-genera itemNumber tipo
 // "{chapter}.{n+1}" según items existentes en el capítulo.
@@ -7,6 +8,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id: budgetVersionId } = await params;
     const data = await request.json();

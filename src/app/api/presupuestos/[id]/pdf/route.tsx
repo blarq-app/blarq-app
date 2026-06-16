@@ -11,6 +11,7 @@ import {
   getObraBaselineItems,
   computeChangeMarkers,
 } from "@/lib/presupuesto/versionDiff";
+import { requireSession } from "@/lib/apiAuth";
 
 // Forzar Node runtime (no edge) — Puppeteer/Chromium necesita Node.
 export const runtime = "nodejs";
@@ -22,6 +23,9 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id } = await params;
 

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { recomputeInvoiceStatus } from "@/lib/banco/invoicePayments";
+import { requireSession } from "@/lib/apiAuth";
 
 // RUT de BLARQ — receptor de las facturas/pagos recibidos.
 const BLARQ_RUT = "77270733-9";
@@ -33,6 +34,9 @@ const BLARQ_RUT = "77270733-9";
 //
 // No toca movimientos "interno".
 export async function POST(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const body = (await request.json()) as Partial<{
       action: "desasignar" | "asignar" | "pago_sin_factura";

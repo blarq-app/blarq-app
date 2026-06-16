@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 /**
  * POST /api/reembolsadores/learn
@@ -21,6 +22,9 @@ import { NextRequest, NextResponse } from "next/server";
  * Devuelve el Reembolsador resultante con su lista de aliases.
  */
 export async function POST(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const data = await request.json();
     const glosa = String(data?.glosa ?? "").trim().toLowerCase();

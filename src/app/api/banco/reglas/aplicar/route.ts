@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { applyRulesToMovement } from "@/lib/banco/categorizationRules";
+import { requireSession } from "@/lib/apiAuth";
 
 // POST /api/banco/reglas/aplicar
 //
@@ -11,6 +12,9 @@ import { applyRulesToMovement } from "@/lib/banco/categorizationRules";
 // No tiene body. Devuelve { tried, categorized } — cuántos movs se intentó
 // procesar y cuántos terminaron categorizados (los que matchearon alguna regla).
 export async function POST() {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   const movs = await prisma.bankMovement.findMany({
     where: { status: "sin_asignar" },
     select: { id: true },

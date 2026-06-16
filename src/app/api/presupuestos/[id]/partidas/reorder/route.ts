@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 // Reordenar partidas (ObraItem) de una versión de presupuesto a mano.
 // MJ arrastra las filas para armar el orden cronológico de la obra. Además
@@ -15,6 +16,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     await params; // budgetVersionId — no se usa, el id de cada partida basta
     const { items } = (await request.json()) as {

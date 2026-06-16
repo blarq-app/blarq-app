@@ -18,6 +18,7 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { parseArtefactos } from "@/lib/import/parseArtefactos";
 import { ensureArtefactoCatalog } from "@/lib/catalog/ensureArtefactoCatalog";
+import { requireSession } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -26,6 +27,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { id: projectId } = await params;
 

@@ -21,11 +21,15 @@ import {
   pushObraItemComponentsToCatalog,
   SinCatalogoError,
 } from "@/lib/catalog/pushObraItemToCatalog";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ itemId: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { itemId } = await params;
     const { pushed, catalogPartidaId } =

@@ -1,9 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 // Reordenar partidas dentro de una categoría.
 // Body: { items: [{ id: string, sortOrder: number }] }
 export async function PATCH(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { items } = (await request.json()) as {
       items: { id: string; sortOrder: number }[];

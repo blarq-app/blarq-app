@@ -15,8 +15,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { recalcObraItemFromComponents } from "@/lib/catalog/recalcObraItem";
 import { getFrozenLineageIds } from "@/lib/catalog/frozenLineage";
 import type { AuditChangeRef } from "@/lib/catalog/auditChanges";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function POST(request: NextRequest) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const body = (await request.json().catch(() => ({}))) as {
       budgetVersionId?: string;

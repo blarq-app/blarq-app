@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/apiAuth";
 
 // Promueve una cotización a "activa" para su MuebleItem.
 // - Marca isSelected=true en esta quote
@@ -10,6 +11,9 @@ export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string; quoteId: string }> }
 ) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
   try {
     const { quoteId } = await params;
 

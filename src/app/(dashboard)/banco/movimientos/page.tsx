@@ -15,7 +15,6 @@ type SearchParams = {
   // de una factura). No es un filtro persistente: cualquier tab/búsqueda lo
   // suelta (ver FilterLink). Se sale con el cartelito "limpiar".
   id?: string;
-  showInternal?: string;
   // Filtros avanzados (panel expandible) — todos opcionales.
   rut?: string;
   name?: string;
@@ -57,11 +56,7 @@ export default async function MovimientosPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const showInternal = sp.showInternal === "1";
   const q = (sp.q ?? "").trim();
-  // Si el panel avanzado fija "tipo=interno", queremos ver internas aunque
-  // el toggle no esté activado.
-  const tipoIsInterno = sp.tipo === "interno";
 
   // Filtro principal del listado.
   const where: Record<string, unknown> = {};
@@ -70,16 +65,19 @@ export default async function MovimientosPage({
   // Drill-down a un movimiento puntual: si viene `id`, mostramos solo ese.
   if (sp.id) where.id = sp.id;
   // Estado de asignación: el filtro avanzado (sp.estado) pisa al de las tabs.
-  // "all" = elección explícita de "Todos" → sin filtro de status (lo que MJ
-  // ve cuando hace click en la tab "Todos"). Sin filtro = vista por defecto:
-  // pendientes (sin_asignar + parcial), porque MJ entra a /banco/movimientos
-  // típicamente para conciliar.
+  // "all" = elección explícita de "Todos" → SIN ningún filtro de status:
+  // muestra TODO, incluidas las transferencias internas (que igual van
+  // etiquetadas como "Transfer interna" en la columna Estado). Antes "Todos"
+  // escondía las internas salvo que se prendiera un toggle — confuso, porque
+  // la pestaña que dice "Todos" era la única que ocultaba algo. Las demás
+  // pestañas filtran por su propio estado, así que las internas no aparecen
+  // ahí de todos modos. Sin filtro = vista por defecto: pendientes
+  // (sin_asignar + parcial), porque MJ entra a /banco/movimientos típicamente
+  // para conciliar.
   const effectiveStatus = sp.estado || sp.status;
   const isDefaultPendientes = !effectiveStatus;
   if (effectiveStatus === "all") {
-    if (!showInternal && !tipoIsInterno) {
-      where.status = { not: "interno" };
-    }
+    // sin filtro de status: TODO
   } else if (effectiveStatus) {
     where.status = effectiveStatus;
   } else {
@@ -414,7 +412,6 @@ export default async function MovimientosPage({
           ))}
         </div>
         <MovementsSearch defaultQ={q} sp={sp} />
-        <ShowInternalToggle sp={sp} active={showInternal} />
       </div>
 
       <MovementsAdvancedFilters
@@ -433,7 +430,6 @@ export default async function MovimientosPage({
           accountId: sp.accountId,
           status: sp.status,
           q: sp.q,
-          showInternal: sp.showInternal,
         }}
       />
 
@@ -478,28 +474,6 @@ function FilterLink({
       }`}
     >
       {label}
-    </Link>
-  );
-}
-
-function ShowInternalToggle({ sp, active }: { sp: SearchParams; active: boolean }) {
-  const params = new URLSearchParams();
-  for (const [k, v] of Object.entries(sp)) {
-    if (k !== "showInternal" && k !== "id" && v) params.set(k, v as string);
-  }
-  if (!active) params.set("showInternal", "1");
-  const href = `/banco/movimientos${params.toString() ? "?" + params.toString() : ""}`;
-  return (
-    <Link
-      href={href}
-      className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
-        active
-          ? "bg-gray-900 text-white border-gray-900"
-          : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
-      }`}
-      title="Por default las transferencias internas BLARQ↔BLARQ se ocultan"
-    >
-      {active ? "✓ Internas visibles" : "Mostrar internas"}
     </Link>
   );
 }

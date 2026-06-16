@@ -219,8 +219,11 @@ export function computeUtilidadPorCobro(p: ProjectWithUtilidad): UtilidadPorCobr
     utilMueblesEstimadaTotal,
     mueblesCobradoCIVA * tasaUtilidadMuebles
   );
-  const sobreCobroObra = obraTotalAcordado > 0 && obraCobradoCIVA > obraTotalAcordado + 1;
-  const sobreCobroMuebles = mueblesTotalAcordado > 0 && mueblesCobradoCIVA > mueblesTotalAcordado + 1;
+  // Tolerancia del 0,1%: ignora el redondeo entre la suma de pagos y el
+  // acordado (un cobro 100% pagado puede dar unos pesos de más). Un sobre-cobro
+  // real (adicionales sin cargar / cobro mal etiquetado) es mucho mayor.
+  const sobreCobroObra = obraTotalAcordado > 0 && obraCobradoCIVA > obraTotalAcordado * 1.001;
+  const sobreCobroMuebles = mueblesTotalAcordado > 0 && mueblesCobradoCIVA > mueblesTotalAcordado * 1.001;
 
   // ── Cierre de muebles: utilidad REAL (cobrado neto − gastado neto) ─────
   // Solo cuando el proyecto está terminado. El gastado de muebles sale de las

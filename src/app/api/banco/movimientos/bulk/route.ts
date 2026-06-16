@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = (await request.json()) as Partial<{
-      action: "desasignar" | "asignar" | "pago_sin_factura";
+      action: "desasignar" | "asignar" | "pago_sin_factura" | "neto_cero";
       movementIds: string[];
       invoiceId: string;
       projectId: string;
@@ -51,7 +51,8 @@ export async function POST(request: NextRequest) {
     if (
       action !== "desasignar" &&
       action !== "asignar" &&
-      action !== "pago_sin_factura"
+      action !== "pago_sin_factura" &&
+      action !== "neto_cero"
     ) {
       return NextResponse.json({ error: "Acción inválida" }, { status: 400 });
     }
@@ -63,6 +64,62 @@ export async function POST(request: NextRequest) {
       where: { id: { in: movementIds } },
       include: { payments: { select: { invoiceId: true } } },
     });
+
+    // ── DEVOLUCIÓN NETO CERO ───────────────────────────────────────────
+    // Plata que entró y volvió (ej. la clienta transfirió por error y se le
+    // devolvió). Se agrupan las entradas y salidas que se cancelan entre sí:
+    // salen de "pendiente", quedan pareadas con un id de grupo, y NO cuentan
+    // como ingreso ni gasto. Validaciones: ≥2 movs, ninguno ya conciliado /
+    // interno / neto cero, al menos una entrada y una salida, y la suma del
+    // grupo ≈ 0 (red de seguridad: si no se cancela, algo falta o sobra).
+    if (action === "neto_cero") {
+      const clp = (n: number) => "$" + Math.round(n).toLocaleString("es-CL");
+      if (movs.length < 2) {
+        return NextResponse.json(
+          { error: "Elegí al menos 2 movimientos: las entradas y las salidas que se cancelan." },
+          { status: 400 }
+        );
+      }
+      if (movs.some((m) => m.payments.length > 0)) {
+        return NextResponse.json(
+          { error: "Algún movimiento ya está conciliado a una factura. Desasignalo antes de marcarlo como devolución." },
+          { status: 400 }
+        );
+      }
+      if (movs.some((m) => m.status === "interno" || m.status === "neto_cero")) {
+        return NextResponse.json(
+          { error: "Algún movimiento ya es interno o neto cero. Sacalo de la selección." },
+          { status: 400 }
+        );
+      }
+      const tieneIngreso = movs.some((m) => m.amount > 0);
+      const tieneEgreso = movs.some((m) => m.amount < 0);
+      if (!tieneIngreso || !tieneEgreso) {
+        return NextResponse.json(
+          { error: "Una devolución neto cero necesita al menos una entrada y una salida." },
+          { status: 400 }
+        );
+      }
+      const suma = movs.reduce((s, m) => s + m.amount, 0);
+      if (Math.abs(suma) > 10) {
+        return NextResponse.json(
+          {
+            error:
+              `Los movimientos no se cancelan: queda un neto de ${clp(suma)}. ` +
+              `Revisá la selección (¿falta o sobra alguno?).`,
+          },
+          { status: 400 }
+        );
+      }
+      // Id de grupo que linkea los movimientos de este lavado.
+      const groupId = crypto.randomUUID();
+      await prisma.bankMovement.updateMany({
+        where: { id: { in: movs.map((m) => m.id) } },
+        data: { status: "neto_cero", netZeroGroupId: groupId, category: null },
+      });
+      return NextResponse.json({ ok: true, neteados: movs.length });
+    }
+
     // Internos no participan de imputaciones — se descartan en silencio.
     const targetMovs = movs.filter((m) => m.status !== "interno");
     if (targetMovs.length === 0) {

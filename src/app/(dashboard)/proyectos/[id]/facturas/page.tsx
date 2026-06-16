@@ -4,6 +4,7 @@ import Link from "next/link";
 import { formatCLP, formatDate } from "@/lib/utils";
 import ProjectFacturasFilters from "@/components/facturas/ProjectFacturasFilters";
 import ClickableInvoiceRow from "@/components/facturas/ClickableInvoiceRow";
+import { invoiceStatusBadge } from "@/lib/facturas/statusBadge";
 import {
   EditableCategoryCell,
   MoveProjectButton,
@@ -19,13 +20,6 @@ type SearchParams = {
   dateFrom?: string;
   dateTo?: string;
   q?: string;
-};
-
-const STATUS_TONE: Record<string, string> = {
-  pendiente: "bg-yellow-100 text-yellow-800",
-  parcial: "bg-blue-100 text-blue-800",
-  pagada: "bg-green-100 text-green-800",
-  anulada: "bg-gray-100 text-gray-500",
 };
 
 export default async function ProyectoFacturasPage({
@@ -448,13 +442,20 @@ export default async function ProyectoFacturasPage({
                     )}
                   </td>
                   <td className="px-4 py-2">
-                    <span
-                      className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                        STATUS_TONE[inv.status] || "bg-gray-100"
-                      }`}
-                    >
-                      {inv.status}
-                    </span>
+                    {(() => {
+                      const badge = invoiceStatusBadge(inv.status, {
+                        paidWithNc: (ncCreditByInvoice.get(inv.id) ?? 0) > 0,
+                        isCompensatedNc:
+                          inv.tipoDoc === 61 && !!inv.compensationType,
+                      });
+                      return (
+                        <span
+                          className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.tone}`}
+                        >
+                          {badge.label}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-2">
                     <span

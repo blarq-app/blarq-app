@@ -7,6 +7,7 @@ import MovementActionButton from "./MovementActionButton";
 import MatchHintButton from "./MatchHintButton";
 import MarkInternalButton from "./MarkInternalButton";
 import MarkSinFacturaButton from "./MarkSinFacturaButton";
+import UndoNetZeroButton from "./UndoNetZeroButton";
 import MovementsBulkBar from "./MovementsBulkBar";
 
 type Payment = {
@@ -248,6 +249,9 @@ export default function MovementsTable({
                           {(m.status === "sin_asignar" ||
                             m.status === "parcial") && (
                             <MarkSinFacturaButton movimientoId={m.id} />
+                          )}
+                          {m.status === "neto_cero" && (
+                            <UndoNetZeroButton movimientoId={m.id} />
                           )}
                           <MovementActionButton
                             movimientoId={m.id}

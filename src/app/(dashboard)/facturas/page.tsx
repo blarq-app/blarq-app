@@ -376,6 +376,12 @@ export default async function FacturasPage({
               category: inv.category ? { id: inv.category.id, name: inv.category.name } : null,
               autoMatched: inv.payments.some((p) => p.autoMatched),
               remaining: remainingOf(inv),
+              // true = tiene una NC aplicada como crédito. Sirve para que el
+              // badge muestre "pagada con NC" en vez de "anulada" cuando la
+              // factura quedó saldada por el crédito (ver statusBadge.ts).
+              paidWithNc: (ncCreditByInvoice.get(inv.id) ?? 0) > 0,
+              // Modo de compensación (si es NC compensada) → badge "compensada".
+              compensationType: inv.compensationType,
             }))}
           />
         )}

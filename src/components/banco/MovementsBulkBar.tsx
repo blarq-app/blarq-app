@@ -58,6 +58,14 @@ export default function MovementsBulkBar({
   // Monto total: signo neto (ingresos − egresos), por si MJ mezcló.
   const neto = selected.reduce((s, m) => s + m.amount, 0);
   const conPagos = selected.filter((m) => m.hasPayments).length;
+  // Elegible para "devolución neto cero": ≥2 movs, ninguno ya conciliado,
+  // hay al menos una entrada y una salida, y el neto se cancela (≈ 0).
+  const netoCeroElegible =
+    selected.length >= 2 &&
+    conPagos === 0 &&
+    selected.some((m) => m.amount > 0) &&
+    selected.some((m) => m.amount < 0) &&
+    Math.abs(neto) <= 10;
 
   async function desasignar() {
     if (busy) return;
@@ -111,6 +119,40 @@ export default function MovementsBulkBar({
         `Listo · ${data.asignados} movimiento${data.asignados !== 1 ? "s" : ""} asignado${data.asignados !== 1 ? "s" : ""} a la factura`
       );
       setPickerOpen(false);
+      onClear();
+      router.refresh();
+      setTimeout(() => setToast(null), 8000);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function marcarNetoCero() {
+    if (busy) return;
+    if (
+      !confirm(
+        `¿Marcar estos ${ids.length} movimientos como devolución (neto cero)?\n\n` +
+          `Son plata que entró y volvió (se cancelan entre sí). Salen de ` +
+          `"pendiente" y NO cuentan como ingreso ni gasto. Lo podés deshacer ` +
+          `después con "deshacer" en cualquiera de los movimientos.`
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/banco/movimientos/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "neto_cero", movementIds: ids }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error ?? "Error al marcar neto cero");
+        return;
+      }
+      setToast(
+        `Listo · ${data.neteados} movimiento${data.neteados !== 1 ? "s" : ""} marcado${data.neteados !== 1 ? "s" : ""} como devolución (neto cero)`
+      );
       onClear();
       router.refresh();
       setTimeout(() => setToast(null), 8000);
@@ -195,6 +237,18 @@ export default function MovementsBulkBar({
               className="text-xs bg-white text-gray-900 px-3 py-1 rounded hover:bg-gray-100 disabled:opacity-50"
             >
               Pago sin factura…
+            </button>
+            <button
+              onClick={marcarNetoCero}
+              disabled={busy || !netoCeroElegible}
+              title={
+                netoCeroElegible
+                  ? "Plata que entró y volvió (se cancelan entre sí). No cuenta como ingreso ni gasto."
+                  : "Seleccioná entradas y salidas que se cancelen entre sí (neto = 0) y que no estén ya conciliadas."
+              }
+              className="text-xs bg-white text-gray-900 px-3 py-1 rounded hover:bg-gray-100 disabled:opacity-40"
+            >
+              Devolución (neto cero)…
             </button>
             <button
               onClick={onClear}

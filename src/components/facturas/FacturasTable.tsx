@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { formatCLP, formatDate } from "@/lib/utils";
+import { invoiceStatusBadge } from "@/lib/facturas/statusBadge";
 import BulkAssignBar from "./BulkAssignBar";
 import {
   EditableCategoryCell,
@@ -52,13 +53,13 @@ type Invoice = {
   autoMatched: boolean;
   // Saldo pendiente (total − pagado − créditos NC). 0 = saldada/pagada.
   remaining: number;
-};
-
-const STATUS_TONE: Record<string, string> = {
-  pendiente: "bg-yellow-100 text-yellow-800",
-  parcial: "bg-blue-100 text-blue-800",
-  pagada: "bg-green-100 text-green-800",
-  anulada: "bg-gray-100 text-gray-500",
+  // true = tiene una NC aplicada como crédito. Hace que una factura "anulada"
+  // se muestre como "pagada con NC" (ver statusBadge.ts).
+  paidWithNc: boolean;
+  // Modo de compensación si es una NC ya compensada (other_invoice /
+  // cash_refund / bank_refund). null = NC sin compensar o no es NC. Hace que
+  // una NC compensada muestre "compensada" en vez de "pagada".
+  compensationType: string | null;
 };
 
 export default function FacturasTable({
@@ -248,13 +249,19 @@ export default function FacturasTable({
                   )}
                 </td>
                 <td className="px-4 py-2 whitespace-nowrap">
-                  <span
-                    className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                      STATUS_TONE[inv.status] || "bg-gray-100"
-                    }`}
-                  >
-                    {inv.status}
-                  </span>
+                  {(() => {
+                    const badge = invoiceStatusBadge(inv.status, {
+                      paidWithNc: inv.paidWithNc,
+                      isCompensatedNc: inv.tipoDoc === 61 && !!inv.compensationType,
+                    });
+                    return (
+                      <span
+                        className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.tone}`}
+                      >
+                        {badge.label}
+                      </span>
+                    );
+                  })()}
                   {inv.autoMatched && (
                     <span
                       className="ml-1 text-[9px] lowercase tracking-wider text-gray-400"

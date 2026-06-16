@@ -36,6 +36,7 @@ const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
   conciliado: { label: "Conciliado", tone: "bg-green-100 text-green-800" },
   sin_factura: { label: "Sin factura", tone: "bg-gray-100 text-gray-700" },
   interno: { label: "Transfer interna", tone: "bg-gray-100 text-gray-500" },
+  neto_cero: { label: "Neto cero", tone: "bg-gray-100 text-gray-500" },
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -239,9 +240,15 @@ export default async function MovimientosPage({
   const pctConciliado = totalCount > 0 ? Math.round((conciliados / totalCount) * 100) : 0;
 
   // Sumas para las cards: total = todo; conciliados = status conciliado;
-  // pendientes = sin_asignar + parcial.
-  const totalIngresos = Object.values(ingresoByStatus).reduce((s, v) => s + v, 0);
-  const totalEgresos = Object.values(egresoByStatus).reduce((s, v) => s + v, 0);
+  // pendientes = sin_asignar + parcial. Las devoluciones "neto cero" se
+  // EXCLUYEN de ingresos/egresos: entró y volvió, no es plata real (igual
+  // criterio que el resto de la app, donde la utilidad sale de las facturas).
+  const sumExcluyendoNetoCero = (byStatus: Record<string, number>) =>
+    Object.entries(byStatus)
+      .filter(([s]) => s !== "neto_cero")
+      .reduce((acc, [, v]) => acc + v, 0);
+  const totalIngresos = sumExcluyendoNetoCero(ingresoByStatus);
+  const totalEgresos = sumExcluyendoNetoCero(egresoByStatus);
   const conciliadosIngresos = ingresoByStatus.conciliado ?? 0;
   const conciliadosEgresos = egresoByStatus.conciliado ?? 0;
   const pendientesIngresos =

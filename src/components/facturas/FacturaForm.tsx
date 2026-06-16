@@ -91,6 +91,13 @@ export default function FacturaForm({
   const iva = Math.round(v.netAmount * 0.19);
   const total = v.netAmount + iva;
 
+  // Una NC (61) NO maneja su estado desde este formulario: lo decide el panel
+  // de compensación de arriba (pendiente → compensada). Si dejáramos el
+  // dropdown de estado editable acá, al guardar pisaría la compensación y la
+  // NC volvería a "pendiente" (bug #39). Por eso, para NC: ocultamos el campo
+  // Estado y NO mandamos `status` en el guardado.
+  const isNc = tipoDoc === 61;
+
   // Categorías agrupadas por padre
   const grouped: Record<string, Category[]> = {};
   for (const c of categories) {
@@ -112,7 +119,9 @@ export default function FacturaForm({
         issueDate: v.issueDate,
         dueDate: v.dueDate || null,
         netAmount: v.netAmount,
-        status: v.status,
+        // En una NC el estado lo maneja el panel de compensación; no lo
+        // mandamos para no pisar la compensación (ver isNc arriba).
+        ...(isNc ? {} : { status: v.status }),
         projectId: v.projectId || null,
         categoryId: v.categoryId || null,
         notes: v.notes || null,
@@ -290,19 +299,23 @@ export default function FacturaForm({
           />
         </Field>
 
-        <Field label="Estado">
-          <select
-            value={v.status}
-            onChange={(e) =>
-              set("status", e.target.value as FacturaFormValues["status"])
-            }
-            className={inputCls}
-          >
-            <option value="pendiente">Pendiente</option>
-            <option value="pagada">Pagada</option>
-            <option value="anulada">Anulada</option>
-          </select>
-        </Field>
+        {/* Estado: editable solo en facturas normales. En una NC el estado
+            lo maneja el panel de compensación de arriba (ver isNc). */}
+        {!isNc && (
+          <Field label="Estado">
+            <select
+              value={v.status}
+              onChange={(e) =>
+                set("status", e.target.value as FacturaFormValues["status"])
+              }
+              className={inputCls}
+            >
+              <option value="pendiente">Pendiente</option>
+              <option value="pagada">Pagada</option>
+              <option value="anulada">Anulada</option>
+            </select>
+          </Field>
+        )}
 
         <Field label="Vencimiento (opcional)">
           <input

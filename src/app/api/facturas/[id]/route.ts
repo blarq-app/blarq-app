@@ -58,7 +58,11 @@ export async function PUT(
         netAmount,
         iva,
         totalAmount,
-        status: data.status,
+        // Solo tocar el estado si viene en el payload. Las NC no lo mandan
+        // (su estado lo maneja el panel de compensación); sin este guard, un
+        // guardado del form pisaría la compensación y la NC volvería a
+        // "pendiente" (bug #39).
+        ...(data.status !== undefined && { status: data.status }),
         notes: data.notes,
         // Solo aceptamos cuando vienen — undefined = no tocar.
         ...(data.referenceFolioNumber !== undefined && {

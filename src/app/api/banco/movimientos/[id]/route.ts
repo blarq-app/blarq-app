@@ -46,6 +46,7 @@ export async function PATCH(
       saveRule: boolean;
       ignore: boolean;
       markInternal: boolean;
+      undoNetZero: boolean;
       notes: string;
     }>;
 
@@ -54,6 +55,19 @@ export async function PATCH(
       include: { payments: true },
     });
     if (!mov) return NextResponse.json({ error: "Movimiento no encontrado" }, { status: 404 });
+
+    // Deshacer una devolución neto cero: suelta TODO el grupo (un lavado es
+    // atómico — deshacer uno deshace todos). Vuelven a "pendiente".
+    if (body.undoNetZero) {
+      const where = mov.netZeroGroupId
+        ? { netZeroGroupId: mov.netZeroGroupId }
+        : { id: mov.id };
+      const r = await prisma.bankMovement.updateMany({
+        where,
+        data: { status: "sin_asignar", netZeroGroupId: null },
+      });
+      return NextResponse.json({ ok: true, deshechos: r.count });
+    }
 
     // Normalizar el atajo invoiceId al shape de payments[].
     let nextPayments: Array<{ invoiceId: string; amountApplied: number }> | undefined;

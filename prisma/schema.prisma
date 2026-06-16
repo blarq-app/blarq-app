@@ -917,11 +917,17 @@ model BankMovement {
   // Cuando se detecta, ambos lados se linkean entre sí. NO cuenta como
   // gasto ni ingreso real — es solo movimiento de fondos interno.
   internalTransferToId String? @unique
+  // Grupo de "devolución neto cero": plata que entró y volvió (ej. la
+  // clienta transfirió por error y se le devolvió). Todos los movimientos
+  // del mismo lavado comparten este id. La suma del grupo es ≈ 0 y NO
+  // cuenta como ingreso ni gasto. null = no es parte de un lavado.
+  netZeroGroupId  String?
   // Status del proceso de conciliación. "sin_asignar" cuando todavía MJ
   // no decidió qué es. "conciliado" cuando matchea con factura.
   // "sin_factura" cuando es un egreso/ingreso categorizado pero sin
   // factura asociada (sueldo, transferencia, etc). "interno" para
-  // transferencias entre cuentas BLARQ.
+  // transferencias entre cuentas BLARQ. "neto_cero" para devoluciones
+  // que se cancelan entre sí (ver netZeroGroupId).
   status          String   @default("sin_asignar")
   notes           String?
   createdAt       DateTime @default(now())
@@ -943,6 +949,7 @@ model BankMovement {
   @@index([bankAccountId])
   @@index([date])
   @@index([status])
+  @@index([netZeroGroupId])
 }
 
 // Reembolsadores: personas (maestros, socios, MJ misma) que compran a

@@ -104,10 +104,21 @@ export default async function EditFacturaPage({
           totalAmount: true,
           businessName: true,
           issueDate: true,
+          status: true,
         },
         take: 50,
       })
     : [];
+
+  // Para el panel de compensación de una NC: solo ofrecer facturas que
+  // todavía tienen saldo (pendiente / parcial). Una NC se aplica a una
+  // factura que aún debe plata; ofrecer las ya pagadas o anuladas confunde
+  // (no son conciliables). El dropdown de "factura referenciada" del form,
+  // en cambio, usa la lista completa (la referencia del SII puede apuntar a
+  // una factura ya pagada).
+  const compensableCandidates = referenceCandidates.filter(
+    (c) => c.status === "pendiente" || c.status === "parcial"
+  );
 
   // Para NCs (tipoDoc=61): si ya está compensada, traer datos de la
   // factura cubierta (caso DP) o del mov bancario (caso reembolso a cuenta)
@@ -188,7 +199,7 @@ export default async function EditFacturaPage({
                 }
               : null
           }
-          candidates={referenceCandidates.map((c) => ({
+          candidates={compensableCandidates.map((c) => ({
             ...c,
             issueDate: c.issueDate.toISOString(),
           }))}

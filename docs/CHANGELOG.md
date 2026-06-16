@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-16 — Facturas/banco: etiquetas de NC + devolución neto cero
+
+- **"Pagada con NC" (#38)**: una factura cubierta entera por el crédito de una NC mostraba "ANULADA" (confuso). Ahora, si tiene una NC aplicada, el badge dice "PAGADA CON NC" (verde); si se anuló sin crédito detrás, sigue diciendo "ANULADA". Solo presentación — el valor en BD sigue siendo `anulada`, la plata no cambia. Helper compartido `src/lib/facturas/statusBadge.ts` (lista global + lista por proyecto).
+- **NC compensada ya no vuelve a "pendiente" (#39)**: el form de edición de una NC tenía un dropdown de Estado que, al guardar, pisaba la compensación (la NC volvía a "pendiente"). Para NC se sacó ese dropdown y el guardado ya no manda `status`; además, el PUT `/api/facturas/[id]` solo toca el estado si viene en el payload (red de seguridad). Una NC compensada muestra el badge "COMPENSADA".
+- **Compensar NC ofrece solo facturas con saldo (#37)**: el panel "elegí la factura a la que se aplicó el crédito" listaba todas las del proveedor (pagadas incluidas); ahora filtra a pendientes/parciales. El dropdown "factura referenciada" del form sigue con la lista completa (la referencia SII puede apuntar a una pagada).
+- **Devolución neto cero (#27)**: plata que entró y volvió (ej. cliente transfirió por error y se le devolvió) — acción masiva en `/banco/movimientos` que agrupa las entradas+salidas que se cancelan (valida neto ≈ 0), las saca de pendiente con estado `neto_cero` y las excluye de los totales de ingreso/egreso. No cuenta como ingreso ni gasto. Reversible ("deshacer" suelta el grupo). Schema: campo nuevo `BankMovement.netZeroGroupId` (aditivo).
+
 ## 2026-06-15 — Seguridad: toda la API exige sesión por defecto (H1) + secret de Telegram obligatorio (H17)
 
 - **Causa (auditoría 2026-06-15, hallazgo H1 CRÍTICO)**: la API estaba sin autenticación — 84 de 85 endpoints `/api` respondían sin login. El login protegía las páginas, no las rutas API → se podía borrar facturas, mover plata, disparar sync o cerrar EPs salteándose el login.

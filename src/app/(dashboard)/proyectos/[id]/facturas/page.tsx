@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { formatCLP, formatDate } from "@/lib/utils";
 import ProjectFacturasFilters from "@/components/facturas/ProjectFacturasFilters";
+import ClickableInvoiceRow from "@/components/facturas/ClickableInvoiceRow";
 import {
   EditableCategoryCell,
   MoveProjectButton,
@@ -231,6 +232,21 @@ export default async function ProyectoFacturasPage({
   const isFiltered =
     !!(sp.status || sp.origin || sp.category || sp.dateFrom || sp.dateTo || sp.q);
 
+  // URL actual de esta lista (con los filtros puestos) — viaja como ?from=
+  // al detalle de la factura, para que el "Volver" devuelva a MJ a esta
+  // pestaña del proyecto y no a la lista global de /facturas.
+  const listParams = new URLSearchParams();
+  if (sp.type) listParams.set("type", sp.type);
+  if (sp.status) listParams.set("status", sp.status);
+  if (sp.origin) listParams.set("origin", sp.origin);
+  if (sp.category) listParams.set("category", sp.category);
+  if (sp.dateFrom) listParams.set("dateFrom", sp.dateFrom);
+  if (sp.dateTo) listParams.set("dateTo", sp.dateTo);
+  if (sp.q) listParams.set("q", sp.q);
+  const returnTo = `/proyectos/${project.id}/facturas${
+    listParams.toString() ? "?" + listParams.toString() : ""
+  }`;
+
   return (
     <div>
       {/* Stats — reflejan el filtro aplicado */}
@@ -343,11 +359,15 @@ export default async function ProyectoFacturasPage({
                 <th className="text-right px-4 py-2">Total <span className="block text-[9px] text-gray-400 normal-case font-normal">c/IVA</span></th>
                 <th className="text-left px-4 py-2">Estado</th>
                 <th className="text-left px-4 py-2">Origen</th>
+                <th className="w-8"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {invoices.map((inv) => (
-                <tr key={inv.id} className="hover:bg-gray-50">
+                <ClickableInvoiceRow
+                  key={inv.id}
+                  href={`/facturas/${inv.id}?from=${encodeURIComponent(returnTo)}`}
+                >
                   <td className="px-4 py-2">
                     <span
                       className={`text-[10px] uppercase px-1.5 py-0.5 rounded tracking-wider ${
@@ -361,7 +381,7 @@ export default async function ProyectoFacturasPage({
                   </td>
                   <td className="px-4 py-2 tabular-nums text-gray-700">
                     <Link
-                      href={`/facturas/${inv.id}`}
+                      href={`/facturas/${inv.id}?from=${encodeURIComponent(returnTo)}`}
                       className="hover:text-gray-900 hover:underline"
                     >
                       {inv.origin === "maxxa_sin_respaldo"
@@ -447,7 +467,13 @@ export default async function ProyectoFacturasPage({
                       {inv.origin === "sii_automatica" ? "SII" : "manual"}
                     </span>
                   </td>
-                </tr>
+                  {/* Flechita que indica que la fila se abre. Gris tenue, se
+                      oscurece al pasar el mouse por la fila (group-hover). Es
+                      texto (›) porque el proyecto no usa lucide-react. */}
+                  <td className="px-3 py-2 text-right">
+                    <span className="text-base leading-none text-gray-300 group-hover:text-gray-600">›</span>
+                  </td>
+                </ClickableInvoiceRow>
               ))}
               {/* Fila de total al pie de la tabla */}
               <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold">
@@ -457,7 +483,7 @@ export default async function ProyectoFacturasPage({
                 <td className="px-4 py-2 text-right tabular-nums text-gray-900">
                   {formatCLP(invoices.reduce((s, i) => s + sign(i) * i.totalAmount, 0))}
                 </td>
-                <td colSpan={2}></td>
+                <td colSpan={3}></td>
               </tr>
             </tbody>
           </table>

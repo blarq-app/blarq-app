@@ -24,12 +24,15 @@ export default async function EditFacturaPage({
   const { id } = await params;
 
   // `from` es la URL de la lista con el filtro que MJ tenía puesto al abrir
-  // esta factura (ej. /facturas?q=brune). El botón "Volver" y el breadcrumb
-  // la usan para devolverla a donde estaba. Solo aceptamos rutas internas a
-  // /facturas para no abrir un redirect a sitios externos.
+  // esta factura (ej. /facturas?q=brune, o la pestaña Facturas de un
+  // proyecto). El botón "Volver" y el breadcrumb la usan para devolverla a
+  // donde estaba. Solo aceptamos rutas internas a /facturas o /proyectos
+  // para no abrir un redirect a sitios externos.
   const { from } = await searchParams;
   const returnTo =
-    from && from.startsWith("/facturas") ? from : "/facturas";
+    from && (from.startsWith("/facturas") || from.startsWith("/proyectos"))
+      ? from
+      : "/facturas";
 
   const [invoice, projects, categories, payments] = await Promise.all([
     // Carga todos los campos del Invoice — incluye `pdfContent` (Bytes

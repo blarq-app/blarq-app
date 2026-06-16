@@ -128,6 +128,10 @@ export async function PATCH(
     const updates: Record<string, unknown> = {};
     if ("categoryId" in data) updates.categoryId = data.categoryId || null;
     if ("projectId" in data) updates.projectId = data.projectId || null;
+    // conceptoCobro: solo aplica a facturas EMITIDAS (obra | muebles |
+    // artefactos | mixto). Define a qué "centro" del proyecto entra el cobro,
+    // y con eso cuánta utilidad se reconoce para Sueldos (ver utilidadPorCobro).
+    if ("conceptoCobro" in data) updates.conceptoCobro = data.conceptoCobro || null;
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "Nada que actualizar" }, { status: 400 });
     }

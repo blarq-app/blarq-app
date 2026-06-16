@@ -222,7 +222,7 @@ export default function MovementsTable({
                       </td>
                       <td className="px-4 py-2">
                         <span
-                          className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                          className={`text-[9px] uppercase tracking-wide whitespace-nowrap px-1.5 py-0.5 rounded ${
                             statusLabels[m.status]?.tone ?? "bg-gray-100"
                           }`}
                         >

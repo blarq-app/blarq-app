@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import MaterialSearch from "@/components/catalogo/MaterialSearch";
 
@@ -23,7 +24,9 @@ export default async function CatalogoMaterialesPage() {
         </div>
       </div>
 
-      <MaterialSearch categories={categories.map((c) => c.category)} />
+      <Suspense>
+        <MaterialSearch categories={categories.map((c) => c.category)} />
+      </Suspense>
     </div>
   );
 }

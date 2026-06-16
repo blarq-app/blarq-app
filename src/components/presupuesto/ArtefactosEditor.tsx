@@ -153,8 +153,8 @@ const COLOR_RULES: Array<[RegExp, string]> = [
   [/MOON GREY/, "Moon Grey"], [/BRUSHED/, "Brushed"], [/CROMAD[OA]|CROMO/, "Cromo"],
   [/BLANCO/, "Blanco"], [/\bINOX|INOXIDABLE/, "Inox"],
 ];
-function lineaDe(name: string): string {
-  const n = name.toUpperCase();
+function lineaDe(name: string, detail?: string | null): string {
+  const n = `${name} ${detail ?? ""}`.toUpperCase();
   for (const [re, v] of LINEA_RULES) if (re.test(n)) return v;
   return "";
 }
@@ -433,6 +433,60 @@ export default function ArtefactosEditor({
     }
   }
 
+  // Duplica un artefacto dentro de su mismo ambiente: crea una copia con
+  // todos sus campos (incluido el costo BLARQ y el link al catálogo) y la
+  // deja pegada al original. Reasigna el sortOrder de ese room para que la
+  // copia quede justo debajo (el display ordena por sortOrder dentro del
+  // room). MJ después la edita o le cambia la cantidad como cualquier fila.
+  async function duplicateItem(source: ArtefactoItem) {
+    try {
+      const res = await fetch(
+        `/api/presupuestos/${initialBudget.id}/artefactos`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subcategory: source.subcategory,
+            room: source.room,
+            name: source.name,
+            detail: source.detail,
+            brand: source.brand,
+            quantity: source.quantity,
+            listPrice: source.listPrice,
+            discountPercent: source.discountPercent,
+            clientPrice: source.clientPrice,
+            realCostBlarq: source.realCostBlarq,
+            referenceLink: source.referenceLink,
+            imageUrl: source.imageUrl,
+            catalogId: source.catalogId,
+          }),
+        }
+      );
+      if (!res.ok) throw new Error("Error");
+      const created: ArtefactoItem = await res.json();
+
+      // Inserta la copia justo después del original y renumera el sortOrder
+      // de las filas de ese ambiente para que el orden quede prolijo.
+      const idx = items.findIndex((i) => i.id === source.id);
+      const withCopy = [
+        ...items.slice(0, idx + 1),
+        created,
+        ...items.slice(idx + 1),
+      ];
+      const inRoom = (it: ArtefactoItem) =>
+        it.room === source.room && it.subcategory === source.subcategory;
+      let counter = 0;
+      const reordered = withCopy.map((it) =>
+        inRoom(it) ? { ...it, sortOrder: counter++ } : it
+      );
+      setItems(reordered);
+      // Persistir el nuevo orden del room (PUT por ítem, ya guarda sortOrder).
+      reordered.filter(inRoom).forEach((it) => persistItem(it));
+    } catch {
+      alert("Error al duplicar");
+    }
+  }
+
   // Arrastrar reordena DENTRO de un room (mismo ambiente y subcategoría). El
   // sortOrder es global pero el display agrupa por subcategoría→room y ordena
   // por sortOrder dentro del grupo, así que reasignar 0..n por room alcanza.
@@ -641,6 +695,7 @@ export default function ArtefactosEditor({
                       gridCls={gridCls}
                       onUpdate={(patch) => updateItem(item.id, patch)}
                       onDelete={() => deleteItem(item.id)}
+                      onDuplicate={() => duplicateItem(item)}
                     />
                   ))}
                 </SortableContext>
@@ -932,8 +987,18 @@ function AgregarArtefactosModal({
   onClose: () => void;
 }) {
   const [room, setRoom] = useState("bano_principal");
+  const [customRoom, setCustomRoom] = useState("");
   const [sub, setSub] = useState("sanitario");
   const [count, setCount] = useState(0);
+
+  // Ambiente efectivo: si MJ eligió "+ Otro ambiente…" usa el nombre que
+  // escribió (texto libre, ej. "Baño 3", "Terraza"). El ambiente se guarda
+  // como texto en la BD, así que no hace falta una lista cerrada de opciones.
+  const isCustomRoom = room === "__custom__";
+  const effectiveRoom = isCustomRoom ? customRoom.trim() : room;
+  const effectiveRoomLabel = isCustomRoom
+    ? customRoom.trim() || "nuevo ambiente"
+    : ROOM_LABELS[room] ?? room;
 
   return (
     <div
@@ -941,7 +1006,7 @@ function AgregarArtefactosModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-xl max-w-2xl w-full my-8"
+        className="bg-white rounded-xl shadow-xl max-w-4xl w-full my-8"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -968,17 +1033,30 @@ function AgregarArtefactosModal({
             <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
               Ambiente
             </label>
-            <select
-              value={room}
-              onChange={(e) => setRoom(e.target.value)}
-              className="px-2 py-1.5 border border-gray-300 rounded text-xs bg-white outline-none focus:border-gray-500"
-            >
-              {ROOM_ORDER.map((r) => (
-                <option key={r} value={r}>
-                  {ROOM_LABELS[r]}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={room}
+                onChange={(e) => setRoom(e.target.value)}
+                className="px-2 py-1.5 border border-gray-300 rounded text-xs bg-white outline-none focus:border-gray-500"
+              >
+                {ROOM_ORDER.map((r) => (
+                  <option key={r} value={r}>
+                    {ROOM_LABELS[r]}
+                  </option>
+                ))}
+                <option value="__custom__">+ Otro ambiente…</option>
+              </select>
+              {isCustomRoom && (
+                <input
+                  autoFocus
+                  type="text"
+                  value={customRoom}
+                  onChange={(e) => setCustomRoom(e.target.value)}
+                  placeholder="Ej. Baño 3, Baño suite, Terraza"
+                  className="w-48 px-2 py-1.5 border border-gray-300 rounded text-xs bg-white outline-none focus:border-gray-500"
+                />
+              )}
+            </div>
           </div>
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
@@ -1006,10 +1084,14 @@ function AgregarArtefactosModal({
             subcategoría al tocar el tab → vuelve a buscar. */}
         <AddArtefactoFromCatalog
           key={sub}
-          roomLabel={ROOM_LABELS[room] ?? room}
+          roomLabel={effectiveRoomLabel}
           defaultSubcategory={sub}
           onAdd={async (payload) => {
-            await onAdd(sub, room, payload);
+            if (!effectiveRoom) {
+              alert("Escribí el nombre del nuevo ambiente.");
+              return;
+            }
+            await onAdd(sub, effectiveRoom, payload);
             setCount((c) => c + 1);
           }}
           onCancel={onClose}
@@ -1031,6 +1113,7 @@ function SortableArtefactoRow({
   gridCls,
   onUpdate,
   onDelete,
+  onDuplicate,
 }: {
   item: ArtefactoItem;
   projectId: string;
@@ -1038,6 +1121,7 @@ function SortableArtefactoRow({
   gridCls: string;
   onUpdate: (patch: Partial<ArtefactoItem>) => void;
   onDelete: () => void;
+  onDuplicate: () => void;
 }) {
   const sortable = useSortable({ id: item.id });
   const style = {
@@ -1071,7 +1155,7 @@ function SortableArtefactoRow({
       />
       {/* Línea (derivada del nombre, en MAYÚSCULA) — solo lectura. */}
       <div className="text-[11px] font-medium text-gray-700 uppercase leading-tight">
-        {lineaDe(item.name) || "—"}
+        {lineaDe(item.name, item.detail) || "—"}
       </div>
       {/* Color (derivado del nombre/detalle) — solo lectura. */}
       <div className="text-[11px] text-gray-600 leading-tight">
@@ -1145,6 +1229,13 @@ function SortableArtefactoRow({
         </>
       )}
       <div className="flex items-center gap-1.5 justify-end">
+        <button
+          onClick={onDuplicate}
+          className="text-gray-400 hover:text-gray-900 text-sm leading-none"
+          title="Duplicar fila (otra igual en este ambiente)"
+        >
+          ⎘
+        </button>
         <button
           onClick={onDelete}
           className="text-gray-400 hover:text-red-600 text-sm leading-none"

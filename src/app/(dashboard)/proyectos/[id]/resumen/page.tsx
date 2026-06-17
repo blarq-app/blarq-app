@@ -9,6 +9,7 @@ import { computeFondoSueldos, type ProjectWithFondo } from "@/lib/banco/fondoSue
 import { computeUtilidadPorCobro, type ProjectWithUtilidad } from "@/lib/banco/utilidadPorCobro";
 import FondoSueldosCard from "@/components/proyecto/FondoSueldosCard";
 import UtilidadPorCobroCard from "@/components/proyecto/UtilidadPorCobroCard";
+import ProjectAlerts from "@/components/proyecto/ProjectAlerts";
 import CuadroResumen from "@/components/proyecto/CuadroResumen";
 
 // Mapa: nombre de CostCategory -> campo de desglose en ObraItem.
@@ -338,25 +339,10 @@ export default async function ResultadosPage({
     include: { children: true },
     orderBy: { sortOrder: "asc" },
   });
-  // Desglose en neto (consistente con la tabla y los cards de arriba) y
-  // c/IVA mostrado como leyenda secundaria. Mismo signo de NCs que en
-  // metrics.ts (tipoDoc=61 resta).
-  const signGasto = (i: { tipoDoc: number | null }) => (i.tipoDoc === 61 ? -1 : 1);
-  const gastosPorCategoria = categories
-    .map((cat) => {
-      const catIds = [cat.id, ...cat.children.map((c) => c.id)];
-      const facturasCat = facturasRecibidas.filter(
-        (i) => i.categoryId && catIds.includes(i.categoryId)
-      );
-      const total = facturasCat.reduce((s, i) => s + signGasto(i) * i.netAmount, 0);
-      const totalConIva = facturasCat.reduce(
-        (s, i) => s + signGasto(i) * i.totalAmount,
-        0
-      );
-      return { name: cat.name, total, totalConIva };
-    })
-    .filter((c) => c.total > 0);
-  const totalConIvaGastos = gastosPorCategoria.reduce((s, c) => s + c.totalConIva, 0);
+  // (El "Desglose de Gastos Reales por categoría" se eliminó 2026-06-16 —
+  // era info repetida: lo mismo (gastos por categoría) ya está, y mejor, en
+  // la tabla "Presupuesto vs Real — Por Categoría" que compara contra el
+  // presupuesto. Se quitó tanto el cálculo como el bloque visual.)
 
   // (totalAcordado y pctCobrado vienen de computeProjectMetrics arriba —
   // expuesto como `totalVendido` en este page para conservar el nombre antiguo.)
@@ -393,29 +379,10 @@ export default async function ResultadosPage({
         </div>
       )}
 
-      {/* Alertas */}
-      {alertas.length > 0 && (
-        <div className="mb-5 space-y-2">
-          {alertas.map((a, i) => {
-            const isDanger = a.severity === "danger";
-            return (
-              <div
-                key={i}
-                className={`rounded-lg px-4 py-2.5 flex items-center gap-3 text-sm ${
-                  isDanger
-                    ? "bg-red-50 border border-red-200 text-red-900"
-                    : "bg-amber-50 border border-amber-200 text-amber-900"
-                }`}
-              >
-                <span className={`text-lg ${isDanger ? "text-red-600" : "text-amber-700"}`}>
-                  ⚠
-                </span>
-                <span>{a.message}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* Alertas de presupuesto — cada una se puede ocultar con la X. El
+          cálculo de las alertas sigue en el server; ProjectAlerts solo las
+          muestra y maneja el ocultar (ver ese componente). */}
+      <ProjectAlerts projectId={project.id} alertas={alertas} />
 
       {/* Cards resumen — todas en NETO para que sean comparables entre sí.
           Total acordado, Cobrado, Por cobrar y Gastado: neto arriba con
@@ -724,58 +691,9 @@ export default async function ResultadosPage({
       {/* (sección "Desglose por tipo" removida — su info ahora vive en
           la tabla "Presupuesto vs Real — Por Categoría" más arriba) */}
 
-      {/* Desglose de gastos por categoría */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Desglose de Gastos Reales (facturas recibidas, neto)
-        </h2>
-        {gastosPorCategoria.length === 0 ? (
-          <p className="text-gray-500 text-sm">
-            No hay gastos registrados con categoría asignada.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {gastosPorCategoria.map((cat) => (
-              <div
-                key={cat.name}
-                className="flex items-center justify-between py-2 border-b border-gray-50"
-              >
-                <span className="text-sm text-gray-700">{cat.name}</span>
-                <div className="flex items-center gap-4">
-                  <div className="w-48 bg-gray-100 rounded-full h-2">
-                    <div
-                      className="bg-gray-900 h-2 rounded-full"
-                      style={{
-                        width: `${Math.min(
-                          (cat.total / totalGastado) * 100,
-                          100
-                        )}%`,
-                      }}
-                    />
-                  </div>
-                  <div className="w-32 text-right">
-                    <div className="text-sm font-medium text-gray-900 tabular-nums">
-                      {formatCLP(cat.total)}
-                    </div>
-                    <div className="text-[10px] text-gray-400 tabular-nums">
-                      c/IVA {formatCLP(cat.totalConIva)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-            <div className="flex items-center justify-between py-2 font-bold">
-              <span>Total</span>
-              <div className="text-right">
-                <div className="tabular-nums">{formatCLP(totalGastado)}</div>
-                <div className="text-[10px] text-gray-400 font-normal tabular-nums">
-                  c/IVA {formatCLP(totalConIvaGastos)}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* "Desglose de Gastos Reales" eliminado 2026-06-16 — info repetida:
+          los gastos por categoría ya están, comparados contra presupuesto, en
+          la tabla "Presupuesto vs Real — Por Categoría" de arriba. */}
     </div>
   );
 }

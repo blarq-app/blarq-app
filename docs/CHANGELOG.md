@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-17 — Dashboard EERR: la línea pasa de utilidad ACUMULADA a utilidad DEL MES
+
+- **Por qué**: la línea acumulada (suma corrida del año, eje propio) confundía a MJ — no se entendía que arrancaba de cero cada enero (por eso 2025 salía toda verde y 2026 toda roja, sin relación entre años), y al estar en un eje aparte se veía desproporcionada ("muy arriba"). Decisión de MJ: que la línea muestre la utilidad de **cada mes**, no el acumulado.
+- **Qué cambió** (solo presentación, en `EstadoResultadoChart.tsx`): la línea ahora grafica `utilidadNeta` mes a mes — verde si ese mes entró más de lo que salió, rosa si no. Como hay meses arriba y abajo del cero, la referencia de cero queda al medio (con 10% de aire arriba/abajo) y deja de pegarse al borde. El campo `utilidadAcumulada` sigue calculándose en la lib pero ya no se dibuja. Leyenda: "Utilidad del mes (neto)".
+- **No toca cálculos**: `estadoResultado.ts` ya devolvía `utilidadNeta` por mes; solo cambió qué serie consume el gráfico.
+
 ## 2026-06-17 — Dashboard: gráfico "Estado de Resultado Anual" (ingresos vs egresos por mes)
 
 - **Qué**: bloque nuevo en el Dashboard (debajo de los KPIs) que replica el gráfico que MJ miraba en Maxxa, con estética BLARQ. Una barra de **ingresos** (gris oscuro) y una de **egresos** (gris medio) por mes (ene–dic), con selector de año arriba a la derecha y **sin** botón Sync (la data ya vive en la app). Línea de **utilidad acumulada (neto)** superpuesta — verde si el acumulado va positivo, rojo si negativo (único uso de color, con significado). Al pasar el mouse por un mes, panel lateral con el desglose (Ventas/Devoluciones · Proveedores/Sueldos/Otros egresos), la utilidad del mes y el **IVA a pagar** (débito − crédito).

@@ -83,20 +83,22 @@ export default function EstadoResultadoChart({
     ...months.map((m) => Math.max(m.ingreso, m.egreso))
   );
 
-  // Último mes con actividad — la línea acumulada se dibuja solo hasta ahí
-  // (no tiene sentido arrastrarla plana por meses futuros vacíos).
+  // Último mes con actividad — la línea se dibuja solo hasta ahí (no tiene
+  // sentido arrastrarla plana por meses futuros vacíos).
   let lastActive = -1;
   months.forEach((m, i) => {
     if (m.ingreso !== 0 || m.egreso !== 0) lastActive = i;
   });
 
-  // Escala de la línea de utilidad acumulada (neto). Eje propio, independiente
-  // de las barras (es otra métrica). El cero queda como referencia.
+  // Escala de la línea de utilidad DEL MES (neto). Eje propio, independiente
+  // de las barras (es otra métrica). Como hay meses positivos y negativos, el
+  // cero queda como referencia en el medio. Se le da un poco de aire arriba y
+  // abajo para que los picos no peguen contra el borde.
   const accVals = months
     .slice(0, Math.max(lastActive + 1, 1))
-    .map((m) => m.utilidadAcumulada);
-  const accMax = Math.max(0, ...accVals);
-  const accMin = Math.min(0, ...accVals);
+    .map((m) => m.utilidadNeta);
+  const accMax = Math.max(0, ...accVals) * 1.1;
+  const accMin = Math.min(0, ...accVals) * 1.1;
   const accRange = accMax - accMin || 1;
   const yOf = (v: number) => CHART_H - ((v - accMin) / accRange) * CHART_H;
   const xOf = (i: number) => ((i + 0.5) / 12) * chartW;
@@ -174,7 +176,9 @@ export default function EstadoResultadoChart({
               })}
             </div>
 
-            {/* Línea de utilidad acumulada (neto), superpuesta */}
+            {/* Línea de utilidad DEL MES (neto), superpuesta. Cada segmento se
+                colorea según el signo del mes de destino: verde si ese mes
+                ganó, rosa si perdió. */}
             {chartW > 0 && lastActive >= 0 && (
               <svg
                 className="absolute inset-0 pointer-events-none"
@@ -184,26 +188,26 @@ export default function EstadoResultadoChart({
                 {months.slice(0, lastActive + 1).map((m, i) => {
                   if (i === 0) return null;
                   const prev = months[i - 1];
-                  const positivo = m.utilidadAcumulada >= 0;
+                  const positivo = m.utilidadNeta >= 0;
                   return (
                     <line
                       key={i}
                       x1={xOf(i - 1)}
-                      y1={yOf(prev.utilidadAcumulada)}
+                      y1={yOf(prev.utilidadNeta)}
                       x2={xOf(i)}
-                      y2={yOf(m.utilidadAcumulada)}
+                      y2={yOf(m.utilidadNeta)}
                       stroke={positivo ? "#10b981" : "#fb7185"}
                       strokeWidth={2}
                     />
                   );
                 })}
                 {months.slice(0, lastActive + 1).map((m, i) => {
-                  const positivo = m.utilidadAcumulada >= 0;
+                  const positivo = m.utilidadNeta >= 0;
                   return (
                     <circle
                       key={i}
                       cx={xOf(i)}
-                      cy={yOf(m.utilidadAcumulada)}
+                      cy={yOf(m.utilidadNeta)}
                       r={sel === i ? 4 : 3}
                       fill={positivo ? "#10b981" : "#fb7185"}
                     />
@@ -239,7 +243,7 @@ export default function EstadoResultadoChart({
             </span>
             <span className="flex items-center gap-1.5">
               <span className="inline-block w-4 h-0.5 bg-emerald-500" />
-              Utilidad acumulada (neto)
+              Utilidad del mes (neto)
             </span>
           </div>
         </div>

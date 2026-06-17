@@ -423,25 +423,70 @@ function VistaCaja({ data, year }: { data: EstadoResultadoCaja; year: number }) 
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
+          <FilaSeccion label="Ingresos" />
           {data.ingresoRows.map((r) => (
             <FilaCaja key={"i-" + r.label} row={r} positivo />
           ))}
+          <FilaSeccion label="Egresos de operación" />
           {data.egresoRows.map((r) => (
             <FilaCaja key={"e-" + r.label} row={r} />
           ))}
         </tbody>
         <tfoot>
-          <FilaTotalCaja label="Total ingreso" monthly={data.totalIngreso} total={data.totalIngresoAnual} positivo />
-          <FilaTotalCaja label="Total egreso" monthly={data.totalEgreso} total={data.totalEgresoAnual} />
-          <FilaTotalCaja label="Total mes" monthly={data.totalMes} total={data.totalAnual} signo bold borderTop />
-          <FilaTotalCaja label="Acumulado" monthly={data.acumulado} total={data.acumulado[11]} signo />
+          <FilaTotalCaja
+            label="Resultado de operación"
+            monthly={data.resultadoOperacion}
+            total={data.resultadoOperacionAnual}
+            signo
+            bold
+            borderTop
+          />
+          {data.noOperativoRows.length > 0 && (
+            <>
+              <FilaSeccion label="No operativo (no es costo del negocio)" foot />
+              {data.noOperativoRows.map((r) => (
+                <FilaCaja key={"n-" + r.label} row={r} />
+              ))}
+            </>
+          )}
+          <FilaTotalCaja
+            label="Total mes (flujo real)"
+            monthly={data.totalMes}
+            total={data.totalAnual}
+            signo
+            bold
+            borderTop
+          />
+          <FilaTotalCaja
+            label="Acumulado"
+            monthly={data.acumulado}
+            total={data.acumulado[11]}
+            signo
+          />
         </tfoot>
       </table>
       <p className="text-[11px] text-gray-400 mt-3 leading-snug">
-        Plata real del banco según la conciliación. &quot;No asignado&quot; = movimientos que
-        todavía no catalogaste; se van achicando a medida que los clasificás.
+        Plata real del banco según la conciliación. El <span className="text-gray-500">resultado de
+        operación</span> dice si el negocio gana; abajo, separados, los retiros de los socios y el
+        pago de IVA (plata que sale pero no es costo de operar). &quot;No asignado&quot; = movimientos
+        que todavía no catalogaste.
       </p>
     </div>
+  );
+}
+
+function FilaSeccion({ label, foot }: { label: string; foot?: boolean }) {
+  return (
+    <tr>
+      <td
+        colSpan={14}
+        className={`text-left text-[10px] uppercase tracking-wider text-gray-400 pt-3 pb-1 sticky left-0 bg-white ${
+          foot ? "border-t border-gray-100" : ""
+        }`}
+      >
+        {label}
+      </td>
+    </tr>
   );
 }
 

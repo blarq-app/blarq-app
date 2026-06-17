@@ -53,9 +53,9 @@ type Invoice = {
   autoMatched: boolean;
   // Saldo pendiente (total − pagado − créditos NC). 0 = saldada/pagada.
   remaining: number;
-  // true = tiene una NC aplicada como crédito. Hace que una factura "anulada"
-  // se muestre como "pagada con NC" (ver statusBadge.ts).
-  paidWithNc: boolean;
+  // NC aplicadas a esta factura como crédito (id + folio + monto). Se muestran
+  // como marca propia en la fila, independiente del estado. Vacío = sin NC.
+  ncApplied: { id: string; folio: string | null; amount: number }[];
   // Modo de compensación si es una NC ya compensada (other_invoice /
   // cash_refund / bank_refund). null = NC sin compensar o no es NC. Hace que
   // una NC compensada muestre "compensada" en vez de "pagada".
@@ -205,6 +205,19 @@ export default function FacturasTable({
                         ↩ ref F-{inv.referenceFolioNumber}
                       </div>
                     ))}
+                  {/* Marca de NC recibida: NC que aplicaron crédito a esta
+                      factura. Independiente del estado (puede ser pagada o
+                      anulada). Apunta a la ficha de la NC. */}
+                  {inv.ncApplied.map((nc) => (
+                    <Link
+                      key={nc.id}
+                      href={`/facturas/${nc.id}?from=${encodeURIComponent(returnTo)}`}
+                      className="block text-[10px] text-rose-600 hover:text-rose-800 hover:underline mt-0.5"
+                      title={`Esta factura recibió el crédito de la NC F-${nc.folio}`}
+                    >
+                      ↳ NC F-{nc.folio} ({formatCLP(nc.amount)})
+                    </Link>
+                  ))}
                 </td>
                 <td className="px-4 py-2 text-gray-600 whitespace-nowrap">
                   {formatDate(inv.issueDate)}
@@ -251,7 +264,6 @@ export default function FacturasTable({
                 <td className="px-4 py-2 whitespace-nowrap">
                   {(() => {
                     const badge = invoiceStatusBadge(inv.status, {
-                      paidWithNc: inv.paidWithNc,
                       isCompensatedNc: inv.tipoDoc === 61 && !!inv.compensationType,
                     });
                     return (

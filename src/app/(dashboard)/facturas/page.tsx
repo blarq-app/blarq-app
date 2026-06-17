@@ -152,16 +152,31 @@ export default async function FacturasPage({
             compensationType: "other_invoice",
             appliedToInvoiceId: { in: invoiceIds },
           },
-          select: { appliedToInvoiceId: true, totalAmount: true },
+          select: {
+            id: true,
+            appliedToInvoiceId: true,
+            totalAmount: true,
+            folioNumber: true,
+          },
         })
       : [];
   const ncCreditByInvoice = new Map<string, number>();
+  // Detalle de las NC aplicadas a cada factura (id + folio + monto), para
+  // mostrar la marca "↳ NC F-xxx" clickeable en la fila. Es independiente del
+  // estado: una factura pagada o anulada puede tener marca de NC.
+  const ncAppliedByInvoice = new Map<
+    string,
+    { id: string; folio: string | null; amount: number }[]
+  >();
   for (const nc of ncsCompensadas) {
     if (!nc.appliedToInvoiceId) continue;
     ncCreditByInvoice.set(
       nc.appliedToInvoiceId,
       (ncCreditByInvoice.get(nc.appliedToInvoiceId) ?? 0) + Math.abs(nc.totalAmount)
     );
+    const list = ncAppliedByInvoice.get(nc.appliedToInvoiceId) ?? [];
+    list.push({ id: nc.id, folio: nc.folioNumber, amount: Math.abs(nc.totalAmount) });
+    ncAppliedByInvoice.set(nc.appliedToInvoiceId, list);
   }
   const paidOf = (inv: {
     id: string;
@@ -376,10 +391,9 @@ export default async function FacturasPage({
               category: inv.category ? { id: inv.category.id, name: inv.category.name } : null,
               autoMatched: inv.payments.some((p) => p.autoMatched),
               remaining: remainingOf(inv),
-              // true = tiene una NC aplicada como crédito. Sirve para que el
-              // badge muestre "pagada con NC" en vez de "anulada" cuando la
-              // factura quedó saldada por el crédito (ver statusBadge.ts).
-              paidWithNc: (ncCreditByInvoice.get(inv.id) ?? 0) > 0,
+              // NC aplicadas a esta factura (folio + monto). Se muestran como
+              // marca propia en la fila, aparte del estado (ver FacturasTable).
+              ncApplied: ncAppliedByInvoice.get(inv.id) ?? [],
               // Modo de compensación (si es NC compensada) → badge "compensada".
               compensationType: inv.compensationType,
             }))}

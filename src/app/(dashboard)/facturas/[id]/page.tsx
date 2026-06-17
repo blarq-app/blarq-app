@@ -4,6 +4,7 @@ import Link from "next/link";
 import FacturaForm from "@/components/facturas/FacturaForm";
 import CompensacionNC from "@/components/facturas/CompensacionNC";
 import RemovePaymentButton from "@/components/facturas/RemovePaymentButton";
+import { formatCLP } from "@/lib/utils";
 
 const DTE_LABEL: Record<number, string> = {
   33: "Factura",
@@ -143,6 +144,22 @@ export default async function EditFacturaPage({
           },
         })
       : null;
+
+  // Dirección inversa: NCs que aplicaron su crédito A esta factura (esta
+  // factura RECIBIÓ el crédito). Se muestran como marca/bloque propio, aparte
+  // del estado — bajan el saldo a pagar pero no convierten la factura en
+  // "anulada". Solo aplica a facturas normales (una NC no recibe crédito de
+  // otra NC).
+  const ncsRecibidas = !isNC
+    ? await prisma.invoice.findMany({
+        where: {
+          compensationType: "other_invoice",
+          appliedToInvoiceId: invoice.id,
+        },
+        orderBy: { issueDate: "desc" },
+        select: { id: true, folioNumber: true, totalAmount: true },
+      })
+    : [];
 
   return (
     <div>
@@ -305,6 +322,38 @@ export default async function EditFacturaPage({
           </div>
         );
       })()}
+
+      {/* Notas de crédito aplicadas a esta factura (la factura recibió el
+          crédito). Marca propia, independiente del estado. */}
+      {!isNC && ncsRecibidas.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+          <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide mb-1">
+            Notas de crédito aplicadas
+          </h2>
+          <p className="text-xs text-gray-500 mb-3">
+            Estas NC aplicaron su crédito a esta factura. Bajan el saldo a pagar;
+            no cambian el estado de la factura.
+          </p>
+          <ul className="divide-y divide-gray-100">
+            {ncsRecibidas.map((nc) => (
+              <li
+                key={nc.id}
+                className="text-xs flex items-center justify-between gap-3 py-2"
+              >
+                <Link
+                  href={`/facturas/${nc.id}?from=${encodeURIComponent(returnTo)}`}
+                  className="text-rose-700 hover:text-rose-900 hover:underline"
+                >
+                  ↳ NC F-{nc.folioNumber}
+                </Link>
+                <span className="tabular-nums text-gray-700">
+                  {formatCLP(Math.abs(nc.totalAmount))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <FacturaForm
         mode="edit"

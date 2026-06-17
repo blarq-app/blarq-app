@@ -76,10 +76,19 @@ function normalizeKey(c: Component): string {
   // (el mismo material puede tener descripciones levemente distintas
   // entre partidas y aún así ser lo mismo).
   if (c.materialId) return `mat:${c.materialId}`;
-  // Sino, agrupamos por descripción normalizada + tipo de unidad. Así si
+  const desc = c.description.trim().toLowerCase().replace(/\s+/g, " ");
+  // Mano de obra: agrupamos SOLO por descripción, ignorando la unidad. Un
+  // mismo oficio (MAESTRO, PINTOR, GASFITER…) se carga con unidades
+  // distintas según la partida — global (GL) en una, por m2 en otra, por
+  // unidad en otra — y la dueña quiere verlo en UNA sola línea con su total.
+  // No se suman cantidades de distinta unidad: cuando difieren, el
+  // post-procesamiento deja "Cant. total" y "Costo unit." en "—" y solo
+  // muestra el total en $ (sumar pesos siempre es válido). El detalle por
+  // partida (con su unidad real) sigue visible al expandir la fila.
+  if (c.type === "mano_obra") return `desc:${desc}`;
+  // Resto de tipos: agrupamos por descripción normalizada + unidad. Así si
   // "Cemento" aparece como m3 en una partida y kg en otra, quedan
   // separados (no sumar peras con manzanas).
-  const desc = c.description.trim().toLowerCase().replace(/\s+/g, " ");
   return `desc:${desc}|${c.unit}`;
 }
 

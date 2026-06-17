@@ -353,7 +353,7 @@ export default async function ProyectoFacturasPage({
                 <th className="text-right px-4 py-2">Total <span className="block text-[9px] text-gray-400 normal-case font-normal">c/IVA</span></th>
                 <th className="text-left px-4 py-2">Estado</th>
                 <th className="text-left px-4 py-2">Origen</th>
-                <th className="w-8"></th>
+                <th className="text-right px-3 py-2">PDF</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -468,11 +468,29 @@ export default async function ProyectoFacturasPage({
                       {inv.origin === "sii_automatica" ? "SII" : "manual"}
                     </span>
                   </td>
-                  {/* Flechita que indica que la fila se abre. Gris tenue, se
-                      oscurece al pasar el mouse por la fila (group-hover). Es
-                      texto (›) porque el proyecto no usa lucide-react. */}
+                  {/* Botón de descarga del PDF, igual que en la lista global de
+                      facturas. Verde "↓✓" si tenemos el PDF oficial del SII
+                      bajado (siiCodigo); gris "↓" si solo está el resumen
+                      interno. El click NO navega: ClickableInvoiceRow ignora los
+                      clicks sobre <a>, así que descarga sin abrir el detalle. */}
                   <td className="px-3 py-2 text-right">
-                    <span className="text-base leading-none text-gray-300 group-hover:text-gray-600">›</span>
+                    <a
+                      href={`/api/facturas/${inv.id}/pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`text-base ${
+                        inv.siiCodigo
+                          ? "text-green-600 hover:text-green-800"
+                          : "text-gray-400 hover:text-gray-900"
+                      }`}
+                      title={
+                        inv.siiCodigo
+                          ? "PDF oficial del SII"
+                          : "PDF resumen interno (los oficiales se bajan vía sync local)"
+                      }
+                    >
+                      {inv.siiCodigo ? "↓✓" : "↓"}
+                    </a>
                   </td>
                 </ClickableInvoiceRow>
               ))}

@@ -445,7 +445,7 @@ function VistaCaja({ data, year }: { data: EstadoResultadoCaja; year: number }) 
             <>
               <FilaSeccion label="No operativo (no es costo del negocio)" foot />
               {data.noOperativoRows.map((r) => (
-                <FilaCaja key={"n-" + r.label} row={r} />
+                <FilaCaja key={"n-" + r.label} row={r} positivo={r.tipo === "ingreso"} />
               ))}
             </>
           )}

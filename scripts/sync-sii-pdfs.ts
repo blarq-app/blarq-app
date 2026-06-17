@@ -32,6 +32,13 @@ import {
   downloadSiiPdf,
 } from "../src/lib/sii/siiBrowser";
 
+// Ventana (en días) durante la cual una factura que NO aparece en el listado
+// del SII se sigue reintentando en cada corrida automática. Las facturas
+// recién emitidas a veces tardan en publicarse en el listado; con esto se
+// auto-curan. Pasada la ventana, asumimos que no va a aparecer y la marcamos
+// como intentada para no reintentar para siempre.
+const RETRY_WINDOW_DAYS = 30;
+
 interface CliArgs {
   limit: number | null;
   dryRun: boolean;
@@ -93,7 +100,7 @@ async function main() {
 
   try {
     console.log("→ Bajando listado completo del SII (paginado)…");
-    const codigos = await loadAllSiiCodigos(sii, { maxPages: 10 });
+    const codigos = await loadAllSiiCodigos(sii, { maxPages: 20 });
     console.log(`  ${codigos.size} DTEs encontrados en listado SII.\n`);
 
     // 3. Iterar facturas y bajar PDFs.
@@ -109,9 +116,23 @@ async function main() {
       const tag = `[${i + 1}/${invoices.length}] ${inv.businessName ?? "?"} ${inv.tipoDoc}/${inv.folioNumber}`;
 
       if (!match) {
-        console.log(`  ${tag} → ❌ no aparece en listado SII`);
+        // No aparece en el listado del SII esta vez. Puede ser que todavía no
+        // esté publicada (factura reciente) o que quede fuera de las páginas
+        // que bajamos. NO la marcamos como "ya intentada" si es reciente:
+        // dejamos pdfFetchedAt en null para que las próximas corridas la
+        // reintenten (se auto-cura cuando el SII la publica). Solo nos
+        // rendimos con las viejas (> RETRY_WINDOW_DAYS), para no reintentar
+        // para siempre las que nunca van a aparecer.
+        const ageDays =
+          (Date.now() - new Date(inv.issueDate).getTime()) / (1000 * 60 * 60 * 24);
+        const giveUp = ageDays > RETRY_WINDOW_DAYS;
+        console.log(
+          `  ${tag} → ❌ no aparece en listado SII${
+            giveUp ? " (vieja, no se reintenta)" : " (reciente, se reintenta luego)"
+          }`
+        );
         notInListing++;
-        if (!args.dryRun) {
+        if (!args.dryRun && giveUp) {
           await prisma.invoice.update({
             where: { id: inv.id },
             data: { pdfFetchedAt: new Date() }, // marca probado, sin pdfContent

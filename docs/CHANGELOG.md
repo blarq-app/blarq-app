@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-17 — Dashboard: gráfico "Estado de Resultado Anual" (ingresos vs egresos por mes)
+
+- **Qué**: bloque nuevo en el Dashboard (debajo de los KPIs) que replica el gráfico que MJ miraba en Maxxa, con estética BLARQ. Una barra de **ingresos** (gris oscuro) y una de **egresos** (gris medio) por mes (ene–dic), con selector de año arriba a la derecha y **sin** botón Sync (la data ya vive en la app). Línea de **utilidad acumulada (neto)** superpuesta — verde si el acumulado va positivo, rojo si negativo (único uso de color, con significado). Al pasar el mouse por un mes, panel lateral con el desglose (Ventas/Devoluciones · Proveedores/Sueldos/Otros egresos), la utilidad del mes y el **IVA a pagar** (débito − crédito).
+- **Base de los montos (decidido con MJ)**: barras y desglose en **c/IVA** (magnitud real de plata, igual que Maxxa); utilidad e IVA a pagar en **neto** (el IVA es de paso al SII, no es resultado — coincide con `utilidadReal` de `metrics.ts`).
+- **Datos**: corte mensual de TODO el estudio (no por proyecto). Ingresos = facturas emitidas por `issueDate` (NC emitida resta). Egresos = facturas recibidas + pagos sin factura (1043) + egresos del banco sin factura (sueldos = `category=sueldo`; previred/comisiones/impuestos/tarjeta s/factura = otros egresos), excluyendo conciliados/internos/neto-cero para no doble-contar. Misma convención de signo de NC que `metrics.ts`.
+- **Alcance**: NO toca `metrics.ts`. Cálculo nuevo en `src/lib/dashboard/estadoResultado.ts` (no duplica métricas por proyecto — es otro corte). API `GET /api/dashboard/estado-resultado?year=` (auth en el handler). Componente cliente `EstadoResultadoChart.tsx` (barras con divs, línea con `<svg>`, sin librería de gráficos). Verificado en vivo contra Neon dev: totales del año y desglose de abril cuadran con las facturas reales.
+
 ## 2026-06-17 — Presupuesto: unificar mano de obra por oficio en "Detalle por costo directo"
 
 - **Síntoma**: en Presupuesto → Detalle por costo directo, la sección Mano de obra mostraba el mismo oficio repetido (MAESTRO 3-4 veces, igual PINTOR, GASFITER, CERAMISTA, JORNAL). Causa: la clave de agrupación era `descripción + unidad`, y un mismo oficio se carga con distinta unidad según la partida (GL en una, UN o M2 en otra).

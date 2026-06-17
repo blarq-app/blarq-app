@@ -194,7 +194,7 @@ export default async function MovimientosPage({
       // Solo proyectos asignables: se esconden las cotizaciones no ganadas
       // (status="cotizacion"). Los centros internos (BLARQ) se mantienen.
       where: { NOT: { status: "cotizacion", isInternal: false } },
-      select: { id: true, name: true },
+      select: { id: true, name: true, numeroProyecto: true },
       orderBy: { name: "asc" },
     }),
     prisma.costCategory.findMany({

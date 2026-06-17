@@ -55,7 +55,7 @@ export default function MovementsTable({
   statusLabels: Record<string, { label: string; tone: string }>;
   categoryLabels: Record<string, string>;
   blarqRutDigits: string;
-  projects: { id: string; name: string }[];
+  projects: { id: string; name: string; numeroProyecto: number | null }[];
   categories: { id: string; label: string }[];
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -203,7 +203,16 @@ export default function MovementsTable({
                             {m.payments.slice(0, 2).map((p) => (
                               <Link
                                 key={p.id}
-                                href={`/facturas/${p.invoice.id}`}
+                                // Va a la lista de facturas filtrada por el
+                                // folio (no al formulario de edición): MJ
+                                // prefiere ver la factura en la lista, con su
+                                // estado y el botón de PDF. Si no hay folio,
+                                // cae al detalle por id.
+                                href={
+                                  p.invoice.folioNumber
+                                    ? `/facturas?q=${encodeURIComponent(p.invoice.folioNumber)}`
+                                    : `/facturas/${p.invoice.id}`
+                                }
                                 className="block text-gray-700 hover:text-gray-900 hover:underline truncate"
                               >
                                 F-{p.invoice.folioNumber} (

@@ -162,12 +162,12 @@ export default function EstadoResultadoChart({
                     <Bar
                       valor={m.ingreso}
                       max={maxBar}
-                      className={activo ? "bg-black" : "bg-gray-900"}
+                      className={activo ? "bg-gray-700" : "bg-gray-500"}
                     />
                     <Bar
                       valor={m.egreso}
                       max={maxBar}
-                      className={activo ? "bg-gray-500" : "bg-gray-400"}
+                      className={activo ? "bg-gray-400" : "bg-gray-200"}
                     />
                   </div>
                 );
@@ -192,7 +192,7 @@ export default function EstadoResultadoChart({
                       y1={yOf(prev.utilidadAcumulada)}
                       x2={xOf(i)}
                       y2={yOf(m.utilidadAcumulada)}
-                      stroke={positivo ? "#16a34a" : "#dc2626"}
+                      stroke={positivo ? "#10b981" : "#fb7185"}
                       strokeWidth={2}
                     />
                   );
@@ -205,7 +205,7 @@ export default function EstadoResultadoChart({
                       cx={xOf(i)}
                       cy={yOf(m.utilidadAcumulada)}
                       r={sel === i ? 4 : 3}
-                      fill={positivo ? "#16a34a" : "#dc2626"}
+                      fill={positivo ? "#10b981" : "#fb7185"}
                     />
                   );
                 })}
@@ -230,15 +230,15 @@ export default function EstadoResultadoChart({
           {/* Leyenda */}
           <div className="flex items-center gap-4 mt-3 text-[11px] text-gray-500">
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-gray-900" />
+              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-gray-500" />
               Ingresos
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-gray-400" />
+              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-gray-200 border border-gray-300" />
               Egresos
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-4 h-0.5 bg-green-600" />
+              <span className="inline-block w-4 h-0.5 bg-emerald-500" />
               Utilidad acumulada (neto)
             </span>
           </div>

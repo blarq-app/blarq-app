@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-17 — Dashboard EERR: dos vistas (Facturación SII / Caja banco) + arreglo de base
+
+- **Problema detectado por MJ comparando contra Maxxa**: el gráfico mostraba utilidad año −$30,8M (pérdida), pero Maxxa daba +$53M. Auditoría contra prod (`ep-shy-morning`) encontró que el gráfico estaba **mal de base**: mezclaba ingresos solo-facturas con egresos facturas + banco (sueldos/previred/impuestos), quedando cojo (egresos casi completos, ingresos a medias) → pérdida ficticia. Tres mediciones limpias e independientes (facturas, caja, Maxxa sin "pagos proyectados") dan todas **entre +$12M y +$18M, en positivo**. Maxxa +$53M está inflado por "pagos proyectados" (+$35,5M, pagos que aún no ocurren).
+- **Decisión con MJ**: separar en **dos vistas** con un toggle "Facturación / Caja" en el mismo bloque del dashboard.
+  - **Facturación** (default): lee SOLO facturas (DTE) — lo que se declara al SII. Ingresos = emitidas; egresos = recibidas reales desglosadas por categoría (Materiales, Mano de obra, Subcontrato, Muebles, Artefactos…); **excluye sueldos, previred, impuestos y pagos sin factura 1043** (nada de eso es DTE ni va en el F29). Bloque de IVA débito/crédito/a pagar para leer el F29. Utilidad facturación prod 2026 ≈ **+$31,6M**.
+  - **Caja**: tabla mensual estilo Maxxa desde movimientos bancarios + conciliación (flujo real, con sueldos y todo). Conciliado→categoría de su factura; sin factura→categoría del banco; sin clasificar→"No asignado"; traspasos internos en su fila (suman cero); neto-cero excluido. Validación: feb/mar 2026 calzan exacto con la tabla de Maxxa de MJ.
+- **Archivos**: `estadoResultado.ts` reescrito (solo facturas + categorías + IVA), nuevo `estadoResultadoCaja.ts`, API devuelve ambas vistas, `EstadoResultadoChart.tsx` con toggle + tabla. La línea sigue mostrando utilidad del mes (no acumulada). No toca `metrics.ts`.
+
 ## 2026-06-17 — Dashboard EERR: la línea pasa de utilidad ACUMULADA a utilidad DEL MES
 
 - **Por qué**: la línea acumulada (suma corrida del año, eje propio) confundía a MJ — no se entendía que arrancaba de cero cada enero (por eso 2025 salía toda verde y 2026 toda roja, sin relación entre años), y al estar en un eje aparte se veía desproporcionada ("muy arriba"). Decisión de MJ: que la línea muestre la utilidad de **cada mes**, no el acumulado.

@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
-import { computeEstadoResultadoAnual } from "@/lib/dashboard/estadoResultado";
+import { computeEstadoResultadoFacturacion } from "@/lib/dashboard/estadoResultado";
+import { computeEstadoResultadoCaja } from "@/lib/dashboard/estadoResultadoCaja";
 
 // GET /api/dashboard/estado-resultado?year=2026
-// Devuelve el Estado de Resultado Anual (mensual, todo el estudio) para el
-// año pedido. Lo consume el gráfico del dashboard cuando MJ cambia de año.
+// Devuelve las dos vistas del Estado de Resultado para el año pedido:
+//   - facturacion: lo que se declara al SII (solo facturas / DTE)
+//   - caja: la plata real del banco (estilo Maxxa)
+// Lo consume el gráfico del dashboard cuando MJ cambia de año o de vista.
 export async function GET(request: NextRequest) {
   const gate = await requireSession();
   if (gate instanceof Response) return gate;
@@ -15,6 +18,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Año inválido" }, { status: 400 });
   }
 
-  const data = await computeEstadoResultadoAnual(year);
-  return NextResponse.json(data);
+  const [facturacion, caja] = await Promise.all([
+    computeEstadoResultadoFacturacion(year),
+    computeEstadoResultadoCaja(year),
+  ]);
+  return NextResponse.json({ facturacion, caja });
 }

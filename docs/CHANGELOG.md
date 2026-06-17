@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-17 — Presupuesto: unificar mano de obra por oficio en "Detalle por costo directo"
+
+- **Síntoma**: en Presupuesto → Detalle por costo directo, la sección Mano de obra mostraba el mismo oficio repetido (MAESTRO 3-4 veces, igual PINTOR, GASFITER, CERAMISTA, JORNAL). Causa: la clave de agrupación era `descripción + unidad`, y un mismo oficio se carga con distinta unidad según la partida (GL en una, UN o M2 en otra).
+- **Fix (solo visual)**: en `CostoDirectoDetalle.tsx`, la mano de obra (`type === "mano_obra"`) ahora agrupa **solo por descripción**, ignorando la unidad → cada oficio queda en una sola línea con su total. Cuando las unidades difieren, "Cant. total" y "Costo unit." quedan en "—" (el post-procesado ya nulea agregados de distinta unidad); el total en $ siempre se suma. El detalle por partida, con la unidad real de cada una, se conserva al expandir.
+- **Alcance**: no toca `metrics.ts` ni ningún cálculo — el total general no cambia. Materiales y el resto de los tipos siguen agrupando por descripción + unidad (los materiales se unen por `materialId`, no por unidad). PR #151.
+
 ## 2026-06-16 — Facturas: estado y marca de NC separados (reemplaza "PAGADA CON NC")
 
 - **Cambio de criterio (reemplaza el #38 de la entrada anterior).** El badge "PAGADA CON NC" secuestraba el estado: una factura anulada de verdad (proveedor facturó por error y emitió NC por el total, sin que se moviera plata) se mostraba como "pagada con NC", lo que contradice que es una anulación real. Se sacó ese relabel: ahora **anulada vuelve a leerse ANULADA**.

@@ -103,10 +103,21 @@ export default async function ProyectoFacturasPage({
             compensationType: "other_invoice",
             appliedToInvoiceId: { in: invoiceIds },
           },
-          select: { appliedToInvoiceId: true, totalAmount: true },
+          select: {
+            id: true,
+            appliedToInvoiceId: true,
+            totalAmount: true,
+            folioNumber: true,
+          },
         })
       : [];
   const ncCreditByInvoice = new Map<string, number>();
+  // Detalle de NC aplicadas a cada factura (id + folio + monto) → marca propia
+  // en la fila, independiente del estado.
+  const ncAppliedByInvoice = new Map<
+    string,
+    { id: string; folio: string | null; amount: number }[]
+  >();
   for (const nc of ncsCompensadas) {
     if (!nc.appliedToInvoiceId) continue;
     // NC tiene totalAmount como número positivo en BD (Math.abs en import).
@@ -115,6 +126,9 @@ export default async function ProyectoFacturasPage({
       nc.appliedToInvoiceId,
       (ncCreditByInvoice.get(nc.appliedToInvoiceId) ?? 0) + Math.abs(nc.totalAmount)
     );
+    const list = ncAppliedByInvoice.get(nc.appliedToInvoiceId) ?? [];
+    list.push({ id: nc.id, folio: nc.folioNumber, amount: Math.abs(nc.totalAmount) });
+    ncAppliedByInvoice.set(nc.appliedToInvoiceId, list);
   }
 
   // Helper: cuánto está cobrado/pagado de una factura. Para facturas
@@ -412,6 +426,18 @@ export default async function ProyectoFacturasPage({
                         ↩ ref F-{inv.referenceFolioNumber}
                       </div>
                     )}
+                    {/* Marca de NC recibida: NC que aplicaron crédito a esta
+                        factura. Independiente del estado. */}
+                    {(ncAppliedByInvoice.get(inv.id) ?? []).map((nc) => (
+                      <Link
+                        key={nc.id}
+                        href={`/facturas/${nc.id}?from=${encodeURIComponent(returnTo)}`}
+                        className="block text-[10px] text-rose-600 hover:text-rose-800 hover:underline mt-0.5"
+                        title={`Esta factura recibió el crédito de la NC F-${nc.folio}`}
+                      >
+                        ↳ NC F-{nc.folio} ({formatCLP(nc.amount)})
+                      </Link>
+                    ))}
                   </td>
                   <td className="px-4 py-2 text-gray-600 whitespace-nowrap">
                     {formatDate(inv.issueDate)}
@@ -444,7 +470,6 @@ export default async function ProyectoFacturasPage({
                   <td className="px-4 py-2">
                     {(() => {
                       const badge = invoiceStatusBadge(inv.status, {
-                        paidWithNc: (ncCreditByInvoice.get(inv.id) ?? 0) > 0,
                         isCompensatedNc:
                           inv.tipoDoc === 61 && !!inv.compensationType,
                       });

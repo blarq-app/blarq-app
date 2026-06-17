@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-16 — Facturas: estado y marca de NC separados (reemplaza "PAGADA CON NC")
+
+- **Cambio de criterio (reemplaza el #38 de la entrada anterior).** El badge "PAGADA CON NC" secuestraba el estado: una factura anulada de verdad (proveedor facturó por error y emitió NC por el total, sin que se moviera plata) se mostraba como "pagada con NC", lo que contradice que es una anulación real. Se sacó ese relabel: ahora **anulada vuelve a leerse ANULADA**.
+- **Dos ejes independientes.** Estado responde solo a *¿se movió plata mía?* → pagada / parcial / anulada. La "marca de NC" es un dato aparte: **"↳ NC F-xxx ($monto)"** clickeable que aparece siempre que una NC aplicó crédito a la factura, **tanto en pagadas como en anuladas** — en la lista `/facturas`, en la pestaña de facturas del proyecto, y en la ficha (bloque "Notas de crédito aplicadas").
+- **Solo presentación.** El estado crudo en BD no cambia; `metrics.ts` ya descuenta la NC por su lado. Se eliminó el flag `paidWithNc` del helper `statusBadge.ts`. Verificado en datos reales (MK): la marca sale en las facturas con NC; types limpios.
+- **Pendiente (Fase 2, no en este cambio).** Modelar saldo a favor reutilizable: una NC que sobra y se gasta de a pedazos en compras nuevas distintas (hoy una NC se consume entera contra una sola factura).
+
 ## 2026-06-16 — Facturas/banco: etiquetas de NC + devolución neto cero
 
 - **"Pagada con NC" (#38)**: una factura cubierta entera por el crédito de una NC mostraba "ANULADA" (confuso). Ahora, si tiene una NC aplicada, el badge dice "PAGADA CON NC" (verde); si se anuló sin crédito detrás, sigue diciendo "ANULADA". Solo presentación — el valor en BD sigue siendo `anulada`, la plata no cambia. Helper compartido `src/lib/facturas/statusBadge.ts` (lista global + lista por proyecto).

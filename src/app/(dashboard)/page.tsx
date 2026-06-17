@@ -5,7 +5,8 @@ import {
   PROJECT_METRICS_INCLUDE,
 } from "@/lib/projects/metrics";
 import { getLastActivity } from "@/lib/projects/lastActivity";
-import { computeEstadoResultadoAnual } from "@/lib/dashboard/estadoResultado";
+import { computeEstadoResultadoFacturacion } from "@/lib/dashboard/estadoResultado";
+import { computeEstadoResultadoCaja } from "@/lib/dashboard/estadoResultadoCaja";
 import ProjectsTable, {
   type ProjectRow,
 } from "@/components/proyecto/ProjectsTable";
@@ -42,8 +43,13 @@ export default async function DashboardPage() {
       gastoDelMesActual(),
     ]);
 
-  // Estado de Resultado Anual (mensual, todo el estudio) del año en curso.
-  const eerrAnual = await computeEstadoResultadoAnual(new Date().getFullYear());
+  // Estado de Resultado Anual (mensual, todo el estudio) del año en curso —
+  // dos vistas: facturación (SII) y caja (banco).
+  const eerrYear = new Date().getFullYear();
+  const [eerrFacturacion, eerrCaja] = await Promise.all([
+    computeEstadoResultadoFacturacion(eerrYear),
+    computeEstadoResultadoCaja(eerrYear),
+  ]);
 
   // Facturas SII sin asignar — banner
   const siiUnassignedCount = await prisma.invoice.count({
@@ -152,8 +158,11 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {/* Estado de Resultado Anual — ingresos vs egresos mes a mes */}
-      <EstadoResultadoChart initialData={eerrAnual} />
+      {/* Estado de Resultado Anual — facturación (SII) + caja (banco) */}
+      <EstadoResultadoChart
+        initialFacturacion={eerrFacturacion}
+        initialCaja={eerrCaja}
+      />
 
       {/* Tabla de proyectos */}
       <div className="flex items-baseline justify-between mb-2">

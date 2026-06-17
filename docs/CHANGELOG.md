@@ -4,6 +4,20 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-17 — Dashboard EERR: dos vistas (Facturación SII / Caja banco) + arreglo de base
+
+- **Problema detectado por MJ comparando contra Maxxa**: el gráfico mostraba utilidad año −$30,8M (pérdida), pero Maxxa daba +$53M. Auditoría contra prod (`ep-shy-morning`) encontró que el gráfico estaba **mal de base**: mezclaba ingresos solo-facturas con egresos facturas + banco (sueldos/previred/impuestos), quedando cojo (egresos casi completos, ingresos a medias) → pérdida ficticia. Tres mediciones limpias e independientes (facturas, caja, Maxxa sin "pagos proyectados") dan todas **entre +$12M y +$18M, en positivo**. Maxxa +$53M está inflado por "pagos proyectados" (+$35,5M, pagos que aún no ocurren).
+- **Decisión con MJ**: separar en **dos vistas** con un toggle "Facturación / Caja" en el mismo bloque del dashboard.
+  - **Facturación** (default): lee SOLO facturas (DTE) — lo que se declara al SII. Ingresos = emitidas; egresos = recibidas reales desglosadas por categoría (Materiales, Mano de obra, Subcontrato, Muebles, Artefactos…); **excluye sueldos, previred, impuestos y pagos sin factura 1043** (nada de eso es DTE ni va en el F29). Bloque de IVA débito/crédito/a pagar para leer el F29. Utilidad facturación prod 2026 ≈ **+$31,6M**.
+  - **Caja**: tabla mensual estilo Maxxa desde movimientos bancarios + conciliación (flujo real, con sueldos y todo). Conciliado→categoría de su factura; sin factura→categoría del banco; sin clasificar→"No asignado"; traspasos internos en su fila (suman cero); neto-cero excluido. Validación: feb/mar 2026 calzan exacto con la tabla de Maxxa de MJ.
+- **Archivos**: `estadoResultado.ts` reescrito (solo facturas + categorías + IVA), nuevo `estadoResultadoCaja.ts`, API devuelve ambas vistas, `EstadoResultadoChart.tsx` con toggle + tabla. La línea sigue mostrando utilidad del mes (no acumulada). No toca `metrics.ts`.
+
+## 2026-06-17 — Dashboard EERR: la línea pasa de utilidad ACUMULADA a utilidad DEL MES
+
+- **Por qué**: la línea acumulada (suma corrida del año, eje propio) confundía a MJ — no se entendía que arrancaba de cero cada enero (por eso 2025 salía toda verde y 2026 toda roja, sin relación entre años), y al estar en un eje aparte se veía desproporcionada ("muy arriba"). Decisión de MJ: que la línea muestre la utilidad de **cada mes**, no el acumulado.
+- **Qué cambió** (solo presentación, en `EstadoResultadoChart.tsx`): la línea ahora grafica `utilidadNeta` mes a mes — verde si ese mes entró más de lo que salió, rosa si no. Como hay meses arriba y abajo del cero, la referencia de cero queda al medio (con 10% de aire arriba/abajo) y deja de pegarse al borde. El campo `utilidadAcumulada` sigue calculándose en la lib pero ya no se dibuja. Leyenda: "Utilidad del mes (neto)".
+- **No toca cálculos**: `estadoResultado.ts` ya devolvía `utilidadNeta` por mes; solo cambió qué serie consume el gráfico.
+
 ## 2026-06-17 — Dashboard: gráfico "Estado de Resultado Anual" (ingresos vs egresos por mes)
 
 - **Qué**: bloque nuevo en el Dashboard (debajo de los KPIs) que replica el gráfico que MJ miraba en Maxxa, con estética BLARQ. Una barra de **ingresos** (gris oscuro) y una de **egresos** (gris medio) por mes (ene–dic), con selector de año arriba a la derecha y **sin** botón Sync (la data ya vive en la app). Línea de **utilidad acumulada (neto)** superpuesta — verde si el acumulado va positivo, rojo si negativo (único uso de color, con significado). Al pasar el mouse por un mes, panel lateral con el desglose (Ventas/Devoluciones · Proveedores/Sueldos/Otros egresos), la utilidad del mes y el **IVA a pagar** (débito − crédito).

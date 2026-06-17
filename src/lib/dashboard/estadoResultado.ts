@@ -1,78 +1,73 @@
-// Estado de Resultado Anual — corte MENSUAL de TODO el estudio.
+// Estado de Resultado — VISTA FACTURACIÓN (lo que se declara al SII).
 //
-// OJO: esto NO es metrics.ts. metrics.ts es la única fuente de verdad de los
-// totales POR PROYECTO. Esta vista es un corte distinto (mensual, todo BLARQ
-// junto, sin separar por obra), pero usa la MISMA definición de qué cuenta
-// como ingreso y egreso para no contradecir a metrics.ts:
+// Corte MENSUAL de TODO el estudio, leyendo SOLO facturas (DTE):
+//   - Ingresos = facturas EMITIDAS (ventas). Una NC emitida (tipoDoc=61) resta
+//     (devolución al cliente).
+//   - Egresos  = facturas RECIBIDAS reales (proveedores), desglosadas por
+//     categoría de costo. Una NC recibida (tipoDoc=61) resta. NO entran:
+//     sueldos, previred, impuestos, ni pagos sin factura (1043) — nada de eso
+//     es un DTE ni va en el F29.
 //
-//   - Ingreso (ventas)  = facturas EMITIDAS por issueDate. Una NC emitida
-//                         (tipoDoc=61) resta (devolución al cliente).
-//   - Egreso            = facturas RECIBIDAS (proveedores) + pagos sin factura
-//                         (Invoice tipoDoc=1043) + egresos del banco sin
-//                         factura (sueldos, previred, comisiones, impuestos,
-//                         tarjeta sin respaldo). Una NC recibida (tipoDoc=61)
-//                         resta del lado proveedores (el proveedor devolvió).
+// Sirve para: leer el F29 (IVA débito de ventas − IVA crédito de compras) y
+// ver si el estudio gana o pierde EN FACTURACIÓN. La plata real (caja) vive en
+// la otra vista (estadoResultadoCaja.ts).
 //
-// Base de los montos (decidido con MJ 2026-06-17):
-//   - Las BARRAS van en c/IVA (totalAmount) — MJ quiere ver la magnitud real
-//     de plata que entró/salió, igual que en Maxxa.
-//   - La UTILIDAD del mes y la acumulada van en NETO — el IVA es de paso al
-//     SII, no es resultado. Coincide con utilidadReal de metrics.ts (neto vs
-//     neto).
-//   - El IVA a pagar se muestra aparte: IVA ventas (débito) − IVA compras
-//     (crédito). Es lo que BLARQ le debe al SII por el mes.
+// Base de montos (con MJ): barras y desglose en c/IVA; utilidad en NETO (el
+// IVA es de paso al SII). Misma convención de signo de NC que metrics.ts.
 
 import { prisma } from "@/lib/prisma";
 
-// Convención de signo idéntica a metrics.ts: una nota de crédito (DTE 61)
-// revierte una factura, así que resta.
 const ncSign = (tipoDoc: number | null) => (tipoDoc === 61 ? -1 : 1);
+
+// Nombre de categoría "techo" de una factura recibida (Materiales, Mano de
+// obra, etc.). Usa la categoría padre si existe.
+function topCategoria(
+  cat: { name: string; parent: { name: string } | null } | null
+): string {
+  if (!cat) return "Sin categoría";
+  return cat.parent?.name ?? cat.name;
+}
 
 export type MonthBucket = {
   month: number; // 1..12
 
-  // --- Lado ingresos (montos positivos) ---
-  ventas: number; // emitidas no-NC, c/IVA
-  devoluciones: number; // NC emitidas, c/IVA (magnitud positiva, ya restada del ingreso)
-  otrosIngresos: number; // sin fuente limpia hoy — queda 0 (ver nota abajo)
-  ingreso: number; // c/IVA neto del lado ventas = ventas − devoluciones
+  // Ingresos (c/IVA, montos positivos)
+  ventas: number; // emitidas no-NC
+  devoluciones: number; // NC emitidas (magnitud positiva, ya restada del ingreso)
+  ingreso: number; // ventas − devoluciones
 
-  // --- Lado egresos (montos positivos) ---
-  proveedores: number; // recibidas reales − NC recibidas, c/IVA
-  sueldos: number; // banco, category=sueldo, sin factura
-  otrosEgresos: number; // pagos sin factura (1043) + previred/comisiones/impuestos/tarjeta s/factura
-  egreso: number; // c/IVA = proveedores + sueldos + otrosEgresos
+  // Egresos (c/IVA, montos positivos)
+  egresoPorCategoria: Record<string, number>; // por categoría techo, neto de NC
+  egreso: number; // total facturas recibidas, neto de NC
 
-  // --- Resultado (NETO) ---
-  utilidadNeta: number; // ingreso neto − egreso neto (sin IVA)
-  utilidadAcumulada: number; // suma corrida de utilidadNeta enero→mes
+  // Resultado (NETO, sin IVA)
+  utilidadNeta: number; // ingreso neto − egreso neto
+  utilidadAcumulada: number; // suma corrida enero→mes (se calcula pero el gráfico usa utilidadNeta)
 
-  // --- IVA del mes ---
-  ivaPagar: number; // IVA débito (ventas) − IVA crédito (compras)
+  // IVA del mes (para el F29)
+  ivaDebito: number; // IVA de ventas
+  ivaCredito: number; // IVA de compras
+  ivaPagar: number; // débito − crédito
 };
 
-export type EstadoResultadoAnual = {
+export type EstadoResultadoFacturacion = {
   year: number;
-  months: MonthBucket[]; // siempre 12, enero..diciembre
+  months: MonthBucket[]; // siempre 12
+  categorias: string[]; // categorías de egreso presentes en el año, ordenadas por monto
   availableYears: number[];
-  // Totales del año (atajo para el panel "Año completo")
   totales: {
     ventas: number;
     devoluciones: number;
-    otrosIngresos: number;
     ingreso: number;
-    proveedores: number;
-    sueldos: number;
-    otrosEgresos: number;
+    egresoPorCategoria: Record<string, number>;
     egreso: number;
     utilidadNeta: number;
+    ivaDebito: number;
+    ivaCredito: number;
     ivaPagar: number;
   };
 };
 
-// Años con datos, para poblar el selector. Tomamos el rango entre la primera
-// factura y el año actual (siempre incluimos el año en curso aunque esté
-// vacío, así MJ puede mirar el año nuevo apenas empieza).
 export async function getAvailableYears(): Promise<number[]> {
   const first = await prisma.invoice.findFirst({
     orderBy: { issueDate: "asc" },
@@ -85,25 +80,24 @@ export async function getAvailableYears(): Promise<number[]> {
   return years;
 }
 
-export async function computeEstadoResultadoAnual(
+export async function computeEstadoResultadoFacturacion(
   year: number
-): Promise<EstadoResultadoAnual> {
+): Promise<EstadoResultadoFacturacion> {
   const start = new Date(year, 0, 1);
   const end = new Date(year + 1, 0, 1);
 
-  // Acumuladores por mes (índice 0..11)
   const ventas = Array(12).fill(0);
   const devoluciones = Array(12).fill(0);
-  const proveedores = Array(12).fill(0);
-  const sueldos = Array(12).fill(0);
-  const otrosEgresos = Array(12).fill(0);
-  // Para utilidad neta y IVA necesitamos los netos y el IVA por separado.
   const ingresoNeto = Array(12).fill(0);
   const egresoNeto = Array(12).fill(0);
-  const ivaVentas = Array(12).fill(0); // débito fiscal
-  const ivaCompras = Array(12).fill(0); // crédito fiscal
+  const ivaDebito = Array(12).fill(0);
+  const ivaCredito = Array(12).fill(0);
+  // Egresos por categoría y por mes: { categoría -> number[12] }
+  const egresoCat: Record<string, number[]> = {};
+  const addCat = (cat: string, m: number, v: number) => {
+    (egresoCat[cat] ??= Array(12).fill(0))[m] += v;
+  };
 
-  // ── Facturas (emitidas y recibidas) por fecha de emisión ────────────────
   const invoices = await prisma.invoice.findMany({
     where: { issueDate: { gte: start, lt: end } },
     select: {
@@ -113,6 +107,9 @@ export async function computeEstadoResultadoAnual(
       netAmount: true,
       iva: true,
       totalAmount: true,
+      category: {
+        select: { name: true, parent: { select: { name: true } } },
+      },
     },
   });
 
@@ -121,95 +118,72 @@ export async function computeEstadoResultadoAnual(
     const s = ncSign(inv.tipoDoc);
 
     if (inv.type === "emitida") {
-      // Ventas (c/IVA) y su contracara de devoluciones (NC).
       if (inv.tipoDoc === 61) devoluciones[m] += inv.totalAmount;
       else ventas[m] += inv.totalAmount;
       ingresoNeto[m] += s * inv.netAmount;
-      ivaVentas[m] += s * inv.iva;
+      ivaDebito[m] += s * inv.iva;
     } else {
-      // recibida
-      if (inv.tipoDoc === 1043) {
-        // Pago sin factura → "otros egresos". No tiene IVA.
-        otrosEgresos[m] += s * inv.totalAmount;
-      } else {
-        // Proveedor real (factura) o NC recibida (resta).
-        proveedores[m] += s * inv.totalAmount;
-        ivaCompras[m] += s * inv.iva;
-      }
+      // Solo facturas recibidas REALES (DTE). Los pagos sin factura (1043)
+      // no son DTE y no entran a esta vista.
+      if (inv.tipoDoc === 1043) continue;
+      const cat = topCategoria(inv.category);
+      addCat(cat, m, s * inv.totalAmount);
       egresoNeto[m] += s * inv.netAmount;
+      ivaCredito[m] += s * inv.iva;
     }
   }
 
-  // ── Egresos del banco sin factura ───────────────────────────────────────
-  // Solo status="sin_factura": esos son egresos categorizados que NO están
-  // respaldados por una factura. Los "conciliado" ya están representados por
-  // su factura recibida (contarlos de nuevo sería doble conteo); los
-  // "interno" (traspasos entre cuentas BLARQ) y "neto_cero" no son gasto.
-  const bankEgresos = await prisma.bankMovement.findMany({
-    where: {
-      date: { gte: start, lt: end },
-      type: "cargo",
-      status: "sin_factura",
-    },
-    select: { date: true, amount: true, category: true },
-  });
-
-  for (const b of bankEgresos) {
-    const m = b.date.getMonth();
-    const monto = Math.abs(b.amount); // cargo viene negativo
-    if (b.category === "sueldo") sueldos[m] += monto;
-    else otrosEgresos[m] += monto; // previred, comisión, impuestos, tarjeta s/factura, etc.
-    // Sin factura → sin IVA recuperable: el neto del egreso es el monto pleno.
-    egresoNeto[m] += monto;
-  }
-
-  // ── Armado de buckets + acumulada ───────────────────────────────────────
   let acum = 0;
   const months: MonthBucket[] = [];
   for (let m = 0; m < 12; m++) {
+    const egresoPorCategoria: Record<string, number> = {};
+    let egreso = 0;
+    for (const [cat, arr] of Object.entries(egresoCat)) {
+      if (arr[m] !== 0) egresoPorCategoria[cat] = arr[m];
+      egreso += arr[m];
+    }
     const ingreso = ventas[m] - devoluciones[m];
-    const egreso = proveedores[m] + sueldos[m] + otrosEgresos[m];
     const utilidadNeta = ingresoNeto[m] - egresoNeto[m];
     acum += utilidadNeta;
     months.push({
       month: m + 1,
       ventas: ventas[m],
       devoluciones: devoluciones[m],
-      otrosIngresos: 0, // ver nota: no hay fuente limpia sin doble-contar cobros
       ingreso,
-      proveedores: proveedores[m],
-      sueldos: sueldos[m],
-      otrosEgresos: otrosEgresos[m],
+      egresoPorCategoria,
       egreso,
       utilidadNeta,
       utilidadAcumulada: acum,
-      ivaPagar: ivaVentas[m] - ivaCompras[m],
+      ivaDebito: ivaDebito[m],
+      ivaCredito: ivaCredito[m],
+      ivaPagar: ivaDebito[m] - ivaCredito[m],
     });
   }
+
+  // Categorías presentes en el año, ordenadas por monto total desc.
+  const totalPorCat: Record<string, number> = {};
+  for (const [cat, arr] of Object.entries(egresoCat))
+    totalPorCat[cat] = arr.reduce((s, v) => s + v, 0);
+  const categorias = Object.keys(totalPorCat).sort(
+    (a, b) => totalPorCat[b] - totalPorCat[a]
+  );
 
   const totales = {
     ventas: sum(months, "ventas"),
     devoluciones: sum(months, "devoluciones"),
-    otrosIngresos: 0,
     ingreso: sum(months, "ingreso"),
-    proveedores: sum(months, "proveedores"),
-    sueldos: sum(months, "sueldos"),
-    otrosEgresos: sum(months, "otrosEgresos"),
+    egresoPorCategoria: totalPorCat,
     egreso: sum(months, "egreso"),
     utilidadNeta: sum(months, "utilidadNeta"),
+    ivaDebito: sum(months, "ivaDebito"),
+    ivaCredito: sum(months, "ivaCredito"),
     ivaPagar: sum(months, "ivaPagar"),
   };
 
   const availableYears = await getAvailableYears();
-  return { year, months, availableYears, totales };
+  return { year, months, categorias, availableYears, totales };
 }
 
 function sum(months: MonthBucket[], key: keyof MonthBucket): number {
   return months.reduce((s, b) => s + (b[key] as number), 0);
 }
-
-// NOTA sobre "otros ingresos": en el modelo de la app no hay una fuente limpia
-// de ingreso distinto de las ventas (facturas emitidas). Los abonos del banco
-// sin factura (deposito_efectivo, etc.) son en su mayoría el COBRO de facturas
-// ya contadas en ventas — sumarlos sería doble-contar. Por eso otrosIngresos
-// queda en 0 hasta que exista una categoría de ingreso real sin factura.

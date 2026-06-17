@@ -2,26 +2,50 @@
 //
 // Corte MENSUAL estilo Maxxa, leyendo los MOVIMIENTOS BANCARIOS + lo que sabe
 // la conciliación. Es el flujo real: lo que entró y salió de la cuenta.
-//   - Conciliado a factura → se etiqueta con la categoría de esa factura
-//     (Materiales, Mano de obra, etc.) si es egreso; "Ingresos por ventas" si
-//     es cobro.
-//   - Sin factura (sueldo, previred, impuestos, etc.) → su categoría del banco.
-//   - Sin clasificar todavía → "No asignado".
-//   - Traspasos entre cuentas BLARQ → fila propia (suman cero, informativos).
-//   - Devoluciones neto-cero → se ignoran (no son ingreso ni gasto).
 //
-// A diferencia de la vista facturación, acá SÍ entran sueldos y todo lo que se
-// movió. Montos tal como vienen del banco (sin desglose de IVA).
+// Se muestra en DOS NIVELES (decidido con MJ 2026-06-17), para no mezclar
+// "¿el negocio es rentable?" con "¿cuánta plata se movió?":
+//   1. RESULTADO DE OPERACIÓN = ingresos − gastos del negocio (materiales,
+//      mano de obra, subcontrato, sueldos de empleados, etc.).
+//   2. NO OPERATIVO (bloque aparte): retiros de los socios (transferencias a
+//      MJ / JT) y el pago de IVA al SII. Plata que sale, pero que NO es costo
+//      de operar — uno es repartir la ganancia, el otro es devolver IVA que ya
+//      se cobró al cliente. (Maxxa tampoco los mete en el resultado.)
+//   3. TOTAL MES = resultado de operación − no operativo = flujo de caja real
+//      completo (no se esconde nada).
+//
+// Clasificación de cada movimiento:
+//   - Conciliado a factura → categoría de esa factura (si es egreso); "Ingresos
+//     por ventas" si es cobro.
+//   - Sin factura (sueldo, previred, etc.) → su categoría del banco.
+//   - Sin clasificar → "No asignado".
+//   - Traspaso interno entre cuentas BLARQ → fila propia (suma cero).
+//   - Devolución neto-cero → se ignora.
 
 import { prisma } from "@/lib/prisma";
 
-// Etiqueta legible para una categoría de movimiento sin factura.
+// Socios de BLARQ: una transferencia que sale hacia ellos es un RETIRO, no un
+// gasto de operación. Se detecta por RUT (sin puntos ni guion) o por nombre.
+const SOCIO_RUTS = ["18022887", "18023983"]; // JT y MJ
+const SOCIO_NOMBRES = ["jose tomas lar", "maria jose blanco", "maría josé blanco"];
+
+function esRetiroSocio(
+  rut: string | null,
+  nombre: string | null,
+  desc: string | null
+): boolean {
+  const r = (rut ?? "").replace(/\D/g, "");
+  if (SOCIO_RUTS.some((s) => r.includes(s))) return true;
+  const t = `${nombre ?? ""} ${desc ?? ""}`.toLowerCase();
+  return SOCIO_NOMBRES.some((n) => t.includes(n));
+}
+
 const ETIQUETA_CATEGORIA: Record<string, string> = {
   sueldo: "Sueldos",
   previred: "Previred",
   comision_bancaria: "Gastos financieros",
-  impuestos: "Impuestos",
-  retiro_personal: "Retiro personal",
+  impuestos: "Impuestos (SII)",
+  retiro_personal: "Retiros de socios",
   compra_tarjeta: "Compra con tarjeta",
   deposito_efectivo: "Depósito en efectivo",
   reembolso_proveedor: "Reembolso de proveedor",
@@ -44,15 +68,20 @@ export type CajaRow = {
 
 export type EstadoResultadoCaja = {
   year: number;
-  ingresoRows: CajaRow[];
-  egresoRows: CajaRow[];
-  totalIngreso: number[]; // 12
-  totalEgreso: number[]; // 12 (negativo)
-  totalMes: number[]; // 12
-  acumulado: number[]; // 12
-  // Totales del año
+  ingresoRows: CajaRow[]; // operativo
+  egresoRows: CajaRow[]; // operativo (gastos del negocio)
+  noOperativoRows: CajaRow[]; // retiros de socios + impuestos (egresos)
+  totalIngreso: number[];
+  totalEgresoOperativo: number[];
+  resultadoOperacion: number[]; // ingreso + egreso operativo
+  totalNoOperativo: number[];
+  totalMes: number[]; // flujo real completo = operación + no operativo
+  acumulado: number[];
+  // Totales anuales
   totalIngresoAnual: number;
-  totalEgresoAnual: number;
+  totalEgresoOperativoAnual: number;
+  resultadoOperacionAnual: number;
+  totalNoOperativoAnual: number;
   totalAnual: number;
 };
 
@@ -70,12 +99,14 @@ export async function computeEstadoResultadoCaja(
       type: true,
       category: true,
       status: true,
+      counterpartyName: true,
+      counterpartyRut: true,
+      description: true,
       payments: {
         select: {
           amountApplied: true,
           invoice: {
             select: {
-              type: true,
               category: { select: { name: true, parent: { select: { name: true } } } },
             },
           },
@@ -84,11 +115,20 @@ export async function computeEstadoResultadoCaja(
     },
   });
 
-  // key = `${tipo}|${label}` -> number[12]
-  const rows: Record<string, { label: string; tipo: "ingreso" | "egreso"; monthly: number[] }> = {};
-  const add = (tipo: "ingreso" | "egreso", label: string, m: number, v: number) => {
-    const key = `${tipo}|${label}`;
-    (rows[key] ??= { label, tipo, monthly: Array(12).fill(0) }).monthly[m] += v;
+  // grupo: "operativo" | "no" — y dentro, key por etiqueta
+  const rows: Record<
+    string,
+    { label: string; tipo: "ingreso" | "egreso"; grupo: "op" | "no"; monthly: number[] }
+  > = {};
+  const add = (
+    grupo: "op" | "no",
+    tipo: "ingreso" | "egreso",
+    label: string,
+    m: number,
+    v: number
+  ) => {
+    const key = `${grupo}|${tipo}|${label}`;
+    (rows[key] ??= { label, tipo, grupo, monthly: Array(12).fill(0) }).monthly[m] += v;
   };
 
   for (const mov of movs) {
@@ -98,7 +138,16 @@ export async function computeEstadoResultadoCaja(
 
     if (mov.status === "neto_cero") continue;
     if (mov.status === "interno") {
-      add(tipo, "Traspasos entre cuentas", m, mov.amount);
+      add("op", tipo, "Traspasos entre cuentas", m, mov.amount);
+      continue;
+    }
+
+    // Retiro de socio: solo egresos hacia MJ / JT → bloque NO operativo.
+    if (
+      tipo === "egreso" &&
+      esRetiroSocio(mov.counterpartyRut, mov.counterpartyName, mov.description)
+    ) {
+      add("no", "egreso", "Retiros de socios", m, mov.amount);
       continue;
     }
 
@@ -110,58 +159,80 @@ export async function computeEstadoResultadoCaja(
           tipo === "ingreso"
             ? "Ingresos por ventas"
             : topCategoria(p.invoice?.category ?? null);
-        add(tipo, label, m, signo * p.amountApplied);
+        add("op", tipo, label, m, signo * p.amountApplied);
       }
       const resto = Math.abs(mov.amount) - aplicado;
-      if (resto > 1) add(tipo, "No asignado", m, signo * resto);
+      if (resto > 1) add("op", tipo, "No asignado", m, signo * resto);
       continue;
     }
 
     if (mov.category) {
+      // Impuestos (pago de IVA al SII) → bloque NO operativo.
+      if (mov.category === "impuestos") {
+        add("no", tipo, "Impuestos (SII)", m, mov.amount);
+        continue;
+      }
       const label = ETIQUETA_CATEGORIA[mov.category] ?? mov.category;
-      add(tipo, label, m, mov.amount);
+      add("op", tipo, label, m, mov.amount);
     } else {
-      add(tipo, "No asignado", m, mov.amount);
+      add("op", tipo, "No asignado", m, mov.amount);
     }
   }
 
   const toRow = (r: { label: string; tipo: "ingreso" | "egreso"; monthly: number[] }): CajaRow => ({
-    ...r,
+    label: r.label,
+    tipo: r.tipo,
+    monthly: r.monthly,
     total: r.monthly.reduce((s, v) => s + v, 0),
   });
 
-  const ingresoRows = Object.values(rows)
-    .filter((r) => r.tipo === "ingreso")
+  const all = Object.values(rows);
+  const ingresoRows = all
+    .filter((r) => r.grupo === "op" && r.tipo === "ingreso")
     .map(toRow)
     .sort((a, b) => b.total - a.total);
-  const egresoRows = Object.values(rows)
-    .filter((r) => r.tipo === "egreso")
+  const egresoRows = all
+    .filter((r) => r.grupo === "op" && r.tipo === "egreso")
     .map(toRow)
-    .sort((a, b) => a.total - b.total); // más negativo primero
+    .sort((a, b) => a.total - b.total);
+  const noOperativoRows = all
+    .filter((r) => r.grupo === "no")
+    .map(toRow)
+    .sort((a, b) => a.total - b.total);
 
-  const totalIngreso = Array(12).fill(0);
-  const totalEgreso = Array(12).fill(0);
-  for (const r of ingresoRows) for (let m = 0; m < 12; m++) totalIngreso[m] += r.monthly[m];
-  for (const r of egresoRows) for (let m = 0; m < 12; m++) totalEgreso[m] += r.monthly[m];
-
-  const totalMes = totalIngreso.map((v, m) => v + totalEgreso[m]);
+  const sumRows = (rs: CajaRow[]) => {
+    const acc = Array(12).fill(0);
+    for (const r of rs) for (let m = 0; m < 12; m++) acc[m] += r.monthly[m];
+    return acc;
+  };
+  const totalIngreso = sumRows(ingresoRows);
+  const totalEgresoOperativo = sumRows(egresoRows);
+  const totalNoOperativo = sumRows(noOperativoRows);
+  const resultadoOperacion = totalIngreso.map((v, m) => v + totalEgresoOperativo[m]);
+  const totalMes = resultadoOperacion.map((v, m) => v + totalNoOperativo[m]);
   const acumulado: number[] = [];
   let acc = 0;
   for (let m = 0; m < 12; m++) {
     acc += totalMes[m];
     acumulado.push(acc);
   }
+  const anual = (a: number[]) => a.reduce((s, v) => s + v, 0);
 
   return {
     year,
     ingresoRows,
     egresoRows,
+    noOperativoRows,
     totalIngreso,
-    totalEgreso,
+    totalEgresoOperativo,
+    resultadoOperacion,
+    totalNoOperativo,
     totalMes,
     acumulado,
-    totalIngresoAnual: totalIngreso.reduce((s, v) => s + v, 0),
-    totalEgresoAnual: totalEgreso.reduce((s, v) => s + v, 0),
-    totalAnual: totalMes.reduce((s, v) => s + v, 0),
+    totalIngresoAnual: anual(totalIngreso),
+    totalEgresoOperativoAnual: anual(totalEgresoOperativo),
+    resultadoOperacionAnual: anual(resultadoOperacion),
+    totalNoOperativoAnual: anual(totalNoOperativo),
+    totalAnual: anual(totalMes),
   };
 }

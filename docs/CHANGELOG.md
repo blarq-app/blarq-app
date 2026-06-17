@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-17 — Dashboard EERR: vista Caja en dos niveles (operación / no operativo)
+
+- **Por qué**: comparando la vista Caja contra Maxxa mes a mes (auditoría sobre prod), las diferencias de egreso (mayo +$17M, marzo +$9M vs Maxxa) se explicaron: el app contaba como egreso los **retiros de los socios** (transferencias a MJ/JT, categoría `sueldo`/`retiro_personal`) y el **pago de IVA al SII** (categoría `impuestos`), que Maxxa NO mete en el resultado. Los ingresos calzan bien con Maxxa sacando los "pagos proyectados" (ene/feb/jun dan exacto).
+- **Decisión con MJ**: la vista Caja se muestra en dos niveles, sin esconder nada. (1) **Resultado de operación** = ingresos − gastos del negocio (materiales, mano de obra, subcontrato, sueldos de empleados, etc.) → responde "¿el negocio gana?". (2) Bloque **No operativo**: "Retiros de socios" + "Impuestos (SII)" — plata que sale pero no es costo de operar. (3) **Total mes (flujo real)** = operación + no operativo = flujo de caja completo.
+- **Cómo se detecta el retiro de socio**: egreso cuyo `counterpartyRut`/nombre matchea a JT (18022887) o MJ (18023983). Los sueldos a empleados (no socios) se quedan como costo de operación. El pago de IVA = categoría `impuestos`.
+- **Archivos**: `estadoResultadoCaja.ts` (clasificación op/no-operativo) y la tabla en `EstadoResultadoChart.tsx`. No toca la vista Facturación ni `metrics.ts`.
+
 ## 2026-06-17 — Dashboard EERR: dos vistas (Facturación SII / Caja banco) + arreglo de base
 
 - **Problema detectado por MJ comparando contra Maxxa**: el gráfico mostraba utilidad año −$30,8M (pérdida), pero Maxxa daba +$53M. Auditoría contra prod (`ep-shy-morning`) encontró que el gráfico estaba **mal de base**: mezclaba ingresos solo-facturas con egresos facturas + banco (sueldos/previred/impuestos), quedando cojo (egresos casi completos, ingresos a medias) → pérdida ficticia. Tres mediciones limpias e independientes (facturas, caja, Maxxa sin "pagos proyectados") dan todas **entre +$12M y +$18M, en positivo**. Maxxa +$53M está inflado por "pagos proyectados" (+$35,5M, pagos que aún no ocurren).

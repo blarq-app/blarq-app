@@ -167,9 +167,11 @@ export async function computeEstadoResultadoCaja(
     }
 
     if (mov.category) {
-      // Impuestos (pago de IVA al SII) → bloque NO operativo.
+      // Impuestos → bloque NO operativo. Se distingue el pago al SII (egreso)
+      // de una devolución de impuesto (abono), que antes compartían etiqueta.
       if (mov.category === "impuestos") {
-        add("no", tipo, "Impuestos (SII)", m, mov.amount);
+        const label = tipo === "ingreso" ? "Devolución de impuestos" : "Impuestos (SII)";
+        add("no", tipo, label, m, mov.amount);
         continue;
       }
       const label = ETIQUETA_CATEGORIA[mov.category] ?? mov.category;

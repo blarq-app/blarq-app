@@ -284,11 +284,19 @@ export default function AddArtefactoFromCatalog({
                 // suma el item.
                 <div
                   key={it.id}
-                  className={`grid grid-cols-[3rem_minmax(0,1.5fr)_4.5rem_4.5rem_minmax(0,1.1fr)_5.5rem_4rem] items-start gap-3 px-3 py-2 border-b border-gray-100 last:border-b-0 text-xs text-left hover:bg-gray-50 ${
+                  className={`grid grid-cols-[4rem_3rem_minmax(0,1.5fr)_4.5rem_4.5rem_minmax(0,1.1fr)_5.5rem] items-start gap-3 px-3 py-2 border-b border-gray-100 last:border-b-0 text-xs text-left hover:bg-gray-50 ${
                     selectedId === it.id ? "bg-gray-50" : ""
                   }`}
                   onMouseEnter={() => setSelectedId(it.id)}
                 >
+                  {/* "+ agregar" a la izquierda: MJ busca y lee por la izquierda,
+                      así el botón queda pegado al nombre y al buscador. */}
+                  <button
+                    onClick={() => handleAddFromCatalog(it, qty)}
+                    className="text-left text-gray-900 font-medium hover:text-gray-600"
+                  >
+                    + agregar
+                  </button>
                   {it.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -344,12 +352,6 @@ export default function AddArtefactoFromCatalog({
                         : "lista"}
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleAddFromCatalog(it, qty)}
-                    className="text-right text-gray-900 font-medium hover:text-gray-600"
-                  >
-                    + agregar
-                  </button>
                 </div>
               ))}
           </div>

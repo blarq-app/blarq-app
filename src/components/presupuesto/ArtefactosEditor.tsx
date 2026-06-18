@@ -196,6 +196,9 @@ export default function ArtefactosEditor({
   // Modal de "Agregar del catálogo" de nivel superior (sirve también cuando
   // la cotización está vacía, donde no hay rooms con su botón "+ agregar").
   const [showAgregar, setShowAgregar] = useState(false);
+  // Ambiente con el que arranca el modal: "bano_principal" para el alta normal,
+  // o "__custom__" cuando se abre desde "+ Nuevo ambiente" (campo libre listo).
+  const [agregarInitialRoom, setAgregarInitialRoom] = useState("bano_principal");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -408,6 +411,26 @@ export default function ArtefactosEditor({
     });
   }
 
+  // Cambia el AMBIENTE (room) de TODO un bloque: reasigna el room de cada
+  // artefacto de ese grupo. Sirve para corregir un bloque mal cargado (ej.
+  // artefactos de cocina que quedaron en "Baño principal") o para renombrar
+  // un ambiente. Si el nuevo room coincide con otro bloque existente de la
+  // misma subcategoría, los dos bloques se fusionan (es lo esperado).
+  // `room` no está en SYNC_FIELDS ni NAME_SYNC_FIELDS, así que reusar
+  // updateItem no contagia el cambio a copias del mismo producto en otros
+  // ambientes — solo mueve las filas de ESTE bloque.
+  function changeRoomForGroup(
+    subKey: string,
+    oldRoomKey: string,
+    newRoom: string
+  ) {
+    if (!newRoom || newRoom === oldRoomKey) return;
+    const targets = items.filter(
+      (i) => (i.subcategory || "sanitario") === subKey && (i.room || "otro") === oldRoomKey
+    );
+    for (const it of targets) updateItem(it.id, { room: newRoom });
+  }
+
   // Aplica los cambios de precio/imagen que vienen del modal "Revisar
   // online". Reutiliza updateItem para que cada cambio se persista en BD
   // y se propague a las copias del mismo catalogId, igual que una edición
@@ -608,10 +631,25 @@ export default function ArtefactosEditor({
         </label>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowAgregar(true)}
+            onClick={() => {
+              setAgregarInitialRoom("bano_principal");
+              setShowAgregar(true);
+            }}
             className="text-sm bg-gray-900 text-white px-3 py-2 rounded-lg font-medium hover:bg-gray-800"
           >
             + Agregar del catálogo
+          </button>
+          {/* Abre el mismo modal pero con el campo de ambiente nuevo listo
+              para escribir (ej. "Baño 3"). Antes esto estaba escondido dentro
+              del desplegable "+ Otro ambiente…" y no se encontraba. */}
+          <button
+            onClick={() => {
+              setAgregarInitialRoom("__custom__");
+              setShowAgregar(true);
+            }}
+            className="text-sm border border-gray-300 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-50"
+          >
+            + Nuevo ambiente
           </button>
           <button
             onClick={() => setShowDuplicar(true)}
@@ -648,10 +686,15 @@ export default function ArtefactosEditor({
 
           {sub.rooms.map((room) => (
             <div key={room.key} className="border-b border-gray-200 last:border-b-0">
-              {/* Banner del room */}
-              <div className="bg-gray-100 px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider text-gray-900 border-b border-gray-300">
-                {room.label}
-              </div>
+              {/* Banner del room — editable: permite cambiar el ambiente de
+                  todo el bloque (corregir o renombrar). */}
+              <RoomBanner
+                roomKey={room.key}
+                label={room.label}
+                onChange={(newRoom) =>
+                  changeRoomForGroup(sub.key, room.key, newRoom)
+                }
+              />
 
               {/* Header de columnas */}
               <div
@@ -959,10 +1002,107 @@ export default function ArtefactosEditor({
           cotización vacía). Elegís el ambiente y vas agregando varios. */}
       {showAgregar && (
         <AgregarArtefactosModal
+          initialRoom={agregarInitialRoom}
           onAdd={addItemFromPayload}
           onClose={() => setShowAgregar(false)}
         />
       )}
+    </div>
+  );
+}
+
+// ─── Banner de ambiente (room) — editable ────────────────────────────────
+//
+// El banner gris que titula cada bloque de artefactos. Por defecto muestra
+// el nombre del ambiente; al tocar "Editar ambiente" se abre un selector
+// para reasignar TODO el bloque a otro ambiente conocido (Baño principal,
+// Cocina, etc.) o a uno nuevo escrito a mano (ej. "Baño 3", "Terraza").
+// Esto resuelve el caso de artefactos cargados en el ambiente equivocado,
+// que antes no se podían mover.
+function RoomBanner({
+  roomKey,
+  label,
+  onChange,
+}: {
+  roomKey: string;
+  label: string;
+  onChange: (newRoom: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  // ¿El ambiente actual es uno de los conocidos (con key) o es texto libre?
+  const known = roomKey in ROOM_LABELS;
+  const [sel, setSel] = useState(known ? roomKey : "__custom__");
+  const [custom, setCustom] = useState(known ? "" : label);
+
+  function save() {
+    const next = sel === "__custom__" ? custom.trim() : sel;
+    if (!next) {
+      alert("Escribí el nombre del ambiente.");
+      return;
+    }
+    onChange(next);
+    setEditing(false);
+  }
+
+  function cancel() {
+    setSel(known ? roomKey : "__custom__");
+    setCustom(known ? "" : label);
+    setEditing(false);
+  }
+
+  if (!editing) {
+    return (
+      <div className="bg-gray-100 px-4 py-1.5 border-b border-gray-300 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-900">
+          {label}
+        </span>
+        <button
+          onClick={() => setEditing(true)}
+          className="text-[10px] uppercase tracking-wider text-gray-400 hover:text-gray-900 shrink-0"
+          title="Cambiar el ambiente de todo este bloque"
+        >
+          Editar ambiente
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-gray-100 px-4 py-1.5 border-b border-gray-300 flex flex-wrap items-center gap-2">
+      <select
+        value={sel}
+        onChange={(e) => setSel(e.target.value)}
+        className="px-2 py-1 border border-gray-300 rounded text-xs bg-white outline-none focus:border-gray-500"
+      >
+        {ROOM_ORDER.map((r) => (
+          <option key={r} value={r}>
+            {ROOM_LABELS[r]}
+          </option>
+        ))}
+        <option value="__custom__">+ Otro ambiente…</option>
+      </select>
+      {sel === "__custom__" && (
+        <input
+          autoFocus
+          type="text"
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          placeholder="Ej. Baño 3, Terraza"
+          className="w-44 px-2 py-1 border border-gray-300 rounded text-xs bg-white outline-none focus:border-gray-500"
+        />
+      )}
+      <button
+        onClick={save}
+        className="text-xs bg-gray-900 text-white px-2.5 py-1 rounded font-medium hover:bg-gray-800"
+      >
+        Guardar
+      </button>
+      <button
+        onClick={cancel}
+        className="text-xs text-gray-500 hover:text-gray-900 px-1"
+      >
+        Cancelar
+      </button>
     </div>
   );
 }
@@ -976,9 +1116,11 @@ export default function ArtefactosEditor({
 // y el TIPO (sanitario/cocina/iluminación), busca en el catálogo y va
 // agregando; el modal queda abierto para sumar varios de una.
 function AgregarArtefactosModal({
+  initialRoom = "bano_principal",
   onAdd,
   onClose,
 }: {
+  initialRoom?: string;
   onAdd: (
     subcategory: string,
     room: string,
@@ -986,7 +1128,7 @@ function AgregarArtefactosModal({
   ) => Promise<void>;
   onClose: () => void;
 }) {
-  const [room, setRoom] = useState("bano_principal");
+  const [room, setRoom] = useState(initialRoom);
   const [customRoom, setCustomRoom] = useState("");
   const [sub, setSub] = useState("sanitario");
   const [count, setCount] = useState(0);
@@ -1146,13 +1288,28 @@ function SortableArtefactoRow({
         item={item}
         onUpdate={onUpdate}
       />
-      {/* Item: textarea a 2 líneas para que el nombre no se corte. */}
-      <textarea
-        rows={2}
-        value={item.name}
-        onChange={(e) => onUpdate({ name: e.target.value })}
-        className="w-full bg-transparent border-0 p-0 font-semibold text-gray-900 text-[11px] leading-tight resize-none outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
-      />
+      {/* Item: textarea a 2 líneas para que el nombre no se corte. Si el
+          producto tiene link a la tienda, una flechita ↗ al lado abre la
+          página web del producto en una pestaña nueva. */}
+      <div className="flex items-start gap-1">
+        <textarea
+          rows={2}
+          value={item.name}
+          onChange={(e) => onUpdate({ name: e.target.value })}
+          className="flex-1 bg-transparent border-0 p-0 font-semibold text-gray-900 text-[11px] leading-tight resize-none outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+        />
+        {item.referenceLink && (
+          <a
+            href={item.referenceLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 mt-0.5 text-gray-400 hover:text-gray-900 leading-none"
+            title="Abrir el producto en la tienda (página web)"
+          >
+            ↗
+          </a>
+        )}
+      </div>
       {/* Línea (derivada del nombre, en MAYÚSCULA) — solo lectura. */}
       <div className="text-[11px] font-medium text-gray-700 uppercase leading-tight">
         {lineaDe(item.name, item.detail) || "—"}

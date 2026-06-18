@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-18 — Cotización de artefactos: ambiente editable + link al producto
+
+- **Ambiente editable por bloque**: el banner gris de cada ambiente (room) en el editor de artefactos (`ArtefactosEditor.tsx`) pasó a tener "Editar ambiente" → reasigna el `room` de **todo el bloque** a otro ambiente conocido o uno nuevo escrito a mano. Resuelve el caso de artefactos cargados en el ambiente equivocado (ej. cocina/iluminación que quedaron en "Baño principal"), que antes no se podían mover. Reusa `updateItem` (persiste por item); `room` no está en los campos de sync, así que no contagia a copias del mismo producto en otros ambientes.
+- **Botón "+ Nuevo ambiente"**: en la barra superior, abre el modal "Agregar del catálogo" ya posicionado en "+ Otro ambiente…" con el campo de texto listo (ej. "Baño 3"). Antes ese camino estaba escondido dentro del desplegable y no se encontraba.
+- **Flechita ↗ al lado del nombre**: cada artefacto con `referenceLink` cargado muestra una ↗ que abre la página del producto en la tienda (mismo patrón que el buscador del catálogo). Solo aparece si hay link.
+- **Alcance**: solo UI del editor de artefactos, un archivo. No toca `metrics.ts` ni cálculos. Verificado en vivo (Portofino, dev `ep-solitary-mud`, Chrome de MJ): los tres comportamientos OK; `tsc` limpio.
+
 ## 2026-06-17 — Presupuesto: unificar mano de obra por oficio en "Detalle por costo directo"
 
 - **Síntoma**: en Presupuesto → Detalle por costo directo, la sección Mano de obra mostraba el mismo oficio repetido (MAESTRO 3-4 veces, igual PINTOR, GASFITER, CERAMISTA, JORNAL). Causa: la clave de agrupación era `descripción + unidad`, y un mismo oficio se carga con distinta unidad según la partida (GL en una, UN o M2 en otra).

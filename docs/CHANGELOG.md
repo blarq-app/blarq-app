@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-18 — Cotización de artefactos: ambiente editable inline + agregar arriba + foto +50%
+
+- **Nombre del ambiente editable directo**: se eliminó el botón "Editar ambiente" con desplegable (que se había agregado hoy mismo). Ahora el nombre del banner gris es un `<input>` que se edita en el lugar (clic y escribís); al salir/Enter reasigna el ambiente de todo el bloque (`changeRoomForGroup`), Escape descarta. `RoomBanner` quedó como un input simple (sin select ni botones). MJ prefiere escribir el nombre directo.
+- **"+ Agregar artefacto" arriba**: el botón pasó del fondo del bloque (después de los totales, donde confundía) a la **misma línea del banner del ambiente**, a la derecha. El formulario de catálogo (`AddArtefactoFromCatalog`) aparece justo debajo del banner cuando está activo.
+- **Foto del producto +50% en el editor** (no en el PDF): thumbnail 44px → 66px (`w-[66px] h-[66px]`); columna IMG de la grilla 3.25rem → 5rem. Texto sin cambios.
+- **Alcance**: solo `ArtefactosEditor.tsx`. No toca `metrics.ts` ni el PDF. Verificado en vivo (Portofino dev, Chrome MJ): renombrar persiste (9 ítems), agregar abre arriba, foto 66px; `tsc` limpio.
+
 ## 2026-06-18 — PDF de artefactos: encabezado igual al de obra
 
 - **Formato unificado**: el encabezado del PDF de artefactos tenía otra disposición (etiquetas inline en mayúscula, sin "Version:", profesional/fecha en grilla 2×2). Se reemplazó por el **mismo formato del PDF de obra** (`ObraPDF.html.ts`): franja con logo (izq) + "Version:" / "Vx COTIZACION" / "ARTEFACTOS" / "Profesional a cargo" (der), y grilla de campos Mandante/Proyecto/Direccion (izq) · Celular/Fecha/Valor UF (der). Se copiaron las clases y specs (`.header-strip`, `.header-fields`, `.field/.label/.value`, etc.) tal cual obra. Subtítulo "ARTEFACTOS" y profesional "MARÍA JOSÉ BLANCO" se mantienen (propios del tipo de documento).

@@ -614,9 +614,9 @@ export default function ArtefactosEditor({
   // siempre visible (antes estaba al final de la fila, fuera de pantalla en
   // esta tabla ancha). El resto de las columnas no cambia.
   const gridColsCost =
-    "grid grid-cols-[1.5rem_3.25rem_minmax(0,1.9fr)_4.5rem_4.5rem_minmax(0,1.4fr)_minmax(0,0.7fr)_2.25rem_5.5rem_3rem_6rem_5.5rem_5rem_3.5rem]";
+    "grid grid-cols-[1.5rem_5rem_minmax(0,1.9fr)_4.5rem_4.5rem_minmax(0,1.4fr)_minmax(0,0.7fr)_2.25rem_5.5rem_3rem_6rem_5.5rem_5rem_3.5rem]";
   const gridColsClean =
-    "grid grid-cols-[1.5rem_3.25rem_minmax(0,1.9fr)_4.5rem_4.5rem_minmax(0,1.4fr)_minmax(0,0.7fr)_2.25rem_5.5rem_3rem_6rem_3.5rem]";
+    "grid grid-cols-[1.5rem_5rem_minmax(0,1.9fr)_4.5rem_4.5rem_minmax(0,1.4fr)_minmax(0,0.7fr)_2.25rem_5.5rem_3rem_6rem_3.5rem]";
   const gridCls = showCost ? gridColsCost : gridColsClean;
 
   return (
@@ -1519,7 +1519,7 @@ function ItemImageCell({
       <button
         type="button"
         onClick={openPopover}
-        className="w-11 h-11 mx-auto rounded border border-gray-200 hover:border-gray-500 bg-white flex items-center justify-center overflow-hidden transition-colors"
+        className="w-[66px] h-[66px] mx-auto rounded border border-gray-200 hover:border-gray-500 bg-white flex items-center justify-center overflow-hidden transition-colors"
         title={item.imageUrl ? "Editar imagen" : "Agregar imagen"}
       >
         {item.imageUrl ? (

@@ -232,6 +232,13 @@ export default function ArtefactosCatalogClient({
   const [activeTab, setActiveTab] = useState<string>("sanitario");
   const [onlyStandard, setOnlyStandard] = useState(false);
   const [adding, setAdding] = useState(false);
+  // Búsqueda por texto libre dentro de la pestaña: matchea cualquier palabra
+  // contra nombre, marca, detalle, línea, color y tipo (ej. "mampara",
+  // "brushed"). Cada palabra tiene que aparecer (AND).
+  const [search, setSearch] = useState("");
+  // Ref del formulario de alta para hacer scroll cuando se abre desde el
+  // botón "+ agregar" de un grupo (que vive abajo en la lista).
+  const addFormRef = useRef<HTMLFormElement>(null);
   // Filtros por tipo, línea y color (se eligen del listado de la pestaña activa).
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [filterLine, setFilterLine] = useState<string | null>(null);
@@ -289,7 +296,11 @@ export default function ArtefactosCatalogClient({
   // se puede arrastrar (estaríamos reordenando sobre una vista parcial). El
   // arrastre se hace sobre la lista completa de la pestaña.
   const isFiltering =
-    !!filterTag || onlyStandard || !!filterLine || !!filterFinish;
+    !!search.trim() ||
+    !!filterTag ||
+    onlyStandard ||
+    !!filterLine ||
+    !!filterFinish;
 
   // Líneas y colores disponibles en la pestaña activa (para los chips).
   const linesInTab = useMemo(
@@ -322,14 +333,31 @@ export default function ArtefactosCatalogClient({
 
   // ── Lista visible: estándares + línea + color sobre tabItems ───────────
   const visible = useMemo(() => {
+    const words = search.toLowerCase().split(/\s+/).filter(Boolean);
     return tabItems.filter((it) => {
       if (onlyStandard && !it.isStandard) return false;
       if (filterTag && (it.tag ?? "").trim() !== filterTag) return false;
       if (filterLine && it.line !== filterLine) return false;
       if (filterFinish && it.finish !== filterFinish) return false;
+      // Búsqueda por texto: cada palabra tiene que aparecer en algún campo.
+      if (words.length) {
+        const hay = [
+          it.name,
+          it.brand,
+          it.detail,
+          it.line,
+          it.finish,
+          it.tag,
+          it.supplier,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!words.every((w) => hay.includes(w))) return false;
+      }
       return true;
     });
-  }, [tabItems, onlyStandard, filterTag, filterLine, filterFinish]);
+  }, [tabItems, onlyStandard, filterTag, filterLine, filterFinish, search]);
 
   // ── Drag & drop ───────────────────────────────────────────────────────
   const sensors = useSensors(
@@ -472,6 +500,23 @@ export default function ArtefactosCatalogClient({
       discountPercent: 0,
       isStandard: false,
     });
+  }
+
+  // Abre el alta con el tipo (tag) y la pestaña ya puestos — desde el botón
+  // "+ agregar" de cada grupo, así MJ no tiene que elegir la subcategoría/tipo
+  // a mano. Hace scroll al formulario (que está arriba).
+  function openAddForTag(tag: string) {
+    closeForm();
+    setNewItem((prev) => ({ ...prev, subcategory: activeTab, tag }));
+    setAdding(true);
+    setTimeout(
+      () =>
+        addFormRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        }),
+      50
+    );
   }
 
   // Abre el formulario completo cargado con los datos de un artefacto.
@@ -703,9 +748,29 @@ export default function ArtefactosCatalogClient({
         })}
       </div>
 
-      {/* Toolbar: filtros + nuevo. La búsqueda por texto se sacó (pedido de
-          MJ): se filtra por pestaña/tipo y por las columnas Línea/Color. */}
+      {/* Toolbar: buscador + filtros + nuevo. */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap items-center gap-3">
+        {/* Buscador por texto libre dentro de la pestaña activa. Matchea
+            cualquier palabra (nombre, marca, detalle, línea, color, tipo). */}
+        <div className="relative">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar… (ej. mampara, brushed)"
+            className="w-64 px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:border-gray-500"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-900 text-sm leading-none"
+              title="Limpiar búsqueda"
+            >
+              ×
+            </button>
+          )}
+        </div>
         {/* Filtro por tipo (Accesorios, Griferías, WC…) de la pestaña activa. */}
         <label className="flex items-center gap-2 text-sm text-gray-700">
           <span className="text-gray-500">Tipo</span>
@@ -772,6 +837,7 @@ export default function ArtefactosCatalogClient({
       {/* Formulario de alta / edición. Es un <form> para que Enter guarde. */}
       {(adding || editingId) && (
         <form
+          ref={addFormRef}
           onSubmit={(e) => {
             e.preventDefault();
             if (editingId) handleSaveEdit();
@@ -1139,8 +1205,20 @@ export default function ArtefactosCatalogClient({
           groups.map((g) => (
             <Fragment key={g.tag || "__sin_tipo__"}>
               {g.tag ? (
-                <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                  {g.tag}
+                <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                    {g.tag}
+                  </span>
+                  {/* Agregar un artefacto directamente a este tipo (ya queda
+                      asignado a este grupo y a la pestaña actual). */}
+                  <button
+                    type="button"
+                    onClick={() => openAddForTag(g.tag)}
+                    className="text-[10px] uppercase tracking-wider text-gray-500 hover:text-gray-900"
+                    title={`Agregar un artefacto en ${g.tag}`}
+                  >
+                    + agregar
+                  </button>
                 </div>
               ) : (
                 groups.length > 1 && (

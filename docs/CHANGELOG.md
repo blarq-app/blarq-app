@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-18 — Catálogo de artefactos: buscador + "+ agregar" por tipo
+
+- **Buscador por texto libre** (vuelve, pero claro): input arriba de la lista que filtra la pestaña activa por cualquier palabra contra nombre, marca, detalle, línea, color, tipo y proveedor (cada palabra tiene que aparecer; AND). Ej. "mampara", "brushed". Tiene × para limpiar. (Antes se había sacado por confuso — A8; ahora con placeholder de ejemplos y matcheo amplio.)
+- **"+ agregar" por tipo** (A7): cada encabezado de grupo (ACCESORIOS, MAMPARAS, WC…) tiene un botón "+ agregar" que abre el alta con el tipo (`tag`) y la pestaña ya puestos, y hace scroll al formulario. Así no hay que elegir la subcategoría/tipo a mano.
+- **Alcance**: solo `ArtefactosCatalogClient.tsx`. El buscador es within-tab (filtra la pestaña activa, no cruza Sanitario/Cocina/Iluminación). No toca cálculos. Verificado en dev: "mampara" filtra a mamparas; "+ agregar" en MAMPARAS abre el alta con tag=Mamparas. `tsc` limpio.
+
 ## 2026-06-18 — Cotización de artefactos: reordenar y duplicar ambientes
 
 - **Reordenar ambientes (bloques) arrastrando**: cada banner de ambiente tiene una manija ⋮⋮ a la izquierda; se agarra el bloque entero y se sube/baja sobre otro (ej. "Baño 3" arriba de "Baño 2"). dnd-kit anidado: contexto de bloques (rooms) por subcategoría + el contexto de filas dentro de cada uno (ya existente).

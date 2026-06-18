@@ -95,6 +95,8 @@ export interface ArtefactosHTMLInput {
     name: string;
     clientName: string;
     address: string | null;
+    clientPhone: string | null;
+    ufReference: number | null;
   };
   budget: {
     version: string;
@@ -196,19 +198,45 @@ const CSS = `
     print-color-adjust: exact;
   }
 
-  /* ── Header (logo + metadata) ───────────────────────────────────────── */
-  .header {
+  /* ── Header — mismo formato que el PDF de obra ──────────────────────────
+     Dos bloques:
+       1) Franja: logo (izq) + título "Vx COTIZACIÓN / ARTEFACTOS /
+          Profesional a cargo" (der).
+       2) Grilla de campos: Mandante/Proyecto/Dirección (izq) ·
+          Celular/Fecha/Valor UF (der).
+     Las clases y specs son idénticas a ObraPDF.html.ts para que los dos PDF
+     se vean iguales. */
+  .header-strip {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    column-gap: 40px;
-    margin-bottom: 10px;
+    column-gap: 30px;
+    margin-bottom: 4pt;
+    align-items: start;
   }
-  .header-left  { text-align: left; }
-  .header-right { text-align: right; }
+  .header-strip .strip-left  { text-align: left; }
+  .header-strip .strip-right { text-align: right; }
 
-  .logo { display: block; height: 45px; width: auto; margin-bottom: 2pt; }
+  .header-fields {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 6pt;
+  }
+  .header-fields .col-left,
+  .header-fields .col-right {
+    display: flex;
+    flex-direction: column;
+    gap: 2pt;
+  }
+  .header-fields .col-right { text-align: left; }
 
-  /* Título e subtítulo: mismas specs que el PDF de obra (18pt / 9pt, gris). */
+  .logo {
+    display: block;
+    height: 45px;
+    width: auto;
+    margin-bottom: 2pt;
+  }
+
   .doc-title {
     font-family: 'Montserrat', sans-serif;
     font-size: 18pt;
@@ -223,30 +251,24 @@ const CSS = `
     font-weight: 400;
     color: #808080;
     letter-spacing: 0.06em;
-    margin: 0 0 6px 0;
+    margin: 0 0 4pt 0;
     text-transform: uppercase;
   }
 
-  .meta {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    column-gap: 12px;
-    row-gap: 2px;
-  }
-  .header-right .meta { grid-template-columns: 1fr auto; }
-  .meta .m-label {
+  .field { margin-bottom: 1pt; }
+  .field .label {
     font-size: 6pt;
     font-weight: 400;
     color: #808080;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    line-height: 1.4;
+    letter-spacing: 0;
+    margin-bottom: 0;
+    line-height: 1.1;
   }
-  .meta .m-value {
+  .field .value {
     font-size: 8pt;
     font-weight: 500;
     color: #1A1A1A;
-    line-height: 1.3;
+    line-height: 1.1;
     text-transform: uppercase;
   }
 
@@ -578,26 +600,52 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
 </head>
 <body>
 
-  <div class="header">
-    <div class="header-left">
+  <!-- HEADER — mismo formato que el PDF de obra -->
+  <!-- 1) Franja: logo (izq) + título + Profesional a cargo (der) -->
+  <div class="header-strip">
+    <div class="strip-left">
       ${logoHtml}
-      <div class="meta">
-        <div class="m-label">Mandante</div>
-        <div class="m-value">${esc(project.clientName)}</div>
-        <div class="m-label">Proyecto</div>
-        <div class="m-value">${esc(project.name)}</div>
-        <div class="m-label">Dirección</div>
-        <div class="m-value">${esc(project.address || "—")}</div>
+    </div>
+    <div class="strip-right">
+      <div class="field"><div class="label">Version:</div></div>
+      <h1 class="doc-title">${esc(budget.version)} COTIZACION</h1>
+      <div class="doc-subtitle">ARTEFACTOS</div>
+      <div class="field">
+        <div class="label">Profesional a cargo:</div>
+        <div class="value">${esc(PROFESSIONAL)}</div>
       </div>
     </div>
-    <div class="header-right">
-      <h1 class="doc-title">${esc(budget.version)} COTIZACIÓN</h1>
-      <div class="doc-subtitle">Artefactos</div>
-      <div class="meta">
-        <div class="m-value">${esc(PROFESSIONAL)}</div>
-        <div class="m-label">Profesional</div>
-        <div class="m-value">${dateStr}</div>
-        <div class="m-label">Fecha</div>
+  </div>
+
+  <!-- 2) Campos: izquierda (Mandante/Proyecto/Direccion) ·
+       derecha (Celular/Fecha/Valor UF). -->
+  <div class="header-fields">
+    <div class="col-left">
+      <div class="field">
+        <div class="label">Mandante:</div>
+        <div class="value">${esc(project.clientName)}</div>
+      </div>
+      <div class="field">
+        <div class="label">Proyecto:</div>
+        <div class="value">${esc(project.name)}</div>
+      </div>
+      <div class="field">
+        <div class="label">Direccion:</div>
+        <div class="value">${esc(project.address || "—")}</div>
+      </div>
+    </div>
+    <div class="col-right">
+      <div class="field">
+        <div class="label">Celular:</div>
+        <div class="value">${esc(project.clientPhone || "—")}</div>
+      </div>
+      <div class="field">
+        <div class="label">Fecha:</div>
+        <div class="value">${dateStr}</div>
+      </div>
+      <div class="field">
+        <div class="label">Valor UF:</div>
+        <div class="value">${project.ufReference != null ? "$ " + Math.round(project.ufReference).toLocaleString("es-CL") : "—"}</div>
       </div>
     </div>
   </div>

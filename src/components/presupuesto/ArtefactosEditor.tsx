@@ -867,19 +867,29 @@ export default function ArtefactosEditor({
                                 room: room.key,
                               })
                             }
-                            className="text-[10px] uppercase tracking-wider text-gray-500 hover:text-gray-900"
+                            className="text-gray-500 hover:text-gray-900"
                             title="Agregar un artefacto a este ambiente"
                           >
-                            + Agregar artefacto
+                            {/* El tamaño va en un <span>: hay una regla global
+                                `button{font-size:.75rem !important}` que pisa
+                                cualquier clase/estilo puesto en el botón. El
+                                span no la matchea, así que acá sí achica. */}
+                            <span
+                              style={{ fontSize: "9px" }}
+                              className="uppercase tracking-wider"
+                            >
+                              + agregar artefacto
+                            </span>
                           </button>
+                          {/* Duplicar el ambiente — mismo ícono que duplicar fila (⎘) */}
                           <button
                             onClick={() =>
                               duplicateRoom(sub.key, room.key, room.label)
                             }
-                            className="text-[10px] uppercase tracking-wider text-gray-500 hover:text-gray-900"
+                            className="text-gray-400 hover:text-gray-900 text-sm leading-none"
                             title="Duplicar este ambiente con todos sus artefactos"
                           >
-                            Duplicar ambiente
+                            ⎘
                           </button>
                         </div>
                       </div>

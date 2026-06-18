@@ -43,7 +43,7 @@ export default function FondoSueldosCard({ fondo }: { fondo: FondoSueldosCalculo
             <td className="py-2">
               <div className="font-medium text-gray-900">Obra</div>
               <div className="text-[11px] text-gray-400">
-                GG {Math.round((fondo.obraGGTotal / Math.max(1, fondo.obraTotalAcordado / 1.19 / 1.05)) * 100) || ""}% del costo directo
+                GG {fondo.obraGGPercentage || ""}% del costo directo
               </div>
             </td>
             <td className="text-right tabular-nums text-gray-900">{formatCLP(fondo.obraGGTotal)}</td>

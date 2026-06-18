@@ -46,6 +46,7 @@ export type FondoSueldosCalculo = {
   totalFondoMaximo: number;
   // Detalle por tipo
   obraGGTotal: number;       // GG total presupuestado (CD × ggPercentage)
+  obraGGPercentage: number;  // GG% real del presupuesto de obra (ej. 20 = 20%)
   obraCobrado: number;       // suma de facturas emitidas cobradas con concepto "obra"
   obraTotalAcordado: number; // CD × (1+gg) × (1+util) × IVA = lo que se cobra al cliente
   pctCobradoObra: number;    // 0..1
@@ -135,6 +136,7 @@ export function computeFondoSueldos(p: ProjectWithFondo): FondoSueldosCalculo {
   return {
     totalFondoMaximo,
     obraGGTotal,
+    obraGGPercentage: obra?.ggPercentage ?? 0,
     obraCobrado,
     obraTotalAcordado,
     pctCobradoObra,

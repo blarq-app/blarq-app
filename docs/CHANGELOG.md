@@ -4,6 +4,10 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-18 — Cotización de artefactos: manija de arrastre a la izquierda
+
+- **Reordenar filas más fácil**: la manija de arrastre (⋮⋮) de cada artefacto pasó de la última columna (que quedaba fuera de pantalla a la derecha en esta tabla ancha) a la **primera columna, siempre visible**. Se agregó una columna de 1.5rem al inicio de la grilla (`gridColsCost`/`gridColsClean`), una celda vacía en el header, y los dos subtotales pasaron de `col-span-9` a `col-span-10`. El arrastre sigue reordenando **solo dentro del mismo ambiente** (lógica `onDragEndRoom` sin cambios). Verificado en vivo (Portofino dev, Chrome MJ): arrastrar reordena y persiste; grilla alineada. Solo UI; no toca `metrics.ts`.
+
 ## 2026-06-18 — Cotización de artefactos: ambiente editable + link al producto
 
 - **Ambiente editable por bloque**: el banner gris de cada ambiente (room) en el editor de artefactos (`ArtefactosEditor.tsx`) pasó a tener "Editar ambiente" → reasigna el `room` de **todo el bloque** a otro ambiente conocido o uno nuevo escrito a mano. Resuelve el caso de artefactos cargados en el ambiente equivocado (ej. cocina/iluminación que quedaron en "Baño principal"), que antes no se podían mover. Reusa `updateItem` (persiste por item); `room` no está en los campos de sync, así que no contagia a copias del mismo producto en otros ambientes.

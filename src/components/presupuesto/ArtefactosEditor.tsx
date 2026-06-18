@@ -689,15 +689,40 @@ export default function ArtefactosEditor({
 
           {sub.rooms.map((room) => (
             <div key={room.key} className="border-b border-gray-200 last:border-b-0">
-              {/* Banner del room — editable: permite cambiar el ambiente de
-                  todo el bloque (corregir o renombrar). */}
-              <RoomBanner
-                roomKey={room.key}
-                label={room.label}
-                onChange={(newRoom) =>
-                  changeRoomForGroup(sub.key, room.key, newRoom)
-                }
-              />
+              {/* Banner del room: el nombre del ambiente se edita directo (izq,
+                  click y escribís) y a la derecha el botón para agregar un
+                  artefacto a este ambiente. */}
+              <div className="bg-gray-100 px-4 py-1.5 border-b border-gray-300 flex items-center justify-between gap-3">
+                <RoomBanner
+                  label={room.label}
+                  onChange={(newRoom) =>
+                    changeRoomForGroup(sub.key, room.key, newRoom)
+                  }
+                />
+                <button
+                  onClick={() =>
+                    setAddingTo({ subcategory: sub.key, room: room.key })
+                  }
+                  className="shrink-0 text-[10px] uppercase tracking-wider text-gray-500 hover:text-gray-900"
+                  title="Agregar un artefacto a este ambiente"
+                >
+                  + Agregar artefacto
+                </button>
+              </div>
+
+              {/* Form de agregar — aparece debajo del banner cuando está activo */}
+              {addingTo?.subcategory === sub.key &&
+                addingTo?.room === room.key && (
+                  <AddArtefactoFromCatalog
+                    roomLabel={room.label}
+                    defaultSubcategory={sub.key}
+                    onAdd={async (payload) => {
+                      await addItemFromPayload(sub.key, room.key, payload);
+                      setAddingTo(null);
+                    }}
+                    onCancel={() => setAddingTo(null)}
+                  />
+                )}
 
               {/* Header de columnas */}
               <div
@@ -777,29 +802,6 @@ export default function ArtefactosEditor({
                 )}
                 <div></div>
               </div>
-
-              {/* Botón agregar item dentro del room — usa el catálogo BLARQ */}
-              {addingTo?.subcategory === sub.key &&
-              addingTo?.room === room.key ? (
-                <AddArtefactoFromCatalog
-                  roomLabel={room.label}
-                  defaultSubcategory={sub.key}
-                  onAdd={async (payload) => {
-                    await addItemFromPayload(sub.key, room.key, payload);
-                    setAddingTo(null);
-                  }}
-                  onCancel={() => setAddingTo(null)}
-                />
-              ) : (
-                <button
-                  onClick={() =>
-                    setAddingTo({ subcategory: sub.key, room: room.key })
-                  }
-                  className="px-4 py-1.5 text-xs text-gray-500 hover:text-gray-900 hover:bg-gray-50 w-full text-left border-t border-gray-100"
-                >
-                  + agregar artefacto en {room.label.toLowerCase()}
-                </button>
-              )}
             </div>
           ))}
 
@@ -1016,99 +1018,52 @@ export default function ArtefactosEditor({
   );
 }
 
-// ─── Banner de ambiente (room) — editable ────────────────────────────────
+// ─── Banner de ambiente (room) — nombre editable directo ─────────────────
 //
-// El banner gris que titula cada bloque de artefactos. Por defecto muestra
-// el nombre del ambiente; al tocar "Editar ambiente" se abre un selector
-// para reasignar TODO el bloque a otro ambiente conocido (Baño principal,
-// Cocina, etc.) o a uno nuevo escrito a mano (ej. "Baño 3", "Terraza").
-// Esto resuelve el caso de artefactos cargados en el ambiente equivocado,
-// que antes no se podían mover.
+// El nombre del ambiente que titula cada bloque se edita EN EL LUGAR: se
+// clickea sobre el texto y se escribe. Al salir del campo (blur) o apretar
+// Enter, se guarda reasignando el ambiente de TODO el bloque
+// (changeRoomForGroup, en el padre). Escape descarta. Antes había un botón
+// "Editar ambiente" con un desplegable; MJ prefiere escribir el nombre
+// directo, sin ese paso intermedio.
 function RoomBanner({
-  roomKey,
   label,
   onChange,
 }: {
-  roomKey: string;
   label: string;
   onChange: (newRoom: string) => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  // ¿El ambiente actual es uno de los conocidos (con key) o es texto libre?
-  const known = roomKey in ROOM_LABELS;
-  const [sel, setSel] = useState(known ? roomKey : "__custom__");
-  const [custom, setCustom] = useState(known ? "" : label);
+  // Se edita una copia local del nombre; recién al confirmar se persiste.
+  // El padre remonta el bloque cuando cambia el ambiente (key=room.key), así
+  // que el useState se reinicializa solo con el label nuevo.
+  const [value, setValue] = useState(label);
 
-  function save() {
-    const next = sel === "__custom__" ? custom.trim() : sel;
-    if (!next) {
-      alert("Escribí el nombre del ambiente.");
+  function commit() {
+    const next = value.trim();
+    // Vacío o sin cambios → volver al nombre actual, no tocar nada.
+    if (!next || next === label) {
+      setValue(label);
       return;
     }
     onChange(next);
-    setEditing(false);
-  }
-
-  function cancel() {
-    setSel(known ? roomKey : "__custom__");
-    setCustom(known ? "" : label);
-    setEditing(false);
-  }
-
-  if (!editing) {
-    return (
-      <div className="bg-gray-100 px-4 py-1.5 border-b border-gray-300 flex items-center justify-between gap-2">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-900">
-          {label}
-        </span>
-        <button
-          onClick={() => setEditing(true)}
-          className="text-[10px] uppercase tracking-wider text-gray-400 hover:text-gray-900 shrink-0"
-          title="Cambiar el ambiente de todo este bloque"
-        >
-          Editar ambiente
-        </button>
-      </div>
-    );
   }
 
   return (
-    <div className="bg-gray-100 px-4 py-1.5 border-b border-gray-300 flex flex-wrap items-center gap-2">
-      <select
-        value={sel}
-        onChange={(e) => setSel(e.target.value)}
-        className="px-2 py-1 border border-gray-300 rounded text-xs bg-white outline-none focus:border-gray-500"
-      >
-        {ROOM_ORDER.map((r) => (
-          <option key={r} value={r}>
-            {ROOM_LABELS[r]}
-          </option>
-        ))}
-        <option value="__custom__">+ Otro ambiente…</option>
-      </select>
-      {sel === "__custom__" && (
-        <input
-          autoFocus
-          type="text"
-          value={custom}
-          onChange={(e) => setCustom(e.target.value)}
-          placeholder="Ej. Baño 3, Terraza"
-          className="w-44 px-2 py-1 border border-gray-300 rounded text-xs bg-white outline-none focus:border-gray-500"
-        />
-      )}
-      <button
-        onClick={save}
-        className="text-xs bg-gray-900 text-white px-2.5 py-1 rounded font-medium hover:bg-gray-800"
-      >
-        Guardar
-      </button>
-      <button
-        onClick={cancel}
-        className="text-xs text-gray-500 hover:text-gray-900 px-1"
-      >
-        Cancelar
-      </button>
-    </div>
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Escape") {
+          setValue(label);
+          e.currentTarget.blur();
+        }
+      }}
+      title="Nombre del ambiente — clic para editar"
+      className="flex-1 min-w-0 bg-transparent border-0 p-0 text-[11px] font-bold uppercase tracking-wider text-gray-900 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+    />
   );
 }
 

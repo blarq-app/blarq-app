@@ -610,10 +610,13 @@ export default function ArtefactosEditor({
   // OJO: las clases de Tailwind tienen que aparecer LITERALES en el código
   // para que el tree-shaking las detecte. Por eso las defino como strings
   // constantes y no las interpolo.
+  // La 1ª columna (1.5rem) es la manija de arrastre ⋮⋮, a la izquierda y
+  // siempre visible (antes estaba al final de la fila, fuera de pantalla en
+  // esta tabla ancha). El resto de las columnas no cambia.
   const gridColsCost =
-    "grid grid-cols-[3.25rem_minmax(0,1.9fr)_4.5rem_4.5rem_minmax(0,1.4fr)_minmax(0,0.7fr)_2.25rem_5.5rem_3rem_6rem_5.5rem_5rem_3.5rem]";
+    "grid grid-cols-[1.5rem_3.25rem_minmax(0,1.9fr)_4.5rem_4.5rem_minmax(0,1.4fr)_minmax(0,0.7fr)_2.25rem_5.5rem_3rem_6rem_5.5rem_5rem_3.5rem]";
   const gridColsClean =
-    "grid grid-cols-[3.25rem_minmax(0,1.9fr)_4.5rem_4.5rem_minmax(0,1.4fr)_minmax(0,0.7fr)_2.25rem_5.5rem_3rem_6rem_3.5rem]";
+    "grid grid-cols-[1.5rem_3.25rem_minmax(0,1.9fr)_4.5rem_4.5rem_minmax(0,1.4fr)_minmax(0,0.7fr)_2.25rem_5.5rem_3rem_6rem_3.5rem]";
   const gridCls = showCost ? gridColsCost : gridColsClean;
 
   return (
@@ -700,6 +703,8 @@ export default function ArtefactosEditor({
               <div
                 className={`${gridCls} items-center gap-3 px-4 py-2 border-b border-gray-200 bg-white text-[10px] font-semibold text-gray-500 uppercase tracking-wider`}
               >
+                {/* Columna de la manija de arrastre — sin título */}
+                <div></div>
                 <div className="text-center">Img</div>
                 <div>Item</div>
                 <div>Línea</div>
@@ -748,7 +753,7 @@ export default function ArtefactosEditor({
               <div
                 className={`${gridCls} items-center gap-3 px-4 py-2 bg-gray-50 border-t border-gray-900 text-xs font-semibold`}
               >
-                <div className="col-span-9 text-gray-600 uppercase tracking-wider text-[10px]">
+                <div className="col-span-10 text-gray-600 uppercase tracking-wider text-[10px]">
                   Total artefactos {room.label.toLowerCase()}
                 </div>
                 <div className="text-right tabular-nums text-gray-900">
@@ -802,7 +807,7 @@ export default function ArtefactosEditor({
           <div
             className={`${gridCls} items-center gap-3 px-4 py-2.5 bg-gray-100 border-t-2 border-gray-900 text-xs font-bold uppercase tracking-wider`}
           >
-            <div className="col-span-9 text-gray-900">Total {sub.label.toLowerCase()}</div>
+            <div className="col-span-10 text-gray-900">Total {sub.label.toLowerCase()}</div>
             <div className="text-right tabular-nums text-gray-900 text-sm">
               {formatCLP(sub.subtotal)}
             </div>
@@ -1283,6 +1288,16 @@ function SortableArtefactoRow({
       style={style}
       className={`${gridCls} items-center gap-3 px-4 py-1 border-b border-gray-100 last:border-b-0 text-xs hover:bg-gray-50`}
     >
+      {/* Manija de arrastre — 1ª columna, siempre visible. Arrastrar reordena
+          la fila dentro de su mismo ambiente. */}
+      <span
+        {...sortable.attributes}
+        {...sortable.listeners}
+        className="cursor-grab text-gray-300 hover:text-gray-700 select-none leading-none text-center"
+        title="Arrastrar para reordenar dentro del ambiente"
+      >
+        ⋮⋮
+      </span>
       <ItemImageCell
         projectId={projectId}
         item={item}
@@ -1400,14 +1415,6 @@ function SortableArtefactoRow({
         >
           ×
         </button>
-        <span
-          {...sortable.attributes}
-          {...sortable.listeners}
-          className="cursor-grab text-gray-300 hover:text-gray-700 select-none leading-none"
-          title="Arrastrar para reordenar"
-        >
-          ⋮⋮
-        </span>
       </div>
     </div>
   );

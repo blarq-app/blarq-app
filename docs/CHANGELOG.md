@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-18 — PDF de artefactos: encabezado igual al de obra
+
+- **Formato unificado**: el encabezado del PDF de artefactos tenía otra disposición (etiquetas inline en mayúscula, sin "Version:", profesional/fecha en grilla 2×2). Se reemplazó por el **mismo formato del PDF de obra** (`ObraPDF.html.ts`): franja con logo (izq) + "Version:" / "Vx COTIZACION" / "ARTEFACTOS" / "Profesional a cargo" (der), y grilla de campos Mandante/Proyecto/Direccion (izq) · Celular/Fecha/Valor UF (der). Se copiaron las clases y specs (`.header-strip`, `.header-fields`, `.field/.label/.value`, etc.) tal cual obra. Subtítulo "ARTEFACTOS" y profesional "MARÍA JOSÉ BLANCO" se mantienen (propios del tipo de documento).
+- **Datos**: se agregaron `clientPhone` y `ufReference` a `ArtefactosHTMLInput.project` (ya venían en `budget.project`, solo faltaba declararlos) para mostrar Celular y Valor UF como en obra.
+- **Alcance**: solo `ArtefactosPDF.html.ts`. No toca cálculos. Verificado generando el PDF real (Portofino V1, dev): encabezado idéntico en estructura al de obra. `tsc` limpio.
+
 ## 2026-06-18 — Cotización de artefactos: manija de arrastre a la izquierda
 
 - **Reordenar filas más fácil**: la manija de arrastre (⋮⋮) de cada artefacto pasó de la última columna (que quedaba fuera de pantalla a la derecha en esta tabla ancha) a la **primera columna, siempre visible**. Se agregó una columna de 1.5rem al inicio de la grilla (`gridColsCost`/`gridColsClean`), una celda vacía en el header, y los dos subtotales pasaron de `col-span-9` a `col-span-10`. El arrastre sigue reordenando **solo dentro del mismo ambiente** (lógica `onDragEndRoom` sin cambios). Verificado en vivo (Portofino dev, Chrome MJ): arrastrar reordena y persiste; grilla alineada. Solo UI; no toca `metrics.ts`.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
 import {
@@ -255,12 +255,18 @@ export default function ArtefactosEditor({
         arr.push(it);
         roomBuckets.set(r, arr);
       }
+      // Orden de los ambientes (bloques): por el sortOrder MÍNIMO de sus
+      // items. Antes era por ROOM_ORDER (lista fija) y caía a orden de
+      // aparición para los nombres libres; como los items llegan ordenados
+      // por sortOrder, el orden visible es el mismo, pero ahora es explícito
+      // y reordenable (arrastrar un ambiente renumera el sortOrder). Empate
+      // → orden de aparición (sort estable).
+      const roomMinOrder = new Map<string, number>();
+      for (const [rk, arr] of roomBuckets) {
+        roomMinOrder.set(rk, Math.min(...arr.map((i) => i.sortOrder)));
+      }
       const rooms = Array.from(roomBuckets.keys())
-        .sort((a, b) => {
-          const ia = ROOM_ORDER.indexOf(a);
-          const ib = ROOM_ORDER.indexOf(b);
-          return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-        })
+        .sort((a, b) => roomMinOrder.get(a)! - roomMinOrder.get(b)!)
         .map((rkey) => {
           const rItems = (roomBuckets.get(rkey) ?? []).sort(
             (a, b) => a.sortOrder - b.sortOrder
@@ -510,27 +516,155 @@ export default function ArtefactosEditor({
     }
   }
 
-  // Arrastrar reordena DENTRO de un room (mismo ambiente y subcategoría). El
-  // sortOrder es global pero el display agrupa por subcategoría→room y ordena
-  // por sortOrder dentro del grupo, así que reasignar 0..n por room alcanza.
-  // Persiste con el PUT por ítem (ya guarda sortOrder).
-  async function onDragEndRoom(e: DragEndEvent, roomItems: ArtefactoItem[]) {
+  // ── Orden de ambientes (bloques) + filas ─────────────────────────────
+  // El sortOrder es GLOBAL dentro de la subcategoría: el orden de los bloques
+  // de ambiente se decide por el sortOrder mínimo de cada uno, y dentro de
+  // cada ambiente las filas van por sortOrder. Reordenar (filas o bloques) y
+  // duplicar pasan por `applyOrder`, que renumera 0..n toda la subcategoría
+  // según un orden de ambientes y el orden interno de cada uno. Así nunca se
+  // pisan los rangos entre ambientes.
+
+  // Orden actual de los ambientes de una subcategoría (por sortOrder mínimo).
+  function roomOrderOf(subKey: string, base: ArtefactoItem[]): string[] {
+    const min = new Map<string, number>();
+    for (const it of base) {
+      if ((it.subcategory || "sanitario") !== subKey) continue;
+      const r = it.room || "otro";
+      const cur = min.get(r);
+      if (cur === undefined || it.sortOrder < cur) min.set(r, it.sortOrder);
+    }
+    return [...min.keys()].sort((a, b) => min.get(a)! - min.get(b)!);
+  }
+
+  // Agrupa los items de una subcategoría por ambiente, en su orden interno
+  // actual (sortOrder asc).
+  function groupRooms(subKey: string, base: ArtefactoItem[]) {
+    const byRoom = new Map<string, ArtefactoItem[]>();
+    const sub = base
+      .filter((i) => (i.subcategory || "sanitario") === subKey)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    for (const it of sub) {
+      const r = it.room || "otro";
+      if (!byRoom.has(r)) byRoom.set(r, []);
+      byRoom.get(r)!.push(it);
+    }
+    return byRoom;
+  }
+
+  // Renumera el sortOrder de toda la subcategoría según un orden de ambientes
+  // y el orden interno de cada uno; aplica al estado y persiste lo que cambió.
+  function applyOrder(
+    roomOrder: string[],
+    itemsByRoom: Map<string, ArtefactoItem[]>,
+    base: ArtefactoItem[]
+  ) {
+    let c = 0;
+    const newSort = new Map<string, number>();
+    for (const r of roomOrder)
+      for (const it of itemsByRoom.get(r) ?? []) newSort.set(it.id, c++);
+    const oldSort = new Map(base.map((it) => [it.id, it.sortOrder]));
+    const updated = base.map((it) =>
+      newSort.has(it.id) ? { ...it, sortOrder: newSort.get(it.id)! } : it
+    );
+    setItems(updated);
+    for (const it of updated) {
+      if (newSort.has(it.id) && oldSort.get(it.id) !== it.sortOrder) {
+        persistItem(it);
+      }
+    }
+  }
+
+  // Arrastrar reordena las FILAS dentro de un ambiente; renumera la subcat
+  // manteniendo el orden de los demás ambientes.
+  function onDragEndRoom(
+    e: DragEndEvent,
+    subKey: string,
+    roomKey: string,
+    roomItems: ArtefactoItem[]
+  ) {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
     const oldIdx = roomItems.findIndex((it) => it.id === active.id);
     const newIdx = roomItems.findIndex((it) => it.id === over.id);
     if (oldIdx < 0 || newIdx < 0) return;
-    const reordered = arrayMove(roomItems, oldIdx, newIdx);
-    const orderMap = new Map(reordered.map((it, i) => [it.id, i]));
-    // Optimista: reasigna sortOrder a los ítems de ESTE room.
-    setItems((prev) =>
-      prev.map((it) =>
-        orderMap.has(it.id) ? { ...it, sortOrder: orderMap.get(it.id)! } : it
+    const byRoom = groupRooms(subKey, items);
+    byRoom.set(roomKey, arrayMove(roomItems, oldIdx, newIdx));
+    applyOrder(roomOrderOf(subKey, items), byRoom, items);
+  }
+
+  // Arrastrar reordena los BLOQUES de ambiente (ej. subir "Baño 3" sobre
+  // "Baño 2"). Los ids de la lista de ambientes son "<subKey>::<roomKey>".
+  function onDragEndRoomBlocks(e: DragEndEvent, subKey: string) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const roomOf = (id: string) => id.split("::").slice(1).join("::");
+    const fromRoom = roomOf(String(active.id));
+    const toRoom = roomOf(String(over.id));
+    const order = roomOrderOf(subKey, items);
+    const from = order.indexOf(fromRoom);
+    const to = order.indexOf(toRoom);
+    if (from < 0 || to < 0) return;
+    applyOrder(arrayMove(order, from, to), groupRooms(subKey, items), items);
+  }
+
+  // Duplica un ambiente COMPLETO: copia todos sus artefactos a un ambiente
+  // nuevo ("<nombre> (copia)") que queda justo debajo del original. MJ lo usa
+  // para armar un baño igual a otro y después cambiarle el nombre.
+  async function duplicateRoom(
+    subKey: string,
+    roomKey: string,
+    roomLabel: string
+  ) {
+    const roomItems = items
+      .filter(
+        (i) =>
+          (i.subcategory || "sanitario") === subKey &&
+          (i.room || "otro") === roomKey
       )
-    );
-    // Persistir cada ítem movido (PUT por ítem).
-    for (const it of reordered) {
-      persistItem({ ...it, sortOrder: orderMap.get(it.id)! });
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    if (roomItems.length === 0) return;
+    const newRoom = `${roomLabel} (copia)`;
+    try {
+      const created: ArtefactoItem[] = [];
+      for (const src of roomItems) {
+        const res = await fetch(
+          `/api/presupuestos/${initialBudget.id}/artefactos`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              subcategory: src.subcategory,
+              room: newRoom,
+              name: src.name,
+              detail: src.detail,
+              brand: src.brand,
+              quantity: src.quantity,
+              listPrice: src.listPrice,
+              discountPercent: src.discountPercent,
+              clientPrice: src.clientPrice,
+              realCostBlarq: src.realCostBlarq,
+              referenceLink: src.referenceLink,
+              imageUrl: src.imageUrl,
+              catalogId: src.catalogId,
+            }),
+          }
+        );
+        if (!res.ok) throw new Error("Error");
+        created.push(await res.json());
+      }
+      // Insertar el ambiente nuevo justo después del original y renumerar.
+      const order = roomOrderOf(subKey, items);
+      const at = order.indexOf(roomKey);
+      const newOrder = [
+        ...order.slice(0, at + 1),
+        newRoom,
+        ...order.slice(at + 1),
+      ];
+      const byRoom = groupRooms(subKey, items);
+      byRoom.set(newRoom, created); // copias en el mismo orden que el original
+      applyOrder(newOrder, byRoom, [...items, ...created]);
+    } catch {
+      alert("Error al duplicar el ambiente");
     }
   }
 
@@ -687,123 +821,179 @@ export default function ArtefactosEditor({
             {sub.label}
           </div>
 
-          {sub.rooms.map((room) => (
-            <div key={room.key} className="border-b border-gray-200 last:border-b-0">
-              {/* Banner del room: el nombre del ambiente se edita directo (izq,
-                  click y escribís) y a la derecha el botón para agregar un
-                  artefacto a este ambiente. */}
-              <div className="bg-gray-100 px-4 py-1.5 border-b border-gray-300 flex items-center justify-between gap-3">
-                <RoomBanner
-                  label={room.label}
-                  onChange={(newRoom) =>
-                    changeRoomForGroup(sub.key, room.key, newRoom)
-                  }
-                />
-                <button
-                  onClick={() =>
-                    setAddingTo({ subcategory: sub.key, room: room.key })
-                  }
-                  className="shrink-0 text-[10px] uppercase tracking-wider text-gray-500 hover:text-gray-900"
-                  title="Agregar un artefacto a este ambiente"
+          {/* Los ambientes (bloques) son arrastrables entre sí: se agarra el
+              banner por la manija ⋮⋮ y se sube/baja sobre otro ambiente. */}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={(e) => onDragEndRoomBlocks(e, sub.key)}
+          >
+            <SortableContext
+              items={sub.rooms.map((r) => `${sub.key}::${r.key}`)}
+              strategy={verticalListSortingStrategy}
+            >
+              {sub.rooms.map((room) => (
+                <SortableRoomBlock
+                  key={room.key}
+                  id={`${sub.key}::${room.key}`}
                 >
-                  + Agregar artefacto
-                </button>
-              </div>
+                  {(handle) => (
+                    <>
+                      {/* Banner del room: manija (arrastrar el ambiente) +
+                          nombre editable directo (izq) · agregar + duplicar
+                          (der). */}
+                      <div className="bg-gray-100 px-4 py-1.5 border-b border-gray-300 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <span
+                            {...handle.attributes}
+                            {...handle.listeners}
+                            className="cursor-grab text-gray-300 hover:text-gray-700 select-none leading-none shrink-0"
+                            title="Arrastrar para reordenar el ambiente (subir/bajar el bloque entero)"
+                          >
+                            ⋮⋮
+                          </span>
+                          <RoomBanner
+                            label={room.label}
+                            onChange={(newRoom) =>
+                              changeRoomForGroup(sub.key, room.key, newRoom)
+                            }
+                          />
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <button
+                            onClick={() =>
+                              setAddingTo({
+                                subcategory: sub.key,
+                                room: room.key,
+                              })
+                            }
+                            className="text-[10px] uppercase tracking-wider text-gray-500 hover:text-gray-900"
+                            title="Agregar un artefacto a este ambiente"
+                          >
+                            + Agregar artefacto
+                          </button>
+                          <button
+                            onClick={() =>
+                              duplicateRoom(sub.key, room.key, room.label)
+                            }
+                            className="text-[10px] uppercase tracking-wider text-gray-500 hover:text-gray-900"
+                            title="Duplicar este ambiente con todos sus artefactos"
+                          >
+                            Duplicar ambiente
+                          </button>
+                        </div>
+                      </div>
 
-              {/* Form de agregar — aparece debajo del banner cuando está activo */}
-              {addingTo?.subcategory === sub.key &&
-                addingTo?.room === room.key && (
-                  <AddArtefactoFromCatalog
-                    roomLabel={room.label}
-                    defaultSubcategory={sub.key}
-                    onAdd={async (payload) => {
-                      await addItemFromPayload(sub.key, room.key, payload);
-                      setAddingTo(null);
-                    }}
-                    onCancel={() => setAddingTo(null)}
-                  />
-                )}
+                      {/* Form de agregar — debajo del banner cuando está activo */}
+                      {addingTo?.subcategory === sub.key &&
+                        addingTo?.room === room.key && (
+                          <AddArtefactoFromCatalog
+                            roomLabel={room.label}
+                            defaultSubcategory={sub.key}
+                            onAdd={async (payload) => {
+                              await addItemFromPayload(
+                                sub.key,
+                                room.key,
+                                payload
+                              );
+                              setAddingTo(null);
+                            }}
+                            onCancel={() => setAddingTo(null)}
+                          />
+                        )}
 
-              {/* Header de columnas */}
-              <div
-                className={`${gridCls} items-center gap-3 px-4 py-2 border-b border-gray-200 bg-white text-[10px] font-semibold text-gray-500 uppercase tracking-wider`}
-              >
-                {/* Columna de la manija de arrastre — sin título */}
-                <div></div>
-                <div className="text-center">Img</div>
-                <div>Item</div>
-                <div>Línea</div>
-                <div>Color</div>
-                <div>Detalle</div>
-                <div>Marca</div>
-                <div className="text-center">Cant.</div>
-                <div className="text-right">P. lista</div>
-                <div className="text-right">Dcto</div>
-                <div className="text-right">Total</div>
-                {showCost && (
-                  <>
-                    <div className="text-right text-red-700/80">Neto BLARQ</div>
-                    <div className="text-right text-green-700/80">Utilidad</div>
-                  </>
-                )}
-                <div></div>
-              </div>
+                      {/* Header de columnas */}
+                      <div
+                        className={`${gridCls} items-center gap-3 px-4 py-2 border-b border-gray-200 bg-white text-[10px] font-semibold text-gray-500 uppercase tracking-wider`}
+                      >
+                        {/* Columna de la manija de arrastre — sin título */}
+                        <div></div>
+                        <div className="text-center">Img</div>
+                        <div>Item</div>
+                        <div>Línea</div>
+                        <div>Color</div>
+                        <div>Detalle</div>
+                        <div>Marca</div>
+                        <div className="text-center">Cant.</div>
+                        <div className="text-right">P. lista</div>
+                        <div className="text-right">Dcto</div>
+                        <div className="text-right">Total</div>
+                        {showCost && (
+                          <>
+                            <div className="text-right text-red-700/80">
+                              Neto BLARQ
+                            </div>
+                            <div className="text-right text-green-700/80">
+                              Utilidad
+                            </div>
+                          </>
+                        )}
+                        <div></div>
+                      </div>
 
-              {/* Items del room — arrastrables (manija ⋮⋮ a la derecha) */}
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={(e) => onDragEndRoom(e, room.items)}
-              >
-                <SortableContext
-                  items={room.items.map((i) => i.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {room.items.map((item) => (
-                    <SortableArtefactoRow
-                      key={item.id}
-                      item={item}
-                      projectId={projectId}
-                      showCost={showCost}
-                      gridCls={gridCls}
-                      onUpdate={(patch) => updateItem(item.id, patch)}
-                      onDelete={() => deleteItem(item.id)}
-                      onDuplicate={() => duplicateItem(item)}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
+                      {/* Items del room — arrastrables (manija ⋮⋮ a la izq) */}
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={(e) =>
+                          onDragEndRoom(e, sub.key, room.key, room.items)
+                        }
+                      >
+                        <SortableContext
+                          items={room.items.map((i) => i.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          {room.items.map((item) => (
+                            <SortableArtefactoRow
+                              key={item.id}
+                              item={item}
+                              projectId={projectId}
+                              showCost={showCost}
+                              gridCls={gridCls}
+                              onUpdate={(patch) => updateItem(item.id, patch)}
+                              onDelete={() => deleteItem(item.id)}
+                              onDuplicate={() => duplicateItem(item)}
+                            />
+                          ))}
+                        </SortableContext>
+                      </DndContext>
 
-              {/* Subtotal del room */}
-              <div
-                className={`${gridCls} items-center gap-3 px-4 py-2 bg-gray-50 border-t border-gray-900 text-xs font-semibold`}
-              >
-                <div className="col-span-10 text-gray-600 uppercase tracking-wider text-[10px]">
-                  Total artefactos {room.label.toLowerCase()}
-                </div>
-                <div className="text-right tabular-nums text-gray-900">
-                  {formatCLP(room.subtotal)}
-                </div>
-                {showCost && (
-                  <>
-                    <div className="text-right tabular-nums text-red-700">
-                      {formatCLP(room.subtotalCostoBlarq)}
-                    </div>
-                    <div
-                      className={`text-right tabular-nums ${
-                        room.subtotal - room.subtotalCostoBlarq >= 0
-                          ? "text-green-700"
-                          : "text-red-700"
-                      }`}
-                    >
-                      {formatCLP(room.subtotal - room.subtotalCostoBlarq)}
-                    </div>
-                  </>
-                )}
-                <div></div>
-              </div>
-            </div>
-          ))}
+                      {/* Subtotal del room */}
+                      <div
+                        className={`${gridCls} items-center gap-3 px-4 py-2 bg-gray-50 border-t border-gray-900 text-xs font-semibold`}
+                      >
+                        <div className="col-span-10 text-gray-600 uppercase tracking-wider text-[10px]">
+                          Total artefactos {room.label.toLowerCase()}
+                        </div>
+                        <div className="text-right tabular-nums text-gray-900">
+                          {formatCLP(room.subtotal)}
+                        </div>
+                        {showCost && (
+                          <>
+                            <div className="text-right tabular-nums text-red-700">
+                              {formatCLP(room.subtotalCostoBlarq)}
+                            </div>
+                            <div
+                              className={`text-right tabular-nums ${
+                                room.subtotal - room.subtotalCostoBlarq >= 0
+                                  ? "text-green-700"
+                                  : "text-red-700"
+                              }`}
+                            >
+                              {formatCLP(
+                                room.subtotal - room.subtotalCostoBlarq
+                              )}
+                            </div>
+                          </>
+                        )}
+                        <div></div>
+                      </div>
+                    </>
+                  )}
+                </SortableRoomBlock>
+              ))}
+            </SortableContext>
+          </DndContext>
 
           {/* Subtotal de subcategoría */}
           <div
@@ -1014,6 +1204,43 @@ export default function ArtefactosEditor({
           onClose={() => setShowAgregar(false)}
         />
       )}
+    </div>
+  );
+}
+
+// ─── Bloque de ambiente arrastrable ──────────────────────────────────────
+//
+// Envuelve un ambiente completo (banner + items + subtotal) para poder
+// arrastrarlo y reordenarlo entre sus hermanos del mismo tipo (ej. subir
+// "Baño 3" sobre "Baño 2"). La manija de arrastre (⋮⋮) va en el banner; el
+// resto del bloque no arrastra. `children` recibe la manija para pintarla.
+type RoomDragHandle = Pick<
+  ReturnType<typeof useSortable>,
+  "attributes" | "listeners"
+>;
+function SortableRoomBlock({
+  id,
+  children,
+}: {
+  id: string;
+  children: (handle: RoomDragHandle) => ReactNode;
+}) {
+  const s = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(s.transform),
+    transition: s.transition,
+    opacity: s.isDragging ? 0.6 : 1,
+    zIndex: s.isDragging ? 20 : ("auto" as const),
+    position: "relative" as const,
+    background: s.isDragging ? "#FFFFFF" : undefined,
+  };
+  return (
+    <div
+      ref={s.setNodeRef}
+      style={style}
+      className="border-b border-gray-200 last:border-b-0"
+    >
+      {children({ attributes: s.attributes, listeners: s.listeners })}
     </div>
   );
 }

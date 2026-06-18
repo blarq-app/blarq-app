@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-18 — Cotización de artefactos: reordenar y duplicar ambientes
+
+- **Reordenar ambientes (bloques) arrastrando**: cada banner de ambiente tiene una manija ⋮⋮ a la izquierda; se agarra el bloque entero y se sube/baja sobre otro (ej. "Baño 3" arriba de "Baño 2"). dnd-kit anidado: contexto de bloques (rooms) por subcategoría + el contexto de filas dentro de cada uno (ya existente).
+- **Duplicar ambiente**: botón "Duplicar ambiente" en el banner; copia TODOS los artefactos del ambiente a uno nuevo "<nombre> (copia)" que queda justo debajo. Sirve para armar un baño igual a otro y después renombrarlo.
+- **Modelo de orden**: el orden de los ambientes pasó a basarse en el `sortOrder` mínimo de cada bloque (antes ROOM_ORDER + orden de aparición; para nombres libres da el mismo resultado, así que la vista existente no cambia). Reordenar bloques, reordenar filas y duplicar pasan todos por un renumerado global de la subcategoría (`applyOrder`), para que los rangos de `sortOrder` entre ambientes nunca se pisen.
+- **Alcance**: solo `ArtefactosEditor.tsx`. No toca `metrics.ts`. Verificado en vivo (Portofino dev): duplicar copia los 8 ítems en orden justo debajo; arrastrar un bloque reordena y persiste; orden existente intacto al cargar. `tsc` limpio.
+
 ## 2026-06-18 — Cotización de artefactos: ambiente editable inline + agregar arriba + foto +50%
 
 - **Nombre del ambiente editable directo**: se eliminó el botón "Editar ambiente" con desplegable (que se había agregado hoy mismo). Ahora el nombre del banner gris es un `<input>` que se edita en el lugar (clic y escribís); al salir/Enter reasigna el ambiente de todo el bloque (`changeRoomForGroup`), Escape descarta. `RoomBanner` quedó como un input simple (sin select ni botones). MJ prefiere escribir el nombre directo.

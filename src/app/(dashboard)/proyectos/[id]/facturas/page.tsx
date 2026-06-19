@@ -203,8 +203,14 @@ export default async function ProyectoFacturasPage({
     // cotizaciones no ganadas (status="cotizacion"). Internos (BLARQ) se
     // mantienen siempre.
     where: { NOT: { status: "cotizacion", isInternal: false } },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
+    select: { id: true, name: true, numeroProyecto: true, numeroCotizacion: true },
+    // Ordenado por número (con los sin número — internos — al final), igual que
+    // el resto de los desplegables de proyecto de la app.
+    orderBy: [
+      { numeroProyecto: { sort: "asc", nulls: "last" } },
+      { numeroCotizacion: { sort: "asc", nulls: "last" } },
+      { name: "asc" },
+    ],
   });
   const projectOptions: ProjectOption[] = allProjects;
 

@@ -14,7 +14,20 @@ export type CategoryOption = {
 export type ProjectOption = {
   id: string;
   name: string;
+  // Número de proyecto (o de cotización, como fallback). Se antepone al
+  // nombre en el desplegable — "44 · Dpto Williamson" — igual que en el
+  // resto de los selectores de proyecto de la app (banco, bulk-assign).
+  numeroProyecto?: number | null;
+  numeroCotizacion?: number | null;
 };
+
+// Etiqueta del proyecto en los desplegables: "44 · Dpto Williamson". Mismo
+// criterio que BulkAssignBar / FacturasFilterBar / banco. Sin número (centros
+// internos como BLARQ/CASA) queda solo el nombre.
+function projectLabel(p: ProjectOption): string {
+  const n = p.numeroProyecto ?? p.numeroCotizacion;
+  return n != null ? `${n} · ${p.name}` : p.name;
+}
 
 // Toast minimal — el sistema no tiene una librería de toast global y
 // agregar una aquí es overkill. Usamos un span flotante que aparece 1.8s.
@@ -208,7 +221,7 @@ export function EditableProjectCell({
       <option value="">— sin asignar —</option>
       {options.map((p) => (
         <option key={p.id} value={p.id}>
-          {p.name}
+          {projectLabel(p)}
         </option>
       ))}
     </select>
@@ -294,7 +307,7 @@ export function MoveProjectButton({
       <option value="">— sin proyecto —</option>
       {options.map((p) => (
         <option key={p.id} value={p.id}>
-          {p.name}
+          {projectLabel(p)}
         </option>
       ))}
     </select>

@@ -9,10 +9,13 @@ import { useRouter } from "next/navigation";
 // sin que la tabla se mueva en cada tecla. "Limpiar" borra solo los
 // filtros avanzados y deja intactos cuenta / status / búsqueda libre.
 
+// Nota: el filtro por monto exacto ya NO vive acá — se subió a la barra de
+// búsqueda visible (MovementsMontoSearch), porque MJ lo usa seguido para
+// conciliar y no quería abrir este panel cada vez. El param ?monto= lo maneja
+// ese componente; acá se conserva (preserveParams) pero no se edita.
 export type AdvancedFiltersValue = {
   rut: string;
   name: string;
-  monto: string; // string para input — convertido a número en server
   desc: string;
   dateFrom: string;
   dateTo: string;
@@ -24,7 +27,6 @@ export type AdvancedFiltersValue = {
 const EMPTY: AdvancedFiltersValue = {
   rut: "",
   name: "",
-  monto: "",
   desc: "",
   dateFrom: "",
   dateTo: "",
@@ -58,7 +60,6 @@ export default function MovementsAdvancedFilters({
     // Aplicar avanzados.
     if (values.rut) params.set("rut", values.rut);
     if (values.name) params.set("name", values.name);
-    if (values.monto) params.set("monto", values.monto);
     if (values.desc) params.set("desc", values.desc);
     if (values.dateFrom) params.set("dateFrom", values.dateFrom);
     if (values.dateTo) params.set("dateTo", values.dateTo);
@@ -81,7 +82,6 @@ export default function MovementsAdvancedFilters({
   const activeCount = [
     v.rut,
     v.name,
-    v.monto,
     v.desc,
     v.dateFrom,
     v.dateTo,
@@ -131,17 +131,6 @@ export default function MovementsAdvancedFilters({
                 onKeyDown={(e) => e.key === "Enter" && handleApply()}
                 placeholder="Brune SpA"
                 className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
-              />
-            </Field>
-            <Field label="Monto exacto">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={v.monto}
-                onChange={(e) => setV({ ...v, monto: e.target.value.replace(/\D/g, "") })}
-                onKeyDown={(e) => e.key === "Enter" && handleApply()}
-                placeholder="1000000"
-                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm tabular-nums text-right focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
               />
             </Field>
             <Field label="Descripción">

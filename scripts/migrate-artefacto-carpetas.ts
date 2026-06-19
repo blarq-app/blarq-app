@@ -62,11 +62,41 @@ async function main() {
       CONSTRAINT "ArtefactoSubgroupOrder_pkey" PRIMARY KEY ("id")
     );
   `);
-  // 3b) Si venía de la forma vieja (line/finish), converger: agregar subgroup,
-  //     soltar line/finish y el índice único viejo.
+  // 3b) Si venía de la forma vieja (line/finish), converger. CRÍTICO: mapear el
+  //     orden viejo (que se identificaba por line+finish) al NOMBRE de carpeta
+  //     ANTES de soltar esas columnas — si no, se pierde el orden manual de los
+  //     subgrupos. El nombre de carpeta se arma igual que el sembrado del
+  //     catálogo ("línea · color"), así el orden viejo cae sobre la carpeta que
+  //     corresponde.
   await prisma.$executeRawUnsafe(
     `ALTER TABLE "ArtefactoSubgroupOrder" ADD COLUMN IF NOT EXISTS "subgroup" TEXT NOT NULL DEFAULT '';`
   );
+  const hasLine = (
+    await prisma.$queryRawUnsafe<unknown[]>(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'ArtefactoSubgroupOrder' AND column_name = 'line'`
+    )
+  ).length > 0;
+  if (hasLine) {
+    await prisma.$executeRawUnsafe(`
+      UPDATE "ArtefactoSubgroupOrder"
+      SET "subgroup" = COALESCE(
+        NULLIF(CONCAT_WS(' · ', NULLIF(TRIM("line"), ''), NULLIF(TRIM("finish"), '')), ''),
+        ''
+      );
+    `);
+  }
+  // Dedup defensivo: si quedaran dos filas con la misma (subcategory, tag,
+  // subgroup) — p.ej. una base a medio migrar con varias filas en "" — dejar una
+  // sola (la de menor sortOrder) para poder crear el índice único.
+  await prisma.$executeRawUnsafe(`
+    DELETE FROM "ArtefactoSubgroupOrder" a
+    USING "ArtefactoSubgroupOrder" b
+    WHERE a."subcategory" = b."subcategory"
+      AND a."tag" = b."tag"
+      AND a."subgroup" = b."subgroup"
+      AND (a."sortOrder" > b."sortOrder"
+           OR (a."sortOrder" = b."sortOrder" AND a."id" > b."id"));
+  `);
   await prisma.$executeRawUnsafe(
     `ALTER TABLE "ArtefactoSubgroupOrder" DROP COLUMN IF EXISTS "line";`
   );

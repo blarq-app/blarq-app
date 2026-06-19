@@ -13,8 +13,9 @@
  * catálogo); la foto no cambia hasta que se vuelve a enviar.
  *
  * Alcance: la restauración está implementada para presupuestos de OBRA
- * (el caso real de drift). La foto igual captura muebles/artefactos para
- * que el registro quede completo, pero restaurar esos tipos todavía no.
+ * (el caso real de drift) y para ARTEFACTOS (desde 2026-06-18, junto con la
+ * propagación de precios catálogo→cotización). La foto igual captura muebles
+ * para que el registro quede completo, pero restaurar muebles todavía no.
  */
 
 import { prisma } from "@/lib/prisma";
@@ -184,4 +185,58 @@ export async function restoreObraFromSnapshot(versionId: string) {
   }, { timeout: 120000, maxWait: 20000 });
 
   return { restoredItems: snap.obraItems.length };
+}
+
+// Campos de un ArtefactoItem tal como viajan en la foto. La foto guarda las
+// filas crudas (bv.artefactoItems), así que al leerlas de JSON son objetos
+// planos; tomamos solo lo que define la línea (sin id / budgetVersionId, que
+// se regeneran al recrear).
+interface ArtefactoSnap {
+  room: string; subcategory: string; name: string; detail: string | null;
+  brand: string | null; quantity: number; listPrice: number;
+  discountPercent: number | null; clientPrice: number;
+  realCostBlarq: number | null; referenceLink: string | null;
+  imageUrl: string | null; catalogId: string | null;
+  priceOverridden?: boolean; sortOrder: number;
+}
+
+/**
+ * Restaura una versión de ARTEFACTOS a su foto: borra las líneas actuales y
+ * las recrea exactamente como estaban al enviar. No toca el estado ni la foto.
+ * Caso de uso: MJ editó a mano una cotización enviada y quiere dejarla igual
+ * que como se la mandó al cliente.
+ */
+export async function restoreArtefactosFromSnapshot(versionId: string) {
+  const bv = await prisma.budgetVersion.findUnique({
+    where: { id: versionId },
+    select: { sentSnapshot: true, type: true },
+  });
+  if (!bv) throw new Error("Versión no encontrada");
+  if (!bv.sentSnapshot) throw new Error("Esta versión no tiene foto guardada (nunca se envió)");
+  if (bv.type !== "artefactos") throw new Error("Tipo de versión no es artefactos");
+
+  const snap = bv.sentSnapshot as unknown as { artefactoItems?: ArtefactoSnap[] };
+  const items = snap.artefactoItems ?? [];
+
+  await prisma.$transaction(async (tx) => {
+    await tx.artefactoItem.deleteMany({ where: { budgetVersionId: versionId } });
+    for (const it of items) {
+      await tx.artefactoItem.create({
+        data: {
+          budgetVersionId: versionId,
+          room: it.room, subcategory: it.subcategory, name: it.name,
+          detail: it.detail, brand: it.brand, quantity: it.quantity,
+          listPrice: it.listPrice, discountPercent: it.discountPercent,
+          clientPrice: it.clientPrice, realCostBlarq: it.realCostBlarq,
+          referenceLink: it.referenceLink, imageUrl: it.imageUrl,
+          catalogId: it.catalogId,
+          // Fotos viejas (anteriores al 2026-06-18) no tienen el flag → false.
+          priceOverridden: it.priceOverridden ?? false,
+          sortOrder: it.sortOrder,
+        },
+      });
+    }
+  }, { timeout: 120000, maxWait: 20000 });
+
+  return { restoredItems: items.length };
 }

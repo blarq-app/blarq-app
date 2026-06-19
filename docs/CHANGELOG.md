@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-18 — Artefactos: el catálogo baja a las cotizaciones (flujo invertido)
+
+- **Se invirtió el flujo de precios de artefactos** para que funcione como el presupuesto de obra (decisión de negocio de MJ; ver ADR `2026-06-18-artefactos-precios-catalogo-a-cotizacion.md`). Antes: el catálogo NO bajaba a los borradores y editar una cotización SÍ pisaba el catálogo global. Ahora: al revés.
+- **Catálogo = precio maestro → baja a borradores.** Editar un item del catálogo (a mano o "Revisar precios") propaga a las líneas de cotización que lo usan, **solo** si están en borrador y no fueron editadas a mano. Lógica en `src/lib/catalog/syncArtefactos.ts` (`propagateCatalogToBorradores`), llamada desde el PUT del catálogo.
+- **Despegar por línea**: nuevo flag `ArtefactoItem.priceOverridden` (default false), equivalente de `ObraItem.isCustomized`. Editar precio/descuento/nombre/detalle/marca/link/foto de una línea la marca como despegada → el catálogo no la vuelve a tocar. Cambiar solo cantidad/ambiente/orden no despega.
+- **Editar la cotización ya NO sube al catálogo** (se eliminó el `artefactoCatalog.update` del PUT de la línea). "Revisar precios online" dentro de la cotización ahora actualiza solo esa cotización. Las enviadas quedan congeladas por estado; se activó **"Volver a lo enviado" para artefactos** (antes solo obra).
+- **Alcance contable**: snapshot de totales ANTES/DESPUÉS idéntico (`scripts/snapshot-artefactos-totales.ts`); test de integración 10/10 (`scripts/test-artefactos-propagacion.ts`); verificado en vivo en dev. Tocar el catálogo ahora PUEDE mover el "Total acordado" de un proyecto cuya cotización de artefactos vigente sea borrador — es lo deseado, no un bug. `tsc` limpio.
+
 ## 2026-06-18 — Catálogo de artefactos: buscador + "+ agregar" por tipo
 
 - **Buscador por texto libre** (vuelve, pero claro): input arriba de la lista que filtra la pestaña activa por cualquier palabra contra nombre, marca, detalle, línea, color, tipo y proveedor (cada palabra tiene que aparecer; AND). Ej. "mampara", "brushed". Tiene × para limpiar. (Antes se había sacado por confuso — A8; ahora con placeholder de ejemplos y matcheo amplio.)

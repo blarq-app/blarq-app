@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 
 /**
  * "Volver a lo enviado": deshace ediciones manuales sobre una versión
- * enviada y la deja EXACTAMENTE como la foto del envío. Solo aparece en
- * versiones de obra ya enviadas que tienen foto. Para el caso "me equivoqué
- * editando, mejor la dejo como se mandó". No la reconecta al catálogo.
+ * enviada y la deja EXACTAMENTE como la foto del envío. Aparece en versiones
+ * de obra y de artefactos ya enviadas que tienen foto. Para el caso "me
+ * equivoqué editando, mejor la dejo como se mandó". No la reconecta al catálogo.
  */
 export default function VolverALoEnviadoButton({
   budgetId,

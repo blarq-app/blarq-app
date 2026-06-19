@@ -438,9 +438,19 @@ model ArtefactoItem {
   imageUrl          String? // URL de la imagen — auto-extraída del referenceLink o pegada manual
   // Si este item viene del catálogo, guardamos el id para poder:
   //  - mostrar "este item está en catálogo" en la UI
-  //  - en el futuro sincronizar cambios de precio del catálogo a items
-  //    de presupuestos en borrador.
+  //  - sincronizar cambios de precio del catálogo a items de presupuestos
+  //    en borrador (ver más abajo priceOverridden).
   catalogId         String?
+  // "Despegada del catálogo" (rediseño precios artefactos 2026-06-18, ADR
+  // 2026-06-18-artefactos-precios-catalogo-a-cotizacion). Mientras esté en
+  // false, la línea SIGUE al catálogo: si MJ edita el precio maestro en
+  // /catálogo (o aplica "Revisar precios"), esta línea se actualiza —pero
+  // solo si la cotización está en borrador—. Cuando MJ edita la línea a mano
+  // (precio, descuento, nombre, foto, etc.) se pone en true y el catálogo no
+  // la vuelve a pisar nunca. Es el equivalente, por línea, de
+  // ObraItem.isCustomized. Las cotizaciones enviadas quedan congeladas por
+  // estado (el catálogo solo toca borradores), igual que en obra.
+  priceOverridden   Boolean @default(false)
   sortOrder         Int     @default(0)
 
   budgetVersion     BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)

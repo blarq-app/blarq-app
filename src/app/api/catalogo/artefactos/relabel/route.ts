@@ -2,13 +2,15 @@
  * Renombrar línea y/o color de varios artefactos del catálogo de una vez.
  *
  * POST /api/catalogo/artefactos/relabel
- *   body: { ids: string[], line?: string|null, finish?: string|null, tag?: string|null }
+ *   body: { ids: string[], line?, finish?, tag?, subgroup? (string|null) }
  *
- * Lo usa el encabezado de cada subgrupo (línea+color) del catálogo: MJ edita
- * el nombre de la línea o del color y se aplica a todos los artefactos de ese
- * subgrupo. Sirve para corregir nombres ("ASIS"→"Asís"), para UNIFICAR
- * (renombrar el color de un subgrupo al de otro → quedan juntos), y para MOVER
- * un subgrupo entero a otro tipo (cambiando el `tag` de todos sus artefactos).
+ * Lo usa el catálogo para aplicar un cambio a varios artefactos de una vez:
+ *  - line/finish: corregir/unificar la línea o el color.
+ *  - tag: mover los artefactos a otro tipo.
+ *  - subgroup: la CARPETA manual (rediseño "carpetas a mano"). Mover un
+ *    artefacto a otra carpeta, o renombrar la carpeta de todo un grupo, se hace
+ *    seteando este campo. Es independiente de line/finish: cambiar la carpeta
+ *    NO toca la línea ni el color, y editar la línea/color NO mueve de carpeta.
  *
  * Solo toca el catálogo (ArtefactoCatalog). NO toca cotizaciones ya hechas:
  * los ítems de presupuesto derivan su línea/color del nombre, no de acá.
@@ -40,15 +42,18 @@ export async function POST(request: NextRequest) {
       line?: string | null;
       finish?: string | null;
       tag?: string | null;
+      subgroup?: string | null;
     } = {};
     if ("line" in data) patch.line = norm(data.line);
     if ("finish" in data) patch.finish = norm(data.finish);
     if ("tag" in data) patch.tag = norm(data.tag); // mover de tipo
+    if ("subgroup" in data) patch.subgroup = norm(data.subgroup); // mover de carpeta
 
     if (
       patch.line === undefined &&
       patch.finish === undefined &&
-      patch.tag === undefined
+      patch.tag === undefined &&
+      patch.subgroup === undefined
     ) {
       return NextResponse.json(
         { error: "Nada para cambiar" },

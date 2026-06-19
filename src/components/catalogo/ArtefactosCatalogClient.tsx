@@ -29,8 +29,9 @@ interface CatalogItem {
   brand: string | null;
   subcategory: string;
   tag: string | null;
-  line: string | null; // línea comercial (Asis, Urban, Stellar…)
-  finish: string | null; // color/terminación (Cromo, Brushed, Gun Grey…)
+  line: string | null; // línea comercial (Asis, Urban, Stellar…) — solo etiqueta
+  finish: string | null; // color/terminación (Cromo, Brushed…) — solo etiqueta
+  subgroup: string | null; // CARPETA manual dentro del tipo (null = sin carpeta)
   supplier: string | null;
   referenceLink: string | null;
   imageUrl: string | null;
@@ -95,67 +96,64 @@ const SUBCATEGORY_OPTIONS = ["sanitario", "cocina", "iluminacion"];
 // `initialTipos` y se maneja con tiposDe()/tiposInTab dentro del componente.
 // Los tipos iniciales (los de antes) se siembran con scripts/setup-artefacto-tipos.ts.
 
-// A partir de cuántos ítems tiene un tipo, sus subgrupos de línea/color
-// arrancan COLAPSADOS por default. La idea: en tipos largos (ej. Accesorios)
-// MJ ve primero el "índice" de combinaciones y abre la que busca.
+// A partir de cuántos ítems tiene un tipo, sus carpetas arrancan COLAPSADAS por
+// default. La idea: en tipos largos (ej. Accesorios) MJ ve primero el "índice"
+// de carpetas y abre la que busca.
 const SUBGROUP_COLLAPSE_THRESHOLD = 8;
 
-// Subgrupo de un tipo: combinación línea + color. Los ítems sin línea ni color
-// caen en un subgrupo "Sin línea / Otros" (hasLineColor=false), que va al final.
+// Subgrupo de un tipo = una CARPETA manual (campo subgroup). Los ítems sin
+// carpeta caen en "Sin carpeta / Otros" (hasName=false), que va al final.
 interface Subgroup {
   key: string;
-  line: string;
-  finish: string;
-  hasLineColor: boolean;
+  name: string; // nombre de la carpeta ("" = sin carpeta)
+  hasName: boolean;
   items: CatalogItem[];
 }
 
-// Parte los ítems de un tipo en subgrupos por LÍNEA + COLOR. El orden lo da
+// Parte los ítems de un tipo en CARPETAS (campo subgroup). El orden lo da
 // `orderOf` (orden manual que MJ arrastró, guardado en ArtefactoSubgroupOrder):
-// los subgrupos con orden guardado van primero por ese número; los que no
-// tienen orden caen al fallback alfabético (línea, luego color; "Sin línea /
-// Otros" al final). Así un subgrupo recién creado o renombrado aparece sin
-// romper, hasta que MJ lo arrastre.
+// las carpetas con orden guardado van primero por ese número; las que no tienen
+// caen al fallback alfabético, con "Sin carpeta / Otros" al final. Editar la
+// línea o el color YA NO mueve de carpeta — la carpeta es independiente.
 function buildSubgroups(
   groupItems: CatalogItem[],
-  orderOf?: (line: string, finish: string) => number | undefined
+  orderOf?: (name: string) => number | undefined
 ): Subgroup[] {
   const byKey = new Map<string, Subgroup>();
   for (const it of groupItems) {
-    const line = (it.line ?? "").trim();
-    const finish = (it.finish ?? "").trim();
-    const hasLineColor = !!(line || finish);
-    const key = hasLineColor ? `${line}|||${finish}` : "__otros__";
+    const name = (it.subgroup ?? "").trim();
+    const hasName = !!name;
+    const key = hasName ? name : "__sincarpeta__";
     const existing = byKey.get(key);
     if (existing) existing.items.push(it);
-    else byKey.set(key, { key, line, finish, hasLineColor, items: [it] });
+    else byKey.set(key, { key, name, hasName, items: [it] });
   }
   return [...byKey.values()].sort((a, b) => {
-    const oa = orderOf?.(a.line, a.finish);
-    const ob = orderOf?.(b.line, b.finish);
+    const oa = orderOf?.(a.name);
+    const ob = orderOf?.(b.name);
     if (oa != null && ob != null) return oa - ob;
-    if (oa != null) return -1; // los que tienen orden manual, primero
+    if (oa != null) return -1; // las que tienen orden manual, primero
     if (ob != null) return 1;
-    if (a.hasLineColor !== b.hasLineColor) return a.hasLineColor ? -1 : 1;
-    return a.line.localeCompare(b.line) || a.finish.localeCompare(b.finish);
+    if (a.hasName !== b.hasName) return a.hasName ? -1 : 1;
+    return a.name.localeCompare(b.name);
   });
 }
 
 // ── IDs para el drag & drop unificado ──────────────────────────────────────
-// Todo (tipos, subgrupos, artefactos) vive en UN solo DndContext para poder
-// arrastrar un artefacto de un subgrupo/tipo a otro. Para saber qué se está
+// Todo (tipos, carpetas, artefactos) vive en UN solo DndContext para poder
+// arrastrar un artefacto de una carpeta/tipo a otro. Para saber qué se está
 // arrastrando y sobre qué se soltó, cada id lleva prefijo: "T#"=tipo,
-// "S#"=subgrupo, "I#"=artefacto. Los subgrupos no tienen id en la BD, así que
-// su id se arma con tipo+línea+color (separados por un carácter que no aparece
-// en los datos).
+// "S#"=carpeta, "I#"=artefacto. Las carpetas no tienen id propio, así que su id
+// se arma con tipo + nombre de carpeta (separados por un carácter que no
+// aparece en los datos).
 const SUB_SEP = "\u0001";
 const tipoSortId = (tipoId: string) => `T#${tipoId}`;
 const itemSortId = (itemId: string) => `I#${itemId}`;
-const subgroupSortId = (tag: string, line: string, finish: string) =>
-  `S#${tag}${SUB_SEP}${line}${SUB_SEP}${finish}`;
-function parseSubgroupId(id: string): { tag: string; line: string; finish: string } {
-  const [tag, line, finish] = id.slice(2).split(SUB_SEP);
-  return { tag: tag ?? "", line: line ?? "", finish: finish ?? "" };
+const subgroupSortId = (tag: string, name: string) =>
+  `S#${tag}${SUB_SEP}${name}`;
+function parseSubgroupId(id: string): { tag: string; name: string } {
+  const [tag, name] = id.slice(2).split(SUB_SEP);
+  return { tag: tag ?? "", name: name ?? "" };
 }
 
 // Chevron monocromático (sin dependencias de íconos): apunta a la derecha y se
@@ -248,13 +246,12 @@ interface ArtefactoTipo {
   sortOrder: number;
 }
 
-// Orden manual de un subgrupo (línea+color) dentro de un tipo. line/finish
-// vacíos ("") = el subgrupo "Sin línea / Otros".
+// Orden manual de una CARPETA dentro de un tipo. subgroup "" = "Sin carpeta /
+// Otros".
 interface SubgroupOrder {
   subcategory: string;
   tag: string;
-  line: string;
-  finish: string;
+  subgroup: string;
   sortOrder: number;
 }
 
@@ -298,15 +295,14 @@ export default function ArtefactosCatalogClient({
   const [openSubgroups, setOpenSubgroups] = useState<Record<string, boolean>>(
     {}
   );
-  // Renombrar línea/color de un subgrupo. Guarda la clave del subgrupo en
-  // edición y los valores tipeados; al guardar se aplica a todos sus
-  // artefactos (sirve para corregir nombres y para unificar dos subgrupos).
+  // Renombrar una CARPETA. Guarda la clave de la carpeta en edición y el nombre
+  // tipeado; al guardar se aplica a todos sus artefactos (cambia su campo
+  // subgroup). Si el nombre nuevo coincide con otra carpeta, se fusionan.
   const [renamingSubKey, setRenamingSubKey] = useState<string | null>(null);
-  const [renameLine, setRenameLine] = useState("");
-  const [renameFinish, setRenameFinish] = useState("");
+  const [renameFolder, setRenameFolder] = useState("");
   const [savingRename, setSavingRename] = useState(false);
-  // Mover un subgrupo entero (línea+color) a otro tipo. Guarda la clave del
-  // subgrupo cuyo selector de "mover a" está abierto.
+  // Mover una carpeta entera a otro tipo. Guarda la clave de la carpeta cuyo
+  // selector de "mover a" está abierto.
   const [movingSubKey, setMovingSubKey] = useState<string | null>(null);
   // Manejo de tipos: alta nueva + renombrado del encabezado.
   const [creatingTipo, setCreatingTipo] = useState(false);
@@ -456,15 +452,12 @@ export default function ArtefactosCatalogClient({
   );
 
   // Lookup del orden manual de subgrupos para un tipo (lo usa buildSubgroups).
-  // Devuelve el sortOrder guardado de un subgrupo (línea+color), o undefined.
+  // Devuelve el sortOrder guardado de una carpeta, o undefined.
   function subgroupOrderOf(tag: string) {
-    return (line: string, finish: string): number | undefined =>
+    return (name: string): number | undefined =>
       subgroupOrders.find(
         (r) =>
-          r.subcategory === activeTab &&
-          r.tag === tag &&
-          r.line === line &&
-          r.finish === finish
+          r.subcategory === activeTab && r.tag === tag && r.subgroup === name
       )?.sortOrder;
   }
 
@@ -485,17 +478,14 @@ export default function ArtefactosCatalogClient({
     }
   }
 
-  // Reordenar artefactos DENTRO de un mismo subgrupo (mismo tipo, línea y
-  // color). Reasigna sortOrder 0..n a ese subgrupo.
+  // Reordenar artefactos DENTRO de una misma carpeta (mismo tipo y carpeta).
+  // Reasigna sortOrder 0..n a esa carpeta.
   function reorderItemWithinSubgroup(moved: CatalogItem, overItemId: string) {
     const tag = (moved.tag ?? "").trim();
-    const line = (moved.line ?? "").trim();
-    const finish = (moved.finish ?? "").trim();
+    const sub = (moved.subgroup ?? "").trim();
     const groupItems = tabItems.filter(
       (it) =>
-        (it.tag ?? "").trim() === tag &&
-        (it.line ?? "").trim() === line &&
-        (it.finish ?? "").trim() === finish
+        (it.tag ?? "").trim() === tag && (it.subgroup ?? "").trim() === sub
     );
     const oldIdx = groupItems.findIndex((it) => it.id === moved.id);
     const newIdx = groupItems.findIndex((it) => it.id === overItemId);
@@ -510,39 +500,36 @@ export default function ArtefactosCatalogClient({
     persistItemOrder(reordered);
   }
 
-  // Mover UN artefacto a otro subgrupo/tipo: en el fondo es un relabel (cambia
-  // su tag/línea/color al del destino). Queda al final del subgrupo destino.
-  // No toca otras líneas — solo la que se arrastró.
+  // Mover UN artefacto a otra carpeta/tipo: en el fondo es un relabel que cambia
+  // su tag (tipo) y su subgroup (carpeta). NO toca línea ni color — solo cambia
+  // de carpeta. Queda al final de la carpeta destino.
   async function moveItemToSubgroup(
     moved: CatalogItem,
     destTag: string,
-    destLine: string,
-    destFinish: string
+    destName: string
   ) {
     const tag = destTag || null;
-    const line = destLine || null;
-    const finish = destFinish || null;
-    // sortOrder = al final del subgrupo destino (max + 1).
+    const subgroup = destName || null;
+    // sortOrder = al final de la carpeta destino (max + 1).
     const destItems = tabItems.filter(
       (it) =>
         it.id !== moved.id &&
         (it.tag ?? "").trim() === destTag &&
-        (it.line ?? "").trim() === destLine &&
-        (it.finish ?? "").trim() === destFinish
+        (it.subgroup ?? "").trim() === destName
     );
     const newOrder =
       destItems.reduce((m, it) => Math.max(m, it.sortOrder), -1) + 1;
     // Optimista.
     setItems((prev) =>
       prev.map((it) =>
-        it.id === moved.id ? { ...it, tag, line, finish, sortOrder: newOrder } : it
+        it.id === moved.id ? { ...it, tag, subgroup, sortOrder: newOrder } : it
       )
     );
     try {
       const res = await fetch("/api/catalogo/artefactos/relabel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: [moved.id], tag, line, finish }),
+        body: JSON.stringify({ ids: [moved.id], tag, subgroup }),
       });
       if (!res.ok) throw new Error();
       // relabel no toca sortOrder: lo persistimos aparte para que quede al final.
@@ -557,26 +544,19 @@ export default function ArtefactosCatalogClient({
     }
   }
 
-  // Reordenar los subgrupos (línea+color) de un tipo. Reasigna 0..n a TODOS los
-  // subgrupos de ese tipo y los guarda en ArtefactoSubgroupOrder.
-  async function reorderSubgroups(
-    tag: string,
-    aLine: string,
-    aFinish: string,
-    oLine: string,
-    oFinish: string
-  ) {
+  // Reordenar las CARPETAS de un tipo. Reasigna 0..n a TODAS las carpetas de ese
+  // tipo y las guarda en ArtefactoSubgroupOrder.
+  async function reorderSubgroups(tag: string, aName: string, oName: string) {
     const groupItems = tabItems.filter((it) => (it.tag ?? "").trim() === tag);
     const subs = buildSubgroups(groupItems, subgroupOrderOf(tag));
-    const oldIdx = subs.findIndex((s) => s.line === aLine && s.finish === aFinish);
-    const newIdx = subs.findIndex((s) => s.line === oLine && s.finish === oFinish);
+    const oldIdx = subs.findIndex((s) => s.name === aName);
+    const newIdx = subs.findIndex((s) => s.name === oName);
     if (oldIdx < 0 || newIdx < 0) return;
     const reordered = arrayMove(subs, oldIdx, newIdx);
     const nuevos: SubgroupOrder[] = reordered.map((s, i) => ({
       subcategory: activeTab,
       tag,
-      line: s.line,
-      finish: s.finish,
+      subgroup: s.name,
       sortOrder: i,
     }));
     // Optimista: reemplaza las filas de este (subcategory, tag) por las nuevas.
@@ -591,15 +571,11 @@ export default function ArtefactosCatalogClient({
         body: JSON.stringify({
           subcategory: activeTab,
           tag,
-          items: reordered.map((s, i) => ({
-            line: s.line,
-            finish: s.finish,
-            sortOrder: i,
-          })),
+          items: reordered.map((s, i) => ({ subgroup: s.name, sortOrder: i })),
         }),
       });
     } catch {
-      alert("No se pudo guardar el orden de los subgrupos.");
+      alert("No se pudo guardar el orden de las carpetas.");
       router.refresh();
     }
   }
@@ -647,12 +623,12 @@ export default function ArtefactosCatalogClient({
       return;
     }
 
-    // Subgrupo sobre subgrupo (mismo tipo) → reordenar subgrupos.
+    // Carpeta sobre carpeta (mismo tipo) → reordenar carpetas.
     if (aType === "S" && oType === "S") {
       const A = parseSubgroupId(a);
       const B = parseSubgroupId(o);
       if (A.tag !== B.tag) return; // entre tipos distintos no se reordena
-      reorderSubgroups(A.tag, A.line, A.finish, B.line, B.finish);
+      reorderSubgroups(A.tag, A.name, B.name);
       return;
     }
 
@@ -662,46 +638,41 @@ export default function ArtefactosCatalogClient({
       if (!moved) return;
 
       let destTag: string;
-      let destLine: string;
-      let destFinish: string;
+      let destName: string; // carpeta destino
       let overItemId: string | null = null;
 
       if (oType === "I") {
-        // Sobre otro artefacto: hereda su tipo/línea/color (su subgrupo).
+        // Sobre otro artefacto: hereda su tipo y su carpeta.
         overItemId = o.slice(2);
         const target = items.find((it) => it.id === overItemId);
         if (!target) return;
         destTag = (target.tag ?? "").trim();
-        destLine = (target.line ?? "").trim();
-        destFinish = (target.finish ?? "").trim();
+        destName = (target.subgroup ?? "").trim();
       } else if (oType === "S") {
-        // Sobre el encabezado de un subgrupo: ese tipo/línea/color.
+        // Sobre el encabezado de una carpeta: ese tipo y esa carpeta.
         const B = parseSubgroupId(o);
         destTag = B.tag;
-        destLine = B.line;
-        destFinish = B.finish;
+        destName = B.name;
       } else if (oType === "T") {
-        // Sobre el encabezado de un tipo: ese tipo, conservando línea/color.
+        // Sobre el encabezado de un tipo: ese tipo, conservando su carpeta.
         const t = tipos.find((x) => x.id === o.slice(2));
         if (!t) return;
         destTag = t.name;
-        destLine = (moved.line ?? "").trim();
-        destFinish = (moved.finish ?? "").trim();
+        destName = (moved.subgroup ?? "").trim();
       } else {
         return;
       }
 
       const same =
         (moved.tag ?? "").trim() === destTag &&
-        (moved.line ?? "").trim() === destLine &&
-        (moved.finish ?? "").trim() === destFinish;
+        (moved.subgroup ?? "").trim() === destName;
       if (same) {
-        // Mismo subgrupo: si soltó sobre otro artefacto, reordena.
+        // Misma carpeta: si soltó sobre otro artefacto, reordena.
         if (overItemId) reorderItemWithinSubgroup(moved, overItemId);
         return;
       }
-      // Cambió de subgrupo/tipo: relabel.
-      moveItemToSubgroup(moved, destTag, destLine, destFinish);
+      // Cambió de carpeta/tipo: relabel.
+      moveItemToSubgroup(moved, destTag, destName);
     }
   }
 
@@ -1038,25 +1009,22 @@ export default function ArtefactosCatalogClient({
     setOpenSubgroups((prev) => ({ ...prev, [key]: currentlyCollapsed }));
   }
 
-  // Abre el editor de renombrado de un subgrupo, precargado con su línea/color.
+  // Abre el editor de renombrado de una carpeta, precargado con su nombre.
   function openRename(key: string, sub: Subgroup) {
     setRenamingSubKey(key);
-    setRenameLine(sub.line);
-    setRenameFinish(sub.finish);
+    setRenameFolder(sub.name);
   }
   function cancelRename() {
     setRenamingSubKey(null);
-    setRenameLine("");
-    setRenameFinish("");
+    setRenameFolder("");
   }
-  // Aplica la nueva línea/color a TODOS los artefactos del subgrupo. Al volver
-  // a agrupar, si la combinación nueva ya existe en otro subgrupo, se fusionan.
+  // Aplica el nombre nuevo de carpeta a TODOS los artefactos del grupo (cambia
+  // su campo subgroup). Si el nombre nuevo ya es el de otra carpeta, se fusionan.
   async function saveRename(sub: Subgroup) {
     const ids = sub.items.map((it) => it.id);
-    const line = renameLine.trim() || null;
-    const finish = renameFinish.trim() || null;
+    const subgroup = renameFolder.trim() || null;
     // Sin cambios reales: cerrar y listo.
-    if (line === (sub.line || null) && finish === (sub.finish || null)) {
+    if (subgroup === (sub.name || null)) {
       cancelRename();
       return;
     }
@@ -1065,23 +1033,23 @@ export default function ArtefactosCatalogClient({
       const res = await fetch("/api/catalogo/artefactos/relabel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids, line, finish }),
+        body: JSON.stringify({ ids, subgroup }),
       });
       if (!res.ok) throw new Error();
       const idSet = new Set(ids);
       setItems((prev) =>
-        prev.map((it) => (idSet.has(it.id) ? { ...it, line, finish } : it))
+        prev.map((it) => (idSet.has(it.id) ? { ...it, subgroup } : it))
       );
       cancelRename();
     } catch {
-      alert("No se pudo renombrar la línea/color.");
+      alert("No se pudo renombrar la carpeta.");
     } finally {
       setSavingRename(false);
     }
   }
 
-  // Mueve TODOS los artefactos de un subgrupo a otro tipo (cambia su `tag`).
-  // El subgrupo línea+color se mantiene, ahora bajo el tipo destino.
+  // Mueve TODOS los artefactos de una carpeta a otro tipo (cambia su `tag`).
+  // La carpeta se mantiene, ahora bajo el tipo destino.
   async function moveSubgroup(sub: Subgroup, newTag: string) {
     const ids = sub.items.map((it) => it.id);
     setMovingSubKey(null);
@@ -1097,7 +1065,7 @@ export default function ArtefactosCatalogClient({
         prev.map((it) => (idSet.has(it.id) ? { ...it, tag: newTag } : it))
       );
     } catch {
-      alert("No se pudo mover el subgrupo de tipo.");
+      alert("No se pudo mover la carpeta de tipo.");
     }
   }
 
@@ -1741,14 +1709,16 @@ export default function ArtefactosCatalogClient({
 
         {!isFiltering && tabItems.length > 1 && (
           <div className="px-4 py-1.5 bg-white border-b border-gray-100 text-[11px] text-gray-400">
-            Los artefactos del mismo tipo quedan juntos, subagrupados por línea
-            y color (clic en el subgrupo para abrir/cerrar). Arrastrá desde la
-            manija (⋮⋮): la de cada fila reordena los artefactos; la del
-            encabezado de un subgrupo reordena los subgrupos; la del encabezado
-            de un tipo reordena los tipos. Para mover UN artefacto a otro
-            subgrupo o tipo, arrastralo y soltalo sobre el encabezado del
-            destino (o sobre un artefacto de ahí). Para cambiar de pestaña, usá
-            el botón Editar.
+            Los artefactos del mismo tipo quedan juntos, en carpetas que armás
+            vos (clic en la carpeta para abrir/cerrar). La carpeta es estable:
+            editar la Línea o el Color de un artefacto ya NO lo mueve de carpeta.
+            Arrastrá desde la manija (⋮⋮): la de cada fila reordena los
+            artefactos; la del encabezado de una carpeta reordena las carpetas;
+            la del encabezado de un tipo reordena los tipos. Para mover UN
+            artefacto a otra carpeta o tipo, arrastralo y soltalo sobre el
+            encabezado del destino (o sobre un artefacto de ahí). "Renombrar" en
+            una carpeta la renombra (y si le ponés el nombre de otra, se
+            fusionan). Para cambiar de pestaña, usá el botón Editar.
           </div>
         )}
 
@@ -1821,14 +1791,12 @@ export default function ArtefactosCatalogClient({
               )}
               {(() => {
                 const subs = buildSubgroups(g.items, subgroupOrderOf(g.tag));
-                // Un solo subgrupo (o todo "Otros"): no agrega ruido, se
-                // muestra plano como antes.
+                // Una sola carpeta (o todo "Sin carpeta"): no agrega ruido, se
+                // muestra plano.
                 if (subs.length <= 1) return renderItemRows(g.items);
                 return (
                   <SortableContext
-                    items={subs.map((sg) =>
-                      subgroupSortId(g.tag, sg.line, sg.finish)
-                    )}
+                    items={subs.map((sg) => subgroupSortId(g.tag, sg.name))}
                     strategy={verticalListSortingStrategy}
                   >
                 {subs.map((sg) => {
@@ -1837,7 +1805,7 @@ export default function ArtefactosCatalogClient({
                   return (
                     <Fragment key={key}>
                       <SortableSubgroupHeader
-                        sortId={subgroupSortId(g.tag, sg.line, sg.finish)}
+                        sortId={subgroupSortId(g.tag, sg.name)}
                         sub={sg}
                         collapsed={collapsed}
                         canDrag={!isFiltering}
@@ -1887,33 +1855,25 @@ export default function ArtefactosCatalogClient({
                         <div className="pl-9 pr-4 py-2 bg-gray-50 border-b border-gray-200 flex flex-wrap items-end gap-3">
                           <div>
                             <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
-                              Línea
+                              Nombre de la carpeta
                             </label>
                             <input
+                              autoFocus
                               type="text"
-                              list="lineas-list"
-                              value={renameLine}
-                              onChange={(e) => setRenameLine(e.target.value)}
-                              placeholder="Sin línea"
-                              className="w-32 bg-white border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-gray-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
-                              Color
-                            </label>
-                            <input
-                              type="text"
-                              list="colores-list"
-                              value={renameFinish}
-                              onChange={(e) => setRenameFinish(e.target.value)}
-                              placeholder="Sin color"
-                              className="w-32 bg-white border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-gray-500"
+                              value={renameFolder}
+                              onChange={(e) => setRenameFolder(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveRename(sg);
+                                if (e.key === "Escape") cancelRename();
+                              }}
+                              placeholder="Sin carpeta"
+                              className="w-48 bg-white border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-gray-500"
                             />
                           </div>
                           <span className="text-[10px] text-gray-500 mb-1.5">
-                            Se aplica a los {sg.items.length} artefactos de este
-                            subgrupo. Si la combinación ya existe, se fusionan.
+                            Se aplica a los {sg.items.length} artefactos de esta
+                            carpeta. Si ya existe una carpeta con ese nombre, se
+                            fusionan.
                           </span>
                           <div className="flex gap-2 ml-auto mb-0.5">
                             <button
@@ -1951,10 +1911,10 @@ export default function ArtefactosCatalogClient({
   );
 }
 
-// ─── Componente: encabezado de subgrupo (arrastrable para reordenar) ──────
-// Es la fila de "LÍNEA · COLOR" dentro de un tipo. Tiene su propia manija de
-// arrastre (⋮⋮) para reordenar los subgrupos del tipo, y sirve también de
-// destino: soltar un artefacto sobre este encabezado lo mueve a este subgrupo.
+// ─── Componente: encabezado de carpeta (arrastrable para reordenar) ───────
+// Es la fila con el nombre de la carpeta dentro de un tipo. Tiene su propia
+// manija de arrastre (⋮⋮) para reordenar las carpetas del tipo, y sirve también
+// de destino: soltar un artefacto sobre este encabezado lo mueve a esta carpeta.
 function SortableSubgroupHeader({
   sortId,
   sub,
@@ -1994,14 +1954,14 @@ function SortableSubgroupHeader({
           {...sortable.attributes}
           {...sortable.listeners}
           className="cursor-grab text-gray-300 hover:text-gray-600 select-none text-[11px]"
-          title="Arrastrar para reordenar este subgrupo dentro del tipo"
+          title="Arrastrar para reordenar esta carpeta dentro del tipo"
         >
           ⋮⋮
         </span>
       ) : (
         <span
           className="text-gray-200 select-none text-[11px]"
-          title="Sacá la búsqueda/filtros para reordenar los subgrupos"
+          title="Sacá la búsqueda/filtros para reordenar las carpetas"
         >
           ⋮⋮
         </span>
@@ -2012,16 +1972,8 @@ function SortableSubgroupHeader({
         className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
       >
         <Chevron open={!collapsed} />
-        <span className="text-[10px] font-medium text-gray-500 tracking-wide">
-          {sub.hasLineColor ? (
-            <>
-              {sub.line && <span className="uppercase">{sub.line}</span>}
-              {sub.line && sub.finish ? " · " : ""}
-              {sub.finish}
-            </>
-          ) : (
-            "Sin línea / Otros"
-          )}
+        <span className="text-[10px] font-medium text-gray-500 tracking-wide uppercase">
+          {sub.hasName ? sub.name : "Sin carpeta / Otros"}
         </span>
         <span className="text-[10px] text-gray-400 tabular-nums">
           · {sub.items.length}
@@ -2031,17 +1983,17 @@ function SortableSubgroupHeader({
         type="button"
         onClick={onOpenRename}
         className="shrink-0 text-[10px] uppercase tracking-wider text-gray-400 hover:text-gray-900 opacity-0 group-hover:opacity-100 focus:opacity-100"
-        title="Renombrar la línea/color de este subgrupo (se aplica a todos sus artefactos)"
+        title="Renombrar esta carpeta (se aplica a todos sus artefactos)"
       >
         renombrar
       </button>
-      {/* Mover todo el subgrupo a otro tipo. Solo si hay otros tipos. */}
+      {/* Mover toda la carpeta a otro tipo. Solo si hay otros tipos. */}
       {canMove && (
         <button
           type="button"
           onClick={onToggleMove}
           className="shrink-0 text-[10px] uppercase tracking-wider text-gray-400 hover:text-gray-900 opacity-0 group-hover:opacity-100 focus:opacity-100"
-          title="Mover todo este subgrupo a otro tipo"
+          title="Mover toda esta carpeta a otro tipo"
         >
           mover a…
         </button>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { formatCLP } from "@/lib/utils";
 import AutoConciliarPendientesButton from "@/components/banco/AutoConciliarPendientesButton";
 import MovementsSearch from "@/components/banco/MovementsSearch";
+import MovementsMontoSearch from "@/components/banco/MovementsMontoSearch";
 import MovementsAdvancedFilters from "@/components/banco/MovementsAdvancedFilters";
 import MovementsTable from "@/components/banco/MovementsTable";
 
@@ -195,7 +196,10 @@ export default async function MovimientosPage({
       // (status="cotizacion"). Los centros internos (BLARQ) se mantienen.
       where: { NOT: { status: "cotizacion", isInternal: false } },
       select: { id: true, name: true, numeroProyecto: true },
-      orderBy: { name: "asc" },
+      // Ordenado por número de proyecto (el desplegable muestra "46 · …"), con
+      // los proyectos sin número (BLARQ, CASA, internos) al final. Antes salía
+      // por nombre y los números saltaban (46, 58, 61, 48…).
+      orderBy: { numeroProyecto: { sort: "asc", nulls: "last" } },
     }),
     prisma.costCategory.findMany({
       where: { appliesTo: { in: ["recibida", "both"] } },
@@ -407,14 +411,19 @@ export default async function MovimientosPage({
             />
           ))}
         </div>
-        <MovementsSearch defaultQ={q} sp={sp} />
+        {/* Buscador de texto + búsqueda por monto exacto, juntos en la barra
+            visible. El monto antes estaba escondido en "Filtros avanzados";
+            MJ lo usa seguido para conciliar y lo quería a mano. */}
+        <div className="flex items-center gap-2 flex-1 min-w-[260px]">
+          <MovementsSearch defaultQ={q} sp={sp} />
+          <MovementsMontoSearch defaultMonto={sp.monto ?? ""} sp={sp} />
+        </div>
       </div>
 
       <MovementsAdvancedFilters
         initial={{
           rut: sp.rut ?? "",
           name: sp.name ?? "",
-          monto: sp.monto ?? "",
           desc: sp.desc ?? "",
           dateFrom: sp.dateFrom ?? "",
           dateTo: sp.dateTo ?? "",
@@ -426,6 +435,9 @@ export default async function MovimientosPage({
           accountId: sp.accountId,
           status: sp.status,
           q: sp.q,
+          // El monto ahora vive en la barra visible (MovementsMontoSearch); el
+          // panel avanzado lo conserva pero ya no lo edita.
+          monto: sp.monto,
         }}
       />
 

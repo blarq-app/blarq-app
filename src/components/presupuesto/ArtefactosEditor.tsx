@@ -699,6 +699,11 @@ export default function ArtefactosEditor({
             referenceLink: payload.referenceLink,
             imageUrl: payload.imageUrl,
             catalogId: payload.catalogId,
+            // Alta manual: si MJ eligió "Desplegar al catálogo", el backend
+            // crea/reutiliza la entrada y la vincula. Default = solo proyecto.
+            promoteToCatalog: payload.promoteToCatalog ?? false,
+            line: payload.line ?? null,
+            finish: payload.finish ?? null,
           }),
         }
       );

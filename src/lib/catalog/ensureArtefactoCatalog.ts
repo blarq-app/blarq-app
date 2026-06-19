@@ -1,19 +1,20 @@
 /**
  * Catálogo BLARQ de artefactos — construcción automática.
  *
- * La idea (pedido de MJ 2026-05-16): el catálogo de artefactos NO es una
- * lista curada de "los más usados". Se construye solo, con CADA producto
- * que se agrega a cualquier cotización — igual que el listado de
- * materiales. La lista termina siendo grande y cubre toda la variedad.
+ * La idea original (pedido de MJ 2026-05-16): el catálogo de artefactos NO es
+ * una lista curada de "los más usados"; se va armando con los productos que se
+ * cargan, igual que el listado de materiales.
+ *
+ * Cambio 2026-06-19: el alta dentro de una cotización dejó de promover TODO
+ * automáticamente. Ahora MJ elige por artefacto: "solo en este proyecto"
+ * (default, no toca el catálogo) o "desplegar al catálogo" (recién ahí se llama
+ * a esta función). La importación masiva desde Excel sí sigue usándola siempre.
  *
  * `ensureArtefactoCatalog` recibe los datos de un artefacto y devuelve el
  * id de su entrada en el catálogo:
  *   - Si ya existe una entrada con el mismo nombre (case-insensitive), la
  *     reutiliza — no duplica.
  *   - Si no existe, la crea.
- *
- * Sirve tanto para el alta individual (POST de artefactos) como para la
- * importación masiva desde Excel.
  */
 
 import type { Prisma } from "@prisma/client";
@@ -30,6 +31,12 @@ export interface ArtefactoCatalogInput {
   imageUrl?: string | null;
   listPrice?: number | null;
   discountPercent?: number | null;
+  // Línea comercial y color/terminación. Cuando MJ despliega al catálogo un
+  // artefacto creado en una cotización, los manda para que la entrada nazca ya
+  // agrupable por línea+color (no haya que recategorizar después).
+  line?: string | null;
+  finish?: string | null;
+  supplier?: string | null;
 }
 
 export async function ensureArtefactoCatalog(
@@ -55,6 +62,9 @@ export async function ensureArtefactoCatalog(
       subcategory: data.subcategory ?? "sanitario",
       referenceLink: data.referenceLink ?? null,
       imageUrl: data.imageUrl ?? null,
+      line: data.line ?? null,
+      finish: data.finish ?? null,
+      supplier: data.supplier ?? null,
       listPrice,
       discountPercent: data.discountPercent ?? null,
       // No es "estándar" automáticamente — eso lo marca MJ con la ★.

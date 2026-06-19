@@ -259,6 +259,9 @@ export default function ArtefactosCatalogClient({
   const [renameLine, setRenameLine] = useState("");
   const [renameFinish, setRenameFinish] = useState("");
   const [savingRename, setSavingRename] = useState(false);
+  // Mover un subgrupo entero (línea+color) a otro tipo. Guarda la clave del
+  // subgrupo cuyo selector de "mover a" está abierto.
+  const [movingSubKey, setMovingSubKey] = useState<string | null>(null);
   // Manejo de tipos: alta nueva + renombrado del encabezado.
   const [creatingTipo, setCreatingTipo] = useState(false);
   const [newTipoName, setNewTipoName] = useState("");
@@ -813,6 +816,27 @@ export default function ArtefactosCatalogClient({
       alert("No se pudo renombrar la línea/color.");
     } finally {
       setSavingRename(false);
+    }
+  }
+
+  // Mueve TODOS los artefactos de un subgrupo a otro tipo (cambia su `tag`).
+  // El subgrupo línea+color se mantiene, ahora bajo el tipo destino.
+  async function moveSubgroup(sub: Subgroup, newTag: string) {
+    const ids = sub.items.map((it) => it.id);
+    setMovingSubKey(null);
+    try {
+      const res = await fetch("/api/catalogo/artefactos/relabel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, tag: newTag }),
+      });
+      if (!res.ok) throw new Error();
+      const idSet = new Set(ids);
+      setItems((prev) =>
+        prev.map((it) => (idSet.has(it.id) ? { ...it, tag: newTag } : it))
+      );
+    } catch {
+      alert("No se pudo mover el subgrupo de tipo.");
     }
   }
 
@@ -1607,7 +1631,55 @@ export default function ArtefactosCatalogClient({
                         >
                           renombrar
                         </button>
+                        {/* Mover todo el subgrupo a otro tipo. Solo si hay otros
+                            tipos a los que moverlo en esta pestaña. */}
+                        {tiposDe(activeTab).filter((t) => t !== g.tag).length >
+                          0 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMovingSubKey(movingSubKey === key ? null : key)
+                            }
+                            className="shrink-0 text-[10px] uppercase tracking-wider text-gray-400 hover:text-gray-900 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            title="Mover todo este subgrupo a otro tipo"
+                          >
+                            mover a…
+                          </button>
+                        )}
                       </div>
+                      {movingSubKey === key && (
+                        <div className="pl-9 pr-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+                          <span className="text-[10px] uppercase tracking-wider text-gray-500">
+                            Mover los {sg.items.length} artefactos a
+                          </span>
+                          <select
+                            autoFocus
+                            defaultValue=""
+                            onChange={(e) => {
+                              if (e.target.value) moveSubgroup(sg, e.target.value);
+                            }}
+                            className="px-2 py-1 border border-gray-300 rounded text-xs bg-white outline-none cursor-pointer focus:border-gray-500"
+                          >
+                            <option value="" disabled>
+                              elegí un tipo…
+                            </option>
+                            {tiposDe(activeTab)
+                              .filter((t) => t !== g.tag)
+                              .map((t) => (
+                                <option key={t} value={t}>
+                                  {t}
+                                </option>
+                              ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => setMovingSubKey(null)}
+                            className="text-xs text-gray-500 hover:text-gray-900"
+                          >
+                            cancelar
+                          </button>
+                        </div>
+                      )}
                       {renamingSubKey === key && (
                         <div className="pl-9 pr-4 py-2 bg-gray-50 border-b border-gray-200 flex flex-wrap items-end gap-3">
                           <div>

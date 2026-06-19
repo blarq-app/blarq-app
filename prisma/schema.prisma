@@ -378,6 +378,23 @@ model MuebleDetail {
 // "lastPriceCheck" se actualiza cuando MJ aprieta "Revisar precios"
 // (sesión 4) — sirve para ordenar items por precio más viejo y avisar
 // "este precio tiene 3 meses, revisalo".
+// Tipos del catálogo de artefactos (Accesorios, Griferías, WC…), por pestaña.
+// Antes vivían fijos en el código (TIPO_OPTIONS_BY_SUB); se movieron a la BD
+// para que MJ los cree/renombre/reordene/borre. El artefacto sigue guardando
+// el tipo por NOMBRE en su campo `tag` (no por id) — al renombrar un tipo se
+// actualizan en bloque los `tag` de sus artefactos, igual que línea/color.
+model ArtefactoTipo {
+  id          String   @id @default(cuid())
+  subcategory String   // sanitario | cocina | iluminacion
+  name        String   // "Accesorios", "Griferías", "WC", …
+  sortOrder   Int      @default(0) // orden manual de los tipos dentro de la pestaña
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([subcategory, name]) // no dos tipos con el mismo nombre en una pestaña
+  @@index([subcategory, sortOrder])
+}
+
 model ArtefactoCatalog {
   id                String   @id @default(cuid())
   name              String   // "WC ATENAS"

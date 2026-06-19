@@ -89,42 +89,11 @@ const SUBCATEGORY_LABELS: Record<string, string> = {
 
 const SUBCATEGORY_OPTIONS = ["sanitario", "cocina", "iluminacion"];
 
-// Tipos para agrupar (desplegable cerrado, definido con MJ). Es el campo
-// "tag" del modelo; los artefactos del mismo tipo se juntan bajo un
-// encabezado. "" = sin tipo (van sueltos, sin encabezado).
-//
-// Los tipos dependen de la pestaña (subcategoría): baños y cocina no comparten
-// vocabulario (un "Horno" no tiene sentido en baños, ni una "Mampara" en
-// cocina). El desplegable y el orden de los grupos usan la lista de la pestaña
-// activa. Iluminación todavía no tiene tipos (todo "sin tipo").
-const TIPO_OPTIONS_BY_SUB: Record<string, string[]> = {
-  // "Duchas" se partió en dos (pedido MJ 2026-06-12): Ducha/Receptáculo
-  // (columnas, griferías de ducha, platos, receptáculos, desagües) y Tina.
-  sanitario: [
-    "Accesorios",
-    "Griferías",
-    "Ducha/Receptáculo",
-    "Tina",
-    "Muebles",
-    "Mamparas",
-    "WC",
-  ],
-  cocina: [
-    "Lavaplatos",
-    "Griferías",
-    "Hornos",
-    "Encimeras",
-    "Campanas",
-    "Refrigeración",
-    "Lavavajillas",
-    "Microondas",
-  ],
-  iluminacion: [],
-};
-
-// Helper: tipos de una subcategoría (vacío si no está definida).
-const tipoOptionsFor = (sub: string): string[] =>
-  TIPO_OPTIONS_BY_SUB[sub] ?? [];
+// Los tipos para agrupar (Accesorios, Griferías, WC…) son el campo "tag" del
+// artefacto. Antes vivían fijos acá (TIPO_OPTIONS_BY_SUB); ahora son editables
+// por MJ y viven en la tabla ArtefactoTipo. La lista por pestaña llega como
+// `initialTipos` y se maneja con tiposDe()/tiposInTab dentro del componente.
+// Los tipos iniciales (los de antes) se siembran con scripts/setup-artefacto-tipos.ts.
 
 // A partir de cuántos ítems tiene un tipo, sus subgrupos de línea/color
 // arrancan COLAPSADOS por default. La idea: en tipos largos (ej. Accesorios)
@@ -242,13 +211,25 @@ function ThousandsInput({
   );
 }
 
+// Tipo editable del catálogo (antes vivía fijo en TIPO_OPTIONS_BY_SUB).
+interface ArtefactoTipo {
+  id: string;
+  subcategory: string;
+  name: string;
+  sortOrder: number;
+}
+
 export default function ArtefactosCatalogClient({
   initialItems,
+  initialTipos,
 }: {
   initialItems: CatalogItem[];
+  initialTipos: ArtefactoTipo[];
 }) {
   const router = useRouter();
   const [items, setItems] = useState<CatalogItem[]>(initialItems);
+  // Tipos editables por pestaña. Reemplazan a la lista fija del código.
+  const [tipos, setTipos] = useState<ArtefactoTipo[]>(initialTipos);
   const [activeTab, setActiveTab] = useState<string>("sanitario");
   const [onlyStandard, setOnlyStandard] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -278,6 +259,12 @@ export default function ArtefactosCatalogClient({
   const [renameLine, setRenameLine] = useState("");
   const [renameFinish, setRenameFinish] = useState("");
   const [savingRename, setSavingRename] = useState(false);
+  // Manejo de tipos: alta nueva + renombrado del encabezado.
+  const [creatingTipo, setCreatingTipo] = useState(false);
+  const [newTipoName, setNewTipoName] = useState("");
+  const [renamingTipoId, setRenamingTipoId] = useState<string | null>(null);
+  const [renameTipoName, setRenameTipoName] = useState("");
+  const [tipoBusy, setTipoBusy] = useState(false);
   const [newItem, setNewItem] = useState({
     name: "",
     detail: "",
@@ -350,19 +337,40 @@ export default function ArtefactosCatalogClient({
       ) as string[],
     [tabItems]
   );
+  // Nombres de los tipos de una pestaña, en orden (desde la BD/estado).
+  // Reemplaza a la vieja tipoOptionsFor() que leía de la lista fija.
+  const tiposDe = (sub: string): string[] =>
+    tipos
+      .filter((t) => t.subcategory === sub)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+      .map((t) => t.name);
+
+  // Tipos (objetos) de la pestaña activa, en orden — para el manejo (renombrar,
+  // borrar, arrastrar) y para mostrar también los tipos vacíos.
+  const tiposInTab = useMemo(
+    () =>
+      tipos
+        .filter((t) => t.subcategory === activeTab)
+        .sort(
+          (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
+        ),
+    [tipos, activeTab]
+  );
+
   // Tipos presentes en la pestaña activa, en el orden del desplegable de la
   // pestaña (para el filtro "Tipo": Accesorios, Griferías, WC…).
   const tagsInTab = useMemo(() => {
     const present = Array.from(
       new Set(tabItems.map((it) => (it.tag ?? "").trim()).filter(Boolean))
     );
-    const orden = tipoOptionsFor(activeTab);
+    const orden = tiposDe(activeTab);
     return present.sort((a, b) => {
       const ia = orden.indexOf(a);
       const ib = orden.indexOf(b);
       return (ia >= 0 ? ia : 9999) - (ib >= 0 ? ib : 9999) || a.localeCompare(b);
     });
-  }, [tabItems, activeTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabItems, activeTab, tipos]);
 
   // ── Lista visible: estándares + línea + color sobre tabItems ───────────
   const visible = useMemo(() => {
@@ -710,28 +718,47 @@ export default function ArtefactosCatalogClient({
   }
 
   // ── Agrupado real por tipo ────────────────────────────────────────────
-  // Junta TODOS los artefactos del mismo tipo bajo un solo encabezado (no
-  // importa dónde estén). Orden de grupos: el del desplegable de la pestaña,
-  // después tipos viejos no estándar, y "sin tipo" al final. Dentro de cada
-  // grupo, el orden es por sortOrder (lo que MJ arrastra).
-  const groups: { tag: string; items: CatalogItem[] }[] = (() => {
-    const byTag = new Map<string, CatalogItem[]>();
-    for (const it of visible) {
-      const key = (it.tag ?? "").trim();
-      const arr = byTag.get(key);
-      if (arr) arr.push(it);
-      else byTag.set(key, [it]);
-    }
-    const orden = tipoOptionsFor(activeTab); // tipos de la pestaña activa
-    const rank = (tag: string) => {
-      if (tag === "") return 100000; // sin tipo, al final
-      const idx = orden.indexOf(tag);
-      return idx >= 0 ? idx : 50000; // tipos viejos no estándar, antes de "sin tipo"
-    };
-    return [...byTag.entries()]
-      .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
-      .map(([tag, items]) => ({ tag, items }));
-  })();
+  // Junta TODOS los artefactos del mismo tipo bajo un solo encabezado. El orden
+  // de los grupos lo fija ahora la lista de tipos editable (tiposInTab). Se
+  // muestran también los tipos VACÍOS (recién creados, sin artefactos) para que
+  // MJ los vea y pueda manejarlos — salvo cuando está filtrando/buscando, donde
+  // solo importan los que tienen resultados. `tipoId` viene del tipo manejable;
+  // los tags viejos que no son un tipo (legacy) y "sin tipo" van sin id.
+  const groups: { tag: string; tipoId: string | null; items: CatalogItem[] }[] =
+    (() => {
+      const byTag = new Map<string, CatalogItem[]>();
+      for (const it of visible) {
+        const key = (it.tag ?? "").trim();
+        const arr = byTag.get(key);
+        if (arr) arr.push(it);
+        else byTag.set(key, [it]);
+      }
+      const result: {
+        tag: string;
+        tipoId: string | null;
+        items: CatalogItem[];
+      }[] = [];
+
+      // 1) Tipos manejables, en su orden. Vacíos solo si NO estás filtrando.
+      for (const t of tiposInTab) {
+        const its = byTag.get(t.name) ?? [];
+        if (its.length === 0 && isFiltering) continue;
+        result.push({ tag: t.name, tipoId: t.id, items: its });
+        byTag.delete(t.name);
+      }
+      // 2) Tags presentes que NO son un tipo manejable (legacy), alfabético.
+      const leftover = [...byTag.entries()].filter(([k]) => k !== "");
+      leftover.sort((a, b) => a[0].localeCompare(b[0]));
+      for (const [tag, its] of leftover) {
+        result.push({ tag, tipoId: null, items: its });
+      }
+      // 3) "Sin tipo" al final.
+      const sinTipo = byTag.get("");
+      if (sinTipo && sinTipo.length) {
+        result.push({ tag: "", tipoId: null, items: sinTipo });
+      }
+      return result;
+    })();
 
   // ── Subgrupos (línea+color) dentro de cada tipo ────────────────────────
   // Default: colapsados solo en tipos largos. Si MJ está buscando/filtrando,
@@ -786,6 +813,117 @@ export default function ArtefactosCatalogClient({
       alert("No se pudo renombrar la línea/color.");
     } finally {
       setSavingRename(false);
+    }
+  }
+
+  // ── Manejo de tipos (crear / renombrar / borrar / reordenar) ───────────
+  async function createTipo() {
+    const name = newTipoName.trim();
+    if (!name) return;
+    setTipoBusy(true);
+    try {
+      const res = await fetch("/api/catalogo/tipos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subcategory: activeTab, name }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "No se pudo crear el tipo.");
+        return;
+      }
+      setTipos((prev) => [...prev, data]);
+      setNewTipoName("");
+      setCreatingTipo(false);
+    } catch {
+      alert("No se pudo crear el tipo.");
+    } finally {
+      setTipoBusy(false);
+    }
+  }
+
+  function openRenameTipo(t: ArtefactoTipo) {
+    setRenamingTipoId(t.id);
+    setRenameTipoName(t.name);
+  }
+  async function saveRenameTipo(t: ArtefactoTipo) {
+    const name = renameTipoName.trim();
+    if (!name || name === t.name) {
+      setRenamingTipoId(null);
+      return;
+    }
+    setTipoBusy(true);
+    try {
+      const res = await fetch(`/api/catalogo/tipos/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "No se pudo renombrar el tipo.");
+        return;
+      }
+      // Renombrar el tipo y arrastrar el nombre nuevo a los artefactos (su tag).
+      setTipos((prev) => prev.map((x) => (x.id === t.id ? { ...x, name } : x)));
+      setItems((prev) =>
+        prev.map((it) =>
+          it.subcategory === t.subcategory && (it.tag ?? "") === t.name
+            ? { ...it, tag: name }
+            : it
+        )
+      );
+      setRenamingTipoId(null);
+    } catch {
+      alert("No se pudo renombrar el tipo.");
+    } finally {
+      setTipoBusy(false);
+    }
+  }
+
+  async function deleteTipo(t: ArtefactoTipo) {
+    if (!confirm(`¿Borrar el tipo "${t.name}"?`)) return;
+    try {
+      const res = await fetch(`/api/catalogo/tipos/${t.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // 409 = tiene artefactos: el backend manda el aviso para mover primero.
+        alert(data.error || "No se pudo borrar el tipo.");
+        return;
+      }
+      setTipos((prev) => prev.filter((x) => x.id !== t.id));
+    } catch {
+      alert("No se pudo borrar el tipo.");
+    }
+  }
+
+  // Arrastrar para reordenar los tipos de la pestaña.
+  async function onTipoDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIdx = tiposInTab.findIndex((t) => t.id === active.id);
+    const newIdx = tiposInTab.findIndex((t) => t.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(tiposInTab, oldIdx, newIdx);
+    const orderMap = new Map(reordered.map((t, i) => [t.id, i]));
+    setTipos((prev) =>
+      prev.map((t) =>
+        orderMap.has(t.id) ? { ...t, sortOrder: orderMap.get(t.id)! } : t
+      )
+    );
+    try {
+      await fetch("/api/catalogo/tipos/reorder", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: reordered.map((t, i) => ({ id: t.id, sortOrder: i })),
+        }),
+      });
+    } catch {
+      alert("No se pudo guardar el orden de los tipos.");
+      router.refresh();
     }
   }
 
@@ -923,6 +1061,50 @@ export default function ArtefactosCatalogClient({
         >
           {reviewLoading ? "Revisando…" : "Revisar precios"}
         </button>
+        {/* Crear un tipo nuevo en esta pestaña. */}
+        {creatingTipo ? (
+          <div className="flex items-center gap-1.5">
+            <input
+              autoFocus
+              type="text"
+              value={newTipoName}
+              onChange={(e) => setNewTipoName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") createTipo();
+                if (e.key === "Escape") {
+                  setCreatingTipo(false);
+                  setNewTipoName("");
+                }
+              }}
+              placeholder="Nombre del tipo"
+              className="w-40 px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:border-gray-500"
+            />
+            <button
+              onClick={createTipo}
+              disabled={tipoBusy || !newTipoName.trim()}
+              className="text-sm bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-800 disabled:opacity-50"
+            >
+              Crear
+            </button>
+            <button
+              onClick={() => {
+                setCreatingTipo(false);
+                setNewTipoName("");
+              }}
+              className="text-sm text-gray-500 px-1 hover:text-gray-900"
+            >
+              ×
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setCreatingTipo(true)}
+            className="text-sm border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium hover:border-gray-500"
+            title="Crear un tipo nuevo en esta pestaña"
+          >
+            + Nuevo tipo
+          </button>
+        )}
         <button
           onClick={() => {
             if (adding) {
@@ -1119,7 +1301,7 @@ export default function ArtefactosCatalogClient({
                 className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500 bg-white"
               >
                 <option value="">Sin tipo</option>
-                {tipoOptionsFor(newItem.subcategory).map((t) => (
+                {tiposDe(newItem.subcategory).map((t) => (
                   <option key={t} value={t}>
                     {t}
                   </option>
@@ -1314,22 +1496,57 @@ export default function ArtefactosCatalogClient({
           </div>
         )}
 
-        {visible.length === 0 ? (
+        {visible.length === 0 && groups.length === 0 ? (
           <div className="p-8 text-center text-sm text-gray-500">
             {tabItems.length === 0
               ? "Todavía no hay artefactos en esta pestaña. Apretá '+ Nuevo artefacto' para empezar."
               : "No hay resultados con esos filtros."}
           </div>
         ) : (
-          groups.map((g) => (
-            <Fragment key={g.tag || "__sin_tipo__"}>
-              {g.tag ? (
+          <DndContext
+            id="tipos-dnd"
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={onTipoDragEnd}
+          >
+          <SortableContext
+            items={groups.filter((g) => g.tipoId).map((g) => g.tipoId as string)}
+            strategy={verticalListSortingStrategy}
+          >
+          {groups.map((g) => (
+            <Fragment key={g.tipoId || g.tag || "__sin_tipo__"}>
+              {g.tipoId ? (
+                // Tipo manejable: arrastrable, renombrable, borrable.
+                <SortableTipoHeader
+                  tipo={tipos.find((t) => t.id === g.tipoId)!}
+                  count={g.items.length}
+                  busy={tipoBusy}
+                  canDrag={!isFiltering}
+                  isRenaming={renamingTipoId === g.tipoId}
+                  renameValue={renameTipoName}
+                  onRenameChange={setRenameTipoName}
+                  onSave={() =>
+                    saveRenameTipo(tipos.find((t) => t.id === g.tipoId)!)
+                  }
+                  onCancel={() => setRenamingTipoId(null)}
+                  onOpenRename={() =>
+                    openRenameTipo(tipos.find((t) => t.id === g.tipoId)!)
+                  }
+                  onDelete={() =>
+                    deleteTipo(tipos.find((t) => t.id === g.tipoId)!)
+                  }
+                  onAdd={() => openAddForTag(g.tag)}
+                />
+              ) : g.tag ? (
+                // Tipo "viejo" presente en artefactos pero no en la lista
+                // editable (legacy): se muestra, sin manejo, para no esconderlo.
                 <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-3">
-                  <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                     {g.tag}
+                    <span className="ml-1.5 normal-case tracking-normal text-gray-300">
+                      (sin tipo propio)
+                    </span>
                   </span>
-                  {/* Agregar un artefacto directamente a este tipo (ya queda
-                      asignado a este grupo y a la pestaña actual). */}
                   <button
                     type="button"
                     onClick={() => openAddForTag(g.tag)}
@@ -1340,11 +1557,9 @@ export default function ArtefactosCatalogClient({
                   </button>
                 </div>
               ) : (
-                groups.length > 1 && (
-                  <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                    Sin tipo
-                  </div>
-                )
+                <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                  Sin tipo
+                </div>
               )}
               {(() => {
                 const baseId = `artefactos-dnd-${g.tag || "sin-tipo"}`;
@@ -1450,9 +1665,132 @@ export default function ArtefactosCatalogClient({
                 });
               })()}
             </Fragment>
-          ))
+          ))}
+          </SortableContext>
+          </DndContext>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Componente: encabezado de tipo (arrastrable, renombrable, borrable) ──
+function SortableTipoHeader({
+  tipo,
+  count,
+  busy,
+  canDrag,
+  isRenaming,
+  renameValue,
+  onRenameChange,
+  onSave,
+  onCancel,
+  onOpenRename,
+  onDelete,
+  onAdd,
+}: {
+  tipo: ArtefactoTipo;
+  count: number;
+  busy: boolean;
+  canDrag: boolean;
+  isRenaming: boolean;
+  renameValue: string;
+  onRenameChange: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  onOpenRename: () => void;
+  onDelete: () => void;
+  onAdd: () => void;
+}) {
+  const s = useSortable({ id: tipo.id, disabled: !canDrag });
+  const style = {
+    transform: CSS.Transform.toString(s.transform),
+    transition: s.transition,
+    opacity: s.isDragging ? 0.5 : 1,
+    zIndex: s.isDragging ? 10 : ("auto" as const),
+    background: s.isDragging ? "#F3F4F6" : undefined,
+  };
+  return (
+    <div
+      ref={s.setNodeRef}
+      style={style}
+      className="group flex items-center gap-2 px-4 py-1.5 bg-gray-50 border-b border-gray-200"
+    >
+      {canDrag ? (
+        <span
+          {...s.attributes}
+          {...s.listeners}
+          className="cursor-grab text-gray-300 hover:text-gray-600 select-none text-[11px]"
+          title="Arrastrar para reordenar el tipo"
+        >
+          ⋮⋮
+        </span>
+      ) : (
+        <span
+          className="text-gray-200 select-none text-[11px]"
+          title="Sacá la búsqueda/filtros para reordenar los tipos"
+        >
+          ⋮⋮
+        </span>
+      )}
+      {isRenaming ? (
+        <div className="flex items-center gap-1.5 flex-1">
+          <input
+            autoFocus
+            type="text"
+            value={renameValue}
+            onChange={(e) => onRenameChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onSave();
+              if (e.key === "Escape") onCancel();
+            }}
+            className="w-44 px-2 py-0.5 border border-gray-300 rounded text-[11px] font-semibold uppercase tracking-wider outline-none focus:border-gray-500"
+          />
+          <button
+            onClick={onSave}
+            disabled={busy}
+            className="text-[10px] uppercase tracking-wider bg-gray-900 text-white px-2 py-0.5 rounded hover:bg-gray-800 disabled:opacity-50"
+          >
+            Guardar
+          </button>
+          <button
+            onClick={onCancel}
+            className="text-[10px] text-gray-500 hover:text-gray-900"
+          >
+            Cancelar
+          </button>
+        </div>
+      ) : (
+        <>
+          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex-1">
+            {tipo.name}
+            <span className="ml-1.5 text-gray-400 tabular-nums">· {count}</span>
+          </span>
+          <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+            <button
+              onClick={onOpenRename}
+              className="text-[10px] uppercase tracking-wider text-gray-400 hover:text-gray-900"
+              title="Renombrar el tipo (cambia también el tipo de sus artefactos)"
+            >
+              renombrar
+            </button>
+            <button
+              onClick={onDelete}
+              className="text-[10px] uppercase tracking-wider text-gray-400 hover:text-red-600"
+              title="Borrar el tipo (bloqueado si tiene artefactos)"
+            >
+              borrar
+            </button>
+          </div>
+          <button
+            onClick={onAdd}
+            className="text-[10px] uppercase tracking-wider text-gray-500 hover:text-gray-900"
+            title={`Agregar un artefacto en ${tipo.name}`}
+          >
+            + agregar
+          </button>
+        </>
+      )}
     </div>
   );
 }

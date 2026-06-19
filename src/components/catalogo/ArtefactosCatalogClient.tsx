@@ -125,6 +125,62 @@ const TIPO_OPTIONS_BY_SUB: Record<string, string[]> = {
 const tipoOptionsFor = (sub: string): string[] =>
   TIPO_OPTIONS_BY_SUB[sub] ?? [];
 
+// A partir de cuántos ítems tiene un tipo, sus subgrupos de línea/color
+// arrancan COLAPSADOS por default. La idea: en tipos largos (ej. Accesorios)
+// MJ ve primero el "índice" de combinaciones y abre la que busca.
+const SUBGROUP_COLLAPSE_THRESHOLD = 8;
+
+// Subgrupo de un tipo: combinación línea + color. Los ítems sin línea ni color
+// caen en un subgrupo "Sin línea / Otros" (hasLineColor=false), que va al final.
+interface Subgroup {
+  key: string;
+  line: string;
+  finish: string;
+  hasLineColor: boolean;
+  items: CatalogItem[];
+}
+
+// Parte los ítems de un tipo en subgrupos por LÍNEA + COLOR. Orden: línea
+// alfabética, luego color; "Sin línea / Otros" siempre al final.
+function buildSubgroups(groupItems: CatalogItem[]): Subgroup[] {
+  const byKey = new Map<string, Subgroup>();
+  for (const it of groupItems) {
+    const line = (it.line ?? "").trim();
+    const finish = (it.finish ?? "").trim();
+    const hasLineColor = !!(line || finish);
+    const key = hasLineColor ? `${line}|||${finish}` : "__otros__";
+    const existing = byKey.get(key);
+    if (existing) existing.items.push(it);
+    else byKey.set(key, { key, line, finish, hasLineColor, items: [it] });
+  }
+  return [...byKey.values()].sort((a, b) => {
+    if (a.hasLineColor !== b.hasLineColor) return a.hasLineColor ? -1 : 1;
+    return a.line.localeCompare(b.line) || a.finish.localeCompare(b.finish);
+  });
+}
+
+// Chevron monocromático (sin dependencias de íconos): apunta a la derecha y se
+// rota 90° cuando el subgrupo está abierto.
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`text-gray-400 shrink-0 transition-transform ${
+        open ? "rotate-90" : ""
+      }`}
+    >
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  );
+}
+
 // Sugerencia de "nombre corto" a partir del título extraído del producto.
 // Saca la marca del final (ej. "... Teka") y lo pasa a mayúsculas, igual que
 // los nombres de la carga automática. Es solo una sugerencia: MJ la edita.
@@ -245,6 +301,12 @@ export default function ArtefactosCatalogClient({
   const [filterFinish, setFilterFinish] = useState<string | null>(null);
   // Si está seteado, el formulario está editando ese artefacto (no creando).
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Subgrupos línea+color que MJ abrió/cerró a mano. La clave guarda el estado
+  // "abierto" (true) y pisa el default (colapsado en tipos largos). Lo que no
+  // está acá usa el default por cantidad de ítems del tipo.
+  const [openSubgroups, setOpenSubgroups] = useState<Record<string, boolean>>(
+    {}
+  );
   const [newItem, setNewItem] = useState({
     name: "",
     detail: "",
@@ -699,6 +761,49 @@ export default function ArtefactosCatalogClient({
       .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
       .map(([tag, items]) => ({ tag, items }));
   })();
+
+  // ── Subgrupos (línea+color) dentro de cada tipo ────────────────────────
+  // Default: colapsados solo en tipos largos. Si MJ está buscando/filtrando,
+  // se ven abiertos (ya acotó lo que quiere ver). Un toggle manual pisa todo.
+  function isSubgroupCollapsed(key: string, tagItemCount: number): boolean {
+    const manual = openSubgroups[key];
+    if (manual !== undefined) return !manual;
+    if (isFiltering) return false;
+    return tagItemCount > SUBGROUP_COLLAPSE_THRESHOLD;
+  }
+  function toggleSubgroup(key: string, currentlyCollapsed: boolean) {
+    // Al togglear guardamos el estado "abierto" = lo contrario de lo actual.
+    setOpenSubgroups((prev) => ({ ...prev, [key]: currentlyCollapsed }));
+  }
+
+  // Bloque arrastrable de filas (un tipo entero, o un subgrupo línea+color).
+  // El reordenar reasigna sortOrder dentro de ESTE bloque.
+  function renderRows(rowItems: CatalogItem[], dndId: string) {
+    return (
+      <DndContext
+        id={dndId}
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={(e) => onDragEndGroup(e, rowItems)}
+      >
+        <SortableContext
+          items={rowItems.map((it) => it.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {rowItems.map((item) => (
+            <CatalogItemRow
+              key={item.id}
+              item={item}
+              canReorder={!isFiltering}
+              onUpdate={(patch) => updateItem(item.id, patch)}
+              onEdit={() => openEdit(item)}
+              onDelete={() => deleteItem(item.id)}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
+    );
+  }
 
   return (
     <div>
@@ -1189,9 +1294,10 @@ export default function ArtefactosCatalogClient({
 
         {!isFiltering && tabItems.length > 1 && (
           <div className="px-4 py-1.5 bg-white border-b border-gray-100 text-[11px] text-gray-400">
-            Los artefactos del mismo tipo quedan juntos bajo su encabezado.
-            Dentro de cada tipo, arrastrá desde la manija (⋮⋮) para ordenarlos.
-            Para cambiar un artefacto de tipo o de pestaña, usá el botón Editar.
+            Los artefactos del mismo tipo quedan juntos, subagrupados por línea y
+            color (clic en el subgrupo para abrir/cerrar). Dentro de cada
+            subgrupo, arrastrá desde la manija (⋮⋮) para ordenarlos. Para cambiar
+            un artefacto de tipo o de pestaña, usá el botón Editar.
           </div>
         )}
 
@@ -1227,28 +1333,47 @@ export default function ArtefactosCatalogClient({
                   </div>
                 )
               )}
-              <DndContext
-                id={`artefactos-dnd-${g.tag || "sin-tipo"}`}
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={(e) => onDragEndGroup(e, g.items)}
-              >
-                <SortableContext
-                  items={g.items.map((it) => it.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {g.items.map((item) => (
-                    <CatalogItemRow
-                      key={item.id}
-                      item={item}
-                      canReorder={!isFiltering}
-                      onUpdate={(patch) => updateItem(item.id, patch)}
-                      onEdit={() => openEdit(item)}
-                      onDelete={() => deleteItem(item.id)}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
+              {(() => {
+                const baseId = `artefactos-dnd-${g.tag || "sin-tipo"}`;
+                const subs = buildSubgroups(g.items);
+                // Un solo subgrupo (o todo "Otros"): no agrega ruido, se
+                // muestra plano como antes.
+                if (subs.length <= 1) return renderRows(g.items, baseId);
+                return subs.map((sg) => {
+                  const key = `${g.tag}::${sg.key}`;
+                  const collapsed = isSubgroupCollapsed(key, g.items.length);
+                  return (
+                    <Fragment key={key}>
+                      {/* Encabezado del subgrupo: más liviano e indentado que
+                          el del tipo (jerarquía por tipografía, no por color). */}
+                      <button
+                        type="button"
+                        onClick={() => toggleSubgroup(key, collapsed)}
+                        className="w-full flex items-center gap-1.5 pl-9 pr-4 py-1 bg-white border-b border-gray-100 text-left hover:bg-gray-50"
+                      >
+                        <Chevron open={!collapsed} />
+                        <span className="text-[10px] font-medium text-gray-500 tracking-wide">
+                          {sg.hasLineColor ? (
+                            <>
+                              {sg.line && (
+                                <span className="uppercase">{sg.line}</span>
+                              )}
+                              {sg.line && sg.finish ? " · " : ""}
+                              {sg.finish}
+                            </>
+                          ) : (
+                            "Sin línea / Otros"
+                          )}
+                        </span>
+                        <span className="text-[10px] text-gray-400 tabular-nums">
+                          · {sg.items.length}
+                        </span>
+                      </button>
+                      {!collapsed && renderRows(sg.items, `${baseId}-${sg.key}`)}
+                    </Fragment>
+                  );
+                });
+              })()}
             </Fragment>
           ))
         )}
@@ -1551,6 +1676,13 @@ function PriceReviewPanel({
   onClose: () => void;
 }) {
   const COLS = "grid-cols-[minmax(0,1fr)_5.5rem_3.5rem_8rem_5rem]";
+  // Por default mostramos SOLO lo que cambió (lo que MJ quiere revisar). El
+  // resto (sin cambio / no se pudo leer) queda detrás de "ver todos".
+  const [showAll, setShowAll] = useState(false);
+  const changedRows = rows.filter(
+    (r) => r.status === "ok" && r.delta != null && r.delta !== 0
+  );
+  const displayRows = showAll ? rows : changedRows;
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
       <div className="flex items-center justify-between mb-3">
@@ -1576,7 +1708,7 @@ function PriceReviewPanel({
       ) : (
         <>
           {resumen && (
-            <div className="flex items-center justify-between mb-3 text-xs text-gray-600">
+            <div className="flex items-center justify-between gap-3 mb-3 text-xs text-gray-600">
               <span>
                 {resumen.conLink} con link ·{" "}
                 <span className="text-gray-900 font-medium">
@@ -1586,14 +1718,26 @@ function PriceReviewPanel({
                   ? ` · ${resumen.noLeidos} no se pudieron leer`
                   : ""}
               </span>
-              {resumen.cambiaron > 0 && (
+              <div className="flex items-center gap-3 shrink-0">
+                {/* Alterna entre ver solo los cambios (default) y la lista
+                    completa, sin tocar qué hace "aplicar". */}
                 <button
-                  onClick={onApplyAll}
-                  className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded hover:bg-gray-800"
+                  onClick={() => setShowAll((v) => !v)}
+                  className="text-gray-500 underline hover:text-gray-900"
                 >
-                  Aplicar todos los cambios
+                  {showAll
+                    ? "Ver solo los que cambiaron"
+                    : `Ver todos (${rows.length})`}
                 </button>
-              )}
+                {resumen.cambiaron > 0 && (
+                  <button
+                    onClick={onApplyAll}
+                    className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded hover:bg-gray-800"
+                  >
+                    Aplicar todos los cambios
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -1607,7 +1751,18 @@ function PriceReviewPanel({
               <div className="text-right">Total (antes → web)</div>
               <div></div>
             </div>
-            {rows.map((r) => {
+            {displayRows.length === 0 ? (
+              <div className="px-3 py-6 text-center text-xs text-gray-500">
+                Ningún precio cambió.{" "}
+                <button
+                  onClick={() => setShowAll(true)}
+                  className="text-gray-600 underline hover:text-gray-900"
+                >
+                  Ver todos ({rows.length})
+                </button>
+              </div>
+            ) : (
+              displayRows.map((r) => {
               const changed =
                 r.status === "ok" && r.delta != null && r.delta !== 0;
               return (
@@ -1680,7 +1835,8 @@ function PriceReviewPanel({
                   </div>
                 </div>
               );
-            })}
+              })
+            )}
           </div>
           <p className="text-[10px] text-gray-400 mt-2">
             Al aplicar se actualiza el precio lista y el descuento con lo del

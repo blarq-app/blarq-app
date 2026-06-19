@@ -2,12 +2,13 @@
  * Renombrar línea y/o color de varios artefactos del catálogo de una vez.
  *
  * POST /api/catalogo/artefactos/relabel
- *   body: { ids: string[], line?: string|null, finish?: string|null }
+ *   body: { ids: string[], line?: string|null, finish?: string|null, tag?: string|null }
  *
  * Lo usa el encabezado de cada subgrupo (línea+color) del catálogo: MJ edita
  * el nombre de la línea o del color y se aplica a todos los artefactos de ese
- * subgrupo. Sirve para corregir nombres ("ASIS"→"Asís") o para UNIFICAR
- * (renombrar el color de un subgrupo al de otro → quedan juntos).
+ * subgrupo. Sirve para corregir nombres ("ASIS"→"Asís"), para UNIFICAR
+ * (renombrar el color de un subgrupo al de otro → quedan juntos), y para MOVER
+ * un subgrupo entero a otro tipo (cambiando el `tag` de todos sus artefactos).
  *
  * Solo toca el catálogo (ArtefactoCatalog). NO toca cotizaciones ya hechas:
  * los ítems de presupuesto derivan su línea/color del nombre, no de acá.
@@ -35,13 +36,22 @@ export async function POST(request: NextRequest) {
       const t = v.trim();
       return t.length > 0 ? t : null;
     };
-    const patch: { line?: string | null; finish?: string | null } = {};
+    const patch: {
+      line?: string | null;
+      finish?: string | null;
+      tag?: string | null;
+    } = {};
     if ("line" in data) patch.line = norm(data.line);
     if ("finish" in data) patch.finish = norm(data.finish);
+    if ("tag" in data) patch.tag = norm(data.tag); // mover de tipo
 
-    if (patch.line === undefined && patch.finish === undefined) {
+    if (
+      patch.line === undefined &&
+      patch.finish === undefined &&
+      patch.tag === undefined
+    ) {
       return NextResponse.json(
-        { error: "Nada para renombrar" },
+        { error: "Nada para cambiar" },
         { status: 400 }
       );
     }

@@ -180,11 +180,22 @@ export default function FacturasTable({
                   </span>
                 </td>
                 <td className="px-4 py-2 tabular-nums text-gray-700">
+                  {/* tipoDoc 1043 = pago sin documento tributario (registrado
+                      desde un movimiento del banco). Su "folio" es un código
+                      interno largo (SR-…) que no le dice nada a MJ y ensanchaba
+                      la tabla. Mostramos una etiqueta amistosa; el código real
+                      queda en el tooltip. El resto de los folios se trunca para
+                      que ningún folio largo rompa el ancho. */}
                   <Link
                     href={`/facturas/${inv.id}?from=${encodeURIComponent(returnTo)}`}
-                    className="hover:text-gray-900 hover:underline"
+                    title={inv.folioNumber ?? undefined}
+                    className="inline-block max-w-[140px] truncate align-bottom hover:text-gray-900 hover:underline"
                   >
-                    {inv.folioNumber || "—"}
+                    {inv.tipoDoc === 1043 ? (
+                      <span className="text-gray-500 italic">pago s/factura</span>
+                    ) : (
+                      inv.folioNumber || "—"
+                    )}
                   </Link>
                   {inv.tipoDoc === 61 && (
                     <span className="ml-1.5 text-[9px] uppercase tracking-wider bg-rose-50 text-rose-700 px-1 py-0.5 rounded">

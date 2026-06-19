@@ -4,7 +4,7 @@ import ArtefactosCatalogClient from "@/components/catalogo/ArtefactosCatalogClie
 export const dynamic = "force-dynamic";
 
 export default async function CatalogoArtefactosPage() {
-  const [items, tipos] = await Promise.all([
+  const [items, tipos, subgroupOrders] = await Promise.all([
     prisma.artefactoCatalog.findMany({
       orderBy: [
         { subcategory: "asc" },
@@ -15,6 +15,11 @@ export default async function CatalogoArtefactosPage() {
     // Tipos editables por MJ (antes vivían fijos en el código).
     prisma.artefactoTipo.findMany({
       orderBy: [{ subcategory: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+    }),
+    // Orden manual de los subgrupos (línea+color) dentro de cada tipo. Los que
+    // no estén acá caen a orden alfabético en el cliente (fallback).
+    prisma.artefactoSubgroupOrder.findMany({
+      orderBy: [{ subcategory: "asc" }, { sortOrder: "asc" }],
     }),
   ]);
 
@@ -41,7 +46,11 @@ export default async function CatalogoArtefactosPage() {
         </div>
       </div>
 
-      <ArtefactosCatalogClient initialItems={items} initialTipos={tipos} />
+      <ArtefactosCatalogClient
+        initialItems={items}
+        initialTipos={tipos}
+        initialSubgroupOrders={subgroupOrders}
+      />
     </div>
   );
 }

@@ -110,9 +110,16 @@ interface Subgroup {
   items: CatalogItem[];
 }
 
-// Parte los ítems de un tipo en subgrupos por LÍNEA + COLOR. Orden: línea
-// alfabética, luego color; "Sin línea / Otros" siempre al final.
-function buildSubgroups(groupItems: CatalogItem[]): Subgroup[] {
+// Parte los ítems de un tipo en subgrupos por LÍNEA + COLOR. El orden lo da
+// `orderOf` (orden manual que MJ arrastró, guardado en ArtefactoSubgroupOrder):
+// los subgrupos con orden guardado van primero por ese número; los que no
+// tienen orden caen al fallback alfabético (línea, luego color; "Sin línea /
+// Otros" al final). Así un subgrupo recién creado o renombrado aparece sin
+// romper, hasta que MJ lo arrastre.
+function buildSubgroups(
+  groupItems: CatalogItem[],
+  orderOf?: (line: string, finish: string) => number | undefined
+): Subgroup[] {
   const byKey = new Map<string, Subgroup>();
   for (const it of groupItems) {
     const line = (it.line ?? "").trim();
@@ -124,9 +131,31 @@ function buildSubgroups(groupItems: CatalogItem[]): Subgroup[] {
     else byKey.set(key, { key, line, finish, hasLineColor, items: [it] });
   }
   return [...byKey.values()].sort((a, b) => {
+    const oa = orderOf?.(a.line, a.finish);
+    const ob = orderOf?.(b.line, b.finish);
+    if (oa != null && ob != null) return oa - ob;
+    if (oa != null) return -1; // los que tienen orden manual, primero
+    if (ob != null) return 1;
     if (a.hasLineColor !== b.hasLineColor) return a.hasLineColor ? -1 : 1;
     return a.line.localeCompare(b.line) || a.finish.localeCompare(b.finish);
   });
+}
+
+// ── IDs para el drag & drop unificado ──────────────────────────────────────
+// Todo (tipos, subgrupos, artefactos) vive en UN solo DndContext para poder
+// arrastrar un artefacto de un subgrupo/tipo a otro. Para saber qué se está
+// arrastrando y sobre qué se soltó, cada id lleva prefijo: "T#"=tipo,
+// "S#"=subgrupo, "I#"=artefacto. Los subgrupos no tienen id en la BD, así que
+// su id se arma con tipo+línea+color (separados por un carácter que no aparece
+// en los datos).
+const SUB_SEP = "\u0001";
+const tipoSortId = (tipoId: string) => `T#${tipoId}`;
+const itemSortId = (itemId: string) => `I#${itemId}`;
+const subgroupSortId = (tag: string, line: string, finish: string) =>
+  `S#${tag}${SUB_SEP}${line}${SUB_SEP}${finish}`;
+function parseSubgroupId(id: string): { tag: string; line: string; finish: string } {
+  const [tag, line, finish] = id.slice(2).split(SUB_SEP);
+  return { tag: tag ?? "", line: line ?? "", finish: finish ?? "" };
 }
 
 // Chevron monocromático (sin dependencias de íconos): apunta a la derecha y se
@@ -219,17 +248,34 @@ interface ArtefactoTipo {
   sortOrder: number;
 }
 
+// Orden manual de un subgrupo (línea+color) dentro de un tipo. line/finish
+// vacíos ("") = el subgrupo "Sin línea / Otros".
+interface SubgroupOrder {
+  subcategory: string;
+  tag: string;
+  line: string;
+  finish: string;
+  sortOrder: number;
+}
+
 export default function ArtefactosCatalogClient({
   initialItems,
   initialTipos,
+  initialSubgroupOrders,
 }: {
   initialItems: CatalogItem[];
   initialTipos: ArtefactoTipo[];
+  initialSubgroupOrders: SubgroupOrder[];
 }) {
   const router = useRouter();
   const [items, setItems] = useState<CatalogItem[]>(initialItems);
   // Tipos editables por pestaña. Reemplazan a la lista fija del código.
   const [tipos, setTipos] = useState<ArtefactoTipo[]>(initialTipos);
+  // Orden manual de los subgrupos (línea+color) que MJ arrastró. Lo que no
+  // está acá cae a orden alfabético (ver buildSubgroups).
+  const [subgroupOrders, setSubgroupOrders] = useState<SubgroupOrder[]>(
+    initialSubgroupOrders
+  );
   const [activeTab, setActiveTab] = useState<string>("sanitario");
   const [onlyStandard, setOnlyStandard] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -409,38 +455,253 @@ export default function ArtefactosCatalogClient({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  // Arrastrar reordena DENTRO de un grupo (mismo tipo). El orden de los
-  // grupos lo fija el tipo (los de la pestaña), no el arrastre; para mover un
-  // artefacto de tipo se usa el desplegable de "tipo".
-  async function onDragEndGroup(e: DragEndEvent, groupItems: CatalogItem[]) {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
-    const oldIdx = groupItems.findIndex((it) => it.id === active.id);
-    const newIdx = groupItems.findIndex((it) => it.id === over.id);
+  // Lookup del orden manual de subgrupos para un tipo (lo usa buildSubgroups).
+  // Devuelve el sortOrder guardado de un subgrupo (línea+color), o undefined.
+  function subgroupOrderOf(tag: string) {
+    return (line: string, finish: string): number | undefined =>
+      subgroupOrders.find(
+        (r) =>
+          r.subcategory === activeTab &&
+          r.tag === tag &&
+          r.line === line &&
+          r.finish === finish
+      )?.sortOrder;
+  }
+
+  // Persiste el orden de los artefactos de un subgrupo (0..n). Solo guarda; la
+  // actualización optimista del estado la hace quien llama.
+  async function persistItemOrder(ordered: CatalogItem[]) {
+    try {
+      await fetch("/api/catalogo/artefactos/reorder", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: ordered.map((it, i) => ({ id: it.id, sortOrder: i })),
+        }),
+      });
+    } catch {
+      alert("Error al guardar el orden");
+      router.refresh();
+    }
+  }
+
+  // Reordenar artefactos DENTRO de un mismo subgrupo (mismo tipo, línea y
+  // color). Reasigna sortOrder 0..n a ese subgrupo.
+  function reorderItemWithinSubgroup(moved: CatalogItem, overItemId: string) {
+    const tag = (moved.tag ?? "").trim();
+    const line = (moved.line ?? "").trim();
+    const finish = (moved.finish ?? "").trim();
+    const groupItems = tabItems.filter(
+      (it) =>
+        (it.tag ?? "").trim() === tag &&
+        (it.line ?? "").trim() === line &&
+        (it.finish ?? "").trim() === finish
+    );
+    const oldIdx = groupItems.findIndex((it) => it.id === moved.id);
+    const newIdx = groupItems.findIndex((it) => it.id === overItemId);
     if (oldIdx < 0 || newIdx < 0) return;
     const reordered = arrayMove(groupItems, oldIdx, newIdx);
-
-    // Optimista: reasigna sortOrder 0..n a los items de ESTE grupo. (El
-    // solapamiento de sortOrder entre grupos no importa: el display ordena
-    // primero por grupo y después por sortOrder dentro del grupo.)
     const orderMap = new Map(reordered.map((it, i) => [it.id, i]));
     setItems((prev) =>
       prev.map((it) =>
         orderMap.has(it.id) ? { ...it, sortOrder: orderMap.get(it.id)! } : it
       )
     );
+    persistItemOrder(reordered);
+  }
 
+  // Mover UN artefacto a otro subgrupo/tipo: en el fondo es un relabel (cambia
+  // su tag/línea/color al del destino). Queda al final del subgrupo destino.
+  // No toca otras líneas — solo la que se arrastró.
+  async function moveItemToSubgroup(
+    moved: CatalogItem,
+    destTag: string,
+    destLine: string,
+    destFinish: string
+  ) {
+    const tag = destTag || null;
+    const line = destLine || null;
+    const finish = destFinish || null;
+    // sortOrder = al final del subgrupo destino (max + 1).
+    const destItems = tabItems.filter(
+      (it) =>
+        it.id !== moved.id &&
+        (it.tag ?? "").trim() === destTag &&
+        (it.line ?? "").trim() === destLine &&
+        (it.finish ?? "").trim() === destFinish
+    );
+    const newOrder =
+      destItems.reduce((m, it) => Math.max(m, it.sortOrder), -1) + 1;
+    // Optimista.
+    setItems((prev) =>
+      prev.map((it) =>
+        it.id === moved.id ? { ...it, tag, line, finish, sortOrder: newOrder } : it
+      )
+    );
     try {
+      const res = await fetch("/api/catalogo/artefactos/relabel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [moved.id], tag, line, finish }),
+      });
+      if (!res.ok) throw new Error();
+      // relabel no toca sortOrder: lo persistimos aparte para que quede al final.
       await fetch("/api/catalogo/artefactos/reorder", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: [{ id: moved.id, sortOrder: newOrder }] }),
+      });
+    } catch {
+      alert("No se pudo mover el artefacto.");
+      router.refresh();
+    }
+  }
+
+  // Reordenar los subgrupos (línea+color) de un tipo. Reasigna 0..n a TODOS los
+  // subgrupos de ese tipo y los guarda en ArtefactoSubgroupOrder.
+  async function reorderSubgroups(
+    tag: string,
+    aLine: string,
+    aFinish: string,
+    oLine: string,
+    oFinish: string
+  ) {
+    const groupItems = tabItems.filter((it) => (it.tag ?? "").trim() === tag);
+    const subs = buildSubgroups(groupItems, subgroupOrderOf(tag));
+    const oldIdx = subs.findIndex((s) => s.line === aLine && s.finish === aFinish);
+    const newIdx = subs.findIndex((s) => s.line === oLine && s.finish === oFinish);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(subs, oldIdx, newIdx);
+    const nuevos: SubgroupOrder[] = reordered.map((s, i) => ({
+      subcategory: activeTab,
+      tag,
+      line: s.line,
+      finish: s.finish,
+      sortOrder: i,
+    }));
+    // Optimista: reemplaza las filas de este (subcategory, tag) por las nuevas.
+    setSubgroupOrders((prev) => [
+      ...prev.filter((r) => !(r.subcategory === activeTab && r.tag === tag)),
+      ...nuevos,
+    ]);
+    try {
+      await fetch("/api/catalogo/artefactos/subgroup-order", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: reordered.map((it, i) => ({ id: it.id, sortOrder: i })),
+          subcategory: activeTab,
+          tag,
+          items: reordered.map((s, i) => ({
+            line: s.line,
+            finish: s.finish,
+            sortOrder: i,
+          })),
         }),
       });
     } catch {
-      alert("Error al guardar el orden");
+      alert("No se pudo guardar el orden de los subgrupos.");
       router.refresh();
+    }
+  }
+
+  // Reordenar tipos (arrastrar el encabezado de tipo).
+  function reorderTipos(activeId: string, overId: string) {
+    const oldIdx = tiposInTab.findIndex((t) => t.id === activeId);
+    const newIdx = tiposInTab.findIndex((t) => t.id === overId);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(tiposInTab, oldIdx, newIdx);
+    const orderMap = new Map(reordered.map((t, i) => [t.id, i]));
+    setTipos((prev) =>
+      prev.map((t) =>
+        orderMap.has(t.id) ? { ...t, sortOrder: orderMap.get(t.id)! } : t
+      )
+    );
+    fetch("/api/catalogo/tipos/reorder", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: reordered.map((t, i) => ({ id: t.id, sortOrder: i })),
+      }),
+    }).catch(() => {
+      alert("No se pudo guardar el orden de los tipos.");
+      router.refresh();
+    });
+  }
+
+  // ── Drag & drop unificado ──────────────────────────────────────────────
+  // Un solo handler para los tres niveles. Decide qué hacer según el prefijo
+  // del id de lo que se arrastró (active) y de lo que está debajo (over):
+  //   T# tipo · S# subgrupo · I# artefacto.
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over) return;
+    const a = String(active.id);
+    const o = String(over.id);
+    if (a === o) return;
+    const aType = a[0];
+    const oType = o[0];
+
+    // Tipo sobre tipo → reordenar tipos.
+    if (aType === "T" && oType === "T") {
+      reorderTipos(a.slice(2), o.slice(2));
+      return;
+    }
+
+    // Subgrupo sobre subgrupo (mismo tipo) → reordenar subgrupos.
+    if (aType === "S" && oType === "S") {
+      const A = parseSubgroupId(a);
+      const B = parseSubgroupId(o);
+      if (A.tag !== B.tag) return; // entre tipos distintos no se reordena
+      reorderSubgroups(A.tag, A.line, A.finish, B.line, B.finish);
+      return;
+    }
+
+    // Artefacto arrastrado → mover o reordenar según dónde se suelte.
+    if (aType === "I") {
+      const moved = items.find((it) => it.id === a.slice(2));
+      if (!moved) return;
+
+      let destTag: string;
+      let destLine: string;
+      let destFinish: string;
+      let overItemId: string | null = null;
+
+      if (oType === "I") {
+        // Sobre otro artefacto: hereda su tipo/línea/color (su subgrupo).
+        overItemId = o.slice(2);
+        const target = items.find((it) => it.id === overItemId);
+        if (!target) return;
+        destTag = (target.tag ?? "").trim();
+        destLine = (target.line ?? "").trim();
+        destFinish = (target.finish ?? "").trim();
+      } else if (oType === "S") {
+        // Sobre el encabezado de un subgrupo: ese tipo/línea/color.
+        const B = parseSubgroupId(o);
+        destTag = B.tag;
+        destLine = B.line;
+        destFinish = B.finish;
+      } else if (oType === "T") {
+        // Sobre el encabezado de un tipo: ese tipo, conservando línea/color.
+        const t = tipos.find((x) => x.id === o.slice(2));
+        if (!t) return;
+        destTag = t.name;
+        destLine = (moved.line ?? "").trim();
+        destFinish = (moved.finish ?? "").trim();
+      } else {
+        return;
+      }
+
+      const same =
+        (moved.tag ?? "").trim() === destTag &&
+        (moved.line ?? "").trim() === destLine &&
+        (moved.finish ?? "").trim() === destFinish;
+      if (same) {
+        // Mismo subgrupo: si soltó sobre otro artefacto, reordena.
+        if (overItemId) reorderItemWithinSubgroup(moved, overItemId);
+        return;
+      }
+      // Cambió de subgrupo/tipo: relabel.
+      moveItemToSubgroup(moved, destTag, destLine, destFinish);
     }
   }
 
@@ -923,60 +1184,27 @@ export default function ArtefactosCatalogClient({
     }
   }
 
-  // Arrastrar para reordenar los tipos de la pestaña.
-  async function onTipoDragEnd(e: DragEndEvent) {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
-    const oldIdx = tiposInTab.findIndex((t) => t.id === active.id);
-    const newIdx = tiposInTab.findIndex((t) => t.id === over.id);
-    if (oldIdx < 0 || newIdx < 0) return;
-    const reordered = arrayMove(tiposInTab, oldIdx, newIdx);
-    const orderMap = new Map(reordered.map((t, i) => [t.id, i]));
-    setTipos((prev) =>
-      prev.map((t) =>
-        orderMap.has(t.id) ? { ...t, sortOrder: orderMap.get(t.id)! } : t
-      )
-    );
-    try {
-      await fetch("/api/catalogo/tipos/reorder", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: reordered.map((t, i) => ({ id: t.id, sortOrder: i })),
-        }),
-      });
-    } catch {
-      alert("No se pudo guardar el orden de los tipos.");
-      router.refresh();
-    }
-  }
-
-  // Bloque arrastrable de filas (un tipo entero, o un subgrupo línea+color).
-  // El reordenar reasigna sortOrder dentro de ESTE bloque.
-  function renderRows(rowItems: CatalogItem[], dndId: string) {
+  // Filas de un subgrupo (o de un tipo plano). Van en su propio SortableContext
+  // — pero TODO comparte el mismo DndContext de afuera, así un artefacto se
+  // puede arrastrar a otro subgrupo/tipo. Los ids llevan prefijo "I#".
+  function renderItemRows(rowItems: CatalogItem[]) {
     return (
-      <DndContext
-        id={dndId}
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={(e) => onDragEndGroup(e, rowItems)}
+      <SortableContext
+        items={rowItems.map((it) => itemSortId(it.id))}
+        strategy={verticalListSortingStrategy}
       >
-        <SortableContext
-          items={rowItems.map((it) => it.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          {rowItems.map((item) => (
-            <CatalogItemRow
-              key={item.id}
-              item={item}
-              canReorder={!isFiltering}
-              onUpdate={(patch) => updateItem(item.id, patch)}
-              onEdit={() => openEdit(item)}
-              onDelete={() => deleteItem(item.id)}
-            />
-          ))}
-        </SortableContext>
-      </DndContext>
+        {rowItems.map((item) => (
+          <CatalogItemRow
+            key={item.id}
+            sortId={itemSortId(item.id)}
+            item={item}
+            canReorder={!isFiltering}
+            onUpdate={(patch) => updateItem(item.id, patch)}
+            onEdit={() => openEdit(item)}
+            onDelete={() => deleteItem(item.id)}
+          />
+        ))}
+      </SortableContext>
     );
   }
 
@@ -1513,10 +1741,14 @@ export default function ArtefactosCatalogClient({
 
         {!isFiltering && tabItems.length > 1 && (
           <div className="px-4 py-1.5 bg-white border-b border-gray-100 text-[11px] text-gray-400">
-            Los artefactos del mismo tipo quedan juntos, subagrupados por línea y
-            color (clic en el subgrupo para abrir/cerrar). Dentro de cada
-            subgrupo, arrastrá desde la manija (⋮⋮) para ordenarlos. Para cambiar
-            un artefacto de tipo o de pestaña, usá el botón Editar.
+            Los artefactos del mismo tipo quedan juntos, subagrupados por línea
+            y color (clic en el subgrupo para abrir/cerrar). Arrastrá desde la
+            manija (⋮⋮): la de cada fila reordena los artefactos; la del
+            encabezado de un subgrupo reordena los subgrupos; la del encabezado
+            de un tipo reordena los tipos. Para mover UN artefacto a otro
+            subgrupo o tipo, arrastralo y soltalo sobre el encabezado del
+            destino (o sobre un artefacto de ahí). Para cambiar de pestaña, usá
+            el botón Editar.
           </div>
         )}
 
@@ -1528,13 +1760,15 @@ export default function ArtefactosCatalogClient({
           </div>
         ) : (
           <DndContext
-            id="tipos-dnd"
+            id="catalogo-dnd"
             sensors={sensors}
             collisionDetection={closestCenter}
-            onDragEnd={onTipoDragEnd}
+            onDragEnd={handleDragEnd}
           >
           <SortableContext
-            items={groups.filter((g) => g.tipoId).map((g) => g.tipoId as string)}
+            items={groups
+              .filter((g) => g.tipoId)
+              .map((g) => tipoSortId(g.tipoId as string))}
             strategy={verticalListSortingStrategy}
           >
           {groups.map((g) => (
@@ -1586,67 +1820,36 @@ export default function ArtefactosCatalogClient({
                 </div>
               )}
               {(() => {
-                const baseId = `artefactos-dnd-${g.tag || "sin-tipo"}`;
-                const subs = buildSubgroups(g.items);
+                const subs = buildSubgroups(g.items, subgroupOrderOf(g.tag));
                 // Un solo subgrupo (o todo "Otros"): no agrega ruido, se
                 // muestra plano como antes.
-                if (subs.length <= 1) return renderRows(g.items, baseId);
-                return subs.map((sg) => {
+                if (subs.length <= 1) return renderItemRows(g.items);
+                return (
+                  <SortableContext
+                    items={subs.map((sg) =>
+                      subgroupSortId(g.tag, sg.line, sg.finish)
+                    )}
+                    strategy={verticalListSortingStrategy}
+                  >
+                {subs.map((sg) => {
                   const key = `${g.tag}::${sg.key}`;
                   const collapsed = isSubgroupCollapsed(key, g.items.length);
                   return (
                     <Fragment key={key}>
-                      {/* Encabezado del subgrupo: más liviano e indentado que
-                          el del tipo (jerarquía por tipografía, no por color).
-                          El "renombrar" aparece al pasar el mouse. */}
-                      <div className="group w-full flex items-center gap-1.5 pl-9 pr-4 py-1 bg-white border-b border-gray-100 hover:bg-gray-50">
-                        <button
-                          type="button"
-                          onClick={() => toggleSubgroup(key, collapsed)}
-                          className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
-                        >
-                          <Chevron open={!collapsed} />
-                          <span className="text-[10px] font-medium text-gray-500 tracking-wide">
-                            {sg.hasLineColor ? (
-                              <>
-                                {sg.line && (
-                                  <span className="uppercase">{sg.line}</span>
-                                )}
-                                {sg.line && sg.finish ? " · " : ""}
-                                {sg.finish}
-                              </>
-                            ) : (
-                              "Sin línea / Otros"
-                            )}
-                          </span>
-                          <span className="text-[10px] text-gray-400 tabular-nums">
-                            · {sg.items.length}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openRename(key, sg)}
-                          className="shrink-0 text-[10px] uppercase tracking-wider text-gray-400 hover:text-gray-900 opacity-0 group-hover:opacity-100 focus:opacity-100"
-                          title="Renombrar la línea/color de este subgrupo (se aplica a todos sus artefactos)"
-                        >
-                          renombrar
-                        </button>
-                        {/* Mover todo el subgrupo a otro tipo. Solo si hay otros
-                            tipos a los que moverlo en esta pestaña. */}
-                        {tiposDe(activeTab).filter((t) => t !== g.tag).length >
-                          0 && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setMovingSubKey(movingSubKey === key ? null : key)
-                            }
-                            className="shrink-0 text-[10px] uppercase tracking-wider text-gray-400 hover:text-gray-900 opacity-0 group-hover:opacity-100 focus:opacity-100"
-                            title="Mover todo este subgrupo a otro tipo"
-                          >
-                            mover a…
-                          </button>
-                        )}
-                      </div>
+                      <SortableSubgroupHeader
+                        sortId={subgroupSortId(g.tag, sg.line, sg.finish)}
+                        sub={sg}
+                        collapsed={collapsed}
+                        canDrag={!isFiltering}
+                        canMove={
+                          tiposDe(activeTab).filter((t) => t !== g.tag).length > 0
+                        }
+                        onToggle={() => toggleSubgroup(key, collapsed)}
+                        onOpenRename={() => openRename(key, sg)}
+                        onToggleMove={() =>
+                          setMovingSubKey(movingSubKey === key ? null : key)
+                        }
+                      />
                       {movingSubKey === key && (
                         <div className="pl-9 pr-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
                           <span className="text-[10px] uppercase tracking-wider text-gray-500">
@@ -1731,10 +1934,12 @@ export default function ArtefactosCatalogClient({
                           </div>
                         </div>
                       )}
-                      {!collapsed && renderRows(sg.items, `${baseId}-${sg.key}`)}
+                      {!collapsed && renderItemRows(sg.items)}
                     </Fragment>
                   );
-                });
+                })}
+                  </SortableContext>
+                );
               })()}
             </Fragment>
           ))}
@@ -1742,6 +1947,105 @@ export default function ArtefactosCatalogClient({
           </DndContext>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Componente: encabezado de subgrupo (arrastrable para reordenar) ──────
+// Es la fila de "LÍNEA · COLOR" dentro de un tipo. Tiene su propia manija de
+// arrastre (⋮⋮) para reordenar los subgrupos del tipo, y sirve también de
+// destino: soltar un artefacto sobre este encabezado lo mueve a este subgrupo.
+function SortableSubgroupHeader({
+  sortId,
+  sub,
+  collapsed,
+  canDrag,
+  canMove,
+  onToggle,
+  onOpenRename,
+  onToggleMove,
+}: {
+  sortId: string;
+  sub: Subgroup;
+  collapsed: boolean;
+  canDrag: boolean;
+  canMove: boolean;
+  onToggle: () => void;
+  onOpenRename: () => void;
+  onToggleMove: () => void;
+}) {
+  const sortable = useSortable({ id: sortId, disabled: !canDrag });
+  const style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.5 : 1,
+    zIndex: sortable.isDragging ? 10 : ("auto" as const),
+    background: sortable.isDragging ? "#F9FAFB" : undefined,
+  };
+  return (
+    <div
+      ref={sortable.setNodeRef}
+      style={style}
+      className="group w-full flex items-center gap-1.5 pl-4 pr-4 py-1 bg-white border-b border-gray-100 hover:bg-gray-50"
+    >
+      {/* Manija de arrastre del subgrupo. */}
+      {canDrag ? (
+        <span
+          {...sortable.attributes}
+          {...sortable.listeners}
+          className="cursor-grab text-gray-300 hover:text-gray-600 select-none text-[11px]"
+          title="Arrastrar para reordenar este subgrupo dentro del tipo"
+        >
+          ⋮⋮
+        </span>
+      ) : (
+        <span
+          className="text-gray-200 select-none text-[11px]"
+          title="Sacá la búsqueda/filtros para reordenar los subgrupos"
+        >
+          ⋮⋮
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
+      >
+        <Chevron open={!collapsed} />
+        <span className="text-[10px] font-medium text-gray-500 tracking-wide">
+          {sub.hasLineColor ? (
+            <>
+              {sub.line && <span className="uppercase">{sub.line}</span>}
+              {sub.line && sub.finish ? " · " : ""}
+              {sub.finish}
+            </>
+          ) : (
+            "Sin línea / Otros"
+          )}
+        </span>
+        <span className="text-[10px] text-gray-400 tabular-nums">
+          · {sub.items.length}
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={onOpenRename}
+        className="shrink-0 text-[10px] uppercase tracking-wider text-gray-400 hover:text-gray-900 opacity-0 group-hover:opacity-100 focus:opacity-100"
+        title="Renombrar la línea/color de este subgrupo (se aplica a todos sus artefactos)"
+      >
+        renombrar
+      </button>
+      {/* Mover todo el subgrupo a otro tipo. Solo si hay otros tipos. */}
+      {canMove && (
+        <button
+          type="button"
+          onClick={onToggleMove}
+          className="shrink-0 text-[10px] uppercase tracking-wider text-gray-400 hover:text-gray-900 opacity-0 group-hover:opacity-100 focus:opacity-100"
+          title="Mover todo este subgrupo a otro tipo"
+        >
+          mover a…
+        </button>
+      )}
     </div>
   );
 }
@@ -1774,7 +2078,9 @@ function SortableTipoHeader({
   onDelete: () => void;
   onAdd: () => void;
 }) {
-  const s = useSortable({ id: tipo.id, disabled: !canDrag });
+  // id con prefijo "T#": comparte DndContext con subgrupos e items, así un
+  // artefacto se puede soltar sobre el encabezado del tipo para moverlo ahí.
+  const s = useSortable({ id: tipoSortId(tipo.id), disabled: !canDrag });
   const style = {
     transform: CSS.Transform.toString(s.transform),
     transition: s.transition,
@@ -1870,18 +2176,21 @@ function SortableTipoHeader({
 // ─── Componente: fila editable + arrastrable ────────────────────────────
 function CatalogItemRow({
   item,
+  sortId,
   canReorder,
   onUpdate,
   onEdit,
   onDelete,
 }: {
   item: CatalogItem;
+  sortId: string;
   canReorder: boolean;
   onUpdate: (patch: Partial<CatalogItem>) => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const sortable = useSortable({ id: item.id, disabled: !canReorder });
+  // id con prefijo "I#" (comparte DndContext con tipos y subgrupos).
+  const sortable = useSortable({ id: sortId, disabled: !canReorder });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   // URL de imagen que no cargó (rota): mostramos el "+" para subir otra en vez

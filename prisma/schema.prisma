@@ -395,6 +395,27 @@ model ArtefactoTipo {
   @@index([subcategory, sortOrder])
 }
 
+// Orden manual de los subgrupos (línea + color) DENTRO de un tipo. Es una tabla
+// chica y aparte a propósito: el orden de los subgrupos NO puede colgarse del
+// sortOrder de los artefactos (la mayoría tiene sortOrder=0 y el arrastre de
+// items reasigna 0..n dentro del subgrupo, así que empatarían). Acá cada fila
+// es un subgrupo identificado por (subcategory, tag/tipo, line, finish). line y
+// finish vacíos se guardan como "" (el subgrupo "Sin línea / Otros"). Lo que no
+// tiene fila cae a orden alfabético (fallback) — no hace falta sembrar nada.
+model ArtefactoSubgroupOrder {
+  id          String   @id @default(cuid())
+  subcategory String   // sanitario | cocina | iluminacion
+  tag         String   // nombre del tipo ("Griferías", …); "" = sin tipo
+  line        String   // línea comercial; "" = sin línea
+  finish      String   // color/terminación; "" = sin color
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([subcategory, tag, line, finish])
+  @@index([subcategory, tag, sortOrder])
+}
+
 model ArtefactoCatalog {
   id                String   @id @default(cuid())
   name              String   // "WC ATENAS"

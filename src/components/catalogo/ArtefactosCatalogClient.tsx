@@ -201,7 +201,7 @@ function sugerirNombreCorto(
 // subcat/tipo · lista · dcto · total · mi costo · gan · std · editar. Nombre y
 // detalle envuelven a 2 líneas (no se cortan) en vez de truncar.
 const GRID_COLS =
-  "grid-cols-[1.25rem_3.25rem_minmax(9rem,1.5fr)_4.5rem_4.5rem_minmax(6rem,1.1fr)_4.25rem_2.5rem_5rem_4.5rem_4.5rem_2rem_4.25rem]";
+  "grid-cols-[1.25rem_3.25rem_minmax(9rem,1.5fr)_5rem_5rem_minmax(6rem,1.1fr)_4.25rem_2.5rem_5rem_4.5rem_4.5rem_2rem_4.25rem]";
 
 // Input numérico con separadores de miles.
 function ThousandsInput({
@@ -2312,27 +2312,27 @@ function CatalogItemRow({
         </div>
       </div>
 
-      {/* Línea (editable, con sugerencias). Se muestra en MAYÚSCULA. */}
+      {/* Línea (editable). Se muestra en MAYÚSCULA. La caja crece a 2 líneas en
+          vez de cortar el texto (ej. "BAJO CUBIERTA"). Es textarea, no input,
+          por eso no trae la lista de sugerencias. */}
       <div className="min-w-0">
-        <input
-          type="text"
-          list="lineas-list"
+        <textarea
+          rows={1}
           value={item.line ?? ""}
           placeholder="—"
           onChange={(e) => onUpdate({ line: e.target.value || null })}
-          className="w-full bg-transparent border-0 p-0 text-gray-700 text-[11px] font-medium uppercase outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+          className="w-full bg-transparent border-0 p-0 text-gray-700 text-[11px] font-medium uppercase leading-tight break-words resize-none [field-sizing:content] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
         />
       </div>
 
-      {/* Color / terminación (editable, con sugerencias). */}
+      {/* Color / terminación (editable). Mismo criterio: 2 líneas, no cortar. */}
       <div className="min-w-0">
-        <input
-          type="text"
-          list="colores-list"
+        <textarea
+          rows={1}
           value={item.finish ?? ""}
           placeholder="—"
           onChange={(e) => onUpdate({ finish: e.target.value || null })}
-          className="w-full bg-transparent border-0 p-0 text-gray-600 text-[11px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+          className="w-full bg-transparent border-0 p-0 text-gray-600 text-[11px] leading-tight break-words resize-none [field-sizing:content] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
         />
       </div>
 

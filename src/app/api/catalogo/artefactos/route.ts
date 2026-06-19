@@ -70,6 +70,19 @@ export async function POST(request: NextRequest) {
       select: { sortOrder: true },
     });
     const nextSortOrder = (last?.sortOrder ?? 0) + 1;
+    // Carpeta (subgroup): si viene explícita se respeta; si no, se arma sola a
+    // partir de línea+color (igual que agrupaba antes). Así el artefacto nuevo
+    // cae junto a los de su misma línea/color y MJ lo mueve si quiere. Null si
+    // no tiene ni línea ni color (queda en "Sin carpeta / Otros").
+    const autoSubgroup =
+      [data.line, data.finish]
+        .map((v) => (typeof v === "string" ? v.trim() : ""))
+        .filter(Boolean)
+        .join(" · ") || null;
+    const subgroup =
+      typeof data.subgroup === "string" && data.subgroup.trim()
+        ? data.subgroup.trim()
+        : autoSubgroup;
     const item = await prisma.artefactoCatalog.create({
       data: {
         name: data.name,
@@ -79,6 +92,7 @@ export async function POST(request: NextRequest) {
         tag: data.tag ?? null,
         line: data.line ?? null,
         finish: data.finish ?? null,
+        subgroup,
         supplier: data.supplier ?? null,
         referenceLink: data.referenceLink ?? null,
         imageUrl: data.imageUrl ?? null,

@@ -402,17 +402,20 @@ model ArtefactoTipo {
 // es un subgrupo identificado por (subcategory, tag/tipo, line, finish). line y
 // finish vacíos se guardan como "" (el subgrupo "Sin línea / Otros"). Lo que no
 // tiene fila cae a orden alfabético (fallback) — no hace falta sembrar nada.
+// Orden manual de las CARPETAS dentro de un tipo. Cada fila es una carpeta
+// identificada por (subcategory, tag, subgroup). subgroup "" = la carpeta "Sin
+// carpeta / Otros". Lo que no tiene fila cae a orden alfabético (fallback).
+// (Antes esta tabla se key-eaba por line+finish; cambió al pasar a carpetas.)
 model ArtefactoSubgroupOrder {
   id          String   @id @default(cuid())
   subcategory String   // sanitario | cocina | iluminacion
   tag         String   // nombre del tipo ("Griferías", …); "" = sin tipo
-  line        String   // línea comercial; "" = sin línea
-  finish      String   // color/terminación; "" = sin color
+  subgroup    String   // nombre de la carpeta; "" = "Sin carpeta / Otros"
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@unique([subcategory, tag, line, finish])
+  @@unique([subcategory, tag, subgroup])
   @@index([subcategory, tag, sortOrder])
 }
 
@@ -429,6 +432,13 @@ model ArtefactoCatalog {
   // quedan editables. Nullable: cocina/iluminación suelen no tener línea.
   line              String?  // Asis, Urban, Stellar, New Home, Atlas, Atenas, Delfos…
   finish            String?  // Cromo, Brushed, Gun Grey, Negro Mate, Blanco…
+  // Carpeta MANUAL dentro de un tipo (rediseño "carpetas a mano" 2026-06-19).
+  // Antes los subgrupos se calculaban de line+finish, y editar la línea
+  // separaba/reagrupaba solo. Ahora la agrupación visual es esta carpeta, que
+  // MJ arma a gusto; line/finish quedan como etiquetas y NO deciden el grupo.
+  // Es el NOMBRE de la carpeta dentro de (subcategory, tag). Null = "sin
+  // carpeta". Se sembró parseando line+finish para no mover nada el día 1.
+  subgroup          String?
   supplier          String?  // MK, CHC, Kitchen House, LED Studio, etc.
   referenceLink     String?  // URL del producto en la tienda
   imageUrl          String?  // URL de la imagen

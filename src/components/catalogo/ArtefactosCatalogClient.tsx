@@ -271,6 +271,13 @@ export default function ArtefactosCatalogClient({
   const [openSubgroups, setOpenSubgroups] = useState<Record<string, boolean>>(
     {}
   );
+  // Renombrar línea/color de un subgrupo. Guarda la clave del subgrupo en
+  // edición y los valores tipeados; al guardar se aplica a todos sus
+  // artefactos (sirve para corregir nombres y para unificar dos subgrupos).
+  const [renamingSubKey, setRenamingSubKey] = useState<string | null>(null);
+  const [renameLine, setRenameLine] = useState("");
+  const [renameFinish, setRenameFinish] = useState("");
+  const [savingRename, setSavingRename] = useState(false);
   const [newItem, setNewItem] = useState({
     name: "",
     detail: "",
@@ -738,6 +745,48 @@ export default function ArtefactosCatalogClient({
   function toggleSubgroup(key: string, currentlyCollapsed: boolean) {
     // Al togglear guardamos el estado "abierto" = lo contrario de lo actual.
     setOpenSubgroups((prev) => ({ ...prev, [key]: currentlyCollapsed }));
+  }
+
+  // Abre el editor de renombrado de un subgrupo, precargado con su línea/color.
+  function openRename(key: string, sub: Subgroup) {
+    setRenamingSubKey(key);
+    setRenameLine(sub.line);
+    setRenameFinish(sub.finish);
+  }
+  function cancelRename() {
+    setRenamingSubKey(null);
+    setRenameLine("");
+    setRenameFinish("");
+  }
+  // Aplica la nueva línea/color a TODOS los artefactos del subgrupo. Al volver
+  // a agrupar, si la combinación nueva ya existe en otro subgrupo, se fusionan.
+  async function saveRename(sub: Subgroup) {
+    const ids = sub.items.map((it) => it.id);
+    const line = renameLine.trim() || null;
+    const finish = renameFinish.trim() || null;
+    // Sin cambios reales: cerrar y listo.
+    if (line === (sub.line || null) && finish === (sub.finish || null)) {
+      cancelRename();
+      return;
+    }
+    setSavingRename(true);
+    try {
+      const res = await fetch("/api/catalogo/artefactos/relabel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, line, finish }),
+      });
+      if (!res.ok) throw new Error();
+      const idSet = new Set(ids);
+      setItems((prev) =>
+        prev.map((it) => (idSet.has(it.id) ? { ...it, line, finish } : it))
+      );
+      cancelRename();
+    } catch {
+      alert("No se pudo renombrar la línea/color.");
+    } finally {
+      setSavingRename(false);
+    }
   }
 
   // Bloque arrastrable de filas (un tipo entero, o un subgrupo línea+color).
@@ -1309,30 +1358,92 @@ export default function ArtefactosCatalogClient({
                   return (
                     <Fragment key={key}>
                       {/* Encabezado del subgrupo: más liviano e indentado que
-                          el del tipo (jerarquía por tipografía, no por color). */}
-                      <button
-                        type="button"
-                        onClick={() => toggleSubgroup(key, collapsed)}
-                        className="w-full flex items-center gap-1.5 pl-9 pr-4 py-1 bg-white border-b border-gray-100 text-left hover:bg-gray-50"
-                      >
-                        <Chevron open={!collapsed} />
-                        <span className="text-[10px] font-medium text-gray-500 tracking-wide">
-                          {sg.hasLineColor ? (
-                            <>
-                              {sg.line && (
-                                <span className="uppercase">{sg.line}</span>
-                              )}
-                              {sg.line && sg.finish ? " · " : ""}
-                              {sg.finish}
-                            </>
-                          ) : (
-                            "Sin línea / Otros"
-                          )}
-                        </span>
-                        <span className="text-[10px] text-gray-400 tabular-nums">
-                          · {sg.items.length}
-                        </span>
-                      </button>
+                          el del tipo (jerarquía por tipografía, no por color).
+                          El "renombrar" aparece al pasar el mouse. */}
+                      <div className="group w-full flex items-center gap-1.5 pl-9 pr-4 py-1 bg-white border-b border-gray-100 hover:bg-gray-50">
+                        <button
+                          type="button"
+                          onClick={() => toggleSubgroup(key, collapsed)}
+                          className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
+                        >
+                          <Chevron open={!collapsed} />
+                          <span className="text-[10px] font-medium text-gray-500 tracking-wide">
+                            {sg.hasLineColor ? (
+                              <>
+                                {sg.line && (
+                                  <span className="uppercase">{sg.line}</span>
+                                )}
+                                {sg.line && sg.finish ? " · " : ""}
+                                {sg.finish}
+                              </>
+                            ) : (
+                              "Sin línea / Otros"
+                            )}
+                          </span>
+                          <span className="text-[10px] text-gray-400 tabular-nums">
+                            · {sg.items.length}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openRename(key, sg)}
+                          className="shrink-0 text-[10px] uppercase tracking-wider text-gray-400 hover:text-gray-900 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                          title="Renombrar la línea/color de este subgrupo (se aplica a todos sus artefactos)"
+                        >
+                          renombrar
+                        </button>
+                      </div>
+                      {renamingSubKey === key && (
+                        <div className="pl-9 pr-4 py-2 bg-gray-50 border-b border-gray-200 flex flex-wrap items-end gap-3">
+                          <div>
+                            <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
+                              Línea
+                            </label>
+                            <input
+                              type="text"
+                              list="lineas-list"
+                              value={renameLine}
+                              onChange={(e) => setRenameLine(e.target.value)}
+                              placeholder="Sin línea"
+                              className="w-32 bg-white border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-gray-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
+                              Color
+                            </label>
+                            <input
+                              type="text"
+                              list="colores-list"
+                              value={renameFinish}
+                              onChange={(e) => setRenameFinish(e.target.value)}
+                              placeholder="Sin color"
+                              className="w-32 bg-white border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-gray-500"
+                            />
+                          </div>
+                          <span className="text-[10px] text-gray-500 mb-1.5">
+                            Se aplica a los {sg.items.length} artefactos de este
+                            subgrupo. Si la combinación ya existe, se fusionan.
+                          </span>
+                          <div className="flex gap-2 ml-auto mb-0.5">
+                            <button
+                              type="button"
+                              onClick={cancelRename}
+                              className="text-xs text-gray-600 px-2 py-1 hover:text-gray-900"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => saveRename(sg)}
+                              disabled={savingRename}
+                              className="text-xs bg-gray-900 text-white px-3 py-1 rounded hover:bg-gray-800 disabled:opacity-50"
+                            >
+                              {savingRename ? "Guardando…" : "Guardar"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       {!collapsed && renderRows(sg.items, `${baseId}-${sg.key}`)}
                     </Fragment>
                   );

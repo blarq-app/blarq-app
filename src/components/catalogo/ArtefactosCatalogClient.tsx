@@ -3,6 +3,7 @@
 import { Fragment, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
+import { fileToThumbnailDataUrl } from "@/lib/imageThumbnail";
 import {
   DndContext,
   closestCenter,
@@ -88,42 +89,67 @@ const SUBCATEGORY_LABELS: Record<string, string> = {
 
 const SUBCATEGORY_OPTIONS = ["sanitario", "cocina", "iluminacion"];
 
-// Tipos para agrupar (desplegable cerrado, definido con MJ). Es el campo
-// "tag" del modelo; los artefactos del mismo tipo se juntan bajo un
-// encabezado. "" = sin tipo (van sueltos, sin encabezado).
-//
-// Los tipos dependen de la pestaña (subcategoría): baños y cocina no comparten
-// vocabulario (un "Horno" no tiene sentido en baños, ni una "Mampara" en
-// cocina). El desplegable y el orden de los grupos usan la lista de la pestaña
-// activa. Iluminación todavía no tiene tipos (todo "sin tipo").
-const TIPO_OPTIONS_BY_SUB: Record<string, string[]> = {
-  // "Duchas" se partió en dos (pedido MJ 2026-06-12): Ducha/Receptáculo
-  // (columnas, griferías de ducha, platos, receptáculos, desagües) y Tina.
-  sanitario: [
-    "Accesorios",
-    "Griferías",
-    "Ducha/Receptáculo",
-    "Tina",
-    "Muebles",
-    "Mamparas",
-    "WC",
-  ],
-  cocina: [
-    "Lavaplatos",
-    "Griferías",
-    "Hornos",
-    "Encimeras",
-    "Campanas",
-    "Refrigeración",
-    "Lavavajillas",
-    "Microondas",
-  ],
-  iluminacion: [],
-};
+// Los tipos para agrupar (Accesorios, Griferías, WC…) son el campo "tag" del
+// artefacto. Antes vivían fijos acá (TIPO_OPTIONS_BY_SUB); ahora son editables
+// por MJ y viven en la tabla ArtefactoTipo. La lista por pestaña llega como
+// `initialTipos` y se maneja con tiposDe()/tiposInTab dentro del componente.
+// Los tipos iniciales (los de antes) se siembran con scripts/setup-artefacto-tipos.ts.
 
-// Helper: tipos de una subcategoría (vacío si no está definida).
-const tipoOptionsFor = (sub: string): string[] =>
-  TIPO_OPTIONS_BY_SUB[sub] ?? [];
+// A partir de cuántos ítems tiene un tipo, sus subgrupos de línea/color
+// arrancan COLAPSADOS por default. La idea: en tipos largos (ej. Accesorios)
+// MJ ve primero el "índice" de combinaciones y abre la que busca.
+const SUBGROUP_COLLAPSE_THRESHOLD = 8;
+
+// Subgrupo de un tipo: combinación línea + color. Los ítems sin línea ni color
+// caen en un subgrupo "Sin línea / Otros" (hasLineColor=false), que va al final.
+interface Subgroup {
+  key: string;
+  line: string;
+  finish: string;
+  hasLineColor: boolean;
+  items: CatalogItem[];
+}
+
+// Parte los ítems de un tipo en subgrupos por LÍNEA + COLOR. Orden: línea
+// alfabética, luego color; "Sin línea / Otros" siempre al final.
+function buildSubgroups(groupItems: CatalogItem[]): Subgroup[] {
+  const byKey = new Map<string, Subgroup>();
+  for (const it of groupItems) {
+    const line = (it.line ?? "").trim();
+    const finish = (it.finish ?? "").trim();
+    const hasLineColor = !!(line || finish);
+    const key = hasLineColor ? `${line}|||${finish}` : "__otros__";
+    const existing = byKey.get(key);
+    if (existing) existing.items.push(it);
+    else byKey.set(key, { key, line, finish, hasLineColor, items: [it] });
+  }
+  return [...byKey.values()].sort((a, b) => {
+    if (a.hasLineColor !== b.hasLineColor) return a.hasLineColor ? -1 : 1;
+    return a.line.localeCompare(b.line) || a.finish.localeCompare(b.finish);
+  });
+}
+
+// Chevron monocromático (sin dependencias de íconos): apunta a la derecha y se
+// rota 90° cuando el subgrupo está abierto.
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`text-gray-400 shrink-0 transition-transform ${
+        open ? "rotate-90" : ""
+      }`}
+    >
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  );
+}
 
 // Sugerencia de "nombre corto" a partir del título extraído del producto.
 // Saca la marca del final (ej. "... Teka") y lo pasa a mayúsculas, igual que
@@ -185,50 +211,25 @@ function ThousandsInput({
   );
 }
 
-// Toma un archivo de imagen y lo achica a una miniatura comprimida (JPEG),
-// devuelta como data URL para guardar directo en imageUrl. Evita subir fotos
-// de 3-5 MB: las deja en ~40-100 KB. Sin almacenamiento externo.
-function fileToThumbnailDataUrl(
-  file: File,
-  maxSize = 600,
-  quality = 0.8
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error("Archivo de imagen inválido"));
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > height && width > maxSize) {
-          height = Math.round((height * maxSize) / width);
-          width = maxSize;
-        } else if (height >= width && height > maxSize) {
-          width = Math.round((width * maxSize) / height);
-          height = maxSize;
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return reject(new Error("No se pudo procesar la imagen"));
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", quality));
-      };
-      img.src = reader.result as string;
-    };
-    reader.readAsDataURL(file);
-  });
+// Tipo editable del catálogo (antes vivía fijo en TIPO_OPTIONS_BY_SUB).
+interface ArtefactoTipo {
+  id: string;
+  subcategory: string;
+  name: string;
+  sortOrder: number;
 }
 
 export default function ArtefactosCatalogClient({
   initialItems,
+  initialTipos,
 }: {
   initialItems: CatalogItem[];
+  initialTipos: ArtefactoTipo[];
 }) {
   const router = useRouter();
   const [items, setItems] = useState<CatalogItem[]>(initialItems);
+  // Tipos editables por pestaña. Reemplazan a la lista fija del código.
+  const [tipos, setTipos] = useState<ArtefactoTipo[]>(initialTipos);
   const [activeTab, setActiveTab] = useState<string>("sanitario");
   const [onlyStandard, setOnlyStandard] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -245,6 +246,28 @@ export default function ArtefactosCatalogClient({
   const [filterFinish, setFilterFinish] = useState<string | null>(null);
   // Si está seteado, el formulario está editando ese artefacto (no creando).
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Subgrupos línea+color que MJ abrió/cerró a mano. La clave guarda el estado
+  // "abierto" (true) y pisa el default (colapsado en tipos largos). Lo que no
+  // está acá usa el default por cantidad de ítems del tipo.
+  const [openSubgroups, setOpenSubgroups] = useState<Record<string, boolean>>(
+    {}
+  );
+  // Renombrar línea/color de un subgrupo. Guarda la clave del subgrupo en
+  // edición y los valores tipeados; al guardar se aplica a todos sus
+  // artefactos (sirve para corregir nombres y para unificar dos subgrupos).
+  const [renamingSubKey, setRenamingSubKey] = useState<string | null>(null);
+  const [renameLine, setRenameLine] = useState("");
+  const [renameFinish, setRenameFinish] = useState("");
+  const [savingRename, setSavingRename] = useState(false);
+  // Mover un subgrupo entero (línea+color) a otro tipo. Guarda la clave del
+  // subgrupo cuyo selector de "mover a" está abierto.
+  const [movingSubKey, setMovingSubKey] = useState<string | null>(null);
+  // Manejo de tipos: alta nueva + renombrado del encabezado.
+  const [creatingTipo, setCreatingTipo] = useState(false);
+  const [newTipoName, setNewTipoName] = useState("");
+  const [renamingTipoId, setRenamingTipoId] = useState<string | null>(null);
+  const [renameTipoName, setRenameTipoName] = useState("");
+  const [tipoBusy, setTipoBusy] = useState(false);
   const [newItem, setNewItem] = useState({
     name: "",
     detail: "",
@@ -317,19 +340,40 @@ export default function ArtefactosCatalogClient({
       ) as string[],
     [tabItems]
   );
+  // Nombres de los tipos de una pestaña, en orden (desde la BD/estado).
+  // Reemplaza a la vieja tipoOptionsFor() que leía de la lista fija.
+  const tiposDe = (sub: string): string[] =>
+    tipos
+      .filter((t) => t.subcategory === sub)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+      .map((t) => t.name);
+
+  // Tipos (objetos) de la pestaña activa, en orden — para el manejo (renombrar,
+  // borrar, arrastrar) y para mostrar también los tipos vacíos.
+  const tiposInTab = useMemo(
+    () =>
+      tipos
+        .filter((t) => t.subcategory === activeTab)
+        .sort(
+          (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
+        ),
+    [tipos, activeTab]
+  );
+
   // Tipos presentes en la pestaña activa, en el orden del desplegable de la
   // pestaña (para el filtro "Tipo": Accesorios, Griferías, WC…).
   const tagsInTab = useMemo(() => {
     const present = Array.from(
       new Set(tabItems.map((it) => (it.tag ?? "").trim()).filter(Boolean))
     );
-    const orden = tipoOptionsFor(activeTab);
+    const orden = tiposDe(activeTab);
     return present.sort((a, b) => {
       const ia = orden.indexOf(a);
       const ib = orden.indexOf(b);
       return (ia >= 0 ? ia : 9999) - (ib >= 0 ? ib : 9999) || a.localeCompare(b);
     });
-  }, [tabItems, activeTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabItems, activeTab, tipos]);
 
   // ── Lista visible: estándares + línea + color sobre tabItems ───────────
   const visible = useMemo(() => {
@@ -677,28 +721,264 @@ export default function ArtefactosCatalogClient({
   }
 
   // ── Agrupado real por tipo ────────────────────────────────────────────
-  // Junta TODOS los artefactos del mismo tipo bajo un solo encabezado (no
-  // importa dónde estén). Orden de grupos: el del desplegable de la pestaña,
-  // después tipos viejos no estándar, y "sin tipo" al final. Dentro de cada
-  // grupo, el orden es por sortOrder (lo que MJ arrastra).
-  const groups: { tag: string; items: CatalogItem[] }[] = (() => {
-    const byTag = new Map<string, CatalogItem[]>();
-    for (const it of visible) {
-      const key = (it.tag ?? "").trim();
-      const arr = byTag.get(key);
-      if (arr) arr.push(it);
-      else byTag.set(key, [it]);
+  // Junta TODOS los artefactos del mismo tipo bajo un solo encabezado. El orden
+  // de los grupos lo fija ahora la lista de tipos editable (tiposInTab). Se
+  // muestran también los tipos VACÍOS (recién creados, sin artefactos) para que
+  // MJ los vea y pueda manejarlos — salvo cuando está filtrando/buscando, donde
+  // solo importan los que tienen resultados. `tipoId` viene del tipo manejable;
+  // los tags viejos que no son un tipo (legacy) y "sin tipo" van sin id.
+  const groups: { tag: string; tipoId: string | null; items: CatalogItem[] }[] =
+    (() => {
+      const byTag = new Map<string, CatalogItem[]>();
+      for (const it of visible) {
+        const key = (it.tag ?? "").trim();
+        const arr = byTag.get(key);
+        if (arr) arr.push(it);
+        else byTag.set(key, [it]);
+      }
+      const result: {
+        tag: string;
+        tipoId: string | null;
+        items: CatalogItem[];
+      }[] = [];
+
+      // 1) Tipos manejables, en su orden. Vacíos solo si NO estás filtrando.
+      for (const t of tiposInTab) {
+        const its = byTag.get(t.name) ?? [];
+        if (its.length === 0 && isFiltering) continue;
+        result.push({ tag: t.name, tipoId: t.id, items: its });
+        byTag.delete(t.name);
+      }
+      // 2) Tags presentes que NO son un tipo manejable (legacy), alfabético.
+      const leftover = [...byTag.entries()].filter(([k]) => k !== "");
+      leftover.sort((a, b) => a[0].localeCompare(b[0]));
+      for (const [tag, its] of leftover) {
+        result.push({ tag, tipoId: null, items: its });
+      }
+      // 3) "Sin tipo" al final.
+      const sinTipo = byTag.get("");
+      if (sinTipo && sinTipo.length) {
+        result.push({ tag: "", tipoId: null, items: sinTipo });
+      }
+      return result;
+    })();
+
+  // ── Subgrupos (línea+color) dentro de cada tipo ────────────────────────
+  // Default: colapsados solo en tipos largos. Si MJ está buscando/filtrando,
+  // se ven abiertos (ya acotó lo que quiere ver). Un toggle manual pisa todo.
+  function isSubgroupCollapsed(key: string, tagItemCount: number): boolean {
+    const manual = openSubgroups[key];
+    if (manual !== undefined) return !manual;
+    if (isFiltering) return false;
+    return tagItemCount > SUBGROUP_COLLAPSE_THRESHOLD;
+  }
+  function toggleSubgroup(key: string, currentlyCollapsed: boolean) {
+    // Al togglear guardamos el estado "abierto" = lo contrario de lo actual.
+    setOpenSubgroups((prev) => ({ ...prev, [key]: currentlyCollapsed }));
+  }
+
+  // Abre el editor de renombrado de un subgrupo, precargado con su línea/color.
+  function openRename(key: string, sub: Subgroup) {
+    setRenamingSubKey(key);
+    setRenameLine(sub.line);
+    setRenameFinish(sub.finish);
+  }
+  function cancelRename() {
+    setRenamingSubKey(null);
+    setRenameLine("");
+    setRenameFinish("");
+  }
+  // Aplica la nueva línea/color a TODOS los artefactos del subgrupo. Al volver
+  // a agrupar, si la combinación nueva ya existe en otro subgrupo, se fusionan.
+  async function saveRename(sub: Subgroup) {
+    const ids = sub.items.map((it) => it.id);
+    const line = renameLine.trim() || null;
+    const finish = renameFinish.trim() || null;
+    // Sin cambios reales: cerrar y listo.
+    if (line === (sub.line || null) && finish === (sub.finish || null)) {
+      cancelRename();
+      return;
     }
-    const orden = tipoOptionsFor(activeTab); // tipos de la pestaña activa
-    const rank = (tag: string) => {
-      if (tag === "") return 100000; // sin tipo, al final
-      const idx = orden.indexOf(tag);
-      return idx >= 0 ? idx : 50000; // tipos viejos no estándar, antes de "sin tipo"
-    };
-    return [...byTag.entries()]
-      .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
-      .map(([tag, items]) => ({ tag, items }));
-  })();
+    setSavingRename(true);
+    try {
+      const res = await fetch("/api/catalogo/artefactos/relabel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, line, finish }),
+      });
+      if (!res.ok) throw new Error();
+      const idSet = new Set(ids);
+      setItems((prev) =>
+        prev.map((it) => (idSet.has(it.id) ? { ...it, line, finish } : it))
+      );
+      cancelRename();
+    } catch {
+      alert("No se pudo renombrar la línea/color.");
+    } finally {
+      setSavingRename(false);
+    }
+  }
+
+  // Mueve TODOS los artefactos de un subgrupo a otro tipo (cambia su `tag`).
+  // El subgrupo línea+color se mantiene, ahora bajo el tipo destino.
+  async function moveSubgroup(sub: Subgroup, newTag: string) {
+    const ids = sub.items.map((it) => it.id);
+    setMovingSubKey(null);
+    try {
+      const res = await fetch("/api/catalogo/artefactos/relabel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, tag: newTag }),
+      });
+      if (!res.ok) throw new Error();
+      const idSet = new Set(ids);
+      setItems((prev) =>
+        prev.map((it) => (idSet.has(it.id) ? { ...it, tag: newTag } : it))
+      );
+    } catch {
+      alert("No se pudo mover el subgrupo de tipo.");
+    }
+  }
+
+  // ── Manejo de tipos (crear / renombrar / borrar / reordenar) ───────────
+  async function createTipo() {
+    const name = newTipoName.trim();
+    if (!name) return;
+    setTipoBusy(true);
+    try {
+      const res = await fetch("/api/catalogo/tipos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subcategory: activeTab, name }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "No se pudo crear el tipo.");
+        return;
+      }
+      setTipos((prev) => [...prev, data]);
+      setNewTipoName("");
+      setCreatingTipo(false);
+    } catch {
+      alert("No se pudo crear el tipo.");
+    } finally {
+      setTipoBusy(false);
+    }
+  }
+
+  function openRenameTipo(t: ArtefactoTipo) {
+    setRenamingTipoId(t.id);
+    setRenameTipoName(t.name);
+  }
+  async function saveRenameTipo(t: ArtefactoTipo) {
+    const name = renameTipoName.trim();
+    if (!name || name === t.name) {
+      setRenamingTipoId(null);
+      return;
+    }
+    setTipoBusy(true);
+    try {
+      const res = await fetch(`/api/catalogo/tipos/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "No se pudo renombrar el tipo.");
+        return;
+      }
+      // Renombrar el tipo y arrastrar el nombre nuevo a los artefactos (su tag).
+      setTipos((prev) => prev.map((x) => (x.id === t.id ? { ...x, name } : x)));
+      setItems((prev) =>
+        prev.map((it) =>
+          it.subcategory === t.subcategory && (it.tag ?? "") === t.name
+            ? { ...it, tag: name }
+            : it
+        )
+      );
+      setRenamingTipoId(null);
+    } catch {
+      alert("No se pudo renombrar el tipo.");
+    } finally {
+      setTipoBusy(false);
+    }
+  }
+
+  async function deleteTipo(t: ArtefactoTipo) {
+    if (!confirm(`¿Borrar el tipo "${t.name}"?`)) return;
+    try {
+      const res = await fetch(`/api/catalogo/tipos/${t.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // 409 = tiene artefactos: el backend manda el aviso para mover primero.
+        alert(data.error || "No se pudo borrar el tipo.");
+        return;
+      }
+      setTipos((prev) => prev.filter((x) => x.id !== t.id));
+    } catch {
+      alert("No se pudo borrar el tipo.");
+    }
+  }
+
+  // Arrastrar para reordenar los tipos de la pestaña.
+  async function onTipoDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIdx = tiposInTab.findIndex((t) => t.id === active.id);
+    const newIdx = tiposInTab.findIndex((t) => t.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(tiposInTab, oldIdx, newIdx);
+    const orderMap = new Map(reordered.map((t, i) => [t.id, i]));
+    setTipos((prev) =>
+      prev.map((t) =>
+        orderMap.has(t.id) ? { ...t, sortOrder: orderMap.get(t.id)! } : t
+      )
+    );
+    try {
+      await fetch("/api/catalogo/tipos/reorder", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: reordered.map((t, i) => ({ id: t.id, sortOrder: i })),
+        }),
+      });
+    } catch {
+      alert("No se pudo guardar el orden de los tipos.");
+      router.refresh();
+    }
+  }
+
+  // Bloque arrastrable de filas (un tipo entero, o un subgrupo línea+color).
+  // El reordenar reasigna sortOrder dentro de ESTE bloque.
+  function renderRows(rowItems: CatalogItem[], dndId: string) {
+    return (
+      <DndContext
+        id={dndId}
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={(e) => onDragEndGroup(e, rowItems)}
+      >
+        <SortableContext
+          items={rowItems.map((it) => it.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {rowItems.map((item) => (
+            <CatalogItemRow
+              key={item.id}
+              item={item}
+              canReorder={!isFiltering}
+              onUpdate={(patch) => updateItem(item.id, patch)}
+              onEdit={() => openEdit(item)}
+              onDelete={() => deleteItem(item.id)}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
+    );
+  }
 
   return (
     <div>
@@ -805,6 +1085,50 @@ export default function ArtefactosCatalogClient({
         >
           {reviewLoading ? "Revisando…" : "Revisar precios"}
         </button>
+        {/* Crear un tipo nuevo en esta pestaña. */}
+        {creatingTipo ? (
+          <div className="flex items-center gap-1.5">
+            <input
+              autoFocus
+              type="text"
+              value={newTipoName}
+              onChange={(e) => setNewTipoName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") createTipo();
+                if (e.key === "Escape") {
+                  setCreatingTipo(false);
+                  setNewTipoName("");
+                }
+              }}
+              placeholder="Nombre del tipo"
+              className="w-40 px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:border-gray-500"
+            />
+            <button
+              onClick={createTipo}
+              disabled={tipoBusy || !newTipoName.trim()}
+              className="text-sm bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-800 disabled:opacity-50"
+            >
+              Crear
+            </button>
+            <button
+              onClick={() => {
+                setCreatingTipo(false);
+                setNewTipoName("");
+              }}
+              className="text-sm text-gray-500 px-1 hover:text-gray-900"
+            >
+              ×
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setCreatingTipo(true)}
+            className="text-sm border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium hover:border-gray-500"
+            title="Crear un tipo nuevo en esta pestaña"
+          >
+            + Nuevo tipo
+          </button>
+        )}
         <button
           onClick={() => {
             if (adding) {
@@ -1001,7 +1325,7 @@ export default function ArtefactosCatalogClient({
                 className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500 bg-white"
               >
                 <option value="">Sin tipo</option>
-                {tipoOptionsFor(newItem.subcategory).map((t) => (
+                {tiposDe(newItem.subcategory).map((t) => (
                   <option key={t} value={t}>
                     {t}
                   </option>
@@ -1189,28 +1513,64 @@ export default function ArtefactosCatalogClient({
 
         {!isFiltering && tabItems.length > 1 && (
           <div className="px-4 py-1.5 bg-white border-b border-gray-100 text-[11px] text-gray-400">
-            Los artefactos del mismo tipo quedan juntos bajo su encabezado.
-            Dentro de cada tipo, arrastrá desde la manija (⋮⋮) para ordenarlos.
-            Para cambiar un artefacto de tipo o de pestaña, usá el botón Editar.
+            Los artefactos del mismo tipo quedan juntos, subagrupados por línea y
+            color (clic en el subgrupo para abrir/cerrar). Dentro de cada
+            subgrupo, arrastrá desde la manija (⋮⋮) para ordenarlos. Para cambiar
+            un artefacto de tipo o de pestaña, usá el botón Editar.
           </div>
         )}
 
-        {visible.length === 0 ? (
+        {visible.length === 0 && groups.length === 0 ? (
           <div className="p-8 text-center text-sm text-gray-500">
             {tabItems.length === 0
               ? "Todavía no hay artefactos en esta pestaña. Apretá '+ Nuevo artefacto' para empezar."
               : "No hay resultados con esos filtros."}
           </div>
         ) : (
-          groups.map((g) => (
-            <Fragment key={g.tag || "__sin_tipo__"}>
-              {g.tag ? (
+          <DndContext
+            id="tipos-dnd"
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={onTipoDragEnd}
+          >
+          <SortableContext
+            items={groups.filter((g) => g.tipoId).map((g) => g.tipoId as string)}
+            strategy={verticalListSortingStrategy}
+          >
+          {groups.map((g) => (
+            <Fragment key={g.tipoId || g.tag || "__sin_tipo__"}>
+              {g.tipoId ? (
+                // Tipo manejable: arrastrable, renombrable, borrable.
+                <SortableTipoHeader
+                  tipo={tipos.find((t) => t.id === g.tipoId)!}
+                  count={g.items.length}
+                  busy={tipoBusy}
+                  canDrag={!isFiltering}
+                  isRenaming={renamingTipoId === g.tipoId}
+                  renameValue={renameTipoName}
+                  onRenameChange={setRenameTipoName}
+                  onSave={() =>
+                    saveRenameTipo(tipos.find((t) => t.id === g.tipoId)!)
+                  }
+                  onCancel={() => setRenamingTipoId(null)}
+                  onOpenRename={() =>
+                    openRenameTipo(tipos.find((t) => t.id === g.tipoId)!)
+                  }
+                  onDelete={() =>
+                    deleteTipo(tipos.find((t) => t.id === g.tipoId)!)
+                  }
+                  onAdd={() => openAddForTag(g.tag)}
+                />
+              ) : g.tag ? (
+                // Tipo "viejo" presente en artefactos pero no en la lista
+                // editable (legacy): se muestra, sin manejo, para no esconderlo.
                 <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-3">
-                  <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                     {g.tag}
+                    <span className="ml-1.5 normal-case tracking-normal text-gray-300">
+                      (sin tipo propio)
+                    </span>
                   </span>
-                  {/* Agregar un artefacto directamente a este tipo (ya queda
-                      asignado a este grupo y a la pestaña actual). */}
                   <button
                     type="button"
                     onClick={() => openAddForTag(g.tag)}
@@ -1221,38 +1581,288 @@ export default function ArtefactosCatalogClient({
                   </button>
                 </div>
               ) : (
-                groups.length > 1 && (
-                  <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                    Sin tipo
-                  </div>
-                )
+                <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                  Sin tipo
+                </div>
               )}
-              <DndContext
-                id={`artefactos-dnd-${g.tag || "sin-tipo"}`}
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={(e) => onDragEndGroup(e, g.items)}
-              >
-                <SortableContext
-                  items={g.items.map((it) => it.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {g.items.map((item) => (
-                    <CatalogItemRow
-                      key={item.id}
-                      item={item}
-                      canReorder={!isFiltering}
-                      onUpdate={(patch) => updateItem(item.id, patch)}
-                      onEdit={() => openEdit(item)}
-                      onDelete={() => deleteItem(item.id)}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
+              {(() => {
+                const baseId = `artefactos-dnd-${g.tag || "sin-tipo"}`;
+                const subs = buildSubgroups(g.items);
+                // Un solo subgrupo (o todo "Otros"): no agrega ruido, se
+                // muestra plano como antes.
+                if (subs.length <= 1) return renderRows(g.items, baseId);
+                return subs.map((sg) => {
+                  const key = `${g.tag}::${sg.key}`;
+                  const collapsed = isSubgroupCollapsed(key, g.items.length);
+                  return (
+                    <Fragment key={key}>
+                      {/* Encabezado del subgrupo: más liviano e indentado que
+                          el del tipo (jerarquía por tipografía, no por color).
+                          El "renombrar" aparece al pasar el mouse. */}
+                      <div className="group w-full flex items-center gap-1.5 pl-9 pr-4 py-1 bg-white border-b border-gray-100 hover:bg-gray-50">
+                        <button
+                          type="button"
+                          onClick={() => toggleSubgroup(key, collapsed)}
+                          className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
+                        >
+                          <Chevron open={!collapsed} />
+                          <span className="text-[10px] font-medium text-gray-500 tracking-wide">
+                            {sg.hasLineColor ? (
+                              <>
+                                {sg.line && (
+                                  <span className="uppercase">{sg.line}</span>
+                                )}
+                                {sg.line && sg.finish ? " · " : ""}
+                                {sg.finish}
+                              </>
+                            ) : (
+                              "Sin línea / Otros"
+                            )}
+                          </span>
+                          <span className="text-[10px] text-gray-400 tabular-nums">
+                            · {sg.items.length}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openRename(key, sg)}
+                          className="shrink-0 text-[10px] uppercase tracking-wider text-gray-400 hover:text-gray-900 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                          title="Renombrar la línea/color de este subgrupo (se aplica a todos sus artefactos)"
+                        >
+                          renombrar
+                        </button>
+                        {/* Mover todo el subgrupo a otro tipo. Solo si hay otros
+                            tipos a los que moverlo en esta pestaña. */}
+                        {tiposDe(activeTab).filter((t) => t !== g.tag).length >
+                          0 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMovingSubKey(movingSubKey === key ? null : key)
+                            }
+                            className="shrink-0 text-[10px] uppercase tracking-wider text-gray-400 hover:text-gray-900 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            title="Mover todo este subgrupo a otro tipo"
+                          >
+                            mover a…
+                          </button>
+                        )}
+                      </div>
+                      {movingSubKey === key && (
+                        <div className="pl-9 pr-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+                          <span className="text-[10px] uppercase tracking-wider text-gray-500">
+                            Mover los {sg.items.length} artefactos a
+                          </span>
+                          <select
+                            autoFocus
+                            defaultValue=""
+                            onChange={(e) => {
+                              if (e.target.value) moveSubgroup(sg, e.target.value);
+                            }}
+                            className="px-2 py-1 border border-gray-300 rounded text-xs bg-white outline-none cursor-pointer focus:border-gray-500"
+                          >
+                            <option value="" disabled>
+                              elegí un tipo…
+                            </option>
+                            {tiposDe(activeTab)
+                              .filter((t) => t !== g.tag)
+                              .map((t) => (
+                                <option key={t} value={t}>
+                                  {t}
+                                </option>
+                              ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => setMovingSubKey(null)}
+                            className="text-xs text-gray-500 hover:text-gray-900"
+                          >
+                            cancelar
+                          </button>
+                        </div>
+                      )}
+                      {renamingSubKey === key && (
+                        <div className="pl-9 pr-4 py-2 bg-gray-50 border-b border-gray-200 flex flex-wrap items-end gap-3">
+                          <div>
+                            <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
+                              Línea
+                            </label>
+                            <input
+                              type="text"
+                              list="lineas-list"
+                              value={renameLine}
+                              onChange={(e) => setRenameLine(e.target.value)}
+                              placeholder="Sin línea"
+                              className="w-32 bg-white border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-gray-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
+                              Color
+                            </label>
+                            <input
+                              type="text"
+                              list="colores-list"
+                              value={renameFinish}
+                              onChange={(e) => setRenameFinish(e.target.value)}
+                              placeholder="Sin color"
+                              className="w-32 bg-white border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-gray-500"
+                            />
+                          </div>
+                          <span className="text-[10px] text-gray-500 mb-1.5">
+                            Se aplica a los {sg.items.length} artefactos de este
+                            subgrupo. Si la combinación ya existe, se fusionan.
+                          </span>
+                          <div className="flex gap-2 ml-auto mb-0.5">
+                            <button
+                              type="button"
+                              onClick={cancelRename}
+                              className="text-xs text-gray-600 px-2 py-1 hover:text-gray-900"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => saveRename(sg)}
+                              disabled={savingRename}
+                              className="text-xs bg-gray-900 text-white px-3 py-1 rounded hover:bg-gray-800 disabled:opacity-50"
+                            >
+                              {savingRename ? "Guardando…" : "Guardar"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {!collapsed && renderRows(sg.items, `${baseId}-${sg.key}`)}
+                    </Fragment>
+                  );
+                });
+              })()}
             </Fragment>
-          ))
+          ))}
+          </SortableContext>
+          </DndContext>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Componente: encabezado de tipo (arrastrable, renombrable, borrable) ──
+function SortableTipoHeader({
+  tipo,
+  count,
+  busy,
+  canDrag,
+  isRenaming,
+  renameValue,
+  onRenameChange,
+  onSave,
+  onCancel,
+  onOpenRename,
+  onDelete,
+  onAdd,
+}: {
+  tipo: ArtefactoTipo;
+  count: number;
+  busy: boolean;
+  canDrag: boolean;
+  isRenaming: boolean;
+  renameValue: string;
+  onRenameChange: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  onOpenRename: () => void;
+  onDelete: () => void;
+  onAdd: () => void;
+}) {
+  const s = useSortable({ id: tipo.id, disabled: !canDrag });
+  const style = {
+    transform: CSS.Transform.toString(s.transform),
+    transition: s.transition,
+    opacity: s.isDragging ? 0.5 : 1,
+    zIndex: s.isDragging ? 10 : ("auto" as const),
+    background: s.isDragging ? "#F3F4F6" : undefined,
+  };
+  return (
+    <div
+      ref={s.setNodeRef}
+      style={style}
+      className="group flex items-center gap-2 px-4 py-1.5 bg-gray-50 border-b border-gray-200"
+    >
+      {canDrag ? (
+        <span
+          {...s.attributes}
+          {...s.listeners}
+          className="cursor-grab text-gray-300 hover:text-gray-600 select-none text-[11px]"
+          title="Arrastrar para reordenar el tipo"
+        >
+          ⋮⋮
+        </span>
+      ) : (
+        <span
+          className="text-gray-200 select-none text-[11px]"
+          title="Sacá la búsqueda/filtros para reordenar los tipos"
+        >
+          ⋮⋮
+        </span>
+      )}
+      {isRenaming ? (
+        <div className="flex items-center gap-1.5 flex-1">
+          <input
+            autoFocus
+            type="text"
+            value={renameValue}
+            onChange={(e) => onRenameChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onSave();
+              if (e.key === "Escape") onCancel();
+            }}
+            className="w-44 px-2 py-0.5 border border-gray-300 rounded text-[11px] font-semibold uppercase tracking-wider outline-none focus:border-gray-500"
+          />
+          <button
+            onClick={onSave}
+            disabled={busy}
+            className="text-[10px] uppercase tracking-wider bg-gray-900 text-white px-2 py-0.5 rounded hover:bg-gray-800 disabled:opacity-50"
+          >
+            Guardar
+          </button>
+          <button
+            onClick={onCancel}
+            className="text-[10px] text-gray-500 hover:text-gray-900"
+          >
+            Cancelar
+          </button>
+        </div>
+      ) : (
+        <>
+          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex-1">
+            {tipo.name}
+            <span className="ml-1.5 text-gray-400 tabular-nums">· {count}</span>
+          </span>
+          <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+            <button
+              onClick={onOpenRename}
+              className="text-[10px] uppercase tracking-wider text-gray-400 hover:text-gray-900"
+              title="Renombrar el tipo (cambia también el tipo de sus artefactos)"
+            >
+              renombrar
+            </button>
+            <button
+              onClick={onDelete}
+              className="text-[10px] uppercase tracking-wider text-gray-400 hover:text-red-600"
+              title="Borrar el tipo (bloqueado si tiene artefactos)"
+            >
+              borrar
+            </button>
+          </div>
+          <button
+            onClick={onAdd}
+            className="text-[10px] uppercase tracking-wider text-gray-500 hover:text-gray-900"
+            title={`Agregar un artefacto en ${tipo.name}`}
+          >
+            + agregar
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -1551,6 +2161,13 @@ function PriceReviewPanel({
   onClose: () => void;
 }) {
   const COLS = "grid-cols-[minmax(0,1fr)_5.5rem_3.5rem_8rem_5rem]";
+  // Por default mostramos SOLO lo que cambió (lo que MJ quiere revisar). El
+  // resto (sin cambio / no se pudo leer) queda detrás de "ver todos".
+  const [showAll, setShowAll] = useState(false);
+  const changedRows = rows.filter(
+    (r) => r.status === "ok" && r.delta != null && r.delta !== 0
+  );
+  const displayRows = showAll ? rows : changedRows;
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
       <div className="flex items-center justify-between mb-3">
@@ -1576,7 +2193,7 @@ function PriceReviewPanel({
       ) : (
         <>
           {resumen && (
-            <div className="flex items-center justify-between mb-3 text-xs text-gray-600">
+            <div className="flex items-center justify-between gap-3 mb-3 text-xs text-gray-600">
               <span>
                 {resumen.conLink} con link ·{" "}
                 <span className="text-gray-900 font-medium">
@@ -1586,14 +2203,26 @@ function PriceReviewPanel({
                   ? ` · ${resumen.noLeidos} no se pudieron leer`
                   : ""}
               </span>
-              {resumen.cambiaron > 0 && (
+              <div className="flex items-center gap-3 shrink-0">
+                {/* Alterna entre ver solo los cambios (default) y la lista
+                    completa, sin tocar qué hace "aplicar". */}
                 <button
-                  onClick={onApplyAll}
-                  className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded hover:bg-gray-800"
+                  onClick={() => setShowAll((v) => !v)}
+                  className="text-gray-500 underline hover:text-gray-900"
                 >
-                  Aplicar todos los cambios
+                  {showAll
+                    ? "Ver solo los que cambiaron"
+                    : `Ver todos (${rows.length})`}
                 </button>
-              )}
+                {resumen.cambiaron > 0 && (
+                  <button
+                    onClick={onApplyAll}
+                    className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded hover:bg-gray-800"
+                  >
+                    Aplicar todos los cambios
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -1607,7 +2236,18 @@ function PriceReviewPanel({
               <div className="text-right">Total (antes → web)</div>
               <div></div>
             </div>
-            {rows.map((r) => {
+            {displayRows.length === 0 ? (
+              <div className="px-3 py-6 text-center text-xs text-gray-500">
+                Ningún precio cambió.{" "}
+                <button
+                  onClick={() => setShowAll(true)}
+                  className="text-gray-600 underline hover:text-gray-900"
+                >
+                  Ver todos ({rows.length})
+                </button>
+              </div>
+            ) : (
+              displayRows.map((r) => {
               const changed =
                 r.status === "ok" && r.delta != null && r.delta !== 0;
               return (
@@ -1680,7 +2320,8 @@ function PriceReviewPanel({
                   </div>
                 </div>
               );
-            })}
+              })
+            )}
           </div>
           <p className="text-[10px] text-gray-400 mt-2">
             Al aplicar se actualiza el precio lista y el descuento con lo del

@@ -4,13 +4,19 @@ import ArtefactosCatalogClient from "@/components/catalogo/ArtefactosCatalogClie
 export const dynamic = "force-dynamic";
 
 export default async function CatalogoArtefactosPage() {
-  const items = await prisma.artefactoCatalog.findMany({
-    orderBy: [
-      { subcategory: "asc" },
-      { sortOrder: "asc" }, // orden manual dentro de la pestaña
-      { name: "asc" }, // fallback estable cuando empatan en sortOrder
-    ],
-  });
+  const [items, tipos] = await Promise.all([
+    prisma.artefactoCatalog.findMany({
+      orderBy: [
+        { subcategory: "asc" },
+        { sortOrder: "asc" }, // orden manual dentro de la pestaña
+        { name: "asc" }, // fallback estable cuando empatan en sortOrder
+      ],
+    }),
+    // Tipos editables por MJ (antes vivían fijos en el código).
+    prisma.artefactoTipo.findMany({
+      orderBy: [{ subcategory: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+    }),
+  ]);
 
   const total = items.length;
   const bySubcat = {
@@ -35,7 +41,7 @@ export default async function CatalogoArtefactosPage() {
         </div>
       </div>
 
-      <ArtefactosCatalogClient initialItems={items} />
+      <ArtefactosCatalogClient initialItems={items} initialTipos={tipos} />
     </div>
   );
 }

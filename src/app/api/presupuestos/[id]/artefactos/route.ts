@@ -32,22 +32,32 @@ export async function POST(
         ? data.clientPrice
         : listPrice * (1 - discountPct);
 
-    // El catálogo BLARQ de artefactos se construye solo: cada producto que
-    // se agrega a una cotización entra al catálogo. Si el item ya viene
-    // del catálogo usamos su catalogId; si no, buscamos/creamos la entrada
-    // por nombre. (Pedido de MJ 2026-05-16.)
+    // Vínculo al catálogo:
+    //   - Si el item viene del catálogo (Buscar en catálogo), trae su catalogId.
+    //   - Si es un alta manual ("Crear nuevo"), depende de la elección de MJ:
+    //       · "Desplegar al catálogo" (promoteToCatalog=true) → crea/reutiliza
+    //         la entrada del catálogo por nombre y queda vinculado.
+    //       · "Solo en este proyecto" (default) → queda sin catalogId; NO entra
+    //         al catálogo.
+    //   Cambio 2026-06-19: antes TODO lo manual entraba al catálogo
+    //   automáticamente (pedido 2026-05-16). MJ pidió poder elegir, con
+    //   "solo este proyecto" como default para no ensuciar el catálogo.
     const catalogId =
       data.catalogId ||
-      (await ensureArtefactoCatalog(prisma, {
-        name: data.name,
-        detail: data.detail,
-        brand: data.brand,
-        subcategory: data.subcategory,
-        referenceLink: data.referenceLink,
-        imageUrl: data.imageUrl,
-        listPrice,
-        discountPercent: discountPct,
-      }));
+      (data.promoteToCatalog
+        ? await ensureArtefactoCatalog(prisma, {
+            name: data.name,
+            detail: data.detail,
+            brand: data.brand,
+            subcategory: data.subcategory,
+            referenceLink: data.referenceLink,
+            imageUrl: data.imageUrl,
+            line: data.line,
+            finish: data.finish,
+            listPrice,
+            discountPercent: discountPct,
+          })
+        : null);
 
     const item = await prisma.artefactoItem.create({
       data: {

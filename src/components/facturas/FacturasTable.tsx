@@ -82,7 +82,13 @@ export default function FacturasTable({
 
   // Adaptamos los props existentes al shape que esperan los selects inline.
   const projectOptions: ProjectOption[] = useMemo(
-    () => projects.map((p) => ({ id: p.id, name: p.name })),
+    () =>
+      projects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        numeroProyecto: p.numeroProyecto,
+        numeroCotizacion: p.numeroCotizacion,
+      })),
     [projects]
   );
   const categoryOptions: CategoryOption[] = useMemo(

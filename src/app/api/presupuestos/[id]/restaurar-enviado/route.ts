@@ -1,11 +1,14 @@
 /**
  * "Volver a lo enviado": restaura la versión a su foto (sentSnapshot).
  * Úsalo cuando, tras editar a mano una versión enviada, MJ quiere deshacer
- * y dejarla EXACTAMENTE como se mandó al cliente. Solo obra por ahora.
+ * y dejarla EXACTAMENTE como se mandó al cliente. Soportado: obra y artefactos.
  */
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import { restoreObraFromSnapshot } from "@/lib/catalog/budgetSnapshot";
+import {
+  restoreObraFromSnapshot,
+  restoreArtefactosFromSnapshot,
+} from "@/lib/catalog/budgetSnapshot";
 import { requireSession } from "@/lib/apiAuth";
 
 export async function POST(
@@ -28,13 +31,16 @@ export async function POST(
         { status: 400 }
       );
     }
-    if (bv.type !== "obra") {
+    if (bv.type !== "obra" && bv.type !== "artefactos") {
       return NextResponse.json(
-        { error: "Volver a lo enviado está implementado solo para obra" },
+        { error: "Volver a lo enviado está implementado para obra y artefactos" },
         { status: 400 }
       );
     }
-    const res = await restoreObraFromSnapshot(id);
+    const res =
+      bv.type === "obra"
+        ? await restoreObraFromSnapshot(id)
+        : await restoreArtefactosFromSnapshot(id);
     return NextResponse.json({ ok: true, ...res });
   } catch (error) {
     console.error("Error restaurando a lo enviado:", error);

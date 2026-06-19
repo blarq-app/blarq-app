@@ -9,6 +9,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
+import { propagateCatalogToBorradores } from "@/lib/catalog/syncArtefactos";
 
 export async function PUT(
   request: NextRequest,
@@ -46,7 +47,33 @@ export async function PUT(
         ...(updateLastCheck && { lastPriceCheck: new Date() }),
       },
     });
-    return NextResponse.json(item);
+
+    // ── Propagación catálogo → cotizaciones en BORRADOR ──────────────────
+    //
+    // Rediseño precios artefactos 2026-06-18 (ADR del mismo día): el catálogo
+    // es el precio MAESTRO. Cuando se edita acá (a mano o aplicando "Revisar
+    // precios"), el cambio BAJA a las líneas de cotizaciones que:
+    //   - apuntan a este item (catalogId),
+    //   - NO fueron editadas a mano en la cotización (priceOverridden=false),
+    //   - y están en BORRADOR (las enviadas/aprobadas quedan congeladas,
+    //     igual que en obra: el catálogo nunca toca lo que ya vio el cliente).
+    //
+    // Decisión consciente de MJ y DISTINTA a la regla de obra (donde el
+    // catálogo es opt-in y no propaga solo). Para artefactos el flujo es como
+    // ella arma el presupuesto: el maestro manda sobre los borradores.
+    //
+    // La lógica vive en lib (testeable sin servidor). Ver syncArtefactos.ts.
+    const lineasActualizadas = await propagateCatalogToBorradores(id, {
+      name: item.name,
+      detail: item.detail,
+      brand: item.brand,
+      listPrice: item.listPrice,
+      discountPercent: item.discountPercent,
+      referenceLink: item.referenceLink,
+      imageUrl: item.imageUrl,
+    });
+
+    return NextResponse.json({ ...item, lineasActualizadas });
   } catch (error) {
     console.error("Error updating catalog artefacto:", error);
     return NextResponse.json(

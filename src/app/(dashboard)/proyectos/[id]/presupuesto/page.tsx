@@ -450,6 +450,12 @@ export default async function PresupuestoPage({
                             currentStatus={budget.status}
                             version={budget.version}
                           />
+                          {budget.status === "enviado" && budget.sentAt && (
+                            <VolverALoEnviadoButton
+                              budgetId={budget.id}
+                              version={budget.version}
+                            />
+                          )}
                           <BorrarBudgetButton
                             budgetId={budget.id}
                             currentStatus={budget.status}

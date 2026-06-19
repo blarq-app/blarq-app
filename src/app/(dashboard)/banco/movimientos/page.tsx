@@ -411,6 +411,15 @@ export default async function MovimientosPage({
             />
           ))}
         </div>
+        {/* Tipo de movimiento (ingreso / egreso) — antes estaba escondido en
+            "Filtros avanzados". MJ lo usa seguido y lo quería visible. Las
+            flechas ↗/↘ son las mismas de las tarjetas de arriba. "Transfer
+            interna" no va acá: ya tiene su propia pestaña de estado. */}
+        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
+          <FilterLink sp={sp} field="tipo" value={undefined} label="Todos" />
+          <FilterLink sp={sp} field="tipo" value="ingreso" label="↗ Ingresos" />
+          <FilterLink sp={sp} field="tipo" value="egreso" label="↘ Egresos" />
+        </div>
         {/* Buscador de texto + búsqueda por monto exacto, juntos en la barra
             visible. El monto antes estaba escondido en "Filtros avanzados";
             MJ lo usa seguido para conciliar y lo quería a mano. */}
@@ -428,16 +437,16 @@ export default async function MovimientosPage({
           dateFrom: sp.dateFrom ?? "",
           dateTo: sp.dateTo ?? "",
           estado: sp.estado ?? "",
-          tipo: sp.tipo ?? "",
           limit: sp.limit ?? "",
         }}
         preserveParams={{
           accountId: sp.accountId,
           status: sp.status,
           q: sp.q,
-          // El monto ahora vive en la barra visible (MovementsMontoSearch); el
-          // panel avanzado lo conserva pero ya no lo edita.
+          // El monto y el tipo (ingreso/egreso) ahora viven en la barra visible;
+          // el panel avanzado los conserva pero ya no los edita.
           monto: sp.monto,
+          tipo: sp.tipo,
         }}
       />
 

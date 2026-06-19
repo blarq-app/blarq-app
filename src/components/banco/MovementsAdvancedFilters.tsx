@@ -9,10 +9,10 @@ import { useRouter } from "next/navigation";
 // sin que la tabla se mueva en cada tecla. "Limpiar" borra solo los
 // filtros avanzados y deja intactos cuenta / status / búsqueda libre.
 
-// Nota: el filtro por monto exacto ya NO vive acá — se subió a la barra de
-// búsqueda visible (MovementsMontoSearch), porque MJ lo usa seguido para
-// conciliar y no quería abrir este panel cada vez. El param ?monto= lo maneja
-// ese componente; acá se conserva (preserveParams) pero no se edita.
+// Nota: el monto exacto y el tipo (ingreso/egreso) ya NO viven acá — se subieron
+// a la barra visible (MovementsMontoSearch y las pestañas de tipo), porque MJ los
+// usa seguido y no quería abrir este panel cada vez. Los params ?monto= y ?tipo=
+// los manejan esos controles; acá se conservan (preserveParams) pero no se editan.
 export type AdvancedFiltersValue = {
   rut: string;
   name: string;
@@ -20,7 +20,6 @@ export type AdvancedFiltersValue = {
   dateFrom: string;
   dateTo: string;
   estado: string; // "" | "sin_asignar" | "parcial" | "conciliado" | "sin_factura"
-  tipo: string; // "" | "ingreso" | "egreso" | "interno"
   limit: string; // "100" | "200" | "500" | "all"
 };
 
@@ -31,7 +30,6 @@ const EMPTY: AdvancedFiltersValue = {
   dateFrom: "",
   dateTo: "",
   estado: "",
-  tipo: "",
   limit: "",
 };
 
@@ -64,7 +62,6 @@ export default function MovementsAdvancedFilters({
     if (values.dateFrom) params.set("dateFrom", values.dateFrom);
     if (values.dateTo) params.set("dateTo", values.dateTo);
     if (values.estado) params.set("estado", values.estado);
-    if (values.tipo) params.set("tipo", values.tipo);
     if (values.limit) params.set("limit", values.limit);
     const qs = params.toString();
     return `/banco/movimientos${qs ? `?${qs}` : ""}`;
@@ -86,7 +83,6 @@ export default function MovementsAdvancedFilters({
     v.dateFrom,
     v.dateTo,
     v.estado,
-    v.tipo,
     v.limit,
   ].filter(Boolean).length;
 
@@ -171,18 +167,6 @@ export default function MovementsAdvancedFilters({
                 <option value="parcial">Parcial</option>
                 <option value="conciliado">Conciliado</option>
                 <option value="sin_factura">Sin factura</option>
-              </select>
-            </Field>
-            <Field label="Tipo movimiento">
-              <select
-                value={v.tipo}
-                onChange={(e) => setV({ ...v, tipo: e.target.value })}
-                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white text-gray-700 focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
-              >
-                <option value="">Todos</option>
-                <option value="ingreso">Ingreso</option>
-                <option value="egreso">Egreso</option>
-                <option value="interno">Transfer interna</option>
               </select>
             </Field>
 

@@ -23,22 +23,12 @@
 //   - Devolución neto-cero → se ignora.
 
 import { prisma } from "@/lib/prisma";
+import { esSocio } from "@/lib/banco/socios";
 
 // Socios de BLARQ: una transferencia que sale hacia ellos es un RETIRO, no un
-// gasto de operación. Se detecta por RUT (sin puntos ni guion) o por nombre.
-const SOCIO_RUTS = ["18022887", "18023983"]; // JT y MJ
-const SOCIO_NOMBRES = ["jose tomas lar", "maria jose blanco", "maría josé blanco"];
-
-function esRetiroSocio(
-  rut: string | null,
-  nombre: string | null,
-  desc: string | null
-): boolean {
-  const r = (rut ?? "").replace(/\D/g, "");
-  if (SOCIO_RUTS.some((s) => r.includes(s))) return true;
-  const t = `${nombre ?? ""} ${desc ?? ""}`.toLowerCase();
-  return SOCIO_NOMBRES.some((n) => t.includes(n));
-}
+// gasto de operación. La definición de "quién es socio" vive en banco/socios.ts
+// (misma que usa el import de cartolas, para no desincronizarse).
+const esRetiroSocio = esSocio;
 
 const ETIQUETA_CATEGORIA: Record<string, string> = {
   sueldo: "Sueldos",

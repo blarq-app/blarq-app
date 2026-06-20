@@ -236,6 +236,15 @@ export default function MovementsTable({
                         ) : m.category ? (
                           <span className="text-gray-600">
                             {categoryLabels[m.category] ?? m.category}
+                            {/* Sugerencia sin confirmar: un movimiento con
+                                categoría pero todavía "sin_asignar" es una
+                                propuesta del import (ej. sueldo a socio) que MJ
+                                aún no ratificó — no cuenta como archivado. */}
+                            {m.status === "sin_asignar" && (
+                              <span className="ml-1 text-[9px] uppercase tracking-wide bg-amber-100 text-amber-800 px-1 py-0.5 rounded align-middle whitespace-nowrap">
+                                a confirmar
+                              </span>
+                            )}
                           </span>
                         ) : isInternal ? (
                           <span className="text-gray-500">transfer interno</span>

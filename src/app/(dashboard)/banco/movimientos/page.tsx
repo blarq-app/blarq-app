@@ -7,6 +7,7 @@ import MovementsSearch from "@/components/banco/MovementsSearch";
 import MovementsMontoSearch from "@/components/banco/MovementsMontoSearch";
 import MovementsAdvancedFilters from "@/components/banco/MovementsAdvancedFilters";
 import MovementsTable from "@/components/banco/MovementsTable";
+import { SOCIO_RUTS, SOCIO_GLOSA_HINTS } from "@/lib/banco/socios";
 
 type SearchParams = {
   accountId?: string;
@@ -25,6 +26,7 @@ type SearchParams = {
   dateTo?: string;
   estado?: string; // mismo dominio que status, pero del panel avanzado
   tipo?: string; // ingreso | egreso | interno
+  socios?: string; // "1" = solo transferencias a socios (MJ/JT), para revisión
   limit?: string; // "100" | "200" | "500" | "all"
 };
 
@@ -130,6 +132,22 @@ export default async function MovimientosPage({
   } else if (sp.tipo === "interno") {
     // pisa el status default; igual lo dejamos explícito por claridad
     where.status = "interno";
+  }
+  // Filtro "transferencias a socios" (MJ/JT): para revisar de un saque todo lo
+  // que se les transfirió y re-imputar lo que no sea sueldo (reembolso/retiro/
+  // bono). Capta por RUT (confiable) o por la glosa truncada del banco.
+  if (sp.socios === "1") {
+    andFilters.push({
+      OR: [
+        ...SOCIO_RUTS.map((d) => ({ counterpartyRut: { contains: d } })),
+        ...SOCIO_GLOSA_HINTS.map((n) => ({
+          counterpartyName: { contains: n, mode: "insensitive" as const },
+        })),
+        ...SOCIO_GLOSA_HINTS.map((n) => ({
+          description: { contains: n, mode: "insensitive" as const },
+        })),
+      ],
+    });
   }
   if (andFilters.length > 0) where.AND = andFilters;
 
@@ -420,6 +438,9 @@ export default async function MovimientosPage({
           <FilterLink sp={sp} field="tipo" value="ingreso" label="↗ Ingresos" />
           <FilterLink sp={sp} field="tipo" value="egreso" label="↘ Egresos" />
         </div>
+        {/* Atajo de revisión: ver solo lo transferido a los socios (MJ/JT)
+            para confirmar sueldos o re-imputar reembolsos/retiros/bonos. */}
+        <SociosFilterLink sp={sp} />
         {/* Buscador de texto + búsqueda por monto exacto, juntos en la barra
             visible. El monto antes estaba escondido en "Filtros avanzados";
             MJ lo usa seguido para conciliar y lo quería a mano. */}
@@ -491,6 +512,32 @@ function FilterLink({
       }`}
     >
       {label}
+    </Link>
+  );
+}
+
+// Toggle "Transferencias a socios": prende/apaga el filtro socios=1 sin perder
+// el resto de los filtros activos. Pill aparte porque es una dimensión
+// ortogonal a ingreso/egreso (puede combinarse con cualquier pestaña).
+function SociosFilterLink({ sp }: { sp: SearchParams }) {
+  const active = sp.socios === "1";
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) {
+    if (k !== "socios" && k !== "id" && v) params.set(k, v as string);
+  }
+  if (!active) params.set("socios", "1");
+  const href = `/banco/movimientos${params.toString() ? "?" + params.toString() : ""}`;
+  return (
+    <Link
+      href={href}
+      title="Ver solo transferencias a los socios (MJ/JT) para confirmar sueldos o re-imputar reembolsos/retiros"
+      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+        active
+          ? "bg-gray-900 text-white border-gray-900"
+          : "text-gray-600 border-gray-200 bg-white hover:bg-gray-100"
+      }`}
+    >
+      Transferencias a socios
     </Link>
   );
 }

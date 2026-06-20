@@ -5,6 +5,7 @@ import { tryAutoMatchMovementWithInvoices } from "@/lib/banco/invoicePayments";
 import { applyRulesToMovement } from "@/lib/banco/categorizationRules";
 import { planImportDedup } from "@/lib/banco/dedup";
 import { requireSession } from "@/lib/apiAuth";
+import { esSocio } from "@/lib/banco/socios";
 
 // El dedup del import vive en `planImportDedup` (src/lib/banco/dedup.ts).
 // Identifica cada movimiento por una huella estable (fecha + monto +
@@ -134,6 +135,20 @@ export async function POST(request: NextRequest) {
     const insertedIds: string[] = [];
     for (const mov of toInsert) {
       try {
+        // Un "sueldo" sugerido hacia un SOCIO (MJ/JT) ya NO nace archivado como
+        // "sin factura": la transferencia puede ser reembolso, bono o retiro, no
+        // necesariamente sueldo. Conserva la sugerencia "sueldo" pero queda en
+        // estado "sin_asignar" (cola Pendiente) para que MJ la confirme o la
+        // cambie — y si es un reembolso, ahí se concilia contra la factura del
+        // proveedor. Los sueldos a NO-socios (empleados) y Previred siguen
+        // naciendo "sin factura". Decisión MJ 2026-06-19 (opción B).
+        const esSueldoSocio =
+          mov.suggestedCategory === "sueldo" &&
+          esSocio(mov.counterpartyRut, mov.counterpartyName, mov.description);
+        const naceSinFactura =
+          !!mov.suggestedCategory &&
+          CATEGORIAS_SIN_DOCUMENTO.has(mov.suggestedCategory) &&
+          !esSueldoSocio;
         const created = await prisma.bankMovement.create({
           data: {
             bankAccountId: bankAccount.id,
@@ -146,10 +161,7 @@ export async function POST(request: NextRequest) {
             counterpartyName: mov.counterpartyName,
             counterpartyRut: mov.counterpartyRut,
             category: mov.suggestedCategory,
-            status:
-              mov.suggestedCategory && CATEGORIAS_SIN_DOCUMENTO.has(mov.suggestedCategory)
-                ? "sin_factura"
-                : "sin_asignar",
+            status: naceSinFactura ? "sin_factura" : "sin_asignar",
           },
         });
         insertedIds.push(created.id);

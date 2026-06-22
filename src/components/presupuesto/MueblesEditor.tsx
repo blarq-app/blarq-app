@@ -1086,7 +1086,11 @@ function ChapterBlock({
         )
       )}
 
-      <div className="px-4 py-1.5 border-b border-gray-100 flex items-center gap-4">
+      {/* Dos acciones distintas, separadas a propósito para no confundirlas:
+          - "Agregar item" = partida de mueble normal (link gris discreto).
+          - "Partida de herrajes" = trae el catálogo (botón con borde, más
+            visible) — MJ se confundía y nombraba un item normal "HERRAJES". */}
+      <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between gap-4">
         <button
           onClick={onAddItem}
           className="text-[11px] text-gray-400 hover:text-gray-900"
@@ -1095,9 +1099,10 @@ function ChapterBlock({
         </button>
         <button
           onClick={onAddHerrajePartida}
-          className="text-[11px] text-gray-400 hover:text-gray-900"
+          className="text-[11px] font-medium text-gray-700 border border-gray-300 rounded px-2.5 py-1 hover:bg-gray-50 hover:border-gray-400 whitespace-nowrap"
+          title="Crea una partida que se arma con herrajes del catálogo (correderas, bisagras, cajones…)"
         >
-          + Partida de herrajes
+          + Partida de herrajes (del catálogo)
         </button>
       </div>
     </>

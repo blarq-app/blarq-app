@@ -88,6 +88,21 @@ export default async function PresupuestoDetailPage({
               </a>
             </>
           )}
+          {/* Listado de herrajes para el mueblista (sin precios), solo si la
+              cotización de muebles tiene herrajes cargados. */}
+          {budget.type === "muebles" &&
+            budget.muebleChapters.some((ch) =>
+              ch.items.some((i) => i.herrajes.length > 0),
+            ) && (
+              <a
+                href={`/api/presupuestos/${budget.id}/pdf?tipo=mueblista`}
+                target="_blank"
+                className="border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+                title="Listado de herrajes por sector SIN precios, para pasarle al mueblista"
+              >
+                PDF mueblista
+              </a>
+            )}
           <a
             href={`/api/presupuestos/${budget.id}/pdf`}
             target="_blank"

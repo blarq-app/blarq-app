@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-22 — Resumen: calculadora "Armar avance + Me paso a Sueldos"
+
+- **Reemplaza las tarjetas "Fondo Sueldos" (forma de pago) y "Utilidad por cobro"** por una calculadora coherente con el Cuadro Resumen, por concepto (Obra / Art. Cocina / Sanitarios / Iluminación / Muebles). Pedido por MJ tras ver el flujo real de avances.
+- **Pieza 1 "Armar el próximo avance"** (interactiva): por concepto MJ pone el objetivo % → a pedir = objetivo% × acordado − ya pagado, recalcula saldo y "total a pedir al cliente". Reemplaza el armado en Excel.
+- **Pieza 2 "Me paso a Sueldos"**: obra (GG) + muebles (utilidad neta); generado = % alcanzado × utilidad al 100%; menos lo ya transferido (motor de transferencias internas, PR #181) = a transferir ahora. Artefactos no generan.
+- **Módulo compartido `src/lib/projects/cuadroResumen.ts`** (`computeCuadroResumen`): se extrajo el cálculo por concepto que vivía inline en `CuadroResumen.tsx` para no duplicarlo; ahora la vista y la calculadora usan la misma fuente. `CuadroResumen` solo renderiza.
+- **Sin cambio de schema.** Calculadora en vivo (no persiste el borrador). Verificado en dev (objetivo 65% recalcula a pedir y sueldo en vivo; Cuadro Resumen idéntico tras el refactor) y validado el cálculo contra la V6 real de Lefevre (obra/cocina/sanitarios/iluminación cuadran al peso). `tsc` limpio. Se borraron los componentes/lib superados (FondoSueldosCard, UtilidadPorCobroCard, formaPagoFondo).
+
 ## 2026-06-22 — Fondo Sueldos: tarjeta rediseñada como forma de pago
 
 - **Rediseño de `FondoSueldosCard`** (resumen del proyecto), pedido por MJ sobre JNC. Antes: columnas Cobrado / % cobrado / Generado (la columna Cobrado venía inflada porque el resumen le pasaba TODAS las facturas a `computeFondoSueldos`). Ahora: por tipo se muestra **costo directo** + **utilidad a generar** (GG obra / utilidad muebles, destacada).

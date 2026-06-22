@@ -56,6 +56,7 @@ export async function GET(
         id: true,
         name: true,
         listPrice: true,
+        discountPercent: true,
         clientPrice: true,
         realCostBlarq: true,
         imageUrl: true,
@@ -74,9 +75,12 @@ export async function GET(
         skippedCatalogGone++;
         return [];
       }
-      // Precio a cliente del catálogo: si no tiene clientPrice explícito,
-      // se vende al precio de lista (misma convención que el catálogo).
-      const catClient = cat.clientPrice ?? cat.listPrice;
+      // Precio a cliente del catálogo: lista × (1 − dcto), igual que como el
+      // propio catálogo muestra el precio (el descuento de la web vive en
+      // discountPercent). Bajamos lista + descuento tal cual, así la columna
+      // DCTO de la cotización refleja el descuento de la web.
+      const catDiscount = cat.discountPercent ?? 0;
+      const catClient = Math.round(cat.listPrice * (1 - catDiscount));
       return [
         {
           itemId: it.id,
@@ -94,6 +98,7 @@ export async function GET(
             realCostBlarq: cat.realCostBlarq,
             clientPrice: catClient,
             listPrice: cat.listPrice,
+            discountPercent: catDiscount,
             imageUrl: cat.imageUrl,
             referenceLink: cat.referenceLink,
           },

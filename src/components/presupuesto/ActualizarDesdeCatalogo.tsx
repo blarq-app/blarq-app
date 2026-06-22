@@ -9,6 +9,7 @@ interface CatalogValues {
   realCostBlarq: number | null;
   clientPrice: number | null;
   listPrice: number;
+  discountPercent?: number; // solo viene en el lado `catalog`
   imageUrl: string | null;
   referenceLink: string | null;
 }
@@ -167,19 +168,11 @@ export default function ActualizarDesdeCatalogo({
         patch.realCostBlarq = d.catalog.realCostBlarq;
       }
       if (s.price && d.catalog.clientPrice != null && d.catalog.clientPrice > 0) {
-        // El editor deriva clientPrice = listPrice × (1 − dcto). Para que el
-        // resultado sea exactamente el precio a cliente del catálogo, mando
-        // listPrice del catálogo y el dcto que lo reproduce.
-        const catList = d.catalog.listPrice;
-        const catClient = d.catalog.clientPrice;
-        if (catList > 0) {
-          patch.listPrice = catList;
-          patch.discountPercent = Math.max(0, 1 - catClient / catList);
-        } else {
-          // Catálogo sin precio de lista: el cliente paga el clientPrice puro.
-          patch.listPrice = catClient;
-          patch.discountPercent = 0;
-        }
+        // Bajamos lista + descuento tal cual del catálogo (el editor recalcula
+        // clientPrice = lista × (1 − dcto)). Así la columna DCTO de la
+        // cotización queda con el descuento de la web, igual que en el catálogo.
+        patch.listPrice = d.catalog.listPrice;
+        patch.discountPercent = d.catalog.discountPercent ?? 0;
       }
       if (s.image && d.catalog.imageUrl) {
         patch.imageUrl = d.catalog.imageUrl;

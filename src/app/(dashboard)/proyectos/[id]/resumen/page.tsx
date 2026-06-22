@@ -6,9 +6,8 @@ import Link from "next/link";
 import CentroCostoView from "@/components/proyecto/CentroCostoView";
 import { computeProjectMetrics } from "@/lib/projects/metrics";
 import { computeCuadroResumen, type CuadroResumenInput } from "@/lib/projects/cuadroResumen";
-import AvanceSueldosCalculator from "@/components/proyecto/AvanceSueldosCalculator";
 import ProjectAlerts from "@/components/proyecto/ProjectAlerts";
-import CuadroResumen from "@/components/proyecto/CuadroResumen";
+import CuadroResumenAvance from "@/components/proyecto/CuadroResumenAvance";
 
 // Mapa: nombre de CostCategory -> campo de desglose en ObraItem.
 // Margen NO está acá — es un componente del costo directo presupuestado
@@ -459,7 +458,7 @@ export default async function ResultadosPage({
           con facturas. Réplica del cuadro Excel que MJ lleva a mano.
           Va inmediatamente debajo de los cards porque es la vista
           "macro" del proyecto. */}
-      <CuadroResumen data={cuadroData} />
+      <CuadroResumenAvance data={cuadroData} transferido={transferidoSueldos} />
 
       {/* Presupuesto vs Real — tabla jerárquica con 3 secciones + total */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
@@ -663,13 +662,6 @@ export default async function ResultadosPage({
         </p>
       </div>
 
-      {/* Armar el próximo avance + Me paso a Sueldos. Calculadora coherente con
-          el Cuadro Resumen (por concepto). Reemplaza las tarjetas previas
-          "Fondo Sueldos" y "Utilidad por cobro". */}
-      <AvanceSueldosCalculator
-        conceptos={cuadroData.conceptos}
-        transferido={transferidoSueldos}
-      />
 
       {/* Avance Obra por Capítulo (compacto, al final) */}
       {chapterRows.length > 0 && (

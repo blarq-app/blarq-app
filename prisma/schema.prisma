@@ -67,6 +67,10 @@ model Project {
   // Movimientos bancarios conciliados a esta obra a mano (hoy: transferencias
   // internas Operativa→Sueldos imputadas a la obra). Ver BankMovement.projectId.
   bankMovements   BankMovement[]
+  // Objetivos % de la fila AVANCE del Cuadro Resumen, guardados por concepto
+  // (ej. {"obra":65,"cocina":100}). Es el borrador del próximo avance que MJ
+  // está armando para el cliente — se guarda para no perderlo al navegar.
+  avanceObjetivos Json?
 
   @@index([maestroId])
   @@index([status])

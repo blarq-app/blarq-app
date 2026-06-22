@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { formatCLP } from "@/lib/utils";
 import type { CuadroResumenData, ConceptoKey } from "@/lib/projects/cuadroResumen";
 
@@ -23,24 +23,45 @@ function fmtDate(d: Date): string {
 export default function CuadroResumenAvance({
   data,
   transferido,
+  projectId,
+  objetivosGuardados,
 }: {
   data: CuadroResumenData;
   // Lo ya transferido a Sueldos, separado por concepto (sinConcepto = traspasos
   // que MJ todavía no marcó obra/muebles en /banco).
   transferido: { obra: number; muebles: number; sinConcepto: number };
+  projectId: string;
+  // Objetivos % guardados (borrador del avance), o null si nunca se guardó.
+  objetivosGuardados: Record<string, number> | null;
 }) {
   const transferidoTotal = transferido.obra + transferido.muebles + transferido.sinConcepto;
   const { conceptos, pagos, totalAcordado, totalPagado, saldoTotal, avanceTotal, versionLabel } =
     data;
 
-  // % OBJETIVO al que MJ quiere llegar, por concepto. Default = el % ya cobrado
-  // (redondeado), así "a pedir" arranca en 0 hasta que sube la barra. Ponés
-  // 100 → te pide EXACTO el saldo que falta (sin problema de decimales).
+  // % OBJETIVO al que MJ quiere llegar, por concepto. Default por concepto = lo
+  // guardado si existe; si no, el % ya cobrado (floor, así "a pedir" arranca en
+  // $0). 100% → te pide EXACTO el saldo que falta.
   const [avance, setAvance] = useState<Record<string, number>>(() =>
-    // Floor (no round): si está al 37,99% el default es 37, no 38 — así "a
-    // pedir" arranca en $0 y no muestra una diferencia mínima espuria.
-    Object.fromEntries(conceptos.map((c) => [c.key, Math.floor(c.avancePct * 100)]))
+    Object.fromEntries(
+      conceptos.map((c) => [
+        c.key,
+        objetivosGuardados?.[c.key] ?? Math.floor(c.avancePct * 100),
+      ])
+    )
   );
+
+  // Guardado con retardo (debounce) para no pegarle al server en cada tecla.
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function guardar(objetivos: Record<string, number>) {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      fetch(`/api/proyectos/${projectId}/avance-objetivos`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objetivos }),
+      }).catch(() => {});
+    }, 600);
+  }
 
   const calc = useMemo(() => {
     const porConcepto = new Map<
@@ -95,7 +116,11 @@ export default function CuadroResumenAvance({
 
   function setPct(key: string, value: string) {
     const n = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
-    setAvance((prev) => ({ ...prev, [key]: n }));
+    setAvance((prev) => {
+      const next = { ...prev, [key]: n };
+      guardar(next); // persistir el borrador (con retardo)
+      return next;
+    });
   }
 
   const sueldoConceptos = conceptos.filter((c) => c.generaSueldo);

@@ -467,7 +467,14 @@ export default async function ResultadosPage({
           con facturas. Réplica del cuadro Excel que MJ lleva a mano.
           Va inmediatamente debajo de los cards porque es la vista
           "macro" del proyecto. */}
-      <CuadroResumenAvance data={cuadroData} transferido={transferido} />
+      <CuadroResumenAvance
+        data={cuadroData}
+        transferido={transferido}
+        projectId={id}
+        objetivosGuardados={
+          (project.avanceObjetivos as Record<string, number> | null) ?? null
+        }
+      />
 
       {/* Presupuesto vs Real — tabla jerárquica con 3 secciones + total */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">

@@ -14,6 +14,7 @@
 // pago es. Si está vacío, default = obra (lo más común).
 
 import type { Prisma } from "@prisma/client";
+import { conceptoDeFactura } from "@/lib/invoices/conceptoCobro";
 
 const projectFondoInclude = {
   invoices: {
@@ -24,6 +25,9 @@ const projectFondoInclude = {
       tipoDoc: true,
       totalAmount: true,
       conceptoCobro: true,
+      // Categoría asignada por MJ (Obra/Muebles/Artefactos) — fuente de verdad
+      // del concepto del cobro. Ver conceptoDeFactura.
+      category: { select: { name: true } },
       status: true,
       payments: { select: { amountApplied: true } },
     },
@@ -120,10 +124,14 @@ export function computeFondoSueldos(p: ProjectWithFondo): FondoSueldosCalculo {
           ? inv.totalAmount
           : 0;
     const signed = sign * cobradoDeFactura;
-    const concepto = inv.conceptoCobro ?? "obra";
+    // Concepto del cobro = categoría que asigna MJ (Obra/Muebles/Artefactos),
+    // con respaldo al campo legacy conceptoCobro. Antes era `conceptoCobro ??
+    // "obra"` → contaba TODO cobro sin concepto como obra (inflaba obra, dejaba
+    // muebles en cero). Ver conceptoDeFactura.
+    const concepto = conceptoDeFactura(inv);
     if (concepto === "muebles") mueblesCobrado += signed;
     else if (concepto === "obra") obraCobrado += signed;
-    // artefactos y mixto no aportan al fondo
+    // artefactos / sin concepto no aportan al fondo
   }
 
   const pctCobradoObra = obraTotalAcordado > 0 ? Math.min(1, obraCobrado / obraTotalAcordado) : 0;

@@ -44,10 +44,30 @@ type BudgetVersionLite = {
 type PaymentLite = { amountApplied: number; bankMovement: { date: Date } };
 type InvoiceLite = {
   type: string;
+  // Categoría que MJ asigna a la factura emitida (CostCategory "Obra" /
+  // "Muebles" / "Artefactos", appliesTo="emitida"). ES la fuente de verdad
+  // del concepto del cobro — el cuadro la lee de acá.
+  category: { name: string } | null;
+  // Campo legacy "obra | muebles | artefactos". Casi siempre null; se usa
+  // solo como respaldo si una factura vieja no tiene categoría.
   conceptoCobro: string | null;
   folioNumber: string | null;
   payments: PaymentLite[];
 };
+
+// Resuelve el concepto del cobro (obra / muebles / artefactos) de una factura
+// emitida. Prioriza la CATEGORÍA que asigna MJ (Obra/Muebles/Artefactos);
+// cae al campo legacy conceptoCobro solo si no hay categoría. Antes el cuadro
+// leía solo conceptoCobro (casi siempre vacío) → no contaba los cobros.
+function conceptoDeFactura(inv: InvoiceLite): "obra" | "muebles" | "artefactos" | null {
+  const cat = (inv.category?.name ?? "").toLowerCase();
+  if (cat.includes("obra")) return "obra";
+  if (cat.includes("mueble")) return "muebles";
+  if (cat.includes("artefacto")) return "artefactos";
+  const c = inv.conceptoCobro;
+  if (c === "obra" || c === "muebles" || c === "artefactos") return c;
+  return null;
+}
 export type CuadroResumenInput = {
   invoices: InvoiceLite[];
   budgets: BudgetVersionLite[];
@@ -160,9 +180,10 @@ export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenDa
         iluminacion: 0,
         muebles: 0,
       };
-      if (inv.conceptoCobro === "obra") porConcepto.obra = p.amountApplied;
-      else if (inv.conceptoCobro === "muebles") porConcepto.muebles = p.amountApplied;
-      else if (inv.conceptoCobro === "artefactos") {
+      const concepto = conceptoDeFactura(inv);
+      if (concepto === "obra") porConcepto.obra = p.amountApplied;
+      else if (concepto === "muebles") porConcepto.muebles = p.amountApplied;
+      else if (concepto === "artefactos") {
         porConcepto.cocina = p.amountApplied * ratioCocina;
         porConcepto.sanitarios = p.amountApplied * ratioSanitarios;
         porConcepto.iluminacion = p.amountApplied * ratioIluminacion;

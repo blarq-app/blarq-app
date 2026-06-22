@@ -25,8 +25,11 @@ export default function CuadroResumenAvance({
   transferido,
 }: {
   data: CuadroResumenData;
-  transferido: number;
+  // Lo ya transferido a Sueldos, separado por concepto (sinConcepto = traspasos
+  // que MJ todavía no marcó obra/muebles en /banco).
+  transferido: { obra: number; muebles: number; sinConcepto: number };
 }) {
+  const transferidoTotal = transferido.obra + transferido.muebles + transferido.sinConcepto;
   const { conceptos, pagos, totalAcordado, totalPagado, saldoTotal, avanceTotal, versionLabel } =
     data;
 
@@ -42,7 +45,14 @@ export default function CuadroResumenAvance({
   const calc = useMemo(() => {
     const porConcepto = new Map<
       ConceptoKey,
-      { aPedir: number; saldoNuevo: number; pctFinal: number; generado: number }
+      {
+        aPedir: number;
+        saldoNuevo: number;
+        pctFinal: number;
+        generado: number;
+        transferido: number;
+        faltaTransferir: number;
+      }
     >();
     let totalAPedir = 0;
     let totalSaldoNuevo = 0;
@@ -55,15 +65,28 @@ export default function CuadroResumenAvance({
       const saldoNuevo = Math.max(0, c.acordado - c.pagado - aPedir);
       const pctFinal = c.acordado > 0 ? (c.pagado + aPedir) / c.acordado : 0;
       const generado = c.generaSueldo ? Math.min(1, pctFinal) * c.utilidad100 : 0;
-      porConcepto.set(c.key, { aPedir, saldoNuevo, pctFinal, generado });
+      // Transferido por concepto (solo obra/muebles llevan sueldo).
+      const transf =
+        c.key === "obra" ? transferido.obra : c.key === "muebles" ? transferido.muebles : 0;
+      const faltaTransferir = Math.max(0, generado - transf);
+      porConcepto.set(c.key, {
+        aPedir,
+        saldoNuevo,
+        pctFinal,
+        generado,
+        transferido: transf,
+        faltaTransferir,
+      });
       totalAPedir += aPedir;
       totalSaldoNuevo += saldoNuevo;
       generadoTotal += generado;
     }
-    const aTransferir = Math.max(0, generadoTotal - transferido);
-    const transferidoDeMas = transferido - generadoTotal > 1000;
+    // A transferir total = lo generado menos TODO lo transferido (incl. lo sin
+    // clasificar) — es el número real a traspasar.
+    const aTransferir = Math.max(0, generadoTotal - transferidoTotal);
+    const transferidoDeMas = transferidoTotal - generadoTotal > 1000;
     return { porConcepto, totalAPedir, totalSaldoNuevo, generadoTotal, aTransferir, transferidoDeMas };
-  }, [conceptos, avance, transferido]);
+  }, [conceptos, avance, transferido, transferidoTotal]);
 
   if (conceptos.length === 0 && pagos.length === 0) return null;
 
@@ -220,8 +243,10 @@ export default function CuadroResumenAvance({
             <tr>
               <th className="text-left pb-2">Concepto</th>
               <th className="text-right pb-2">Utilidad al 100%</th>
-              <th className="text-right pb-2 w-24">% con el avance</th>
+              <th className="text-right pb-2 w-16">% avance</th>
               <th className="text-right pb-2">Generado</th>
+              <th className="text-right pb-2">Ya transferido</th>
+              <th className="text-right pb-2">Falta transferir</th>
             </tr>
           </thead>
           <tbody>
@@ -236,24 +261,34 @@ export default function CuadroResumenAvance({
                   <td className="py-2 text-right tabular-nums text-gray-600">{formatCLP(c.utilidad100)}</td>
                   <td className="py-2 text-right tabular-nums text-gray-400">{(cc.pctFinal * 100).toFixed(0)}%</td>
                   <td className="py-2 text-right tabular-nums font-medium text-emerald-800">{formatCLP(cc.generado)}</td>
+                  <td className="py-2 text-right tabular-nums text-gray-600">{formatCLP(cc.transferido)}</td>
+                  <td className="py-2 text-right tabular-nums font-medium text-gray-900">{formatCLP(cc.faltaTransferir)}</td>
                 </tr>
               );
             })}
             <tr className="border-t border-gray-200 font-bold">
-              <td className="py-2 uppercase tracking-wider text-xs text-gray-700" colSpan={3}>Generado total</td>
+              <td className="py-2 uppercase tracking-wider text-xs text-gray-700" colSpan={3}>Total</td>
               <td className="py-2 text-right tabular-nums text-gray-900">{formatCLP(calc.generadoTotal)}</td>
+              <td className="py-2 text-right tabular-nums text-gray-700">{formatCLP(transferidoTotal)}</td>
+              <td className="py-2 text-right tabular-nums text-gray-900">{formatCLP(calc.aTransferir)}</td>
             </tr>
           </tbody>
         </table>
         <div className="grid grid-cols-3 gap-3 mt-4">
           <Metric label="Generado" value={calc.generadoTotal} />
-          <Metric label="Ya transferido" value={transferido} />
+          <Metric label="Ya transferido" value={transferidoTotal} />
           <Metric label="A transferir ahora" value={calc.aTransferir} tone="ok" />
         </div>
+        {transferido.sinConcepto > 1000 && (
+          <p className="text-[11px] text-amber-700 mt-2">
+            Hay {formatCLP(transferido.sinConcepto)} transferido sin marcar obra/muebles. Marcá el
+            concepto de esas transferencias en Banco → Movimientos para verlo separado por concepto.
+          </p>
+        )}
         {calc.transferidoDeMas && (
           <p className="text-[11px] text-amber-700 mt-2">
-            Ya te transferiste más de lo generado ({formatCLP(transferido)} vs {formatCLP(calc.generadoTotal)}).
-            Te adelantaste {formatCLP(transferido - calc.generadoTotal)}.
+            Ya te transferiste más de lo generado ({formatCLP(transferidoTotal)} vs {formatCLP(calc.generadoTotal)}).
+            Te adelantaste {formatCLP(transferidoTotal - calc.generadoTotal)}.
           </p>
         )}
       </div>

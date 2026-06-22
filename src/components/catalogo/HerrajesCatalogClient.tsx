@@ -84,9 +84,53 @@ const CATEGORY_LABELS: Record<Category, string> = {
 };
 
 // ── IDs para el drag & drop ───────────────────────────────────────────────
-// Reordenamos solo ítems DENTRO de una misma categoría (no movemos entre
-// categorías ni reordenamos categorías: el set de 4 es fijo). Prefijo "I#".
+// Reordenamos solo PRODUCTOS DENTRO de una misma carpeta (no movemos entre
+// categorías ni reordenamos categorías: el set de 4 es fijo). El id de arrastre
+// usa el id de la PRIMERA variante del producto como representante. Prefijo "I#".
 const itemSortId = (itemId: string) => `I#${itemId}`;
+
+// ── Producto = grupo de variantes que solo difieren en medida/color ────────
+// Un "producto" agrupa filas que comparten (supplier, category, subgroup,
+// name). Cada variante sigue siendo su propio item del catálogo (su propio id,
+// costo, sku y link): esto es solo de DISPLAY, no cambia el modelo ni la base.
+interface ProductGroup {
+  key: string; // clave estable del producto (supplier|category|subgroup|name)
+  variants: HerrajeItem[]; // ordenadas por medida ascendente (orden de carga)
+}
+
+// Clave del producto: junta lo que define "el mismo producto en otra medida".
+// El name ya viene en MAYÚSCULA y normalizado; lo bajamos a minúscula para que
+// no se separe por diferencias de mayúsculas.
+function productKeyOf(it: HerrajeItem): string {
+  const sub = (it.subgroup ?? "").trim().toLowerCase();
+  return `${it.supplier}|${it.category}|${sub}|${it.name.trim().toLowerCase()}`;
+}
+
+// Agrupa una lista de items (ya filtrada) en productos, preservando el orden de
+// aparición (que viene por sortOrder). El primer item de cada grupo define la
+// posición del producto en la lista.
+function buildProductGroups(rowItems: HerrajeItem[]): ProductGroup[] {
+  const byKey = new Map<string, ProductGroup>();
+  for (const it of rowItems) {
+    const key = productKeyOf(it);
+    const existing = byKey.get(key);
+    if (existing) existing.variants.push(it);
+    else byKey.set(key, { key, variants: [it] });
+  }
+  return [...byKey.values()];
+}
+
+// Etiqueta de una variante para el desplegable de medida. Si tiene medida, la
+// medida en MAYÚSCULA ("500MM"); si no hay medida pero sí color, el color
+// ("NEGRO"); si varían las dos, "500MM · NEGRO". Sin nada, un guion.
+function variantLabel(it: HerrajeItem): string {
+  const m = (it.measure ?? "").trim();
+  const f = (it.finish ?? "").trim();
+  if (m && f) return `${m.toUpperCase()} · ${f.toUpperCase()}`;
+  if (m) return m.toUpperCase();
+  if (f) return f.toUpperCase();
+  return "—";
+}
 
 // Chevron monocromático (sin librería de íconos): apunta a la derecha y rota
 // 90° cuando la carpeta está abierta.
@@ -219,6 +263,12 @@ export default function HerrajesCatalogClient({
   const [openSubgroups, setOpenSubgroups] = useState<Record<string, boolean>>(
     {}
   );
+  // Por cada producto agrupado, qué variante (id) está elegida en su
+  // desplegable de medida. Si una clave no está acá, se usa la primera variante
+  // (o la que matchee el filtro de medida activo). Solo de DISPLAY.
+  const [selectedVariant, setSelectedVariant] = useState<
+    Record<string, string>
+  >({});
   const [newItem, setNewItem] = useState({
     name: "",
     detail: "",
@@ -305,14 +355,18 @@ export default function HerrajesCatalogClient({
   );
 
   // ── Lista visible: filtros + búsqueda sobre tabItems ───────────────────
+  // OJO con medida/color: NO descartamos variantes acá. Si filtramos por
+  // "500mm" y sacáramos las otras medidas del producto, el desplegable perdería
+  // las demás opciones. La regla pedida es: el PRODUCTO se muestra si ALGUNA de
+  // sus variantes pasa el filtro de medida/color, pero el desplegable conserva
+  // TODAS sus medidas. Por eso medida/color se aplican a nivel producto (más
+  // abajo, en visibleProducts) y acá solo filtramos categoría/carpeta/búsqueda.
   const visible = useMemo(() => {
     const words = search.toLowerCase().split(/\s+/).filter(Boolean);
     return tabItems.filter((it) => {
       if (filterCategory && it.category !== filterCategory) return false;
       if (filterSubgroup && (it.subgroup ?? "").trim() !== filterSubgroup)
         return false;
-      if (filterMeasure && it.measure !== filterMeasure) return false;
-      if (filterFinish && it.finish !== filterFinish) return false;
       if (words.length) {
         const hay = [
           it.name,
@@ -330,7 +384,35 @@ export default function HerrajesCatalogClient({
       }
       return true;
     });
-  }, [tabItems, filterCategory, filterSubgroup, filterMeasure, filterFinish, search]);
+  }, [tabItems, filterCategory, filterSubgroup, search]);
+
+  // ¿Pasa el item los filtros de medida/color? (los que NO descartan variantes
+  // en `visible`, sino que deciden si el PRODUCTO se muestra). Un producto se
+  // muestra si ALGUNA variante cumple ambos.
+  const variantMatchesMeasureFinish = useMemo(
+    () => (it: HerrajeItem) => {
+      if (filterMeasure && it.measure !== filterMeasure) return false;
+      if (filterFinish && it.finish !== filterFinish) return false;
+      return true;
+    },
+    [filterMeasure, filterFinish]
+  );
+
+  // Filtra una lista de items dejando solo los que pertenecen a un producto con
+  // al menos una variante que pase medida/color. Mantiene TODAS las variantes
+  // de los productos que sí se muestran (para no vaciar el desplegable).
+  const keepProductsMatchingMeasureFinish = useMemo(
+    () =>
+      (list: HerrajeItem[]): HerrajeItem[] => {
+        if (!filterMeasure && !filterFinish) return list;
+        const okKeys = new Set<string>();
+        for (const it of list) {
+          if (variantMatchesMeasureFinish(it)) okKeys.add(productKeyOf(it));
+        }
+        return list.filter((it) => okKeys.has(productKeyOf(it)));
+      },
+    [filterMeasure, filterFinish, variantMatchesMeasureFinish]
+  );
 
   // ── Drag & drop ───────────────────────────────────────────────────────
   const sensors = useSensors(
@@ -355,28 +437,42 @@ export default function HerrajesCatalogClient({
     }
   }
 
-  // Reordenar ítems DENTRO de una misma carpeta (misma categoría y carpeta).
-  function reorderItemWithinSubgroup(moved: HerrajeItem, overItemId: string) {
+  // Reordenar PRODUCTOS dentro de una misma carpeta (misma categoría y
+  // carpeta). Movemos el producto entero: todas sus variantes quedan contiguas
+  // y reciben sortOrder consecutivos según el nuevo orden de productos. Así un
+  // producto agrupado se mueve como un bloque, no variante por variante.
+  function reorderProductWithinSubgroup(
+    moved: HerrajeItem,
+    overItem: HerrajeItem
+  ) {
     const cat = moved.category;
     const sub = (moved.subgroup ?? "").trim();
+    // Items de la carpeta, en su orden actual.
     const groupItems = tabItems.filter(
       (it) => it.category === cat && (it.subgroup ?? "").trim() === sub
     );
-    const oldIdx = groupItems.findIndex((it) => it.id === moved.id);
-    const newIdx = groupItems.findIndex((it) => it.id === overItemId);
-    if (oldIdx < 0 || newIdx < 0) return;
-    const reordered = arrayMove(groupItems, oldIdx, newIdx);
-    const orderMap = new Map(reordered.map((it, i) => [it.id, i]));
+    // Productos de la carpeta (cada uno con sus variantes contiguas).
+    const products = buildProductGroups(groupItems);
+    const movedKey = productKeyOf(moved);
+    const overKey = productKeyOf(overItem);
+    const oldIdx = products.findIndex((p) => p.key === movedKey);
+    const newIdx = products.findIndex((p) => p.key === overKey);
+    if (oldIdx < 0 || newIdx < 0 || oldIdx === newIdx) return;
+    const reorderedProducts = arrayMove(products, oldIdx, newIdx);
+    // Aplanamos a la lista de variantes en el orden nuevo: el sortOrder final
+    // es el índice en esta lista (todas las variantes de un producto seguidas).
+    const reorderedItems = reorderedProducts.flatMap((p) => p.variants);
+    const orderMap = new Map(reorderedItems.map((it, i) => [it.id, i]));
     setItems((prev) =>
       prev.map((it) =>
         orderMap.has(it.id) ? { ...it, sortOrder: orderMap.get(it.id)! } : it
       )
     );
-    persistItemOrder(reordered);
+    persistItemOrder(reorderedItems);
   }
 
-  // Reordenamos solo entre ítems de la MISMA carpeta. Soltar sobre otra carpeta
-  // no mueve (la categoría/carpeta de un herraje se cambia por el botón Editar).
+  // Reordenamos solo entre productos de la MISMA carpeta. Soltar sobre otra
+  // carpeta no mueve (la categoría/carpeta de un herraje se cambia por Editar).
   function handleDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     if (!over) return;
@@ -390,7 +486,7 @@ export default function HerrajesCatalogClient({
     const sameGroup =
       moved.category === target.category &&
       (moved.subgroup ?? "").trim() === (target.subgroup ?? "").trim();
-    if (sameGroup) reorderItemWithinSubgroup(moved, target.id);
+    if (sameGroup) reorderProductWithinSubgroup(moved, target);
   }
 
   // ── Mutaciones ────────────────────────────────────────────────────────
@@ -671,8 +767,11 @@ export default function HerrajesCatalogClient({
   // Las 4 categorías van en orden fijo. Vacías solo se ocultan si estás
   // filtrando (ahí solo importan las que tienen resultados).
   const groups: { category: Category; items: HerrajeItem[] }[] = (() => {
+    // Aplicamos el filtro de medida/color a nivel PRODUCTO: deja los productos
+    // con al menos una variante que matchee, conservando todas sus variantes.
+    const base = keepProductsMatchingMeasureFinish(visible);
     const byCat = new Map<Category, HerrajeItem[]>();
-    for (const it of visible) {
+    for (const it of base) {
       const arr = byCat.get(it.category);
       if (arr) arr.push(it);
       else byCat.set(it.category, [it]);
@@ -697,25 +796,68 @@ export default function HerrajesCatalogClient({
     setOpenSubgroups((prev) => ({ ...prev, [key]: currentlyCollapsed }));
   }
 
-  // Filas de una carpeta (o de una categoría plana). Comparten el DndContext de
-  // afuera; los ids llevan prefijo "I#".
+  // Devuelve qué variante mostrar por default en un producto agrupado: si hay
+  // filtro de medida activo, la primera que lo matchee; si no, la primera de la
+  // lista (los datos vienen ordenados por medida ascendente).
+  function defaultVariant(variants: HerrajeItem[]): HerrajeItem {
+    if (filterMeasure) {
+      const match = variants.find((v) => v.measure === filterMeasure);
+      if (match) return match;
+    }
+    return variants[0];
+  }
+
+  // Filas de una carpeta (o de una categoría plana). Primero AGRUPAMOS por
+  // producto: cada producto es UNA fila (con desplegable de medida si tiene 2+
+  // variantes). El DndContext es el de afuera; el id de arrastre de cada
+  // producto es el de su primera variante (representante). Prefijo "I#".
   function renderItemRows(rowItems: HerrajeItem[]) {
+    const products = buildProductGroups(rowItems);
     return (
       <SortableContext
-        items={rowItems.map((it) => itemSortId(it.id))}
+        items={products.map((p) => itemSortId(p.variants[0].id))}
         strategy={verticalListSortingStrategy}
       >
-        {rowItems.map((item) => (
-          <HerrajeItemRow
-            key={item.id}
-            sortId={itemSortId(item.id)}
-            item={item}
-            canReorder={!isFiltering}
-            onUpdate={(patch) => updateItem(item.id, patch)}
-            onEdit={() => openEdit(item)}
-            onDelete={() => deleteItem(item.id)}
-          />
-        ))}
+        {products.map((p) => {
+          if (p.variants.length === 1) {
+            // Producto con una sola variante → fila normal, sin desplegable.
+            const item = p.variants[0];
+            return (
+              <HerrajeItemRow
+                key={p.key}
+                sortId={itemSortId(item.id)}
+                item={item}
+                canReorder={!isFiltering}
+                onUpdate={(patch) => updateItem(item.id, patch)}
+                onEdit={() => openEdit(item)}
+                onDelete={() => deleteItem(item.id)}
+              />
+            );
+          }
+          // Producto con 2+ variantes → fila con desplegable de medida.
+          const selectedId =
+            selectedVariant[p.key] &&
+            p.variants.some((v) => v.id === selectedVariant[p.key])
+              ? selectedVariant[p.key]
+              : defaultVariant(p.variants).id;
+          const selected =
+            p.variants.find((v) => v.id === selectedId) ?? p.variants[0];
+          return (
+            <HerrajeProductRow
+              key={p.key}
+              sortId={itemSortId(p.variants[0].id)}
+              variants={p.variants}
+              selected={selected}
+              canReorder={!isFiltering}
+              onSelectVariant={(id) =>
+                setSelectedVariant((prev) => ({ ...prev, [p.key]: id }))
+              }
+              onUpdate={(patch) => updateItem(selected.id, patch)}
+              onEdit={() => openEdit(selected)}
+              onDelete={() => deleteItem(selected.id)}
+            />
+          );
+        })}
       </SortableContext>
     );
   }
@@ -1195,7 +1337,9 @@ export default function HerrajesCatalogClient({
           </div>
         )}
 
-        {visible.length === 0 && groups.length === 0 ? (
+        {/* Sin productos para mostrar (puede ser que `visible` traiga items pero
+            ninguno pase el filtro de medida/color a nivel producto). */}
+        {groups.every((g) => g.items.length === 0) ? (
           <div className="p-8 text-center text-sm text-gray-500">
             {tabItems.length === 0
               ? "Todavía no hay herrajes en esta pestaña. Apretá '+ Nuevo herraje' para empezar."
@@ -1214,8 +1358,10 @@ export default function HerrajesCatalogClient({
                 <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-3">
                   <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                     {CATEGORY_LABELS[g.category]}
+                    {/* Contamos PRODUCTOS (filas visibles tras agrupar), no
+                        variantes: el objetivo es que la lista se vea más corta. */}
                     <span className="ml-1.5 text-gray-400 tabular-nums">
-                      · {g.items.length}
+                      · {buildProductGroups(g.items).length}
                     </span>
                   </span>
                   <button
@@ -1246,8 +1392,9 @@ export default function HerrajesCatalogClient({
                           <span className="text-[10px] font-medium text-gray-500 tracking-wide uppercase">
                             {sg.hasName ? sg.name : "Otros"}
                           </span>
+                          {/* Conteo por producto (no por variante). */}
                           <span className="text-[10px] text-gray-400 tabular-nums">
-                            · {sg.items.length}
+                            · {buildProductGroups(sg.items).length}
                           </span>
                         </button>
                         {!collapsed && renderItemRows(sg.items)}
@@ -1491,6 +1638,249 @@ function HerrajeItemRow({
           onClick={onDelete}
           className="text-gray-300 hover:text-red-600 text-lg leading-none"
           title="Borrar"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Componente: fila de PRODUCTO con varias medidas (agrupada) ─────────
+// Muestra UN producto (nombre + foto una vez) con un desplegable de medida.
+// Al elegir la medida, COSTO / CLIENTE / SKU / COLOR / LINK pasan a ser los de
+// la variante elegida. El costo se edita SOBRE la variante elegida (cada medida
+// es su propio item del catálogo). El nombre y la marca son de solo lectura acá
+// (para no romper la agrupación): se editan con el botón Editar.
+function HerrajeProductRow({
+  variants,
+  selected,
+  sortId,
+  canReorder,
+  onSelectVariant,
+  onUpdate,
+  onEdit,
+  onDelete,
+}: {
+  variants: HerrajeItem[];
+  selected: HerrajeItem;
+  sortId: string;
+  canReorder: boolean;
+  onSelectVariant: (id: string) => void;
+  onUpdate: (patch: Partial<HerrajeItem>) => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const sortable = useSortable({ id: sortId, disabled: !canReorder });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [failedImg, setFailedImg] = useState<string | null>(null);
+
+  async function handlePhotoFile(file: File | undefined | null) {
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const dataUrl = await fileToThumbnailDataUrl(file);
+      // La foto es del producto: la aplicamos a TODAS las variantes para que el
+      // grupo se vea consistente elijas la medida que elijas.
+      for (const v of variants) {
+        await fetch(`/api/catalogo/herrajes/${v.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...v, imageUrl: dataUrl }),
+        });
+      }
+      // El estado optimista de la variante elegida lo hace onUpdate; el resto
+      // se refresca al recargar. Para no complicar, actualizamos solo la
+      // elegida en memoria (la foto compartida igual queda igual visualmente).
+      onUpdate({ imageUrl: dataUrl });
+    } catch {
+      alert("No se pudo procesar la imagen. Probá con otra.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  const style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.5 : 1,
+    zIndex: sortable.isDragging ? 10 : ("auto" as const),
+    background: sortable.isDragging ? "#FAFAFA" : undefined,
+  };
+
+  const overridden = selected.clientPrice != null;
+  const client = clientPriceOf(selected);
+
+  return (
+    <div
+      ref={sortable.setNodeRef}
+      style={style}
+      className={`grid ${GRID_COLS} items-center gap-2 px-3 py-2 border-b border-gray-100 last:border-b-0 text-xs hover:bg-gray-50`}
+    >
+      {/* Manija de arrastre (mueve el producto entero). */}
+      <div className="flex justify-center">
+        {canReorder ? (
+          <span
+            {...sortable.attributes}
+            {...sortable.listeners}
+            className="cursor-grab text-gray-300 hover:text-gray-700 select-none"
+            title="Arrastrar para reordenar (mueve el producto entero)"
+          >
+            ⋮⋮
+          </span>
+        ) : (
+          <span
+            className="text-gray-200 select-none"
+            title="Sacá la búsqueda y los filtros para poder reordenar"
+          >
+            ⋮⋮
+          </span>
+        )}
+      </div>
+
+      {/* Foto (del producto, una vez). */}
+      <div className="flex justify-center">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            handlePhotoFile(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          title="Click para subir / cambiar la foto"
+          className="group relative w-12 h-12"
+        >
+          {selected.imageUrl && failedImg !== selected.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imgSrc(selected.imageUrl)}
+              alt={selected.name}
+              onError={() => setFailedImg(selected.imageUrl)}
+              className="w-12 h-12 object-contain bg-white border border-gray-200 rounded"
+            />
+          ) : (
+            <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center text-gray-300 text-lg">
+              +
+            </div>
+          )}
+          <span className="absolute inset-0 hidden group-hover:flex items-center justify-center bg-black/40 rounded text-white text-[9px] uppercase tracking-wider text-center leading-tight px-0.5">
+            {uploadingPhoto ? "subiendo…" : "subir foto"}
+          </span>
+        </button>
+      </div>
+
+      {/* Nombre + marca del producto (solo lectura acá; se editan en Editar). */}
+      <div className="min-w-0">
+        <div className="font-semibold text-gray-900 text-[11px] leading-tight break-words">
+          {selected.name}
+        </div>
+        {selected.brand && (
+          <div className="text-gray-500 text-[10px] uppercase">
+            {selected.brand}
+          </div>
+        )}
+        {/* Pista de cuántas medidas tiene el producto. */}
+        <div className="text-gray-400 text-[9px] tabular-nums">
+          {variants.length} medidas
+        </div>
+      </div>
+
+      {/* Medida → desplegable de variantes. Mismo look que los filtros. */}
+      <div className="min-w-0">
+        <select
+          value={selected.id}
+          onChange={(e) => onSelectVariant(e.target.value)}
+          className="w-full bg-white border border-gray-200 rounded text-[11px] font-medium tabular-nums text-gray-700 px-1 py-0.5 outline-none cursor-pointer focus:border-gray-400"
+          title="Elegí la medida"
+        >
+          {variants.map((v) => (
+            <option key={v.id} value={v.id}>
+              {variantLabel(v)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Color de la variante elegida (solo lectura). En MAYÚSCULA. */}
+      <div className="min-w-0 text-gray-600 text-[11px] uppercase leading-tight break-words">
+        {selected.finish?.trim() ? selected.finish.toUpperCase() : "—"}
+      </div>
+
+      {/* SKU de la variante elegida (solo lectura, chico gris). */}
+      <div className="min-w-0 text-gray-400 text-[10px] break-words">
+        {selected.sku?.trim() ? selected.sku : "—"}
+      </div>
+
+      {/* Costo de la variante elegida (editable inline = costNet). */}
+      <div>
+        <ThousandsInput
+          value={selected.costNet}
+          onChange={(v) => onUpdate({ costNet: v })}
+          placeholder="0"
+          className="w-full bg-transparent border-0 p-0 text-right tabular-nums text-gray-700 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+        />
+      </div>
+
+      {/* Cliente (derivado de la variante elegida, read-only). */}
+      <div
+        className="text-right tabular-nums text-gray-500"
+        title={
+          overridden
+            ? "Precio fijo (editalo en el botón Editar)"
+            : "Costo + 20% (automático)"
+        }
+      >
+        {selected.costNet === 0 && !overridden ? (
+          <span className="text-gray-300">—</span>
+        ) : (
+          <span className={overridden ? "text-gray-700 font-medium" : ""}>
+            {formatCLP(client)}
+            {overridden && (
+              <span className="ml-0.5 text-[9px] text-gray-400 align-top">
+                fijo
+              </span>
+            )}
+          </span>
+        )}
+      </div>
+
+      {/* Link de la variante elegida. */}
+      <div className="flex justify-center">
+        {selected.referenceLink ? (
+          <a
+            href={selected.referenceLink}
+            target="_blank"
+            rel="noreferrer"
+            className="text-gray-400 hover:text-gray-900 text-sm leading-none"
+            title={selected.referenceLink}
+          >
+            ↗
+          </a>
+        ) : (
+          <span className="text-gray-200 select-none">—</span>
+        )}
+      </div>
+
+      {/* Acciones (sobre la variante elegida). */}
+      <div className="flex items-center justify-center gap-1.5">
+        <button
+          onClick={onEdit}
+          className="text-[10px] text-gray-500 border border-gray-300 rounded px-1.5 py-0.5 hover:border-gray-500 hover:text-gray-900"
+          title="Editar la medida elegida (abre el cuadro completo)"
+        >
+          Editar
+        </button>
+        <button
+          onClick={onDelete}
+          className="text-gray-300 hover:text-red-600 text-lg leading-none"
+          title="Borrar la medida elegida"
         >
           ×
         </button>

@@ -390,32 +390,6 @@
   "costNet": 3186
  },
  {
-  "name": "Bisagra Movi-Corner Inox",
-  "supplier": "DPH",
-  "category": "bisagra",
-  "subgroup": "Esquinera",
-  "measure": null,
-  "finish": null,
-  "brand": "DPH",
-  "sku": "BICOR001",
-  "referenceLink": "https://dph.cl/products/bisagra-movi-corner-inox",
-  "imageUrl": "https://cdn.shopify.com/s/files/1/0602/8312/5862/files/BICOR001.jpg",
-  "costNet": 18500
- },
- {
-  "name": "Bisagra Movi-Corner Inox",
-  "supplier": "DPH",
-  "category": "bisagra",
-  "subgroup": "Esquinera",
-  "measure": null,
-  "finish": null,
-  "brand": "DPH",
-  "sku": "BICOR002",
-  "referenceLink": "https://dph.cl/products/bisagra-movi-corner-inox",
-  "imageUrl": "https://cdn.shopify.com/s/files/1/0602/8312/5862/files/BICOR001.jpg",
-  "costNet": 19500
- },
- {
   "name": "Bisagra 180° Cierre Suave",
   "supplier": "DPH",
   "category": "bisagra",

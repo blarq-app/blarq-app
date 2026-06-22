@@ -30,9 +30,11 @@ export default function CuadroResumenAvance({
   const { conceptos, pagos, totalAcordado, totalPagado, saldoTotal, avanceTotal, versionLabel } =
     data;
 
-  // % que MJ pide EN ESTE avance, por concepto (incremental). Default 0.
+  // % OBJETIVO al que MJ quiere llegar, por concepto. Default = el % ya cobrado
+  // (redondeado), así "a pedir" arranca en 0 hasta que sube la barra. Ponés
+  // 100 → te pide EXACTO el saldo que falta (sin problema de decimales).
   const [avance, setAvance] = useState<Record<string, number>>(() =>
-    Object.fromEntries(conceptos.map((c) => [c.key, 0]))
+    Object.fromEntries(conceptos.map((c) => [c.key, Math.round(c.avancePct * 100)]))
   );
 
   const calc = useMemo(() => {
@@ -44,8 +46,10 @@ export default function CuadroResumenAvance({
     let totalSaldoNuevo = 0;
     let generadoTotal = 0;
     for (const c of conceptos) {
-      const pct = (avance[c.key] ?? 0) / 100;
-      const aPedir = pct * c.acordado;
+      // El % es el OBJETIVO al que llegar. A pedir = lo que falta para llegar
+      // a ese % (nunca negativo). Así 100% pide exactamente el saldo restante.
+      const objetivo = (avance[c.key] ?? 0) / 100;
+      const aPedir = Math.max(0, objetivo * c.acordado - c.pagado);
       const saldoNuevo = Math.max(0, c.acordado - c.pagado - aPedir);
       const pctFinal = c.acordado > 0 ? (c.pagado + aPedir) / c.acordado : 0;
       const generado = c.generaSueldo ? Math.min(1, pctFinal) * c.utilidad100 : 0;
@@ -78,7 +82,8 @@ export default function CuadroResumenAvance({
         <h2 className="text-lg font-semibold text-gray-900 mb-1">Cuadro Resumen</h2>
         <p className="text-xs text-gray-500 mb-4">
           Acordado por concepto, lo ya cobrado, y el avance que pedís ahora.
-          Completá el % de AVANCE por concepto. Las columnas son las del
+          Completá el % AL QUE QUERÉS LLEGAR por concepto (100% = cobrar todo el
+          saldo) y te calcula cuánto pedir. Las columnas son las del
           presupuesto entregado al cliente.
         </p>
         <div className="overflow-x-auto">

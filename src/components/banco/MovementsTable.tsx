@@ -133,7 +133,7 @@ export default function MovementsTable({
                   <th className="text-left px-4 py-2 w-24">Cuenta</th>
                   <th className="text-left px-4 py-2">Descripción</th>
                   <th className="text-right px-4 py-2">Monto</th>
-                  <th className="text-left px-4 py-2 w-32">Imputación</th>
+                  <th className="text-left px-4 py-2 w-72">Imputación</th>
                   <th className="text-left px-4 py-2 w-32">Estado</th>
                   <th className="px-4 py-2 w-44 text-right">Acción</th>
                 </tr>
@@ -210,7 +210,7 @@ export default function MovementsTable({
                           // se traspasó por obra). Va PRIMERO en la cadena
                           // porque estos movs traen category="transfer_interno"
                           // y si no, caerían en la rama de categoría (texto gris).
-                          <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
                             <InternalTransferProjectSelect
                               movimientoId={m.id}
                               projectId={m.projectId}

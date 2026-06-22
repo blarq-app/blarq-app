@@ -64,6 +64,9 @@ model Project {
   shoppingItems   ShoppingItem[]
   invoiceRules    InvoiceCategorizationRule[]
   pendingTags     PendingProjectTag[]
+  // Movimientos bancarios conciliados a esta obra a mano (hoy: transferencias
+  // internas Operativa→Sueldos imputadas a la obra). Ver BankMovement.projectId.
+  bankMovements   BankMovement[]
 
   @@index([maestroId])
   @@index([status])
@@ -980,6 +983,12 @@ model BankMovement {
   // del mismo lavado comparten este id. La suma del grupo es ≈ 0 y NO
   // cuenta como ingreso ni gasto. null = no es parte de un lavado.
   netZeroGroupId  String?
+  // Obra a la que MJ concilió este movimiento, A MANO. Hoy se usa solo para
+  // las transferencias internas Operativa→Sueldos (category="transfer_interno"):
+  // permite ver, por proyecto, cuánta utilidad ya se traspasó a la cuenta
+  // sueldos. NUNCA se auto-asigna (igual criterio que las facturas). Si se
+  // borra la obra, queda null (onDelete: SetNull) — no rompe el movimiento.
+  projectId       String?
   // Status del proceso de conciliación. "sin_asignar" cuando todavía MJ
   // no decidió qué es. "conciliado" cuando matchea con factura.
   // "sin_factura" cuando es un egreso/ingreso categorizado pero sin
@@ -992,6 +1001,7 @@ model BankMovement {
   updatedAt       DateTime @updatedAt
 
   bankAccount     BankAccount  @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  project         Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
   payments        InvoicePayment[]
   internalTransferTo BankMovement? @relation("InternalTransfer", fields: [internalTransferToId], references: [id])
   internalTransferFrom BankMovement? @relation("InternalTransfer")
@@ -1008,6 +1018,7 @@ model BankMovement {
   @@index([date])
   @@index([status])
   @@index([netZeroGroupId])
+  @@index([projectId])
 }
 
 // Reembolsadores: personas (maestros, socios, MJ misma) que compran a

@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-21 — Banco: conciliar transferencias internas (Operativa→Sueldos) con obras
+
+- **Nuevo campo `BankMovement.projectId`** (nullable, relación a `Project` con `onDelete: SetNull`, índice). Permite imputar A MANO un movimiento a una obra. Hoy se usa solo para las transferencias internas Operativa↔Sueldos (`category="transfer_interno"`); nunca se auto-asigna (mismo criterio que las facturas).
+- **UI de asignación**: en `/banco/movimientos`, cada transferencia interna trae un desplegable de obra (formato "número · nombre", reusado del PR #171) en la columna IMPUTACIÓN. Asignar/desasignar etiqueta **los dos lados del par linkeado** (sale −X de Operativa, entra +X a Sueldos) vía `PATCH /api/banco/movimientos/[id]` con `internalProjectId`. Componente `InternalTransferProjectSelect.tsx`.
+- **Cálculo "transferido por obra"**: suma NETA de las internas conciliadas a la obra, contando **solo el lado que entra a Sueldos** (`bankAccount.role="salary_fund"`) — nunca los dos lados, o se duplicaría. Las devoluciones (Sueldos→Operativa) vienen con monto negativo en esa cuenta, así que netean solas. Query inline en `resumen/page.tsx`.
+- **`FondoSueldosCard`** extendida con dos líneas: "Ya transferido a sueldos" y "Falta transferir" (= máximo de la obra al 100% − transferido, decisión de MJ). Aviso ámbar si transferido > generado hasta ahora ("traspaso adelantado").
+- **Alcance contable**: ADITIVO. No toca `fondoSueldos.ts` ni `metrics.ts` ni el cálculo de "generado". Snapshot de "generado" ANTES/DESPUÉS idéntico (`scripts/snapshot-fondo-generado.ts`). Verificado en vivo (dev, Chrome MJ): asignar la transferencia de $1.000.000 a la obra 46 etiqueta ambos lados y la card muestra transferido $1.000.000 / falta $1.669.408 (cuenta una sola vez); desasignar revierte. `tsc` limpio.
+
 ## 2026-06-18 — Artefactos: el catálogo baja a las cotizaciones (flujo invertido)
 
 - **Se invirtió el flujo de precios de artefactos** para que funcione como el presupuesto de obra (decisión de negocio de MJ; ver ADR `2026-06-18-artefactos-precios-catalogo-a-cotizacion.md`). Antes: el catálogo NO bajaba a los borradores y editar una cotización SÍ pisaba el catálogo global. Ahora: al revés.

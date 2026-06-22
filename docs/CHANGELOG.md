@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-22 — Cotización de artefactos: botón "Actualizar del catálogo"
+
+- **Qué cambia**: en el editor de artefactos de una cotización, el botón "Revisar precios online" se reemplaza por **"Actualizar del catálogo"**. En vez de salir a la tienda web, compara cada artefacto con su producto del catálogo BLARQ y baja los valores elegidos. Motivo: el catálogo es la fuente de verdad y cada cotización guarda una *foto* del precio/costo del momento en que se agregó el artefacto — al cambiar el catálogo, las cotizaciones viejas quedan desactualizadas hasta que se bajan los datos. (El "revisar precios online" sigue existiendo dentro del catálogo, así que la consulta a la web no se pierde, solo se centraliza ahí.)
+- **UX**: mismo modal de "antes vs ahora" que ya conocía MJ. Tres dimensiones por ítem: costo (neto BLARQ), precio a cliente y foto/link. El **costo viene pre-marcado** (lo seguro); precio y foto los marca MJ caso a caso para no pisar un precio negociado. Solo aplica a ítems linkeados al catálogo (`catalogId`).
+- **No despega la línea**: la bajada va por un endpoint propio (`POST /api/presupuestos/[id]/artefactos/actualizar-catalogo`), NO por el PUT por-ítem que tiene la heurística de `priceOverridden`. Bajar del catálogo es lo contrario de "editar a mano", así que el flag de despegado **no se toca** — el botón solo copia los valores elegidos. Si baja precio de lista/descuento, recalcula el precio a cliente.
+- **Archivos**: nuevo `ActualizarDesdeCatalogo.tsx` + ruta `actualizar-catalogo` (GET diff + POST aplicar); `ArtefactosEditor.tsx` cambia botón/handler. El viejo `RevisarPreciosArtefactos.tsx` y su ruta `revisar-precios` quedan sin uso (no se borraron, por si se quiere volver). Verificado: `tsc` y lint limpios; click-through en vivo pendiente de probar con MJ (la base de prod no es accesible desde el preview automático).
+
 ## 2026-06-22 — Resumen: calculadora "Armar avance + Me paso a Sueldos"
 
 - **Reemplaza las tarjetas "Fondo Sueldos" (forma de pago) y "Utilidad por cobro"** por una calculadora coherente con el Cuadro Resumen, por concepto (Obra / Art. Cocina / Sanitarios / Iluminación / Muebles). Pedido por MJ tras ver el flujo real de avances.

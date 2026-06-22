@@ -1,0 +1,216 @@
+// Cálculo por concepto del Cuadro Resumen del proyecto — fuente única que
+// comparten el `CuadroResumen` (vista) y la herramienta "Armar avance + Me
+// paso a Sueldos". Antes este cálculo vivía inline en CuadroResumen.tsx; se
+// extrajo acá para no duplicarlo (regla del repo: una sola fuente de verdad
+// por cálculo).
+//
+// Por cada concepto (OBRA / ART. COCINA / ART. SANITARIOS / ART. ILUMINACIÓN /
+// MUEBLES) calcula: el acordado (suma de versiones aprobadas), lo ya cobrado
+// (transferencias conciliadas con facturas emitidas, repartiendo artefactos
+// proporcional al acordado), el % de avance y el saldo. Además, para los
+// conceptos que GENERAN sueldo (obra, muebles), la utilidad al 100% (GG obra /
+// utilidad neta muebles) — base del cálculo de cuánto se traspasa a Sueldos.
+//
+// Reglas de negocio (ya confirmadas con MJ, ver CuadroResumen.tsx histórico):
+//   - Acordado OBRA: CD × (1 + GG + Util) × 1.19  (GG/Util ADITIVOS, no encadenados).
+//   - Acordado MUEBLES: Σ clientPriceIva × qty.
+//   - Acordado ARTEFACTOS: split cocina/sanitarios/iluminación por subcategory.
+//   - Sueldo lo generan OBRA (su GG) y MUEBLES (utilidad neta). Artefactos NO.
+
+// ── Tipos de entrada (estructuralmente compatibles con el include del resumen) ──
+type ObraItemLite = { total: number };
+type MuebleItemLite = {
+  quantity: number;
+  costDistributor: number;
+  clientPriceNet: number;
+  clientPriceIva: number;
+};
+type ArtefactoItemLite = {
+  subcategory: string;
+  clientPrice: number;
+  quantity: number;
+};
+type BudgetVersionLite = {
+  version: string;
+  status: string;
+  type: string;
+  updatedAt: Date;
+  ggPercentage: number | null;
+  utilityPercentage: number | null;
+  obraItems?: ObraItemLite[];
+  muebleChapters?: { items: MuebleItemLite[] }[];
+  artefactoItems?: ArtefactoItemLite[];
+};
+type PaymentLite = { amountApplied: number; bankMovement: { date: Date } };
+type InvoiceLite = {
+  type: string;
+  conceptoCobro: string | null;
+  folioNumber: string | null;
+  payments: PaymentLite[];
+};
+export type CuadroResumenInput = {
+  invoices: InvoiceLite[];
+  budgets: BudgetVersionLite[];
+};
+
+// ── Tipos de salida ─────────────────────────────────────────────────────────
+export type ConceptoKey = "obra" | "cocina" | "sanitarios" | "iluminacion" | "muebles";
+
+export type ConceptoCuadro = {
+  key: ConceptoKey;
+  label: string;
+  acordado: number;
+  pagado: number; // total cobrado de este concepto
+  avancePct: number; // pagado / acordado (0..1+)
+  saldo: number; // acordado − pagado
+  fecha: string; // fecha de la versión vigente del concepto (dd-mm-yy)
+  generaSueldo: boolean; // obra y muebles = true
+  utilidad100: number; // utilidad al 100% (GG obra / util neta muebles); 0 si no genera
+};
+
+export type PagoRow = {
+  date: Date;
+  folioNumber: string | null;
+  // monto cobrado por concepto en este pago
+  porConcepto: Record<ConceptoKey, number>;
+};
+
+export type CuadroResumenData = {
+  conceptos: ConceptoCuadro[]; // solo los que tienen acordado > 0
+  pagos: PagoRow[];
+  totalAcordado: number;
+  totalPagado: number;
+  saldoTotal: number;
+  avanceTotal: number; // totalPagado / totalAcordado
+  versionLabel: string; // "V5" / "V6" / "Acordado" (si hay 2+ aprobadas por tipo)
+};
+
+function allApproved(arr: BudgetVersionLite[]): BudgetVersionLite[] {
+  return arr.filter((b) => b.status === "aprobado");
+}
+function lastUpdated(arr: BudgetVersionLite[]): BudgetVersionLite | undefined {
+  if (arr.length === 0) return undefined;
+  return [...arr].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+}
+function fmtDate(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yy = String(d.getFullYear()).slice(2);
+  return `${dd}-${mm}-${yy}`;
+}
+
+export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenData {
+  const { invoices, budgets } = input;
+  const obrasAprobadas = allApproved(budgets.filter((b) => b.type === "obra"));
+  const mueblesAprobados = allApproved(budgets.filter((b) => b.type === "muebles"));
+  const artefactosAprobados = allApproved(budgets.filter((b) => b.type === "artefactos"));
+  const lastObra = lastUpdated(obrasAprobadas);
+  const lastMuebles = lastUpdated(mueblesAprobados);
+  const lastArtefactos = lastUpdated(artefactosAprobados);
+
+  // ── Acordado por concepto ───────────────────────────────────────────────
+  const obraAcordado = obrasAprobadas.reduce((s, b) => {
+    const cd = (b.obraItems ?? []).reduce((ss, it) => ss + it.total, 0);
+    const gg = (b.ggPercentage ?? 0) / 100;
+    const util = (b.utilityPercentage ?? 0) / 100;
+    return s + cd * (1 + gg + util) * 1.19;
+  }, 0);
+  // Utilidad OBRA al 100% = GG total (lo que se traspasa a sueldos).
+  const obraUtilidad100 = obrasAprobadas.reduce((s, b) => {
+    const cd = (b.obraItems ?? []).reduce((ss, it) => ss + it.total, 0);
+    return s + cd * ((b.ggPercentage ?? 0) / 100);
+  }, 0);
+
+  const mueblesItems = mueblesAprobados.flatMap((b) => (b.muebleChapters ?? []).flatMap((c) => c.items));
+  const mueblesAcordado = mueblesItems.reduce((s, it) => s + it.clientPriceIva * it.quantity, 0);
+  const mueblesUtilidad100 = mueblesItems.reduce(
+    (s, it) => s + (it.clientPriceNet - it.costDistributor) * it.quantity,
+    0
+  );
+
+  const sumaSub = (sub: string) =>
+    artefactosAprobados.reduce(
+      (s, b) =>
+        s +
+        (b.artefactoItems ?? [])
+          .filter((it) => it.subcategory === sub)
+          .reduce((ss, it) => ss + it.clientPrice * it.quantity, 0),
+      0
+    );
+  const cocinaAcordado = sumaSub("cocina");
+  const sanitariosAcordado = sumaSub("sanitario");
+  const iluminacionAcordado = sumaSub("iluminacion");
+
+  const totalAcordado =
+    obraAcordado + cocinaAcordado + sanitariosAcordado + iluminacionAcordado + mueblesAcordado;
+
+  // ── Pagos por concepto (artefactos: split proporcional al acordado) ──────
+  const artefactosBase = cocinaAcordado + sanitariosAcordado + iluminacionAcordado;
+  const ratioCocina = artefactosBase > 0 ? cocinaAcordado / artefactosBase : 0;
+  const ratioSanitarios = artefactosBase > 0 ? sanitariosAcordado / artefactosBase : 0;
+  const ratioIluminacion = artefactosBase > 0 ? iluminacionAcordado / artefactosBase : 0;
+
+  const pagos: PagoRow[] = [];
+  for (const inv of invoices.filter((i) => i.type === "emitida")) {
+    for (const p of inv.payments) {
+      const porConcepto: Record<ConceptoKey, number> = {
+        obra: 0,
+        cocina: 0,
+        sanitarios: 0,
+        iluminacion: 0,
+        muebles: 0,
+      };
+      if (inv.conceptoCobro === "obra") porConcepto.obra = p.amountApplied;
+      else if (inv.conceptoCobro === "muebles") porConcepto.muebles = p.amountApplied;
+      else if (inv.conceptoCobro === "artefactos") {
+        porConcepto.cocina = p.amountApplied * ratioCocina;
+        porConcepto.sanitarios = p.amountApplied * ratioSanitarios;
+        porConcepto.iluminacion = p.amountApplied * ratioIluminacion;
+      }
+      const algo =
+        porConcepto.obra ||
+        porConcepto.cocina ||
+        porConcepto.sanitarios ||
+        porConcepto.iluminacion ||
+        porConcepto.muebles;
+      if (algo) {
+        pagos.push({ date: new Date(p.bankMovement.date), folioNumber: inv.folioNumber, porConcepto });
+      }
+    }
+  }
+  pagos.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  const obraDate = lastObra ? fmtDate(new Date(lastObra.updatedAt)) : "";
+  const artefactosDate = lastArtefactos ? fmtDate(new Date(lastArtefactos.updatedAt)) : "";
+  const mueblesDate = lastMuebles ? fmtDate(new Date(lastMuebles.updatedAt)) : "";
+
+  const conceptosAll: ConceptoCuadro[] = [
+    { key: "obra", label: "Obra", acordado: obraAcordado, fecha: obraDate, generaSueldo: true, utilidad100: obraUtilidad100, pagado: 0, avancePct: 0, saldo: 0 },
+    { key: "cocina", label: "Art. Cocina", acordado: cocinaAcordado, fecha: artefactosDate, generaSueldo: false, utilidad100: 0, pagado: 0, avancePct: 0, saldo: 0 },
+    { key: "sanitarios", label: "Art. Sanitarios", acordado: sanitariosAcordado, fecha: artefactosDate, generaSueldo: false, utilidad100: 0, pagado: 0, avancePct: 0, saldo: 0 },
+    { key: "iluminacion", label: "Art. Iluminación", acordado: iluminacionAcordado, fecha: artefactosDate, generaSueldo: false, utilidad100: 0, pagado: 0, avancePct: 0, saldo: 0 },
+    { key: "muebles", label: "Muebles", acordado: mueblesAcordado, fecha: mueblesDate, generaSueldo: true, utilidad100: mueblesUtilidad100, pagado: 0, avancePct: 0, saldo: 0 },
+  ];
+  const conceptos = conceptosAll.filter((c) => c.acordado > 0);
+  for (const c of conceptos) {
+    c.pagado = pagos.reduce((s, r) => s + r.porConcepto[c.key], 0);
+    c.avancePct = c.acordado > 0 ? c.pagado / c.acordado : 0;
+    c.saldo = c.acordado - c.pagado;
+  }
+
+  const totalPagado = conceptos.reduce((s, c) => s + c.pagado, 0);
+  const saldoTotal = totalAcordado - totalPagado;
+  const avanceTotal = totalAcordado > 0 ? totalPagado / totalAcordado : 0;
+
+  const maxPerType = Math.max(
+    obrasAprobadas.length,
+    mueblesAprobados.length,
+    artefactosAprobados.length
+  );
+  const versionLabel =
+    maxPerType <= 1
+      ? lastObra?.version ?? lastMuebles?.version ?? lastArtefactos?.version ?? "—"
+      : "Acordado";
+
+  return { conceptos, pagos, totalAcordado, totalPagado, saldoTotal, avanceTotal, versionLabel };
+}

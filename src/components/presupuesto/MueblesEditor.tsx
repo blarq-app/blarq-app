@@ -218,7 +218,11 @@ export default function MueblesEditor({
     setChapters((prev) =>
       prev.map((c) =>
         c.id === chapterId
-          ? {
+          ? // El POST de /muebles/items NO trae las relaciones; hay que sembrar
+            // los TRES arrays vacíos (details, quotes, herrajes) o el render se
+            // cae al leer item.quotes/.herrajes (.filter/.length) con undefined.
+            // (Supersede el fix de #188 que solo sembraba details+quotes.)
+            {
               ...c,
               items: [
                 ...c.items,
@@ -1132,7 +1136,9 @@ function ItemBlock({
   onDeleteQuote: (quoteId: string) => void;
   onActivateQuote: (quoteId: string) => void;
 }) {
-  const alternatives = item.quotes.filter((q) => !q.isSelected);
+  // Red de seguridad: si por cualquier camino el item llega sin la lista de
+  // cotizaciones cargada, tratarla como vacía en vez de caerse al renderizar.
+  const alternatives = (item.quotes ?? []).filter((q) => !q.isSelected);
   // Costo interno colapsado por default — la vista por default refleja el PDF.
   // El usuario expande cuando quiere ver/editar el cálculo o comparar proveedores.
   const [showCost, setShowCost] = useState(false);

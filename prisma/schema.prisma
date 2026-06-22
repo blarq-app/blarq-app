@@ -809,6 +809,17 @@ model Invoice {
   //   - "mixto"      → MJ define el split en porcentajes (campo extra a futuro)
   // Para facturas recibidas, queda null (no aplica).
   conceptoCobro   String?
+  // Desglose REAL de un cobro de ARTEFACTOS entre sus sub-categorías
+  // (cocina / sanitarios / iluminación). El Cuadro Resumen necesita repartir
+  // cada cobro de artefactos entre las 3 columnas; por default lo hace
+  // proporcional al presupuesto, pero eso falla cuando el cobro no siguió ese
+  // reparto (ej. se cobró cocina+sanitarios pero NADA de iluminación, que se
+  // agregó después). Si estos campos están seteados (alguno no-null), el cuadro
+  // usa estos montos en vez del reparto proporcional. Null = proporcional.
+  // Solo aplican a facturas emitidas con concepto artefactos.
+  artefactoCocina      Float?
+  artefactoSanitario   Float?
+  artefactoIluminacion Float?
   // Referencia a otra factura cuando este DTE la modifica.
   // Solo aplica a NC (tipoDoc=61) y ND (tipoDoc=56), que en Chile siempre
   // referencian la factura original que cancelan/ajustan.
@@ -1078,6 +1089,12 @@ model BankMovement {
   // sueldos. NUNCA se auto-asigna (igual criterio que las facturas). Si se
   // borra la obra, queda null (onDelete: SetNull) — no rompe el movimiento.
   projectId       String?
+  // Para transferencias internas Operativa→Sueldos: de qué utilidad es el
+  // traspaso, "obra" | "muebles". (Artefactos no genera sueldo.) Permite, en
+  // "Me paso a Sueldos", separar lo transferido por concepto y calcular cuánto
+  // falta transferir de cada uno. null = sin clasificar todavía. Se setea a
+  // mano (en /banco/movimientos) en los dos lados del par linkeado.
+  internalConcepto String?
   // Status del proceso de conciliación. "sin_asignar" cuando todavía MJ
   // no decidió qué es. "conciliado" cuando matchea con factura.
   // "sin_factura" cuando es un egreso/ingreso categorizado pero sin

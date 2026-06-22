@@ -17,6 +17,8 @@
 //   - Acordado ARTEFACTOS: split cocina/sanitarios/iluminación por subcategory.
 //   - Sueldo lo generan OBRA (su GG) y MUEBLES (utilidad neta). Artefactos NO.
 
+import { conceptoDeFactura } from "@/lib/invoices/conceptoCobro";
+
 // ── Tipos de entrada (estructuralmente compatibles con el include del resumen) ──
 type ObraItemLite = { total: number };
 type MuebleItemLite = {
@@ -44,8 +46,20 @@ type BudgetVersionLite = {
 type PaymentLite = { amountApplied: number; bankMovement: { date: Date } };
 type InvoiceLite = {
   type: string;
+  // Categoría que MJ asigna a la factura emitida (CostCategory "Obra" /
+  // "Muebles" / "Artefactos", appliesTo="emitida"). ES la fuente de verdad
+  // del concepto del cobro — el cuadro la lee de acá.
+  category: { name: string } | null;
+  // Campo legacy "obra | muebles | artefactos". Casi siempre null; se usa
+  // solo como respaldo si una factura vieja no tiene categoría.
   conceptoCobro: string | null;
   folioNumber: string | null;
+  totalAmount: number;
+  // Desglose REAL del cobro de artefactos (si está cargado). Si alguno no es
+  // null, se usa en vez del reparto proporcional al presupuesto.
+  artefactoCocina: number | null;
+  artefactoSanitario: number | null;
+  artefactoIluminacion: number | null;
   payments: PaymentLite[];
 };
 export type CuadroResumenInput = {
@@ -68,11 +82,13 @@ export type ConceptoCuadro = {
   utilidad100: number; // utilidad al 100% (GG obra / util neta muebles); 0 si no genera
 };
 
+// Una fila de pago = un AVANCE cobrado (todas las facturas de la misma fecha
+// agrupadas), con el monto y la factura POR CONCEPTO. Antes había una fila por
+// factura (obra/artefactos/muebles en filas separadas); ahora van juntas en la
+// fila de su fecha, como en el Excel de MJ.
 export type PagoRow = {
   date: Date;
-  folioNumber: string | null;
-  // monto cobrado por concepto en este pago
-  porConcepto: Record<ConceptoKey, number>;
+  porConcepto: Record<ConceptoKey, { monto: number; folio: string | null }>;
 };
 
 export type CuadroResumenData = {
@@ -150,35 +166,59 @@ export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenDa
   const ratioSanitarios = artefactosBase > 0 ? sanitariosAcordado / artefactosBase : 0;
   const ratioIluminacion = artefactosBase > 0 ? iluminacionAcordado / artefactosBase : 0;
 
-  const pagos: PagoRow[] = [];
+  // Construimos los pagos AGRUPADOS por fecha: todas las facturas cobradas el
+  // mismo día (= un avance) van en una fila, con el monto y la factura por
+  // concepto. Clave del grupo = la fecha (yyyy-mm-dd).
+  const emptyConcepto = (): Record<ConceptoKey, { monto: number; folio: string | null }> => ({
+    obra: { monto: 0, folio: null },
+    cocina: { monto: 0, folio: null },
+    sanitarios: { monto: 0, folio: null },
+    iluminacion: { monto: 0, folio: null },
+    muebles: { monto: 0, folio: null },
+  });
+  const grupos = new Map<string, PagoRow>();
+  const addPago = (date: Date, key: ConceptoKey, monto: number, folio: string | null) => {
+    if (!monto) return;
+    const clave = date.toISOString().slice(0, 10);
+    let row = grupos.get(clave);
+    if (!row) {
+      row = { date, porConcepto: emptyConcepto() };
+      grupos.set(clave, row);
+    }
+    row.porConcepto[key].monto += monto;
+    // Si ya había una factura para este concepto en la misma fecha, juntamos los folios.
+    row.porConcepto[key].folio = row.porConcepto[key].folio
+      ? `${row.porConcepto[key].folio}/${folio ?? ""}`
+      : folio;
+  };
   for (const inv of invoices.filter((i) => i.type === "emitida")) {
     for (const p of inv.payments) {
-      const porConcepto: Record<ConceptoKey, number> = {
-        obra: 0,
-        cocina: 0,
-        sanitarios: 0,
-        iluminacion: 0,
-        muebles: 0,
-      };
-      if (inv.conceptoCobro === "obra") porConcepto.obra = p.amountApplied;
-      else if (inv.conceptoCobro === "muebles") porConcepto.muebles = p.amountApplied;
-      else if (inv.conceptoCobro === "artefactos") {
-        porConcepto.cocina = p.amountApplied * ratioCocina;
-        porConcepto.sanitarios = p.amountApplied * ratioSanitarios;
-        porConcepto.iluminacion = p.amountApplied * ratioIluminacion;
-      }
-      const algo =
-        porConcepto.obra ||
-        porConcepto.cocina ||
-        porConcepto.sanitarios ||
-        porConcepto.iluminacion ||
-        porConcepto.muebles;
-      if (algo) {
-        pagos.push({ date: new Date(p.bankMovement.date), folioNumber: inv.folioNumber, porConcepto });
+      const date = new Date(p.bankMovement.date);
+      const concepto = conceptoDeFactura(inv);
+      if (concepto === "obra") addPago(date, "obra", p.amountApplied, inv.folioNumber);
+      else if (concepto === "muebles") addPago(date, "muebles", p.amountApplied, inv.folioNumber);
+      else if (concepto === "artefactos") {
+        // Si la factura tiene el desglose real cargado, lo usamos (prorrateado
+        // por la fracción de este pago); si no, repartimos proporcional al
+        // presupuesto de artefactos.
+        const tieneSplit =
+          inv.artefactoCocina != null ||
+          inv.artefactoSanitario != null ||
+          inv.artefactoIluminacion != null;
+        if (tieneSplit && inv.totalAmount > 0) {
+          const frac = p.amountApplied / inv.totalAmount;
+          addPago(date, "cocina", (inv.artefactoCocina ?? 0) * frac, inv.folioNumber);
+          addPago(date, "sanitarios", (inv.artefactoSanitario ?? 0) * frac, inv.folioNumber);
+          addPago(date, "iluminacion", (inv.artefactoIluminacion ?? 0) * frac, inv.folioNumber);
+        } else {
+          addPago(date, "cocina", p.amountApplied * ratioCocina, inv.folioNumber);
+          addPago(date, "sanitarios", p.amountApplied * ratioSanitarios, inv.folioNumber);
+          addPago(date, "iluminacion", p.amountApplied * ratioIluminacion, inv.folioNumber);
+        }
       }
     }
   }
-  pagos.sort((a, b) => a.date.getTime() - b.date.getTime());
+  const pagos: PagoRow[] = [...grupos.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
 
   const obraDate = lastObra ? fmtDate(new Date(lastObra.updatedAt)) : "";
   const artefactosDate = lastArtefactos ? fmtDate(new Date(lastArtefactos.updatedAt)) : "";
@@ -193,7 +233,7 @@ export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenDa
   ];
   const conceptos = conceptosAll.filter((c) => c.acordado > 0);
   for (const c of conceptos) {
-    c.pagado = pagos.reduce((s, r) => s + r.porConcepto[c.key], 0);
+    c.pagado = pagos.reduce((s, r) => s + r.porConcepto[c.key].monto, 0);
     c.avancePct = c.acordado > 0 ? c.pagado / c.acordado : 0;
     c.saldo = c.acordado - c.pagado;
   }

@@ -17,6 +17,8 @@
 //   - Acordado ARTEFACTOS: split cocina/sanitarios/iluminación por subcategory.
 //   - Sueldo lo generan OBRA (su GG) y MUEBLES (utilidad neta). Artefactos NO.
 
+import { conceptoDeFactura } from "@/lib/invoices/conceptoCobro";
+
 // ── Tipos de entrada (estructuralmente compatibles con el include del resumen) ──
 type ObraItemLite = { total: number };
 type MuebleItemLite = {
@@ -54,20 +56,6 @@ type InvoiceLite = {
   folioNumber: string | null;
   payments: PaymentLite[];
 };
-
-// Resuelve el concepto del cobro (obra / muebles / artefactos) de una factura
-// emitida. Prioriza la CATEGORÍA que asigna MJ (Obra/Muebles/Artefactos);
-// cae al campo legacy conceptoCobro solo si no hay categoría. Antes el cuadro
-// leía solo conceptoCobro (casi siempre vacío) → no contaba los cobros.
-function conceptoDeFactura(inv: InvoiceLite): "obra" | "muebles" | "artefactos" | null {
-  const cat = (inv.category?.name ?? "").toLowerCase();
-  if (cat.includes("obra")) return "obra";
-  if (cat.includes("mueble")) return "muebles";
-  if (cat.includes("artefacto")) return "artefactos";
-  const c = inv.conceptoCobro;
-  if (c === "obra" || c === "muebles" || c === "artefactos") return c;
-  return null;
-}
 export type CuadroResumenInput = {
   invoices: InvoiceLite[];
   budgets: BudgetVersionLite[];

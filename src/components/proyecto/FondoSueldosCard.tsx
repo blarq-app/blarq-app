@@ -5,13 +5,34 @@ import type { FondoSueldosCalculo } from "@/lib/banco/fondoSueldos";
 //   - Cuánto representa al 100% (GG obra + utilidad muebles).
 //   - Cuánto se generó hasta ahora según lo cobrado.
 //   - Detalle por tipo (obra / muebles / artefactos).
+//   - Cuánto ya se transfirió a la cuenta Sueldos y cuánto falta.
 //
 // Si el proyecto no tiene cobros aún, igual se muestra el "máximo posible"
 // como referencia.
-export default function FondoSueldosCard({ fondo }: { fondo: FondoSueldosCalculo }) {
+//
+// `transferido` = suma NETA de las transferencias internas Operativa→Sueldos
+// conciliadas a esta obra (las devoluciones ya vienen restadas). Lo calcula
+// el server (resumen/page.tsx); la card solo lo muestra.
+export default function FondoSueldosCard({
+  fondo,
+  transferido = 0,
+}: {
+  fondo: FondoSueldosCalculo;
+  transferido?: number;
+}) {
   // Si no hay nada presupuestado en obra ni muebles, no tiene sentido mostrar
   // la card.
   if (fondo.totalFondoMaximo <= 0) return null;
+
+  // "Falta transferir" se mide contra el MÁXIMO de la obra (al 100%), no
+  // contra lo generado hasta ahora — decisión de MJ (muestra el techo del
+  // traspaso, no solo lo disponible hoy). Se clampa a 0: si ya transfirió
+  // el total, no mostramos negativo.
+  const faltaTransferir = Math.max(0, fondo.totalFondoMaximo - transferido);
+  // Aviso de "te pagaste de más": se transfirió MÁS de lo que la obra generó
+  // hasta ahora (lo realmente cobrado). Señal de traspaso adelantado. Tolerancia
+  // de $1.000 para no saltar por redondeos.
+  const transferidoDeMas = transferido - fondo.fondoGenerado > 1000;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
@@ -101,6 +122,40 @@ export default function FondoSueldosCard({ fondo }: { fondo: FondoSueldosCalculo
           </tr>
         </tbody>
       </table>
+
+      {/* Traspaso a la cuenta Sueldos: cuánto ya me transferí de esta obra y
+          cuánto falta (contra el máximo). Es lo que MJ concilia a mano en
+          /banco/movimientos sobre las transferencias internas. */}
+      <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-gray-500">
+            Ya transferido a sueldos
+          </p>
+          <p className="text-base font-semibold tabular-nums text-gray-900 mt-0.5">
+            {formatCLP(transferido)}
+          </p>
+          {transferidoDeMas && (
+            <p className="text-[11px] text-amber-700 mt-1">
+              Te transferiste más de lo que esta obra generó hasta ahora
+              ({formatCLP(fondo.fondoGenerado)}). Traspaso adelantado.
+            </p>
+          )}
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] uppercase tracking-wider text-gray-500">
+            Falta transferir
+            <span className="normal-case text-gray-400 ml-1">(al 100%)</span>
+          </p>
+          <p
+            className={`text-base font-semibold tabular-nums mt-0.5 ${
+              faltaTransferir > 0 ? "text-gray-900" : "text-gray-300"
+            }`}
+          >
+            {formatCLP(faltaTransferir)}
+          </p>
+        </div>
+      </div>
+
       <p className="text-[11px] text-gray-400 mt-3">
         Para que cuente como cobrado, las facturas emitidas deben estar marcadas
         como pagadas (la conciliación bancaria lo hace automático). Las

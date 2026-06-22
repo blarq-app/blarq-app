@@ -47,6 +47,10 @@ export async function PATCH(
       ignore: boolean;
       markInternal: boolean;
       undoNetZero: boolean;
+      // Conciliar una transferencia interna (Operativa→Sueldos) a una obra.
+      // string = id de la obra; null = desasignar. Etiqueta AMBOS lados del
+      // par linkeado (ver branch más abajo).
+      internalProjectId: string | null;
       notes: string;
     }>;
 
@@ -55,6 +59,40 @@ export async function PATCH(
       include: { payments: true },
     });
     if (!mov) return NextResponse.json({ error: "Movimiento no encontrado" }, { status: 404 });
+
+    // Asignar / desasignar OBRA a una transferencia interna. Una transferencia
+    // son DOS movimientos linkeados (sale −X de Operativa, entra +X a Sueldos):
+    // etiquetamos los dos lados a la vez para que la obra quede conciliada sin
+    // importar en cuál fila clickeó MJ. El cálculo de "transferido por obra"
+    // suma SOLO el lado que entra a Sueldos (ver fondoSueldos.ts), así que
+    // etiquetar ambos lados no produce doble conteo.
+    if (body.internalProjectId !== undefined) {
+      if (mov.category !== "transfer_interno" && mov.status !== "interno") {
+        return NextResponse.json(
+          { error: "Solo se puede asignar obra a transferencias internas" },
+          { status: 400 }
+        );
+      }
+      if (body.internalProjectId) {
+        const existe = await prisma.project.count({ where: { id: body.internalProjectId } });
+        if (!existe) return NextResponse.json({ error: "La obra no existe" }, { status: 400 });
+      }
+      // Ambos lados del par. La relación internalTransferToId se setea en los
+      // dos sentidos al importar, pero por si algún dato viejo solo tiene un
+      // lado, buscamos también el que apunta a este mov.
+      const ids = new Set<string>([mov.id]);
+      if (mov.internalTransferToId) ids.add(mov.internalTransferToId);
+      const back = await prisma.bankMovement.findFirst({
+        where: { internalTransferToId: mov.id },
+        select: { id: true },
+      });
+      if (back) ids.add(back.id);
+      const r = await prisma.bankMovement.updateMany({
+        where: { id: { in: Array.from(ids) } },
+        data: { projectId: body.internalProjectId },
+      });
+      return NextResponse.json({ ok: true, etiquetados: r.count });
+    }
 
     // Deshacer una devolución neto cero: suelta TODO el grupo (un lavado es
     // atómico — deshacer uno deshace todos). Vuelven a "pendiente".

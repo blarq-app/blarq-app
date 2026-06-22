@@ -76,6 +76,23 @@ export default async function ResultadosPage({
     return <CentroCostoView project={project} searchParams={sp} />;
   }
 
+  // ── Lo ya transferido a la cuenta Sueldos por esta obra ────────────────
+  // Suma NETA de las transferencias internas (Operativa→Sueldos) que MJ
+  // concilió a esta obra. Contamos SOLO el lado que ENTRA a Sueldos
+  // (bankAccount.role="salary_fund"); nunca los dos lados del par, o se
+  // contaría el doble. Una devolución (Sueldos→Operativa) viene con monto
+  // negativo en esa cuenta, así que netea sola. Es un dato aditivo: no toca
+  // el cálculo del fondo "generado" (fondoSueldos.ts).
+  const transferidoAgg = await prisma.bankMovement.aggregate({
+    _sum: { amount: true },
+    where: {
+      projectId: id,
+      category: "transfer_interno",
+      bankAccount: { role: "salary_fund" },
+    },
+  });
+  const transferidoSueldos = transferidoAgg._sum.amount ?? 0;
+
   // ── Métricas contables (fuente única: metrics.ts) ──────────────────────
   // Antes esto se calculaba duplicado acá, lo que causó el bug del IVA del
   // 29-abr (se arregló en metrics y la pantalla seguía mal). Ahora todo
@@ -645,7 +662,10 @@ export default async function ResultadosPage({
       </div>
 
       {/* Fondo Sueldos generado por este proyecto */}
-      <FondoSueldosCard fondo={computeFondoSueldos(project as unknown as ProjectWithFondo)} />
+      <FondoSueldosCard
+        fondo={computeFondoSueldos(project as unknown as ProjectWithFondo)}
+        transferido={transferidoSueldos}
+      />
 
       {/* Utilidad por cobro (interno) — desglose cobro a cobro + sugerencia de
           traspaso a Sueldos + etiquetado de concepto. NUNCA va al cliente. */}

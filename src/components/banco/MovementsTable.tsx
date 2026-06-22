@@ -9,6 +9,7 @@ import MarkInternalButton from "./MarkInternalButton";
 import MarkSinFacturaButton from "./MarkSinFacturaButton";
 import UndoNetZeroButton from "./UndoNetZeroButton";
 import MovementsBulkBar from "./MovementsBulkBar";
+import InternalTransferProjectSelect from "./InternalTransferProjectSelect";
 
 type Payment = {
   id: string;
@@ -32,6 +33,8 @@ export type MovementRow = {
   status: string;
   category: string | null;
   bankAccountAlias: string;
+  // Obra conciliada (solo se usa hoy para transferencias internas).
+  projectId: string | null;
   payments: Payment[];
 };
 
@@ -198,7 +201,18 @@ export default function MovementsTable({
                         )}
                       </td>
                       <td className="px-4 py-2 text-xs">
-                        {m.payments.length > 0 ? (
+                        {isInternal ? (
+                          // Transferencia interna Operativa↔Sueldos: dejamos
+                          // elegir la obra a la que se concilia (cuánta utilidad
+                          // se traspasó por obra). Va PRIMERO en la cadena
+                          // porque estos movs traen category="transfer_interno"
+                          // y si no, caerían en la rama de categoría (texto gris).
+                          <InternalTransferProjectSelect
+                            movimientoId={m.id}
+                            projectId={m.projectId}
+                            projects={projects}
+                          />
+                        ) : m.payments.length > 0 ? (
                           <div className="space-y-0.5">
                             {m.payments.slice(0, 2).map((p) => (
                               <Link
@@ -246,8 +260,6 @@ export default function MovementsTable({
                               </span>
                             )}
                           </span>
-                        ) : isInternal ? (
-                          <span className="text-gray-500">transfer interno</span>
                         ) : (
                           <span className="text-gray-300">—</span>
                         )}

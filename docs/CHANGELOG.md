@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-22 — Fondo Sueldos: tarjeta rediseñada como forma de pago
+
+- **Rediseño de `FondoSueldosCard`** (resumen del proyecto), pedido por MJ sobre JNC. Antes: columnas Cobrado / % cobrado / Generado (la columna Cobrado venía inflada porque el resumen le pasaba TODAS las facturas a `computeFondoSueldos`). Ahora: por tipo se muestra **costo directo** + **utilidad a generar** (GG obra / utilidad muebles, destacada).
+- **Desglose por forma de pago del cliente** (anticipo/avances/saldo del presupuesto, modelo `PaymentTerm` — NO confundir con los Estados de Pago a maestros): cada tramo con su **monto a cobrar** (% × total acordado obra) y la **utilidad que genera** (% × GG), marcado **cobrado / parcial / pendiente** según lo realmente cobrado (solo emitidas, cálculo correcto).
+- **Módulo nuevo `src/lib/banco/formaPagoFondo.ts`** (`computeFormaPagoFondo`), aditivo y de solo lectura: no toca `fondoSueldos.ts` (que sigue usándolo el dashboard de banco) ni `metrics.ts`. Suma todas las obras aprobadas (como metrics/utilidadPorCobro). La forma de pago se lee de la versión de obra aprobada; si no la tiene cargada (caso JNC, está en la enviada), cae a la versión de obra más reciente que la tenga y lo avisa.
+- **Convive con la tarjeta "Utilidad por cobro"** (realidad factura por factura) que va debajo: arriba el plan, abajo lo cobrado. Decisión de MJ.
+- **Sin cambio de schema.** Verificado en vivo (dev, proyecto 46 con forma de pago sembrada temporal): tramos suman el GG, marcado cobrado/parcial/pendiente correcto, pie ya transferido/falta. Test de lógica `scripts/test-formapago.ts`. `tsc` limpio.
+
 ## 2026-06-21 — Banco: conciliar transferencias internas (Operativa→Sueldos) con obras
 
 - **Nuevo campo `BankMovement.projectId`** (nullable, relación a `Project` con `onDelete: SetNull`, índice). Permite imputar A MANO un movimiento a una obra. Hoy se usa solo para las transferencias internas Operativa↔Sueldos (`category="transfer_interno"`); nunca se auto-asigna (mismo criterio que las facturas).

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
+import AddHerrajeFromCatalog from "./AddHerrajeFromCatalog";
 
 // Input numérico con separadores de miles. Sin foco muestra "5.488.460",
 // con foco muestra "5488460" para edición. onChange devuelve el número crudo.
@@ -61,6 +62,24 @@ type MuebleQuote = {
   sortOrder: number;
 };
 
+// Línea de herraje dentro de una partida kind="herrajes". Cada línea apunta a
+// un herraje del catálogo (catalogId) y guarda su sector, cantidad y costo
+// neto. El precio a cliente de la partida se deriva del total de líneas + margen.
+type MuebleHerraje = {
+  id: string;
+  itemId: string;
+  catalogId: string | null;
+  sector: string;
+  supplier: string;
+  name: string;
+  measure: string | null;
+  finish: string | null;
+  sku: string | null;
+  quantity: number;
+  costNet: number;
+  sortOrder: number;
+};
+
 type MuebleItem = {
   id: string;
   itemNumber: string;
@@ -73,8 +92,11 @@ type MuebleItem = {
   clientPriceNet: number;
   clientPriceIva: number;
   sortOrder: number;
+  // "mueble" (default) | "herrajes". Decide qué bloque se renderiza.
+  kind: string;
   details: MuebleDetail[];
   quotes: MuebleQuote[];
+  herrajes: MuebleHerraje[];
 };
 
 type MuebleChapter = {
@@ -191,18 +213,243 @@ export default function MueblesEditor({
     });
     if (!res.ok) return alert("Error al crear item");
     const created: MuebleItem = await res.json();
+    // Sembramos los TRES arrays para que el render no se caiga (la respuesta
+    // del POST no necesariamente los trae): details, quotes y herrajes.
     setChapters((prev) =>
       prev.map((c) =>
         c.id === chapterId
-          ? // El POST de /muebles/items NO devuelve la relación `quotes` (el item
-            // nace sin cotizaciones alternativas; se agregan después con POST
-            // /quotes). Hay que sembrarla vacía sí o sí: el render lee
-            // `item.quotes` (.filter/.length) y con `undefined` se cae. `details`
-            // ya se sembraba por la misma razón.
-            { ...c, items: [...c.items, { ...created, details: [], quotes: [] }] }
+          ? // El POST de /muebles/items NO trae las relaciones; hay que sembrar
+            // los TRES arrays vacíos (details, quotes, herrajes) o el render se
+            // cae al leer item.quotes/.herrajes (.filter/.length) con undefined.
+            // (Supersede el fix de #188 que solo sembraba details+quotes.)
+            {
+              ...c,
+              items: [
+                ...c.items,
+                { ...created, details: [], quotes: [], herrajes: [] },
+              ],
+            }
           : c
       )
     );
+  }
+
+  // Crea una PARTIDA de herrajes (kind="herrajes") dentro del capítulo. El back
+  // la nace con name "HERRAJES", utilityPercentage 0.2 y totales en 0.
+  async function addHerrajePartida(chapterId: string) {
+    const res = await fetch(`/api/presupuestos/${budgetId}/muebles/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chapterId, kind: "herrajes" }),
+    });
+    if (!res.ok) return alert("Error al crear partida de herrajes");
+    const created: MuebleItem = await res.json();
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id === chapterId
+          ? {
+              ...c,
+              items: [
+                ...c.items,
+                { ...created, details: [], quotes: [], herrajes: [] },
+              ],
+            }
+          : c
+      )
+    );
+  }
+
+  // ── Líneas de herraje dentro de una partida kind="herrajes" ──────────────
+  // El editor NO calcula los totales del item: el back los recalcula desde las
+  // líneas y los devuelve. Acá solo mergeamos esos totales en el estado para
+  // que costo/precio/IVA de la partida queden sincronizados sin recargar.
+
+  // Mergea en el estado los totales recalculados que devuelve el back para un
+  // item, dejando el resto de campos del item intactos.
+  function patchItemTotals(
+    chapterId: string,
+    itemId: string,
+    updated: Partial<MuebleItem>
+  ) {
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) =>
+                i.id === itemId
+                  ? {
+                      ...i,
+                      costDistributor:
+                        updated.costDistributor ?? i.costDistributor,
+                      utilityPercentage:
+                        updated.utilityPercentage ?? i.utilityPercentage,
+                      clientPriceNet: updated.clientPriceNet ?? i.clientPriceNet,
+                      clientPriceIva: updated.clientPriceIva ?? i.clientPriceIva,
+                    }
+                  : i
+              ),
+            }
+      )
+    );
+  }
+
+  // El modal ya hizo el POST; acá metemos la línea nueva y refrescamos totales.
+  function onHerrajeAdded(
+    chapterId: string,
+    itemId: string,
+    line: MuebleHerraje,
+    updated: Partial<MuebleItem>
+  ) {
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) =>
+                i.id === itemId
+                  ? { ...i, herrajes: [...i.herrajes, line] }
+                  : i
+              ),
+            }
+      )
+    );
+    patchItemTotals(chapterId, itemId, updated);
+  }
+
+  // Editar cantidad o sector de una línea de herraje. El back devuelve la línea
+  // y el item recalculado.
+  async function updateHerraje(
+    chapterId: string,
+    itemId: string,
+    herrajeId: string,
+    patch: { quantity?: number; sector?: string }
+  ) {
+    // Optimista: mostramos el cambio de inmediato en la línea.
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) =>
+                i.id !== itemId
+                  ? i
+                  : {
+                      ...i,
+                      herrajes: i.herrajes.map((h) =>
+                        h.id === herrajeId ? { ...h, ...patch } : h
+                      ),
+                    }
+              ),
+            }
+      )
+    );
+    const res = await fetch(
+      `/api/presupuestos/${budgetId}/muebles/items/${itemId}/herrajes/${herrajeId}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      }
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    // Sincronizamos la línea con la versión del back y refrescamos totales.
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) =>
+                i.id !== itemId
+                  ? i
+                  : {
+                      ...i,
+                      herrajes: i.herrajes.map((h) =>
+                        h.id === herrajeId ? { ...h, ...data.line } : h
+                      ),
+                    }
+              ),
+            }
+      )
+    );
+    patchItemTotals(chapterId, itemId, data.item);
+  }
+
+  // Borrar una línea de herraje. El back devuelve el item recalculado.
+  async function deleteHerraje(
+    chapterId: string,
+    itemId: string,
+    herrajeId: string
+  ) {
+    const res = await fetch(
+      `/api/presupuestos/${budgetId}/muebles/items/${itemId}/herrajes/${herrajeId}`,
+      { method: "DELETE" }
+    );
+    if (!res.ok) return alert("Error al eliminar el herraje");
+    const data = await res.json();
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) =>
+                i.id !== itemId
+                  ? i
+                  : { ...i, herrajes: i.herrajes.filter((h) => h.id !== herrajeId) }
+              ),
+            }
+      )
+    );
+    patchItemTotals(chapterId, itemId, data.item);
+  }
+
+  // Editar nombre / margen de la partida de herrajes. Para kind="herrajes" el
+  // back recalcula el costo desde las líneas; devuelve el item actualizado.
+  async function updateHerrajePartida(
+    chapterId: string,
+    itemId: string,
+    patch: { itemNumber?: string; name?: string; utilityPercentage?: number }
+  ) {
+    // Optimista en nombre/número/margen; los totales llegan del back.
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) =>
+                i.id === itemId ? { ...i, ...patch } : i
+              ),
+            }
+      )
+    );
+    const current = chapters
+      .find((c) => c.id === chapterId)
+      ?.items.find((i) => i.id === itemId);
+    const res = await fetch(
+      `/api/presupuestos/${budgetId}/muebles/items/${itemId}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: patch.name ?? current?.name ?? "HERRAJES",
+          utilityPercentage:
+            patch.utilityPercentage ?? current?.utilityPercentage ?? 0.2,
+          ...(patch.itemNumber !== undefined
+            ? { itemNumber: patch.itemNumber }
+            : {}),
+        }),
+      }
+    );
+    if (!res.ok) return;
+    const updated: Partial<MuebleItem> = await res.json();
+    patchItemTotals(chapterId, itemId, updated);
   }
 
   async function updateItem(
@@ -553,11 +800,25 @@ export default function MueblesEditor({
           <ChapterBlock
           key={ch.id}
           chapter={ch}
+          budgetId={budgetId}
           onUpdate={(patch) => updateChapter(ch.id, patch)}
           onDelete={() => deleteChapter(ch.id)}
           onAddItem={() => addItem(ch.id)}
+          onAddHerrajePartida={() => addHerrajePartida(ch.id)}
           onUpdateItem={(itemId, patch) => updateItem(ch.id, itemId, patch)}
           onDeleteItem={(itemId) => deleteItem(ch.id, itemId)}
+          onUpdateHerrajePartida={(itemId, patch) =>
+            updateHerrajePartida(ch.id, itemId, patch)
+          }
+          onHerrajeAdded={(itemId, line, updated) =>
+            onHerrajeAdded(ch.id, itemId, line, updated)
+          }
+          onUpdateHerraje={(itemId, herrajeId, patch) =>
+            updateHerraje(ch.id, itemId, herrajeId, patch)
+          }
+          onDeleteHerraje={(itemId, herrajeId) =>
+            deleteHerraje(ch.id, itemId, herrajeId)
+          }
           onAddDetail={(itemId) => addDetail(ch.id, itemId)}
           onUpdateDetail={(itemId, detailId, patch) =>
             updateDetail(ch.id, itemId, detailId, patch)
@@ -702,9 +963,11 @@ export default function MueblesEditor({
 
 function ChapterBlock({
   chapter,
+  budgetId,
   onUpdate,
   onDelete,
   onAddItem,
+  onAddHerrajePartida,
   onUpdateItem,
   onDeleteItem,
   onAddDetail,
@@ -714,11 +977,17 @@ function ChapterBlock({
   onUpdateQuote,
   onDeleteQuote,
   onActivateQuote,
+  onUpdateHerrajePartida,
+  onHerrajeAdded,
+  onUpdateHerraje,
+  onDeleteHerraje,
 }: {
   chapter: MuebleChapter;
+  budgetId: string;
   onUpdate: (patch: Partial<MuebleChapter>) => void;
   onDelete: () => void;
   onAddItem: () => void;
+  onAddHerrajePartida: () => void;
   onUpdateItem: (itemId: string, patch: Partial<MuebleItem>) => void;
   onDeleteItem: (itemId: string) => void;
   onAddDetail: (itemId: string) => void;
@@ -736,6 +1005,21 @@ function ChapterBlock({
   ) => void;
   onDeleteQuote: (itemId: string, quoteId: string) => void;
   onActivateQuote: (itemId: string, quoteId: string) => void;
+  onUpdateHerrajePartida: (
+    itemId: string,
+    patch: { itemNumber?: string; name?: string; utilityPercentage?: number }
+  ) => void;
+  onHerrajeAdded: (
+    itemId: string,
+    line: MuebleHerraje,
+    updated: Partial<MuebleItem>
+  ) => void;
+  onUpdateHerraje: (
+    itemId: string,
+    herrajeId: string,
+    patch: { quantity?: number; sector?: string }
+  ) => void;
+  onDeleteHerraje: (itemId: string, herrajeId: string) => void;
 }) {
   const subtotal = chapter.items.reduce(
     (s, i) => s + i.clientPriceIva * i.quantity,
@@ -767,33 +1051,62 @@ function ChapterBlock({
         </button>
       </div>
 
-      {/* Items del capítulo */}
-      {chapter.items.map((item) => (
-        <ItemBlock
-          key={item.id}
-          item={item}
-          onUpdate={(patch) => onUpdateItem(item.id, patch)}
-          onDelete={() => onDeleteItem(item.id)}
-          onAddDetail={() => onAddDetail(item.id)}
-          onUpdateDetail={(detailId, patch) =>
-            onUpdateDetail(item.id, detailId, patch)
-          }
-          onDeleteDetail={(detailId) => onDeleteDetail(item.id, detailId)}
-          onAddQuote={() => onAddQuote(item.id)}
-          onUpdateQuote={(quoteId, patch) =>
-            onUpdateQuote(item.id, quoteId, patch)
-          }
-          onDeleteQuote={(quoteId) => onDeleteQuote(item.id, quoteId)}
-          onActivateQuote={(quoteId) => onActivateQuote(item.id, quoteId)}
-        />
-      ))}
+      {/* Items del capítulo. Los items kind="herrajes" usan un bloque distinto
+          (no muestran componentes ni cotizaciones de proveedor). */}
+      {chapter.items.map((item) =>
+        item.kind === "herrajes" ? (
+          <HerrajePartidaBlock
+            key={item.id}
+            item={item}
+            budgetId={budgetId}
+            onUpdate={(patch) => onUpdateHerrajePartida(item.id, patch)}
+            onDelete={() => onDeleteItem(item.id)}
+            onHerrajeAdded={(line, updated) =>
+              onHerrajeAdded(item.id, line, updated)
+            }
+            onUpdateHerraje={(herrajeId, patch) =>
+              onUpdateHerraje(item.id, herrajeId, patch)
+            }
+            onDeleteHerraje={(herrajeId) => onDeleteHerraje(item.id, herrajeId)}
+          />
+        ) : (
+          <ItemBlock
+            key={item.id}
+            item={item}
+            onUpdate={(patch) => onUpdateItem(item.id, patch)}
+            onDelete={() => onDeleteItem(item.id)}
+            onAddDetail={() => onAddDetail(item.id)}
+            onUpdateDetail={(detailId, patch) =>
+              onUpdateDetail(item.id, detailId, patch)
+            }
+            onDeleteDetail={(detailId) => onDeleteDetail(item.id, detailId)}
+            onAddQuote={() => onAddQuote(item.id)}
+            onUpdateQuote={(quoteId, patch) =>
+              onUpdateQuote(item.id, quoteId, patch)
+            }
+            onDeleteQuote={(quoteId) => onDeleteQuote(item.id, quoteId)}
+            onActivateQuote={(quoteId) => onActivateQuote(item.id, quoteId)}
+          />
+        )
+      )}
 
-      <div className="px-4 py-1.5 border-b border-gray-100">
+      {/* Dos acciones distintas, separadas a propósito para no confundirlas:
+          - "Agregar item" = partida de mueble normal (link gris discreto).
+          - "Partida de herrajes" = trae el catálogo (botón con borde, más
+            visible) — MJ se confundía y nombraba un item normal "HERRAJES". */}
+      <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between gap-4">
         <button
           onClick={onAddItem}
           className="text-[11px] text-gray-400 hover:text-gray-900"
         >
-          + Agregar item al capítulo (ej. Muebles, Herrajes, Cubiertas)
+          + Agregar item al capítulo (ej. Muebles, Cubiertas)
+        </button>
+        <button
+          onClick={onAddHerrajePartida}
+          className="text-[11px] font-medium text-gray-700 border border-gray-300 rounded px-2.5 py-1 hover:bg-gray-50 hover:border-gray-400 whitespace-nowrap"
+          title="Crea una partida que se arma con herrajes del catálogo (correderas, bisagras, cajones…)"
+        >
+          + Partida de herrajes (del catálogo)
         </button>
       </div>
     </>
@@ -1214,6 +1527,240 @@ function ItemBlock({
             </div>
           </div>
         )}
+      </div>
+    </>
+  );
+}
+
+// ─── Partida de herrajes (kind="herrajes") ──────────────────────────────────
+// Bloque distinto al ItemBlock normal: no tiene componentes ni cotizaciones de
+// proveedor. Lista herrajes del catálogo AGRUPADOS por sector, con su cantidad
+// editable, y muestra el costo interno + margen + precio cliente de la partida.
+function HerrajePartidaBlock({
+  item,
+  budgetId,
+  onUpdate,
+  onDelete,
+  onHerrajeAdded,
+  onUpdateHerraje,
+  onDeleteHerraje,
+}: {
+  item: MuebleItem;
+  budgetId: string;
+  onUpdate: (patch: {
+    itemNumber?: string;
+    name?: string;
+    utilityPercentage?: number;
+  }) => void;
+  onDelete: () => void;
+  onHerrajeAdded: (
+    line: MuebleHerraje,
+    updated: Partial<MuebleItem>
+  ) => void;
+  onUpdateHerraje: (
+    herrajeId: string,
+    patch: { quantity?: number; sector?: string }
+  ) => void;
+  onDeleteHerraje: (herrajeId: string) => void;
+}) {
+  const [showCatalog, setShowCatalog] = useState(false);
+
+  // Mismo grid que el resto de la tabla (item · partida · cantidad · total · ✕).
+  const ROW_GRID =
+    "grid grid-cols-[3rem_minmax(0,1fr)_5rem_8rem_2rem] items-baseline gap-3";
+
+  // Agrupamos las líneas por sector. "" = "Sin sector". Conservamos el orden de
+  // aparición de los sectores (primer line de cada sector marca su posición).
+  const groups: { sector: string; lines: MuebleHerraje[] }[] = [];
+  for (const line of item.herrajes) {
+    const sector = line.sector ?? "";
+    const existing = groups.find((g) => g.sector === sector);
+    if (existing) existing.lines.push(line);
+    else groups.push({ sector, lines: [line] });
+  }
+
+  // Sectores ya usados (para sugerir en el modal).
+  const existingSectors = Array.from(
+    new Set(item.herrajes.map((h) => h.sector).filter(Boolean))
+  );
+
+  // Margen mostrado como % entero (0.2 → 20).
+  const marginPct = item.utilityPercentage
+    ? Math.round(item.utilityPercentage * 100)
+    : 0;
+
+  return (
+    <>
+      {/* Fila de la partida: número (editable), nombre (editable), total. */}
+      <div className={`${ROW_GRID} px-4 pt-2 pb-1 border-b border-gray-100`}>
+        <input
+          type="text"
+          value={item.itemNumber}
+          onChange={(e) => onUpdate({ itemNumber: e.target.value })}
+          className="bg-transparent border-0 p-0 text-sm tabular-nums text-gray-700 outline-none"
+        />
+        <input
+          type="text"
+          value={item.name}
+          onChange={(e) => onUpdate({ name: e.target.value.toUpperCase() })}
+          className="bg-transparent border-0 p-0 text-sm font-bold uppercase text-gray-900 outline-none"
+        />
+        <div></div>
+        <span className="text-right text-sm font-bold tabular-nums text-gray-900">
+          {formatCLP(item.clientPriceIva)}
+        </span>
+        <button
+          onClick={onDelete}
+          className="text-gray-400 hover:text-red-600 text-sm leading-none"
+          title="Eliminar partida de herrajes"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Líneas agrupadas por sector */}
+      {item.herrajes.length === 0 ? (
+        <div className={`${ROW_GRID} px-4 py-1.5 border-b border-gray-100`}>
+          <div></div>
+          <div className="text-[11px] text-gray-400 italic">
+            Agregá herrajes del catálogo.
+          </div>
+          <div></div>
+          <div></div>
+          <div></div>
+        </div>
+      ) : (
+        groups.map((g) => (
+          <div key={g.sector || "__sin__"}>
+            {/* Sub-encabezado del sector (chico, gris, MAYÚSCULA). */}
+            <div className={`${ROW_GRID} px-4 pt-1.5 pb-0.5 border-b border-gray-50`}>
+              <div></div>
+              <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                {g.sector ? `Sector ${g.sector}` : "Sin sector"}
+              </div>
+              <div></div>
+              <div></div>
+              <div></div>
+            </div>
+
+            {/* Cada herraje del sector */}
+            {g.lines.map((h) => (
+              <div
+                key={h.id}
+                className={`${ROW_GRID} px-4 py-0.5 border-b border-gray-50`}
+              >
+                <div></div>
+                {/* Columna PARTIDA: nombre + medida + color + proveedor.
+                    Flex (no grid anidado): el grid anidado colapsaba la columna
+                    del nombre a ~1 carácter y lo dibujaba en vertical. */}
+                <div className="flex items-baseline gap-2 min-w-0">
+                  <span className="flex-1 min-w-0 text-[11px] text-gray-800 leading-tight break-words">
+                    {h.name}
+                    {h.measure ? (
+                      <span className="text-gray-500">
+                        {" "}
+                        · {h.measure.toUpperCase()}
+                      </span>
+                    ) : null}
+                    {h.finish ? (
+                      <span className="text-gray-500">
+                        {" "}
+                        · {h.finish.toUpperCase()}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="shrink-0 text-[9px] uppercase tracking-wider text-gray-400 self-center">
+                    {h.supplier}
+                  </span>
+                  {/* Costo unitario (read-only, gris). */}
+                  <span className="shrink-0 w-16 text-[10px] text-right tabular-nums text-gray-400 self-center">
+                    {formatCLP(h.costNet)}
+                  </span>
+                </div>
+                {/* Cantidad editable. */}
+                <input
+                  type="number"
+                  min={0}
+                  step="1"
+                  value={h.quantity}
+                  onChange={(e) =>
+                    onUpdateHerraje(h.id, {
+                      quantity: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  className="bg-transparent border-0 p-0 text-center text-[11px] tabular-nums text-gray-700 outline-none"
+                />
+                {/* Subtotal costo (costo × cantidad). */}
+                <span className="text-right text-[11px] tabular-nums text-gray-600">
+                  {formatCLP(h.costNet * h.quantity)}
+                </span>
+                <button
+                  onClick={() => onDeleteHerraje(h.id)}
+                  className="text-gray-300 hover:text-red-500 text-xs leading-none"
+                  title="Eliminar herraje"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        ))
+      )}
+
+      {/* Botón "Agregar del catálogo" + modal */}
+      <div className={`${ROW_GRID} px-4 pb-1 pt-1 border-b border-gray-100`}>
+        <div></div>
+        <button
+          onClick={() => setShowCatalog((v) => !v)}
+          className="text-[10px] text-gray-400 hover:text-gray-900 text-left"
+        >
+          {showCatalog ? "Cerrar catálogo" : "Agregar del catálogo"}
+        </button>
+        <div></div>
+        <div></div>
+        <div></div>
+      </div>
+
+      {showCatalog && (
+        <AddHerrajeFromCatalog
+          budgetId={budgetId}
+          itemId={item.id}
+          existingSectors={existingSectors}
+          onAdded={(line, updated) =>
+            onHerrajeAdded(line as MuebleHerraje, updated as Partial<MuebleItem>)
+          }
+          onClose={() => setShowCatalog(false)}
+        />
+      )}
+
+      {/* Costo interno de la partida — sobrio, gris. Margen editable. */}
+      <div className="px-4 py-1.5 border-b border-gray-200 bg-gray-50">
+        <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-[11px] text-gray-600">
+          <span className="font-medium text-gray-700">Costo interno</span>
+          <span className="text-gray-900 tabular-nums">
+            {formatCLP(item.costDistributor)}
+          </span>
+          <span className="text-gray-300">·</span>
+          <span>margen</span>
+          <input
+            type="number"
+            step="1"
+            value={marginPct || ""}
+            onChange={(e) =>
+              onUpdate({
+                utilityPercentage: (parseFloat(e.target.value) || 0) / 100,
+              })
+            }
+            placeholder="20"
+            className="w-12 bg-white border border-gray-300 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:border-gray-500 text-gray-900"
+          />
+          <span>%</span>
+          <span className="text-gray-300">·</span>
+          <span>cliente</span>
+          <span className="text-gray-900 font-medium tabular-nums">
+            {formatCLP(item.clientPriceIva)}
+          </span>
+        </div>
       </div>
     </>
   );

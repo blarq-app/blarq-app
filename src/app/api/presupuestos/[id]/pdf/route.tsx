@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { renderObraHTML } from "@/lib/pdf/ObraPDF.html";
 import { renderMueblesHTML } from "@/lib/pdf/MueblesPDF.html";
+import { renderMueblistaHTML } from "@/lib/pdf/MueblistaPDF.html";
 import {
   renderArtefactosHTML,
   buildArtefactosFooter,
@@ -20,7 +21,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const gate = await requireSession();
@@ -28,6 +29,8 @@ export async function GET(
 
   try {
     const { id } = await params;
+    // tipo=mueblista → listado de herrajes por sector SIN precios (Fase 3).
+    const tipo = request.nextUrl.searchParams.get("tipo");
 
     const budget = await prisma.budgetVersion.findUnique({
       where: { id },
@@ -39,7 +42,10 @@ export async function GET(
           include: {
             items: {
               orderBy: { sortOrder: "asc" },
-              include: { details: { orderBy: { sortOrder: "asc" } } },
+              include: {
+                details: { orderBy: { sortOrder: "asc" } },
+                herrajes: { orderBy: { sortOrder: "asc" } },
+              },
             },
           },
         },
@@ -86,6 +92,27 @@ export async function GET(
         })),
       });
       filename = `BLARQ_Obra_${baseName}_${budget.version}.pdf`;
+    } else if (budget.type === "muebles" && tipo === "mueblista") {
+      // Listado para el mueblista: herrajes por sector, sin precios. Aplana las
+      // líneas de herraje de todas las partidas de cada capítulo.
+      html = renderMueblistaHTML({
+        project: budget.project,
+        budget: { version: budget.version, date: budget.date },
+        chapters: budget.muebleChapters.map((ch) => ({
+          name: ch.name,
+          herrajes: ch.items.flatMap((i) =>
+            i.herrajes.map((h) => ({
+              sector: h.sector,
+              name: h.name,
+              measure: h.measure,
+              finish: h.finish,
+              supplier: h.supplier,
+              quantity: h.quantity,
+            })),
+          ),
+        })),
+      });
+      filename = `BLARQ_Herrajes_Mueblista_${baseName}_${budget.version}.pdf`;
     } else if (budget.type === "muebles") {
       html = renderMueblesHTML({
         project: budget.project,
@@ -106,6 +133,13 @@ export async function GET(
             details: i.details.map((d) => ({
               name: d.name,
               material: d.material,
+            })),
+            herrajes: i.herrajes.map((h) => ({
+              sector: h.sector,
+              name: h.name,
+              measure: h.measure,
+              finish: h.finish,
+              quantity: h.quantity,
             })),
           })),
         })),

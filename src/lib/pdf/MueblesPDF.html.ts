@@ -29,6 +29,14 @@ export interface MuebleDetailInput {
   material: string;
 }
 
+export interface MuebleHerrajeInput {
+  sector: string;
+  name: string;
+  measure: string | null;
+  finish: string | null;
+  quantity: number;
+}
+
 export interface MuebleItemInput {
   itemNumber: string;
   name: string;
@@ -36,6 +44,9 @@ export interface MuebleItemInput {
   quantity: number;
   clientPriceIva: number;
   details: MuebleDetailInput[];
+  // Partidas de herrajes: el detalle son herrajes agrupados por sector, sin
+  // precio por línea (el precio es el total de la partida). null/[] = no aplica.
+  herrajes?: MuebleHerrajeInput[];
 }
 
 export interface MuebleChapterInput {
@@ -364,6 +375,58 @@ const CSS = `
 `;
 
 // ─── HTML render ──────────────────────────────────────────────────────────
+// Detalle de una partida de herrajes en el PDF al cliente: los herrajes
+// agrupados por SECTOR (sub-encabezado) y listados con su medida/color y
+// cantidad, SIN precio por línea (el precio es el total de la partida). Es el
+// equivalente, para herrajes, del detalle de componentes de un mueble.
+function renderHerrajeDetailRows(
+  herrajes: MuebleHerrajeInput[] | undefined
+): string {
+  if (!herrajes || herrajes.length === 0) return "";
+  // Agrupar por sector preservando el orden de aparición.
+  const order: string[] = [];
+  const bySector = new Map<string, MuebleHerrajeInput[]>();
+  for (const h of herrajes) {
+    const key = h.sector || "";
+    if (!bySector.has(key)) {
+      bySector.set(key, []);
+      order.push(key);
+    }
+    bySector.get(key)!.push(h);
+  }
+  return order
+    .map((sector) => {
+      const lines = bySector.get(sector)!;
+      const header = sector
+        ? `<tr class="detail-row"><td></td><td class="col-detail-name" colspan="3"><strong>${esc(
+            sector.toUpperCase()
+          )}</strong></td></tr>`
+        : "";
+      const rows = lines
+        .map((h) => {
+          // Medida/color en MAYÚSCULA, como en el editor y el catálogo.
+          const spec = [h.measure, h.finish]
+            .filter(Boolean)
+            .join(" · ")
+            .toUpperCase();
+          const qty = `${fmtQty(h.quantity)} un`;
+          return `
+          <tr class="detail-row">
+            <td></td>
+            <td class="col-detail-name" colspan="3">
+              <span style="display:inline-block;min-width:120px;">${esc(h.name)}</span>
+              <span class="col-detail-material">${esc(spec)}${
+                spec ? " · " : ""
+              }${esc(qty)}</span>
+            </td>
+          </tr>`;
+        })
+        .join("");
+      return header + rows;
+    })
+    .join("");
+}
+
 export function renderMueblesHTML(input: MueblesHTMLInput): string {
   const { project, budget, chapters, paymentTerms } = input;
 
@@ -435,6 +498,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
           </tr>`
           )
           .join("")}
+        ${renderHerrajeDetailRows(item.herrajes)}
       `
         )
         .join("")}

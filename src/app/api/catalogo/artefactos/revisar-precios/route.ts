@@ -38,12 +38,24 @@ interface RevisionRow {
   webDiscount: number | null; // descuento del web (decimal 0..1)
   webTotal: number | null; // lo que pagaría el cliente con el web de hoy
   delta: number | null; // webTotal - storedTotal
+  // ¿Hay algo que aplicar? Verdadero si la web difiere de lo guardado en
+  // lista, descuento O total. OJO: NO alcanza con mirar el total — un producto
+  // que la web pone en oferta (lista $53.290 −25% = $39.990) puede tener el
+  // mismo total que el catálogo cuando éste guardó el precio con descuento ya
+  // aplicado y 0% (lista $39.990, 0%). El total no cambia pero la lista y el
+  // descuento sí, y eso es justo lo que hay que bajar para que se vea el dcto.
+  changed: boolean;
   status: "ok" | "sin-precio" | "error";
 }
 
 function total(listPrice: number, discount: number): number {
   return Math.round(listPrice * (1 - discount));
 }
+
+// Tolerancias para comparar guardado vs web (evita falsos cambios por
+// redondeo): 1 peso en montos, 0,5% en el descuento decimal.
+const EPS_PESO = 1;
+const EPS_DCTO = 0.005;
 
 export async function POST(request: NextRequest) {
   const gate = await requireSession();
@@ -101,33 +113,42 @@ export async function POST(request: NextRequest) {
             }
           }
           if (webListPrice == null || webPrice == null) {
-            return { ...base, webListPrice: null, webDiscount: null, webTotal: null, delta: null, status: "sin-precio" };
+            return { ...base, webListPrice: null, webDiscount: null, webTotal: null, delta: null, changed: false, status: "sin-precio" };
           }
           const webDiscount =
             webListPrice > 0 ? Math.max(0, 1 - webPrice / webListPrice) : 0;
+          // Cambió si difiere la lista, el descuento O el total (no solo el
+          // total — ver comentario en RevisionRow.changed).
+          const changed =
+            Math.abs(webListPrice - base.storedListPrice) > EPS_PESO ||
+            Math.abs(webDiscount - base.storedDiscount) > EPS_DCTO ||
+            Math.abs(webPrice - base.storedTotal) > EPS_PESO;
           return {
             ...base,
             webListPrice,
             webDiscount,
             webTotal: webPrice,
             delta: webPrice - base.storedTotal,
+            changed,
             status: "ok",
           };
         } catch {
-          return { ...base, webListPrice: null, webDiscount: null, webTotal: null, delta: null, status: "error" };
+          return { ...base, webListPrice: null, webDiscount: null, webTotal: null, delta: null, changed: false, status: "error" };
         }
       })
     );
 
-    // Primero los que más cambiaron; al final los no leídos.
+    // Primero los que tienen algo que aplicar; dentro, los que más movieron el
+    // total; al final los no leídos.
     rows.sort((a, b) => {
+      if (a.changed !== b.changed) return a.changed ? -1 : 1;
       const da = a.delta == null ? -1 : Math.abs(a.delta);
       const db = b.delta == null ? -1 : Math.abs(b.delta);
       return db - da;
     });
 
     const conLink = items.length;
-    const cambiaron = rows.filter((r) => r.delta != null && r.delta !== 0).length;
+    const cambiaron = rows.filter((r) => r.changed).length;
     const noLeidos = rows.filter((r) => r.status !== "ok").length;
 
     return NextResponse.json({ rows, resumen: { conLink, cambiaron, noLeidos } });

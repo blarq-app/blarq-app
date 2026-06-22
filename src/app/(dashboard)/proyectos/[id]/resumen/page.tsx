@@ -5,7 +5,7 @@ import { formatCLP, OBRA_CHAPTERS, ObraChapter } from "@/lib/utils";
 import Link from "next/link";
 import CentroCostoView from "@/components/proyecto/CentroCostoView";
 import { computeProjectMetrics } from "@/lib/projects/metrics";
-import { computeFondoSueldos, type ProjectWithFondo } from "@/lib/banco/fondoSueldos";
+import { computeFormaPagoFondo, type ProjectForFormaPago } from "@/lib/banco/formaPagoFondo";
 import { computeUtilidadPorCobro, type ProjectWithUtilidad } from "@/lib/banco/utilidadPorCobro";
 import FondoSueldosCard from "@/components/proyecto/FondoSueldosCard";
 import UtilidadPorCobroCard from "@/components/proyecto/UtilidadPorCobroCard";
@@ -663,7 +663,7 @@ export default async function ResultadosPage({
 
       {/* Fondo Sueldos generado por este proyecto */}
       <FondoSueldosCard
-        fondo={computeFondoSueldos(project as unknown as ProjectWithFondo)}
+        forma={computeFormaPagoFondo(project as unknown as ProjectForFormaPago)}
         transferido={transferidoSueldos}
       />
 

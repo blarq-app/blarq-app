@@ -311,6 +311,12 @@ model MuebleItem {
   name               String  // "MUEBLES", "HERRAJES", "CUBIERTAS"
   descriptionGeneral String? // "SEGÚN PLANOS ARQUITECTURA" — texto general bajo el nombre
   quantity           Float   @default(1)
+  // Tipo de partida. "mueble" (default) = partida normal con costo manual /
+  // cotizaciones de proveedor. "herrajes" = partida armada con líneas traídas
+  // del catálogo de herrajes (ver MuebleHerraje): su costDistributor pasa a ser
+  // DERIVADO = Σ(costNet × cantidad) de sus líneas, y el header de costo queda
+  // de solo lectura (lo maneja la lista de herrajes). Fase 2 herrajes 2026-06-22.
+  kind               String  @default("mueble") // mueble | herrajes
   // Cálculo interno
   supplier           String?
   costDistributor    Float   @default(0) // Lo que paga BLARQ al proveedor
@@ -323,6 +329,7 @@ model MuebleItem {
   chapter            MuebleChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   details            MuebleDetail[]
   quotes             MuebleQuote[]
+  herrajes           MuebleHerraje[]
 
   @@index([budgetVersionId])
   @@index([chapterId])
@@ -362,6 +369,39 @@ model MuebleDetail {
   item      MuebleItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   @@index([itemId])
+}
+
+// Línea de herraje dentro de una partida "HERRAJES" (MuebleItem.kind="herrajes").
+// Cada línea es un herraje traído del catálogo (HerrajeCatalog), con su SECTOR
+// (texto libre que nombra MJ: SECTOR LAVAPLATOS, ENCIMERA…), su cantidad y el
+// COSTO CONGELADO al momento de agregarlo. El costo del item = Σ(costNet × qty)
+// de sus líneas; el precio a cliente sale del margen del item (default 20%).
+// El proveedor es por línea (se puede mezclar HBT y DPH). Fase 2, 2026-06-22.
+//
+// Por qué snapshot del costo (costNet) y no leer el catálogo en vivo: una
+// cotización aprobada queda congelada (principles.md "presupuesto aprobado
+// inmutable ante cambios al catálogo"). Guardamos también name/measure/finish/
+// supplier para que la línea se siga viendo aunque el catálogo cambie o se
+// borre el item de catálogo. catalogId queda como trazabilidad (puede ser null
+// si el herraje se cargó a mano).
+model MuebleHerraje {
+  id         String  @id @default(cuid())
+  itemId     String
+  catalogId  String? // HerrajeCatalog.id de origen (trazabilidad; null si manual)
+  sector     String  // texto libre: "SECTOR LAVAPLATOS", "ENCIMERA"…; "" = sin sector
+  supplier   String  // HBT | DPH (snapshot — el proveedor es por línea)
+  name       String  // snapshot del nombre del herraje
+  measure    String? // snapshot de la medida ("500mm")
+  finish     String? // snapshot del color/terminación
+  sku        String? // snapshot del SKU del proveedor
+  quantity   Float   @default(1)
+  costNet    Float   @default(0) // costo unitario CONGELADO al agregar (lo que cobra el proveedor)
+  sortOrder  Int     @default(0)
+
+  item       MuebleItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([catalogId])
 }
 
 // Catálogo BLARQ de artefactos — fuente reutilizable entre proyectos.

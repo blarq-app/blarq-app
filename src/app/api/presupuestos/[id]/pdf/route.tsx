@@ -39,7 +39,10 @@ export async function GET(
           include: {
             items: {
               orderBy: { sortOrder: "asc" },
-              include: { details: { orderBy: { sortOrder: "asc" } } },
+              include: {
+                details: { orderBy: { sortOrder: "asc" } },
+                herrajes: { orderBy: { sortOrder: "asc" } },
+              },
             },
           },
         },
@@ -106,6 +109,13 @@ export async function GET(
             details: i.details.map((d) => ({
               name: d.name,
               material: d.material,
+            })),
+            herrajes: i.herrajes.map((h) => ({
+              sector: h.sector,
+              name: h.name,
+              measure: h.measure,
+              finish: h.finish,
+              quantity: h.quantity,
             })),
           })),
         })),

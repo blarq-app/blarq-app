@@ -51,6 +51,9 @@ export async function PATCH(
       // string = id de la obra; null = desasignar. Etiqueta AMBOS lados del
       // par linkeado (ver branch más abajo).
       internalProjectId: string | null;
+      // Concepto del traspaso de utilidad (transferencia interna): "obra" |
+      // "muebles" | null. Se setea en los dos lados del par.
+      internalConcepto: string | null;
       notes: string;
     }>;
 
@@ -90,6 +93,33 @@ export async function PATCH(
       const r = await prisma.bankMovement.updateMany({
         where: { id: { in: Array.from(ids) } },
         data: { projectId: body.internalProjectId },
+      });
+      return NextResponse.json({ ok: true, etiquetados: r.count });
+    }
+
+    // Asignar / desasignar CONCEPTO (obra | muebles) a una transferencia interna
+    // — de qué utilidad es el traspaso. Mismo criterio que la obra: se setea en
+    // los dos lados del par.
+    if (body.internalConcepto !== undefined) {
+      if (mov.category !== "transfer_interno" && mov.status !== "interno") {
+        return NextResponse.json(
+          { error: "Solo se puede asignar concepto a transferencias internas" },
+          { status: 400 }
+        );
+      }
+      if (body.internalConcepto && !["obra", "muebles"].includes(body.internalConcepto)) {
+        return NextResponse.json({ error: "Concepto inválido" }, { status: 400 });
+      }
+      const ids = new Set<string>([mov.id]);
+      if (mov.internalTransferToId) ids.add(mov.internalTransferToId);
+      const back = await prisma.bankMovement.findFirst({
+        where: { internalTransferToId: mov.id },
+        select: { id: true },
+      });
+      if (back) ids.add(back.id);
+      const r = await prisma.bankMovement.updateMany({
+        where: { id: { in: Array.from(ids) } },
+        data: { internalConcepto: body.internalConcepto },
       });
       return NextResponse.json({ ok: true, etiquetados: r.count });
     }

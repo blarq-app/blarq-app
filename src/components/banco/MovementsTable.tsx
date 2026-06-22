@@ -10,6 +10,7 @@ import MarkSinFacturaButton from "./MarkSinFacturaButton";
 import UndoNetZeroButton from "./UndoNetZeroButton";
 import MovementsBulkBar from "./MovementsBulkBar";
 import InternalTransferProjectSelect from "./InternalTransferProjectSelect";
+import InternalTransferConceptoSelect from "./InternalTransferConceptoSelect";
 
 type Payment = {
   id: string;
@@ -35,6 +36,8 @@ export type MovementRow = {
   bankAccountAlias: string;
   // Obra conciliada (solo se usa hoy para transferencias internas).
   projectId: string | null;
+  // Concepto del traspaso (obra | muebles) — solo transferencias internas.
+  internalConcepto: string | null;
   payments: Payment[];
 };
 
@@ -207,11 +210,17 @@ export default function MovementsTable({
                           // se traspasó por obra). Va PRIMERO en la cadena
                           // porque estos movs traen category="transfer_interno"
                           // y si no, caerían en la rama de categoría (texto gris).
-                          <InternalTransferProjectSelect
-                            movimientoId={m.id}
-                            projectId={m.projectId}
-                            projects={projects}
-                          />
+                          <div className="space-y-1">
+                            <InternalTransferProjectSelect
+                              movimientoId={m.id}
+                              projectId={m.projectId}
+                              projects={projects}
+                            />
+                            <InternalTransferConceptoSelect
+                              movimientoId={m.id}
+                              concepto={m.internalConcepto}
+                            />
+                          </div>
                         ) : m.payments.length > 0 ? (
                           <div className="space-y-0.5">
                             {m.payments.slice(0, 2).map((p) => (

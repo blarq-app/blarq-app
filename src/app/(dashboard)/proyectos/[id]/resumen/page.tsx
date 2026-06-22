@@ -80,7 +80,10 @@ export default async function ResultadosPage({
   // contaría el doble. Una devolución (Sueldos→Operativa) viene con monto
   // negativo en esa cuenta, así que netea sola. Es un dato aditivo: no toca
   // el cálculo del fondo "generado" (fondoSueldos.ts).
-  const transferidoAgg = await prisma.bankMovement.aggregate({
+  // Separado por concepto (obra / muebles / sin clasificar) para que "Me paso a
+  // Sueldos" muestre cuánto falta transferir de cada utilidad.
+  const transferidoGroups = await prisma.bankMovement.groupBy({
+    by: ["internalConcepto"],
     _sum: { amount: true },
     where: {
       projectId: id,
@@ -88,7 +91,13 @@ export default async function ResultadosPage({
       bankAccount: { role: "salary_fund" },
     },
   });
-  const transferidoSueldos = transferidoAgg._sum.amount ?? 0;
+  const transferido = { obra: 0, muebles: 0, sinConcepto: 0 };
+  for (const g of transferidoGroups) {
+    const v = g._sum.amount ?? 0;
+    if (g.internalConcepto === "obra") transferido.obra += v;
+    else if (g.internalConcepto === "muebles") transferido.muebles += v;
+    else transferido.sinConcepto += v;
+  }
 
   // Cuadro Resumen por concepto (fuente única): lo consume tanto la vista
   // CuadroResumen como la calculadora "Armar avance + Me paso a Sueldos".
@@ -458,7 +467,7 @@ export default async function ResultadosPage({
           con facturas. Réplica del cuadro Excel que MJ lleva a mano.
           Va inmediatamente debajo de los cards porque es la vista
           "macro" del proyecto. */}
-      <CuadroResumenAvance data={cuadroData} transferido={transferidoSueldos} />
+      <CuadroResumenAvance data={cuadroData} transferido={transferido} />
 
       {/* Presupuesto vs Real — tabla jerárquica con 3 secciones + total */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">

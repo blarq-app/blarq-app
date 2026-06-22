@@ -335,6 +335,7 @@ export default async function MovimientosPage({
     category: m.category,
     bankAccountAlias: m.bankAccount.alias,
     projectId: m.projectId,
+    internalConcepto: m.internalConcepto,
     payments: m.payments.map((p) => ({
       id: p.id,
       invoiceId: p.invoiceId,

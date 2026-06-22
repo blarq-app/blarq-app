@@ -13,6 +13,7 @@ const navigation = [
   { name: "Partidas", href: "/catalogo/partidas", icon: "📋" },
   { name: "Materiales", href: "/catalogo/materiales", icon: "🧱" },
   { name: "Artefactos", href: "/catalogo/artefactos", icon: "🚿" },
+  { name: "Herrajes", href: "/catalogo/herrajes", icon: "🔩" },
   { name: "Reembolsadores", href: "/configuracion/reembolsadores", icon: "🔄" },
   { name: "Auditoría precios", href: "/configuracion/auditoria-precios", icon: "🔍" },
 ];

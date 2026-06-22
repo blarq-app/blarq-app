@@ -23,9 +23,9 @@ import { CSS } from "@dnd-kit/utilities";
 import AddArtefactoFromCatalog, {
   type ArtefactoFromCatalog,
 } from "./AddArtefactoFromCatalog";
-import RevisarPreciosArtefactos, {
-  type ArtefactoPricePatch,
-} from "./RevisarPreciosArtefactos";
+import ActualizarDesdeCatalogo, {
+  type CatalogApplyPatch,
+} from "./ActualizarDesdeCatalogo";
 import DuplicarArtefactos from "./DuplicarArtefactos";
 
 // Input numérico con separadores de miles. Sin foco muestra "5.488.460",
@@ -191,7 +191,7 @@ export default function ArtefactosEditor({
   const [addingTo, setAddingTo] = useState<
     null | { subcategory: string; room: string }
   >(null);
-  const [showRevisar, setShowRevisar] = useState(false);
+  const [showActualizarCat, setShowActualizarCat] = useState(false);
   const [showDuplicar, setShowDuplicar] = useState(false);
   // Modal de "Agregar del catálogo" de nivel superior (sirve también cuando
   // la cotización está vacía, donde no hay rooms con su botón "+ agregar").
@@ -437,17 +437,44 @@ export default function ArtefactosEditor({
     for (const it of targets) updateItem(it.id, { room: newRoom });
   }
 
-  // Aplica los cambios de precio/imagen que vienen del modal "Revisar
-  // online". Reutiliza updateItem para que cada cambio se persista en BD
-  // y se propague a las copias del mismo catalogId, igual que una edición
-  // manual de la celda.
-  async function applyPricePatches(patches: ArtefactoPricePatch[]) {
-    for (const p of patches) {
-      const patch: Partial<ArtefactoItem> = {};
-      if (p.listPrice !== undefined) patch.listPrice = p.listPrice;
-      if (p.imageUrl !== undefined) patch.imageUrl = p.imageUrl;
-      if (Object.keys(patch).length > 0) updateItem(p.itemId, patch);
+  // Aplica los cambios que vienen del modal "Actualizar del catálogo": baja
+  // costo / precio a cliente / foto desde el producto del catálogo. Va por un
+  // endpoint propio (NO el PUT por-ítem) para no disparar la heurística de
+  // "despegar del catálogo" — bajar del catálogo no despega la línea. Cada
+  // fila del modal es un ítem distinto (las copias del mismo producto en
+  // otros baños aparecen como filas propias), así que no hace falta propagar.
+  async function applyCatalogPatches(patches: CatalogApplyPatch[]) {
+    if (patches.length === 0) return;
+    const res = await fetch(
+      `/api/presupuestos/${initialBudget.id}/artefactos/actualizar-catalogo`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patches }),
+      }
+    );
+    if (!res.ok) {
+      alert("No se pudieron aplicar los cambios del catálogo.");
+      return;
     }
+    const { updated } = (await res.json()) as {
+      updated: Array<
+        Pick<
+          ArtefactoItem,
+          | "id"
+          | "listPrice"
+          | "discountPercent"
+          | "clientPrice"
+          | "realCostBlarq"
+          | "imageUrl"
+          | "referenceLink"
+        >
+      >;
+    };
+    const byId = new Map(updated.map((u) => [u.id, u]));
+    setItems((prev) =>
+      prev.map((it) => (byId.has(it.id) ? { ...it, ...byId.get(it.id)! } : it))
+    );
   }
 
   async function deleteItem(itemId: string) {
@@ -800,10 +827,10 @@ export default function ArtefactosEditor({
             Traer de otra cotización
           </button>
           <button
-            onClick={() => setShowRevisar(true)}
+            onClick={() => setShowActualizarCat(true)}
             className="text-sm border border-gray-300 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-50"
           >
-            Revisar precios online
+            Actualizar del catálogo
           </button>
           <button
             onClick={handleSave}
@@ -1186,12 +1213,12 @@ export default function ArtefactosEditor({
         />
       </div>
 
-      {/* Modal: revisar precios e imágenes online */}
-      {showRevisar && (
-        <RevisarPreciosArtefactos
+      {/* Modal: actualizar costo/precio/foto desde el catálogo BLARQ */}
+      {showActualizarCat && (
+        <ActualizarDesdeCatalogo
           budgetId={initialBudget.id}
-          onApply={applyPricePatches}
-          onClose={() => setShowRevisar(false)}
+          onApply={applyCatalogPatches}
+          onClose={() => setShowActualizarCat(false)}
         />
       )}
 

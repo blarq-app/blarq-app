@@ -46,6 +46,10 @@ export default function BulkPriceUpdateModal({
     "idle"
   );
   const [progress, setProgress] = useState(0);
+  // Cuántos materiales se están guardando en la tanda actual. Sirve para que
+  // la barra de "Guardando…" mida sobre el total real que se aplica (los
+  // tildados), no sobre todos los materiales revisados.
+  const [applyTotal, setApplyTotal] = useState(0);
   const [showErrors, setShowErrors] = useState(false);
 
   const patch = (i: number, p: Partial<Row>) =>
@@ -98,10 +102,16 @@ export default function BulkPriceUpdateModal({
   }
 
   async function apply() {
-    setPhase("applying");
     const toApply = materials
       .map((mat, i) => ({ mat, row: rows[i] }))
       .filter(({ row }) => row.status === "changed" && row.selected);
+    // El guardado es uno por uno (cada material además se propaga a las
+    // partidas que lo usan), así que tarda. La barra mide el avance REAL
+    // sobre los que se aplican, no se queda pegada en 100% como antes.
+    setApplyTotal(toApply.length);
+    setProgress(0);
+    setPhase("applying");
+    let saved = 0;
     for (const { mat, row } of toApply) {
       try {
         await fetch(`/api/catalogo/materiales/${mat.id}`, {
@@ -118,6 +128,8 @@ export default function BulkPriceUpdateModal({
         // Si una falla, seguimos con las demás. El refetch al cerrar muestra
         // el estado real de lo que sí se guardó.
       }
+      saved++;
+      setProgress(saved);
     }
     onApplied();
     onClose();
@@ -131,14 +143,22 @@ export default function BulkPriceUpdateModal({
     .map((mat, i) => ({ mat, row: rows[i] }))
     .filter(({ row }) => row.status === "error");
   const selectedCount = changed.filter(({ row }) => row.selected).length;
-  const pct = materials.length
-    ? Math.round((progress / materials.length) * 100)
-    : 0;
+  // Durante el guardado el denominador es la tanda que se aplica; durante la
+  // revisión es el total de materiales con link.
+  const pctTotal = phase === "applying" ? applyTotal : materials.length;
+  const pct = pctTotal ? Math.round((progress / pctTotal) * 100) : 0;
+
+  // Mientras guarda no se puede cerrar: cortar a la mitad deja unos guardados
+  // y otros no. La X, el clic afuera y la tecla quedan inertes hasta terminar.
+  const requestClose = () => {
+    if (phase === "applying") return;
+    onClose();
+  };
 
   return (
     <div
       className="fixed inset-0 bg-black/30 z-50 flex justify-center items-start py-10 px-4 overflow-y-auto"
-      onClick={onClose}
+      onClick={requestClose}
     >
       <div
         className="w-[640px] max-w-full bg-white rounded-xl shadow-sm"
@@ -156,8 +176,9 @@ export default function BulkPriceUpdateModal({
             </p>
           </div>
           <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+            onClick={requestClose}
+            disabled={phase === "applying"}
+            className="text-gray-400 hover:text-gray-600 text-2xl leading-none disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label="Cerrar"
           >
             ×
@@ -196,7 +217,7 @@ export default function BulkPriceUpdateModal({
               <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
                 <span>
                   {phase === "applying"
-                    ? "Guardando cambios…"
+                    ? `Guardando ${progress} de ${applyTotal}…`
                     : `Revisando ${progress} de ${materials.length}…`}
                 </span>
                 <span className="tabular-nums">{pct}%</span>

@@ -50,15 +50,21 @@ const ROOM_LABELS: Record<string, string> = {
   otro: "Otro",
 };
 
+// Dos montos se consideran iguales si difieren menos de 1 peso. Evita falsos
+// cambios por colita decimal (ej. clientPrice guardado como 79990.00000001).
+function sameMoney(a: number | null, b: number | null): boolean {
+  if (a == null || b == null) return a === b;
+  return Math.abs(a - b) < 1;
+}
 // ¿El costo del catálogo aporta algo? (tiene valor y difiere del actual)
 function costActionable(d: CatalogDiff): boolean {
   const c = d.catalog.realCostBlarq;
-  return c != null && c > 0 && c !== d.current.realCostBlarq;
+  return c != null && c > 0 && !sameMoney(c, d.current.realCostBlarq);
 }
 // ¿El precio a cliente del catálogo difiere del de la cotización?
 function priceActionable(d: CatalogDiff): boolean {
   const c = d.catalog.clientPrice;
-  return c != null && c > 0 && c !== d.current.clientPrice;
+  return c != null && c > 0 && !sameMoney(c, d.current.clientPrice);
 }
 // ¿La foto del catálogo aporta (la cotización no la tiene o es distinta)?
 function imageActionable(d: CatalogDiff): boolean {

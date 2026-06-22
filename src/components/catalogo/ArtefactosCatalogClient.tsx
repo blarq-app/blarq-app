@@ -78,6 +78,7 @@ interface PriceReviewRow {
   webDiscount: number | null; // decimal 0..1
   webTotal: number | null; // lo que pagaría el cliente con el web de hoy
   delta: number | null; // webTotal - storedTotal
+  changed?: boolean; // hay algo que aplicar (lista, dcto o total difieren)
   status: "ok" | "sin-precio" | "error";
   applied?: boolean; // marcada como aplicada en esta sesión
 }
@@ -946,7 +947,7 @@ export default function ArtefactosCatalogClient({
 
   function applyAllChanged() {
     for (const row of reviewRows) {
-      if (row.status === "ok" && row.delta != null && row.delta !== 0 && !row.applied) {
+      if (row.status === "ok" && row.changed && !row.applied) {
         applyReviewRow(row);
       }
     }
@@ -2425,9 +2426,7 @@ function PriceReviewPanel({
   // Por default mostramos SOLO lo que cambió (lo que MJ quiere revisar). El
   // resto (sin cambio / no se pudo leer) queda detrás de "ver todos".
   const [showAll, setShowAll] = useState(false);
-  const changedRows = rows.filter(
-    (r) => r.status === "ok" && r.delta != null && r.delta !== 0
-  );
+  const changedRows = rows.filter((r) => r.status === "ok" && !!r.changed);
   const displayRows = showAll ? rows : changedRows;
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
@@ -2509,8 +2508,7 @@ function PriceReviewPanel({
               </div>
             ) : (
               displayRows.map((r) => {
-              const changed =
-                r.status === "ok" && r.delta != null && r.delta !== 0;
+              const changed = r.status === "ok" && !!r.changed;
               return (
                 <div
                   key={r.id}

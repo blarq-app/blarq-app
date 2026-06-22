@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-22 — Cuadro Resumen interactivo + Me paso a Sueldos (evolución #183→#197)
+
+- **Cuadro Resumen interactivo** (`CuadroResumenAvance.tsx`, reemplaza CuadroResumen + tarjetas viejas): por concepto muestra acordado vigente, cobros AGRUPADOS por fecha (un avance = una fila), TOTAL PAGOS, y una fila **AVANCE editable** (% OBJETIVO al que llegar; 100% = cobrar todo el saldo) que calcula el monto a pedir y recalcula SALDO. Es el cuadro que se entrega al cliente. **Se guarda** por obra (`Project.avanceObjetivos` Json, PUT `/api/proyectos/[id]/avance-objetivos`, debounce). Formato 3-col compacto.
+- **Concepto del cobro = categoría de la factura** (no `conceptoCobro`): helper `src/lib/invoices/conceptoCobro.ts` — conceptoCobro si está (proyectos viejos), si no la `category` Obra/Muebles/Artefactos (proyectos nuevos). Usado por cuadroResumen + fondoSueldos. Arregla "ya pagado 0%" en proyectos nuevos.
+- **Desglose real del cobro de artefactos** (`Invoice.artefactoCocina/Sanitario/Iluminacion`): cuando está cargado se usa en vez del reparto proporcional (que smeareaba la iluminación nueva). 
+- **Me paso a Sueldos por concepto**: obra (GG) + muebles; generado = %alcanzado × utilidad 100; **ya transferido / falta transferir POR CONCEPTO**. El concepto del traspaso se marca en /banco/movimientos (`BankMovement.internalConcepto` obra/muebles, desplegable junto al de obra).
+- **Datos cargados a prod (proyecto 63 Lefevre/JNC)**: obra V6 ($38.894.347, resumen MAESTRA), artefactos V6 oficial ($2.555.676 con iluminación), concepto de facturas leído de la categoría. Migraciones aditivas por SQL (no db push — dev tiene tablas de otras sesiones). **Pendiente MJ**: marcar obra/muebles en transferencias de JNC; corregir precios V6 (cocina ~$1k); import detalle de partidas de obra (hoy resumen → lista de compra vacía).
+
 ## 2026-06-22 — Catálogo: "Revisar precios" detecta descuentos aunque el total no cambie
 
 - **Bug**: "Revisar precios" del catálogo decidía si un producto "cambió" mirando **solo el total final** (`delta = webTotal − storedTotal`). Si la web ponía un producto en oferta (ej. Lavamanos Eta: lista $53.290 −25% = $39.990) pero el catálogo ya tenía guardado ese total con el descuento aplicado y 0% (lista $39.990, 0%), el total no cambiaba → la fila se marcaba "sin cambio", quedaba oculta por default y "Aplicar todos" la salteaba. Resultado: el descuento de la web nunca se podía bajar y la columna DCTO seguía en 0%.

@@ -5,10 +5,8 @@ import { formatCLP, OBRA_CHAPTERS, ObraChapter } from "@/lib/utils";
 import Link from "next/link";
 import CentroCostoView from "@/components/proyecto/CentroCostoView";
 import { computeProjectMetrics } from "@/lib/projects/metrics";
-import { computeFormaPagoFondo, type ProjectForFormaPago } from "@/lib/banco/formaPagoFondo";
-import { computeUtilidadPorCobro, type ProjectWithUtilidad } from "@/lib/banco/utilidadPorCobro";
-import FondoSueldosCard from "@/components/proyecto/FondoSueldosCard";
-import UtilidadPorCobroCard from "@/components/proyecto/UtilidadPorCobroCard";
+import { computeCuadroResumen, type CuadroResumenInput } from "@/lib/projects/cuadroResumen";
+import AvanceSueldosCalculator from "@/components/proyecto/AvanceSueldosCalculator";
 import ProjectAlerts from "@/components/proyecto/ProjectAlerts";
 import CuadroResumen from "@/components/proyecto/CuadroResumen";
 
@@ -92,6 +90,13 @@ export default async function ResultadosPage({
     },
   });
   const transferidoSueldos = transferidoAgg._sum.amount ?? 0;
+
+  // Cuadro Resumen por concepto (fuente única): lo consume tanto la vista
+  // CuadroResumen como la calculadora "Armar avance + Me paso a Sueldos".
+  const cuadroData = computeCuadroResumen({
+    invoices: project.invoices,
+    budgets: project.budgetVersions,
+  } as unknown as CuadroResumenInput);
 
   // ── Métricas contables (fuente única: metrics.ts) ──────────────────────
   // Antes esto se calculaba duplicado acá, lo que causó el bug del IVA del
@@ -454,10 +459,7 @@ export default async function ResultadosPage({
           con facturas. Réplica del cuadro Excel que MJ lleva a mano.
           Va inmediatamente debajo de los cards porque es la vista
           "macro" del proyecto. */}
-      <CuadroResumen
-        invoices={project.invoices}
-        budgets={project.budgetVersions}
-      />
+      <CuadroResumen data={cuadroData} />
 
       {/* Presupuesto vs Real — tabla jerárquica con 3 secciones + total */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
@@ -661,15 +663,13 @@ export default async function ResultadosPage({
         </p>
       </div>
 
-      {/* Fondo Sueldos generado por este proyecto */}
-      <FondoSueldosCard
-        forma={computeFormaPagoFondo(project as unknown as ProjectForFormaPago)}
+      {/* Armar el próximo avance + Me paso a Sueldos. Calculadora coherente con
+          el Cuadro Resumen (por concepto). Reemplaza las tarjetas previas
+          "Fondo Sueldos" y "Utilidad por cobro". */}
+      <AvanceSueldosCalculator
+        conceptos={cuadroData.conceptos}
         transferido={transferidoSueldos}
       />
-
-      {/* Utilidad por cobro (interno) — desglose cobro a cobro + sugerencia de
-          traspaso a Sueldos + etiquetado de concepto. NUNCA va al cliente. */}
-      <UtilidadPorCobroCard data={computeUtilidadPorCobro(project as unknown as ProjectWithUtilidad)} />
 
       {/* Avance Obra por Capítulo (compacto, al final) */}
       {chapterRows.length > 0 && (

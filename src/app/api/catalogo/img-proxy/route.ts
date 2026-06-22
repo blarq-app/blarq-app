@@ -31,6 +31,8 @@ const ALLOWED_HOSTS = [
   "scene7.com",
   "cdn.shopify.com", // Kitchen House (Teka) — su tienda corre en Shopify
   "kitchenhouse.cl", // Kitchen House sirve las mismas fotos por su dominio (/cdn/shop/...), p.ej. al usar "Extraer"
+  "dph.cl", // Catálogo de herrajes DPH (Shopify) — fotos por cdn.shopify.com, pero por las dudas
+  "hbt.cl", // Catálogo de herrajes HBT (Magento) — fotos en hbt.cl/media/catalog/product/...
 ];
 
 const BROWSER_UA =

@@ -30,7 +30,7 @@ export interface HerrajeItem {
   name: string;
   detail: string | null;
   supplier: "HBT" | "DPH";
-  category: "cajon" | "corredera" | "bisagra" | "despensa";
+  category: "cajon" | "corredera" | "bisagra" | "despensa" | "accesorio";
   subgroup: string | null; // carpeta dentro de la categoría (null = "Otros")
   measure: string | null; // ej. "500mm"
   finish: string | null; // color / terminación
@@ -74,13 +74,20 @@ interface PriceReviewRow {
 const SUPPLIER_OPTIONS: ("DPH" | "HBT")[] = ["DPH", "HBT"];
 
 // ── Categorías dentro de cada proveedor (encabezado de sección) ───────────
-const CATEGORY_OPTIONS = ["cajon", "corredera", "bisagra", "despensa"] as const;
+const CATEGORY_OPTIONS = [
+  "cajon",
+  "corredera",
+  "bisagra",
+  "despensa",
+  "accesorio",
+] as const;
 type Category = (typeof CATEGORY_OPTIONS)[number];
 const CATEGORY_LABELS: Record<Category, string> = {
   cajon: "Cajones",
   corredera: "Correderas",
   bisagra: "Bisagras",
   despensa: "Despensas",
+  accesorio: "Accesorios", // basureros, organizadores, repuestos del sistema
 };
 
 // ── IDs para el drag & drop ───────────────────────────────────────────────

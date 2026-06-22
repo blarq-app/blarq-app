@@ -54,6 +54,12 @@ type InvoiceLite = {
   // solo como respaldo si una factura vieja no tiene categoría.
   conceptoCobro: string | null;
   folioNumber: string | null;
+  totalAmount: number;
+  // Desglose REAL del cobro de artefactos (si está cargado). Si alguno no es
+  // null, se usa en vez del reparto proporcional al presupuesto.
+  artefactoCocina: number | null;
+  artefactoSanitario: number | null;
+  artefactoIluminacion: number | null;
   payments: PaymentLite[];
 };
 export type CuadroResumenInput = {
@@ -192,9 +198,23 @@ export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenDa
       if (concepto === "obra") addPago(date, "obra", p.amountApplied, inv.folioNumber);
       else if (concepto === "muebles") addPago(date, "muebles", p.amountApplied, inv.folioNumber);
       else if (concepto === "artefactos") {
-        addPago(date, "cocina", p.amountApplied * ratioCocina, inv.folioNumber);
-        addPago(date, "sanitarios", p.amountApplied * ratioSanitarios, inv.folioNumber);
-        addPago(date, "iluminacion", p.amountApplied * ratioIluminacion, inv.folioNumber);
+        // Si la factura tiene el desglose real cargado, lo usamos (prorrateado
+        // por la fracción de este pago); si no, repartimos proporcional al
+        // presupuesto de artefactos.
+        const tieneSplit =
+          inv.artefactoCocina != null ||
+          inv.artefactoSanitario != null ||
+          inv.artefactoIluminacion != null;
+        if (tieneSplit && inv.totalAmount > 0) {
+          const frac = p.amountApplied / inv.totalAmount;
+          addPago(date, "cocina", (inv.artefactoCocina ?? 0) * frac, inv.folioNumber);
+          addPago(date, "sanitarios", (inv.artefactoSanitario ?? 0) * frac, inv.folioNumber);
+          addPago(date, "iluminacion", (inv.artefactoIluminacion ?? 0) * frac, inv.folioNumber);
+        } else {
+          addPago(date, "cocina", p.amountApplied * ratioCocina, inv.folioNumber);
+          addPago(date, "sanitarios", p.amountApplied * ratioSanitarios, inv.folioNumber);
+          addPago(date, "iluminacion", p.amountApplied * ratioIluminacion, inv.folioNumber);
+        }
       }
     }
   }

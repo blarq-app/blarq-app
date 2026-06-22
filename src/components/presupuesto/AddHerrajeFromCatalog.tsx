@@ -64,12 +64,19 @@ interface UpdatedItem {
 
 const SUPPLIER_OPTIONS = ["DPH", "HBT"] as const;
 // Categorías del catálogo de herrajes (mismo set que la pantalla del catálogo).
-const CATEGORY_OPTIONS = ["cajon", "corredera", "bisagra", "despensa"] as const;
+const CATEGORY_OPTIONS = [
+  "cajon",
+  "corredera",
+  "bisagra",
+  "despensa",
+  "accesorio",
+] as const;
 const CATEGORY_LABELS: Record<string, string> = {
   cajon: "Cajones",
   corredera: "Correderas",
   bisagra: "Bisagras",
   despensa: "Despensas",
+  accesorio: "Accesorios",
 };
 
 /**

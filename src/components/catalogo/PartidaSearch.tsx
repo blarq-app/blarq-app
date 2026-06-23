@@ -249,20 +249,35 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
 
   // Al cambiar el TIPO de un componente, limpiar los campos appliedTo*
   // (eran válidos sólo bajo la combinación type/unit anterior).
+  //
+  // Pérdida y margen son recargos PORCENTUALES, no montos sueltos: al elegir
+  // ese tipo, la línea pasa sola a "%" con su fórmula armada (pérdida = % sobre
+  // todos los materiales; margen = % sobre el resto), así calcula de inmediato.
+  // Antes quedaba en "UN" cant 1 → daba $0 y había que configurarla a mano
+  // (cambiar unidad a % + elegir "todos los materiales"), que no es obvio.
   function changeCompType(compId: string, newType: string) {
     if (!draft) return;
     setDraft({
       ...draft,
-      components: draft.components.map((c) =>
-        c.id === compId
-          ? {
-              ...c,
-              type: newType,
-              appliedToComponentId: null,
-              appliedToType: null,
-            }
-          : c
-      ),
+      components: draft.components.map((c) => {
+        if (c.id !== compId) return c;
+        const next = { ...c, type: newType };
+        next.appliedToComponentId = null;
+        next.appliedToType = null;
+        if (newType === "perdida") {
+          next.unit = "%";
+          next.appliedToType = "material"; // sobre todos los materiales por defecto
+          if (c.unit !== "%") next.quantity = 10;
+        } else if (newType === "margen") {
+          next.unit = "%";
+          if (c.unit !== "%") next.quantity = 10;
+        } else if (c.unit === "%") {
+          // Volver a un tipo de costo directo desde un %: la unidad "%" ya no
+          // aplica → default a "UN" para que no calcule como porcentaje.
+          next.unit = "UN";
+        }
+        return next;
+      }),
     });
   }
 
@@ -277,6 +292,9 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
         const next = { ...c, unit: newUnit };
         if (newUnit === "%" && c.type === "mano_obra") {
           next.appliedToType = "mano_obra";
+          next.appliedToComponentId = null;
+        } else if (newUnit === "%" && c.type === "perdida") {
+          next.appliedToType = "material"; // sobre todos los materiales por defecto
           next.appliedToComponentId = null;
         } else if (newUnit !== "%") {
           next.appliedToComponentId = null;

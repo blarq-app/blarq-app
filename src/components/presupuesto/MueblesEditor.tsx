@@ -50,6 +50,37 @@ function HerrajeQtyInput({
   );
 }
 
+// Nombre editable de una línea de herraje. Igual que la cantidad: edita en
+// LOCAL y guarda al SALIR del campo (blur). El nombre viene del catálogo pero
+// se puede ajustar por cotización (ej. pasar a minúscula, corregir texto).
+// Textarea con field-sizing para que los nombres largos envuelvan.
+function HerrajeNameInput({
+  value,
+  onCommit,
+}: {
+  value: string;
+  onCommit: (name: string) => void;
+}) {
+  const [local, setLocal] = useState(value);
+  useEffect(() => {
+    setLocal(value);
+  }, [value]);
+  const commit = () => {
+    const v = local.replace(/\s+/g, " ").trim();
+    if (v && v !== value) onCommit(v);
+    else if (!v) setLocal(value); // no permitir vaciar el nombre
+  };
+  return (
+    <textarea
+      rows={1}
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={commit}
+      className="flex-1 min-w-0 bg-transparent border-0 p-0 text-[11px] text-gray-800 leading-tight resize-none [field-sizing:content] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+    />
+  );
+}
+
 // Input numérico con separadores de miles. Sin foco muestra "5.488.460",
 // con foco muestra "5488460" para edición. onChange devuelve el número crudo.
 function ThousandsInput({
@@ -370,7 +401,7 @@ export default function MueblesEditor({
     chapterId: string,
     itemId: string,
     herrajeId: string,
-    patch: { quantity?: number; sector?: string }
+    patch: { quantity?: number; sector?: string; name?: string }
   ) {
     // Optimista: mostramos el cambio de inmediato en la línea.
     setChapters((prev) =>
@@ -1062,7 +1093,7 @@ function ChapterBlock({
   onUpdateHerraje: (
     itemId: string,
     herrajeId: string,
-    patch: { quantity?: number; sector?: string }
+    patch: { quantity?: number; sector?: string; name?: string }
   ) => void;
   onDeleteHerraje: (itemId: string, herrajeId: string) => void;
 }) {
@@ -1615,7 +1646,7 @@ function HerrajePartidaBlock({
   ) => void;
   onUpdateHerraje: (
     herrajeId: string,
-    patch: { quantity?: number; sector?: string }
+    patch: { quantity?: number; sector?: string; name?: string }
   ) => void;
   onDeleteHerraje: (herrajeId: string) => void;
 }) {
@@ -1715,21 +1746,19 @@ function HerrajePartidaBlock({
                     Flex (no grid anidado): el grid anidado colapsaba la columna
                     del nombre a ~1 carácter y lo dibujaba en vertical. */}
                 <div className="flex items-baseline gap-2 min-w-0">
-                  <span className="flex-1 min-w-0 text-[11px] text-gray-800 leading-tight break-words">
-                    {h.name}
-                    {h.measure ? (
-                      <span className="text-gray-500">
-                        {" "}
-                        · {h.measure.toUpperCase()}
-                      </span>
-                    ) : null}
-                    {h.finish ? (
-                      <span className="text-gray-500">
-                        {" "}
-                        · {h.finish.toUpperCase()}
-                      </span>
-                    ) : null}
-                  </span>
+                  {/* Nombre editable (commit al salir del campo). */}
+                  <HerrajeNameInput
+                    value={h.name}
+                    onCommit={(name) => onUpdateHerraje(h.id, { name })}
+                  />
+                  {(h.measure || h.finish) && (
+                    <span className="shrink-0 text-[10px] text-gray-500 self-center">
+                      {[h.measure, h.finish]
+                        .filter(Boolean)
+                        .map((s) => (s as string).toUpperCase())
+                        .join(" · ")}
+                    </span>
+                  )}
                   <span className="shrink-0 text-[9px] uppercase tracking-wider text-gray-400 self-center">
                     {h.supplier}
                   </span>

@@ -22,12 +22,21 @@ export async function PUT(
     const { itemId, herrajeId } = await params;
     const data = await request.json();
 
-    const patch: { quantity?: number; sector?: string; sortOrder?: number } = {};
+    const patch: {
+      quantity?: number;
+      sector?: string;
+      sortOrder?: number;
+      name?: string;
+    } = {};
     if (data.quantity !== undefined) {
       const q = Number(data.quantity);
       patch.quantity = q > 0 ? q : 1;
     }
     if (typeof data.sector === "string") patch.sector = data.sector.trim();
+    // Nombre editable por cotización (no toca el costo, no recalcula nada).
+    if (typeof data.name === "string" && data.name.trim()) {
+      patch.name = data.name.trim();
+    }
     if (data.sortOrder !== undefined) patch.sortOrder = Number(data.sortOrder);
 
     const line = await prisma.muebleHerraje.update({

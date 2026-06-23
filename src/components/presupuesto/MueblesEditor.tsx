@@ -2006,34 +2006,15 @@ function HerrajePartidaBlock({
         </button>
       </div>
 
-      {/* Sin líneas del catálogo: modo MANUAL — proveedor + costo total a mano
-          (igual que muebles, para cuando el mueblista cotiza los herrajes). La
-          otra opción ("Agregar del catálogo") sigue abajo; si agrega del
-          catálogo, la partida pasa a modo itemizado y el costo lo derivan las
-          líneas. */}
+      {/* Partida de herrajes con DOS modos:
+          - SIN líneas: modo MANUAL — proveedor + costo se cargan abajo, en la
+            línea de "Costo interno" (igual que muebles/cubiertas).
+          - CON líneas (del catálogo): itemizado; el costo lo derivan las líneas.
+          "Agregar del catálogo" siempre disponible. */}
       {item.herrajes.length === 0 ? (
-        <div className="px-4 py-2 border-b border-gray-100 flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-600">
-          <span className="text-gray-500">Cargar a mano:</span>
-          <span>proveedor</span>
-          <input
-            type="text"
-            value={item.supplier ?? ""}
-            onChange={(e) => onUpdate({ supplier: e.target.value || null })}
-            placeholder="ej. mueblista"
-            className="w-32 bg-white border border-gray-300 rounded px-1.5 py-0.5 outline-none focus:border-gray-500"
-          />
-          <span className="text-gray-300">·</span>
-          <span>costo total</span>
-          <ThousandsInput
-            value={item.costDistributor}
-            onChange={(v) => onUpdate({ costDistributor: v })}
-            placeholder="0"
-            className="w-24 bg-white border border-gray-300 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:border-gray-500"
-          />
-          <span className="text-gray-300 mx-1">·</span>
-          <span className="text-gray-400 italic">
-            o usá “Agregar del catálogo” abajo
-          </span>
+        <div className="px-4 py-1.5 border-b border-gray-100 text-[11px] text-gray-400 italic">
+          Cargá el proveedor y el costo en “Costo interno” (abajo), o agregá del
+          catálogo.
         </div>
       ) : (
         groups.map((g) => (
@@ -2135,9 +2116,32 @@ function HerrajePartidaBlock({
       <div className="px-4 py-1.5 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-[11px] text-gray-600">
           <span className="font-medium text-gray-700">Costo interno</span>
-          <span className="text-gray-900 tabular-nums">
-            {formatCLP(item.costDistributor)}
-          </span>
+          {item.herrajes.length === 0 ? (
+            // Modo MANUAL (sin líneas del catálogo): proveedor + costo editables
+            // acá mismo, igual que el costo interno de muebles/cubiertas.
+            <>
+              <span>proveedor</span>
+              <input
+                type="text"
+                value={item.supplier ?? ""}
+                onChange={(e) => onUpdate({ supplier: e.target.value || null })}
+                placeholder="ej. mueblista"
+                className="w-28 bg-white border border-gray-300 rounded px-1.5 py-0.5 outline-none focus:border-gray-500 text-gray-900"
+              />
+              <span className="text-gray-300">·</span>
+              <span>costo</span>
+              <ThousandsInput
+                value={item.costDistributor}
+                onChange={(v) => onUpdate({ costDistributor: v })}
+                placeholder="0"
+                className="w-24 bg-white border border-gray-300 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:border-gray-500 text-gray-900"
+              />
+            </>
+          ) : (
+            <span className="text-gray-900 tabular-nums">
+              {formatCLP(item.costDistributor)}
+            </span>
+          )}
           <span className="text-gray-300">·</span>
           <span>margen</span>
           <input

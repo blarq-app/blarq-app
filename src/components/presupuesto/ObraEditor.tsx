@@ -8,6 +8,7 @@ import BudgetAuditBanner from "@/components/presupuesto/BudgetAuditBanner";
 import ObraItemComponentsEditor from "@/components/presupuesto/ObraItemComponentsEditor";
 import CostoDirectoDetalle from "@/components/presupuesto/CostoDirectoDetalle";
 import PartidaExpandedPanel from "@/components/presupuesto/PartidaExpandedPanel";
+import RichTextEditor from "@/components/presupuesto/RichTextEditor";
 import { sanitizeRichTextHtml, isRichTextEmpty } from "@/lib/richText";
 import {
   DndContext,
@@ -244,6 +245,11 @@ export default function ObraEditor({
   const [enabledEmptyChapters, setEnabledEmptyChapters] = useState<Set<string>>(new Set());
   const [showChapterPicker, setShowChapterPicker] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+  // Qué partida tiene la descripción del cliente abierta para editar INLINE en
+  // la fila (sin abrir el panel). Solo una a la vez: el editor de texto con
+  // formato es pesado, así que se monta on-demand al hacer clic y se desmonta
+  // al salir (onChange de RichTextEditor dispara en blur → guarda y cierra).
+  const [editingDescId, setEditingDescId] = useState<string | null>(null);
   // Provision price overrides: componentId → precio c/IVA ingresado por usuario
   const [provisionPrices, setProvisionPrices] = useState<Record<string, number>>({});
   // Edición inline de zona (subChapter) — por fila individual o por grupo
@@ -412,6 +418,9 @@ export default function ObraEditor({
   // Orden de arrastre: solo en versiones editables (borrador/enviado). En
   // aprobado/rechazado la lista queda fija.
   const canReorder = ["borrador", "enviado"].includes(initialBudget.status);
+  // Mismo gate que el detalle de costos: las descripciones se editan solo en
+  // versiones no congeladas (borrador/enviado). En aprobado/rechazado son vista.
+  const canEditDetail = ["borrador", "enviado"].includes(initialBudget.status);
   // Lista plana de ids EN EL ORDEN VISIBLE (capítulo por capítulo, y dentro de
   // cada uno el orden ya calculado arriba). dnd-kit ordena contra esta lista,
   // así que tiene que reflejar exactamente lo que se ve en pantalla.
@@ -1364,29 +1373,56 @@ export default function ObraEditor({
                         />
                       </td>
                       <td className="px-3 py-0.5 align-top">
-                        {/* DESCRIPCION CLIENTE — vista con formato (negrita,
-                            cursiva, listas, color). La edición está en el panel
-                            expandido (abajo); acá un clic lo abre, porque una
-                            barra de formato no entra en esta celda compacta. */}
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={() =>
-                            setExpandedItems((prev) => ({ ...prev, [item.id]: true }))
-                          }
-                          title="Clic para editar la descripción (se abre el detalle)"
-                          className="text-force-10 w-full text-gray-600 leading-snug cursor-text min-h-[14px] [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-4 [&_ol]:pl-4 [&_li]:my-0.5"
-                        >
-                          {isRichTextEmpty(item.descriptionCliente) ? (
-                            <span className="text-gray-300">Descripción para el cliente (PDF)…</span>
-                          ) : (
-                            <span
-                              dangerouslySetInnerHTML={{
-                                __html: sanitizeRichTextHtml(item.descriptionCliente),
+                        {/* DESCRIPCION CLIENTE (la que va al PDF). Se edita INLINE
+                            acá mismo: un clic monta el editor de texto con formato
+                            (la barra de formato es flotante, ya no ocupa lugar) y
+                            al salir guarda y vuelve a la vista. La del MAESTRO vive
+                            solo en el panel expandido. En versiones congeladas
+                            (aprobado/rechazado) es solo vista; el clic abre el
+                            panel para consultarla. */}
+                        {canEditDetail && editingDescId === item.id ? (
+                          <div className="[&_.ProseMirror]:!text-[10px] [&_.ProseMirror]:!leading-snug [&_.ProseMirror]:!min-h-[18px] [&_.ProseMirror]:!py-0.5 [&_.ProseMirror]:!px-1.5 [&_.ProseMirror_p]:!my-0 [&_.ProseMirror_li]:!my-0">
+                            <RichTextEditor
+                              value={item.descriptionCliente}
+                              autoFocus
+                              placeholder="Descripción para el cliente (PDF)…"
+                              onChange={(html) => {
+                                // RichTextEditor dispara onChange en blur (al salir).
+                                // Guardamos solo si cambió y cerramos la edición inline.
+                                if (html !== (item.descriptionCliente ?? "")) {
+                                  handleUpdateItem(item.id, "descriptionCliente", html);
+                                }
+                                setEditingDescId(null);
                               }}
                             />
-                          )}
-                        </div>
+                          </div>
+                        ) : (
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => {
+                              if (canEditDetail) setEditingDescId(item.id);
+                              else
+                                setExpandedItems((prev) => ({ ...prev, [item.id]: true }));
+                            }}
+                            title={
+                              canEditDetail
+                                ? "Clic para editar la descripción del cliente acá mismo"
+                                : "Clic para ver el detalle"
+                            }
+                            className="text-force-10 w-full text-gray-600 leading-snug cursor-text min-h-[14px] [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-4 [&_ol]:pl-4 [&_li]:my-0.5"
+                          >
+                            {isRichTextEmpty(item.descriptionCliente) ? (
+                              <span className="text-gray-300">Descripción para el cliente (PDF)…</span>
+                            ) : (
+                              <span
+                                dangerouslySetInnerHTML={{
+                                  __html: sanitizeRichTextHtml(item.descriptionCliente),
+                                }}
+                              />
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-2 py-0.5 align-top text-center">
                         {/* Unidad NO editable — viene de la PartidaCatalog

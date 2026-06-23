@@ -86,23 +86,15 @@ export default function PartidaExpandedPanel(p: Props) {
   const showLumpRow = compCount === 0;
   return (
     <div className="px-4 py-1.5 space-y-1">
-      {/* Descripciones cliente / maestro, lado a lado y compactas. */}
-      <div className="grid md:grid-cols-2 gap-2">
-        <DescBlock
-          label="Descripción para el cliente"
-          hint="— PDF presupuesto"
-          value={item.descriptionCliente}
-          placeholder="Descripción para el cliente…"
-          onChange={(html) => p.onUpdate("descriptionCliente", html)}
-        />
-        <DescBlock
-          label="Descripción para el maestro"
-          hint="— estado de pago"
-          value={item.descriptionMaestro}
-          placeholder="Alcance para el maestro…"
-          onChange={(html) => p.onUpdate("descriptionMaestro", html)}
-        />
-      </div>
+      {/* Solo la descripción para el MAESTRO (la que el cliente NO ve, va al
+          estado de pago). La del cliente se edita inline arriba, en la fila. */}
+      <DescBlock
+        label="Descripción para el maestro"
+        hint="— estado de pago · el cliente no la ve"
+        value={item.descriptionMaestro}
+        placeholder="Alcance para el maestro…"
+        onChange={(html) => p.onUpdate("descriptionMaestro", html)}
+      />
 
       {/* Fila de costos por unidad (6 rubros + suma). SOLO cuando la partida
           no tiene desglose: ahí es donde se cargan los costos a mano. Si hay

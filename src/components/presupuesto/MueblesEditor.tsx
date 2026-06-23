@@ -1949,6 +1949,11 @@ function HerrajePartidaBlock({
   onDeleteHerraje: (herrajeId: string) => void;
 }) {
   const [showCatalog, setShowCatalog] = useState(false);
+  // Costo interno colapsable, IGUAL que muebles/cubiertas. Arranca ABIERTO
+  // cuando la partida está vacía (modo manual: hay que tipear proveedor+costo);
+  // si ya tiene líneas del catálogo el costo lo derivan ellas, así que arranca
+  // colapsado mostrando el resumen.
+  const [showCost, setShowCost] = useState(item.herrajes.length === 0);
 
   // Mismo grid que el resto de la tabla (item · partida · cantidad · total · ✕).
   const ROW_GRID =
@@ -2007,16 +2012,11 @@ function HerrajePartidaBlock({
       </div>
 
       {/* Partida de herrajes con DOS modos:
-          - SIN líneas: modo MANUAL — proveedor + costo se cargan abajo, en la
-            línea de "Costo interno" (igual que muebles/cubiertas).
+          - SIN líneas: modo MANUAL — proveedor + costo se cargan en el "Costo
+            interno" de abajo (igual que muebles/cubiertas).
           - CON líneas (del catálogo): itemizado; el costo lo derivan las líneas.
-          "Agregar del catálogo" siempre disponible. */}
-      {item.herrajes.length === 0 ? (
-        <div className="px-4 py-1.5 border-b border-gray-100 text-[11px] text-gray-400 italic">
-          Cargá el proveedor y el costo en “Costo interno” (abajo), o agregá del
-          catálogo.
-        </div>
-      ) : (
+          Las líneas del catálogo se listan acá, agrupadas por sector. */}
+      {item.herrajes.length > 0 && (
         groups.map((g) => (
           <div key={g.sector || "__sin__"}>
             {/* Sub-encabezado del sector: SOLO si la línea tiene un sector
@@ -2112,63 +2112,113 @@ function HerrajePartidaBlock({
         />
       )}
 
-      {/* Costo interno de la partida — sobrio, gris. Margen editable. */}
-      <div className="px-4 py-1.5 border-b border-gray-200 bg-gray-50">
-        <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-[11px] text-gray-600">
-          <span className="font-medium text-gray-700">Costo interno</span>
-          {item.herrajes.length === 0 ? (
-            // Modo MANUAL (sin líneas del catálogo): proveedor + costo editables
-            // acá mismo, igual que el costo interno de muebles/cubiertas.
-            <>
-              <span>proveedor</span>
-              <input
-                type="text"
-                value={item.supplier ?? ""}
-                onChange={(e) => onUpdate({ supplier: e.target.value || null })}
-                placeholder="ej. mueblista"
-                className="w-28 bg-white border border-gray-300 rounded px-1.5 py-0.5 outline-none focus:border-gray-500 text-gray-900"
-              />
-              <span className="text-gray-300">·</span>
-              <span>costo</span>
-              <ThousandsInput
-                value={item.costDistributor}
-                onChange={(v) => onUpdate({ costDistributor: v })}
-                placeholder="0"
-                className="w-24 bg-white border border-gray-300 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:border-gray-500 text-gray-900"
-              />
-            </>
-          ) : (
-            <span className="text-gray-900 tabular-nums">
-              {formatCLP(item.costDistributor)}
-            </span>
-          )}
-          <span className="text-gray-300">·</span>
-          <span>margen</span>
-          <input
-            type="number"
-            step="1"
-            value={marginPct || ""}
-            onChange={(e) =>
-              onUpdate({
-                utilityPercentage: (parseFloat(e.target.value) || 0) / 100,
-              })
-            }
-            placeholder="20"
-            className="w-12 bg-white border border-gray-300 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:border-gray-500 text-gray-900"
-          />
-          <span>%</span>
-          <span className="text-gray-300">·</span>
-          <span>cliente</span>
-          <span className="text-gray-900 font-medium tabular-nums">
-            {formatCLP(item.clientPriceIva)}
+      {/* Costo interno — IGUAL que muebles/cubiertas: rojo burdeo, colapsable,
+          con Neto / C/IVA / Util explícitos. El rojo señala que es info INTERNA
+          (no va al PDF del cliente); la utilidad sigue en verde.
+          - Modo MANUAL (sin líneas del catálogo): proveedor + costo editables.
+          - Modo itemizado (con líneas): el costo lo derivan las líneas (solo
+            lectura); el margen sigue editable. */}
+      <div className="px-4 py-1.5 border-b border-red-200 bg-gray-50">
+        <button
+          onClick={() => setShowCost((v) => !v)}
+          className="text-[11px] text-red-800 hover:text-red-900 flex items-center gap-1.5 w-full text-left"
+        >
+          <span className="inline-block w-3">{showCost ? "▾" : "▸"}</span>
+          <span className="font-medium">Costo interno</span>
+          <span className="text-red-300">·</span>
+          <span className="text-red-900">{item.supplier || "—"}</span>
+          <span className="text-red-300">·</span>
+          <span className="text-red-900 tabular-nums">
+            {formatCLP(item.clientPriceIva)} c/iva
           </span>
-          {/* Utilidad de la partida (igual que muebles/cubiertas): el margen en
-              $ = precio neto al cliente − costo. */}
-          <span className="text-gray-300">·</span>
+          <span className="text-red-300">·</span>
           <span className="text-green-700 font-medium tabular-nums">
             util {formatCLP(item.clientPriceNet - item.costDistributor)}
           </span>
-        </div>
+        </button>
+
+        {showCost && (
+          <div className="mt-2 border border-red-200 rounded overflow-hidden bg-white">
+            <table className="w-full text-[11px]">
+              <thead className="bg-gray-50 text-red-700 uppercase tracking-wider text-[9.5px]">
+                <tr>
+                  <th className="text-left px-2 py-1 font-bold">Proveedor</th>
+                  <th className="text-right px-2 py-1 font-bold w-24">Costo</th>
+                  <th className="text-right px-2 py-1 font-bold w-14">% util</th>
+                  <th className="text-right px-2 py-1 font-bold w-24 text-gray-500">Neto</th>
+                  <th className="text-right px-2 py-1 font-bold w-24 text-gray-500">C/IVA</th>
+                  <th className="text-right px-2 py-1 font-bold w-20 text-green-700">Util</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  {/* Proveedor y costo: editables en modo manual, solo lectura
+                      cuando el costo lo derivan las líneas del catálogo. */}
+                  <td className="px-2 py-1">
+                    {item.herrajes.length === 0 ? (
+                      <input
+                        type="text"
+                        value={item.supplier ?? ""}
+                        onChange={(e) =>
+                          onUpdate({ supplier: e.target.value || null })
+                        }
+                        placeholder="proveedor"
+                        className="w-full bg-transparent border-0 p-0 outline-none text-red-900"
+                      />
+                    ) : (
+                      <span className="text-red-900">{item.supplier || "—"}</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-1 text-right">
+                    {item.herrajes.length === 0 ? (
+                      <ThousandsInput
+                        value={item.costDistributor}
+                        onChange={(v) => onUpdate({ costDistributor: v })}
+                        placeholder="0"
+                        className="w-full bg-transparent border-0 p-0 text-right tabular-nums outline-none text-red-900"
+                      />
+                    ) : (
+                      <span className="text-red-900 tabular-nums">
+                        {formatCLP(item.costDistributor)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-2 py-1 text-right">
+                    <input
+                      type="number"
+                      step="1"
+                      value={marginPct || ""}
+                      onChange={(e) =>
+                        onUpdate({
+                          utilityPercentage:
+                            (parseFloat(e.target.value) || 0) / 100,
+                        })
+                      }
+                      placeholder="20"
+                      className="w-full bg-transparent border-0 p-0 text-right tabular-nums outline-none text-red-900"
+                    />
+                  </td>
+                  {/* Neto y C/IVA en gris = precio cliente. Util en verde. */}
+                  <td className="px-2 py-1 text-right tabular-nums text-gray-700">
+                    {formatCLP(item.clientPriceNet)}
+                  </td>
+                  <td className="px-2 py-1 text-right tabular-nums text-gray-700">
+                    {formatCLP(item.clientPriceIva)}
+                  </td>
+                  <td className="px-2 py-1 text-right tabular-nums text-green-700">
+                    {formatCLP(item.clientPriceNet - item.costDistributor)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            {item.herrajes.length > 0 && (
+              <div className="px-2 py-1 bg-gray-50 border-t border-gray-100 text-[10px] text-gray-400">
+                El costo lo derivan los {item.herrajes.length} herraje
+                {item.herrajes.length === 1 ? "" : "s"} del catálogo de arriba.
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </>
   );

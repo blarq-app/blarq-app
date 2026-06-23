@@ -246,11 +246,15 @@ const CSS = `
     vertical-align: middle;
   }
 
-  /* Fila ítem (1.1 MUEBLES, 1.2 CUBIERTA, …) */
+  /* Fila ítem (1.1 MUEBLES, 1.2 CUBIERTA, …) — cada partida arranca un bloque.
+     Línea fina GRIS CLARO arriba + un poco de aire para separar MUEBLES /
+     CUBIERTAS / HERRAJES entre sí. El nombre pesa y mide más que sus
+     componentes para que el título "mande" la jerarquía. */
   .item-row td {
-    font-weight: 500;
-    font-size: 6.5pt;
-    padding: 2pt 5pt;
+    font-weight: 600;
+    font-size: 7pt;
+    padding: 4pt 5pt 2pt;
+    border-top: 0.5pt solid #CFCFCF;
   }
   .item-desc-general {
     font-weight: 400;
@@ -260,7 +264,9 @@ const CSS = `
     margin-top: 1pt;
   }
 
-  /* Detalle (CUERPO INTERIOR / FRENTES PUERTAS / etc) — indented */
+  /* Detalle (CUERPO INTERIOR / FRENTES PUERTAS / etc) — colgados de su partida
+     con una guía de sangría (línea vertical gris muy clara a la izquierda).
+     Más chicos que el título de la partida. */
   .detail-row td {
     padding: 1pt 5pt;
     font-size: 6pt;
@@ -270,7 +276,8 @@ const CSS = `
   .detail-row .col-detail-name {
     font-weight: 500;
     text-transform: uppercase;
-    padding-left: 18px;
+    padding-left: 14px;
+    border-left: 0.75pt solid #DCDCDC;
     color: #1A1A1A;
   }
   .detail-row .col-detail-material {

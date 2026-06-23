@@ -1237,12 +1237,16 @@ export default function ObraEditor({
                         {/* Marca de cambio vs. la última versión enviada al
                             cliente: flecha (subió/bajó) o "nuevo". El número
                             queda fijo en su lugar (alineado entre filas) y la
-                            marca cuelga hacia la IZQUIERDA con posición absoluta
-                            — así NUEVO no corre el número. Tooltip antes → ahora. */}
+                            marca cuelga hacia la DERECHA con posición absoluta —
+                            así NUEVO no corre el número NI tapa la manija de
+                            arrastre / el botón de desglose, que están a la
+                            izquierda (antes, colgando a la izquierda, la pastilla
+                            "Nuevo" se dibujaba encima del ⋮⋮ y no se podía
+                            arrastrar la fila). Tooltip antes → ahora. */}
                         <span className="relative inline-block">
                           {chg?.marker === "up" && (
                             <span
-                              className="absolute right-full top-1/2 -translate-y-1/2 mr-1 font-bold leading-none text-gray-900"
+                              className="absolute left-full top-1/2 -translate-y-1/2 ml-1 font-bold leading-none text-gray-900"
                               title={
                                 chg.prevTotal != null
                                   ? `Subió · antes ${formatCLP(chg.prevTotal)} → ahora ${formatCLP(item.total)}`
@@ -1254,7 +1258,7 @@ export default function ObraEditor({
                           )}
                           {chg?.marker === "down" && (
                             <span
-                              className="absolute right-full top-1/2 -translate-y-1/2 mr-1 font-bold leading-none text-gray-900"
+                              className="absolute left-full top-1/2 -translate-y-1/2 ml-1 font-bold leading-none text-gray-900"
                               title={
                                 chg.prevTotal != null
                                   ? `Bajó · antes ${formatCLP(chg.prevTotal)} → ahora ${formatCLP(item.total)}`
@@ -1266,7 +1270,7 @@ export default function ObraEditor({
                           )}
                           {chg?.marker === "added" && (
                             <span
-                              className="absolute right-full top-1/2 -translate-y-1/2 mr-1 inline-block whitespace-nowrap rounded-full border border-gray-900 px-1 text-[8px] font-semibold uppercase leading-none tracking-wide text-gray-900"
+                              className="absolute left-full top-1/2 -translate-y-1/2 ml-1 inline-block whitespace-nowrap rounded-full border border-gray-900 px-1 text-[8px] font-semibold uppercase leading-none tracking-wide text-gray-900"
                               title="Partida nueva — no estaba en la versión enviada al cliente"
                             >
                               Nuevo

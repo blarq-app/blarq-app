@@ -1688,16 +1688,21 @@ function HerrajePartidaBlock({
       ) : (
         groups.map((g) => (
           <div key={g.sector || "__sin__"}>
-            {/* Sub-encabezado del sector (chico, gris, MAYÚSCULA). */}
-            <div className={`${ROW_GRID} px-4 pt-1.5 pb-0.5 border-b border-gray-50`}>
-              <div></div>
-              <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                {g.sector ? `Sector ${g.sector}` : "Sin sector"}
+            {/* Sub-encabezado del sector: SOLO si la línea tiene un sector
+                asignado. Si no hay sectores, no mostramos "Sin sector" (era
+                ruido cuando MJ no usa sectores); los herrajes se listan planos.
+                El sector se asigna al agregar del catálogo (campo Sector). */}
+            {g.sector && (
+              <div className={`${ROW_GRID} px-4 pt-1.5 pb-0.5 border-b border-gray-50`}>
+                <div></div>
+                <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                  Sector {g.sector}
+                </div>
+                <div></div>
+                <div></div>
+                <div></div>
               </div>
-              <div></div>
-              <div></div>
-              <div></div>
-            </div>
+            )}
 
             {/* Cada herraje del sector */}
             {g.lines.map((h) => (

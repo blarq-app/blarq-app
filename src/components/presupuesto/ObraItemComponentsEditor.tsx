@@ -214,7 +214,14 @@ export default function ObraItemComponentsEditor({
   function changeUnit(c: Component, newUnit: string) {
     const fields: Record<string, unknown> = { unit: newUnit };
     if (newUnit === "%") {
-      fields.appliedToType = c.type === "mano_obra" ? "mano_obra" : null;
+      // mano de obra → leyes (% sobre MO); pérdida → % sobre todos los
+      // materiales por defecto, así calcula al toque sin configurar nada más.
+      fields.appliedToType =
+        c.type === "mano_obra"
+          ? "mano_obra"
+          : c.type === "perdida"
+            ? "material"
+            : null;
     } else {
       fields.appliedToType = null;
       fields.appliedToComponentId = null;
@@ -325,10 +332,11 @@ export default function ObraItemComponentsEditor({
             type,
             description: "",
             unit: type === "margen" || type === "perdida" ? "%" : "UN",
-            quantity: type === "margen" ? 10 : type === "perdida" ? 5 : 0,
+            quantity: type === "margen" ? 10 : type === "perdida" ? 10 : 0,
             unitCost: 0,
             sortOrder: comps.length,
-            appliedToType: type === "mano_obra" ? null : null,
+            // Pérdida nace como % sobre todos los materiales (calcula al toque).
+            appliedToType: type === "perdida" ? "material" : null,
           }),
         }
       );

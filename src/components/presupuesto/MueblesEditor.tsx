@@ -1101,13 +1101,24 @@ function ChapterBlock({
         >
           + Agregar item al capítulo (ej. Muebles, Cubiertas)
         </button>
-        <button
-          onClick={onAddHerrajePartida}
-          className="text-[11px] font-medium text-gray-700 border border-gray-300 rounded px-2.5 py-1 hover:bg-gray-50 hover:border-gray-400 whitespace-nowrap"
-          title="Crea una partida que se arma con herrajes del catálogo (correderas, bisagras, cajones…)"
-        >
-          + Partida de herrajes (del catálogo)
-        </button>
+        {/* El botón de crear partida de herrajes se muestra SOLO si el capítulo
+            todavía no tiene una. Una vez creada, se suman más herrajes con
+            "Agregar del catálogo" DENTRO de la partida (los sectores son
+            sub-grupos de esa única partida). Así no se crean partidas HERRAJES
+            duplicadas por error al salir y volver a entrar. */}
+        {chapter.items.some((i) => i.kind === "herrajes") ? (
+          <span className="text-[11px] text-gray-300 whitespace-nowrap">
+            Herrajes: agregá del catálogo dentro de la partida ↑
+          </span>
+        ) : (
+          <button
+            onClick={onAddHerrajePartida}
+            className="text-[11px] font-medium text-gray-700 border border-gray-300 rounded px-2.5 py-1 hover:bg-gray-50 hover:border-gray-400 whitespace-nowrap"
+            title="Crea una partida que se arma con herrajes del catálogo (correderas, bisagras, cajones…)"
+          >
+            + Partida de herrajes (del catálogo)
+          </button>
+        )}
       </div>
     </>
   );

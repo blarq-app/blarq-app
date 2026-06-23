@@ -4,6 +4,47 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
 import AddHerrajeFromCatalog from "./AddHerrajeFromCatalog";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+// Manija de arrastre ⋮⋮ — mismo glifo gris que el catálogo de herrajes. Solo el
+// handle lleva los listeners de useSortable (no la fila entera), para no romper
+// los inputs/botones internos al hacer click.
+function DragHandle({
+  attributes,
+  listeners,
+  className = "",
+}: {
+  attributes: React.HTMLAttributes<HTMLElement>;
+  listeners: Record<string, unknown> | undefined;
+  className?: string;
+}) {
+  return (
+    <span
+      {...attributes}
+      {...(listeners as React.HTMLAttributes<HTMLElement>)}
+      className={`cursor-grab text-gray-300 hover:text-gray-700 select-none leading-none ${className}`}
+      title="Arrastrar para reordenar"
+    >
+      ⋮⋮
+    </span>
+  );
+}
 
 // Cantidad de una línea de herraje. Edita LOCAL mientras se tipea (el subtotal
 // se ve al instante) y recién manda al servidor al SALIR del campo (blur o
@@ -247,6 +288,122 @@ export default function MueblesEditor({
     const net = cost * (1 + utility);
     const iva = net * 1.19;
     return { clientPriceNet: net, clientPriceIva: iva };
+  }
+
+  // ── Arrastre (drag & drop) ──────────────────────────────────────────────
+  // Mismo patrón que el catálogo de herrajes. Sensor con un umbral de 5px para
+  // no disparar un drag cuando MJ solo quiere hacer click en un input.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  // Reordenar CAPÍTULOS. Optimista: movemos el array de inmediato (arrayMove) y
+  // después persistimos. El server renumera (chapterNumber + itemNumber de cada
+  // item) y nos devuelve la numeración nueva: la mergeamos sin tocar el resto.
+  async function reorderChapters(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIdx = chapters.findIndex((c) => c.id === active.id);
+    const newIdx = chapters.findIndex((c) => c.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(chapters, oldIdx, newIdx);
+    setChapters(reordered);
+    try {
+      const res = await fetch(
+        `/api/presupuestos/${budgetId}/muebles/chapters/reorder`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderedIds: reordered.map((c) => c.id) }),
+        }
+      );
+      if (!res.ok) {
+        console.error("Error al reordenar capítulos:", await res.text());
+        return;
+      }
+      const data: {
+        chapters: {
+          id: string;
+          chapterNumber: number;
+          sortOrder: number;
+          items: { id: string; itemNumber: string; sortOrder: number }[];
+        }[];
+      } = await res.json();
+      // Mergeamos la numeración nueva (chapterNumber + itemNumber de cada item)
+      // sin pisar nombres, costos ni el resto de los campos.
+      const numByChapter = new Map(data.chapters.map((c) => [c.id, c]));
+      setChapters((prev) =>
+        prev.map((c) => {
+          const fresh = numByChapter.get(c.id);
+          if (!fresh) return c;
+          const numByItem = new Map(fresh.items.map((it) => [it.id, it]));
+          return {
+            ...c,
+            chapterNumber: fresh.chapterNumber,
+            sortOrder: fresh.sortOrder,
+            items: c.items.map((it) => {
+              const fi = numByItem.get(it.id);
+              return fi
+                ? { ...it, itemNumber: fi.itemNumber, sortOrder: fi.sortOrder }
+                : it;
+            }),
+          };
+        })
+      );
+    } catch (err) {
+      console.error("Error al reordenar capítulos:", err);
+    }
+  }
+
+  // Reordenar ITEMS dentro de un capítulo. Optimista + merge de la numeración
+  // nueva (itemNumber) que devuelve el server.
+  async function reorderItems(chapterId: string, orderedIds: string[]) {
+    setChapters((prev) =>
+      prev.map((c) => {
+        if (c.id !== chapterId) return c;
+        const byId = new Map(c.items.map((it) => [it.id, it]));
+        const reordered = orderedIds
+          .map((id) => byId.get(id))
+          .filter((it): it is MuebleItem => !!it);
+        return { ...c, items: reordered };
+      })
+    );
+    try {
+      const res = await fetch(
+        `/api/presupuestos/${budgetId}/muebles/items/reorder`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chapterId, orderedIds }),
+        }
+      );
+      if (!res.ok) {
+        console.error("Error al reordenar items:", await res.text());
+        return;
+      }
+      const data: {
+        items: { id: string; itemNumber: string; sortOrder: number }[];
+      } = await res.json();
+      const numByItem = new Map(data.items.map((it) => [it.id, it]));
+      setChapters((prev) =>
+        prev.map((c) =>
+          c.id !== chapterId
+            ? c
+            : {
+                ...c,
+                items: c.items.map((it) => {
+                  const fi = numByItem.get(it.id);
+                  return fi
+                    ? { ...it, itemNumber: fi.itemNumber, sortOrder: fi.sortOrder }
+                    : it;
+                }),
+              }
+        )
+      );
+    } catch (err) {
+      console.error("Error al reordenar items:", err);
+    }
   }
 
   // ── Capítulos ──
@@ -872,11 +1029,23 @@ export default function MueblesEditor({
           <div></div>
         </div>
 
-        {chapters.map((ch) => (
-          <ChapterBlock
+        <DndContext
+          id="muebles-chapters-dnd"
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={reorderChapters}
+        >
+          <SortableContext
+            items={chapters.map((c) => c.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {chapters.map((ch) => (
+              <ChapterBlock
           key={ch.id}
           chapter={ch}
           budgetId={budgetId}
+          sensors={sensors}
+          onReorderItems={(orderedIds) => reorderItems(ch.id, orderedIds)}
           onUpdate={(patch) => updateChapter(ch.id, patch)}
           onDelete={() => deleteChapter(ch.id)}
           onAddItem={() => addItem(ch.id)}
@@ -913,7 +1082,9 @@ export default function MueblesEditor({
             activateQuote(ch.id, itemId, quoteId)
           }
         />
-        ))}
+            ))}
+          </SortableContext>
+        </DndContext>
 
         <button
           onClick={addChapter}
@@ -1040,6 +1211,8 @@ export default function MueblesEditor({
 function ChapterBlock({
   chapter,
   budgetId,
+  sensors,
+  onReorderItems,
   onUpdate,
   onDelete,
   onAddItem,
@@ -1060,6 +1233,8 @@ function ChapterBlock({
 }: {
   chapter: MuebleChapter;
   budgetId: string;
+  sensors: ReturnType<typeof useSensors>;
+  onReorderItems: (orderedIds: string[]) => void;
   onUpdate: (patch: Partial<MuebleChapter>) => void;
   onDelete: () => void;
   onAddItem: () => void;
@@ -1101,12 +1276,36 @@ function ChapterBlock({
     (s, i) => s + i.clientPriceIva * i.quantity,
     0
   );
+
+  // Sortable a nivel capítulo: la fila gris del encabezado es el nodo
+  // arrastrable. El handle ⋮⋮ va al lado del número; solo el handle lleva los
+  // listeners para no romper el input del nombre ni el botón de borrar.
+  const sortable = useSortable({ id: chapter.id });
+  const chapterStyle = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.5 : 1,
+    zIndex: sortable.isDragging ? 10 : ("auto" as const),
+    position: "relative" as const,
+  };
+
   return (
     <>
-      {/* Fila de capítulo (gris, mismo grid que el resto) */}
-      <div className="grid grid-cols-[3rem_minmax(0,1fr)_5rem_8rem_2rem] items-center gap-3 px-4 py-2.5 bg-[#DBDBDB] border-b border-gray-300">
-        <span className="font-bold text-gray-900 tabular-nums">
-          {chapter.chapterNumber}
+      {/* Fila de capítulo (gris, mismo grid que el resto). La manija va antes
+          del número, dentro de la primera celda. */}
+      <div
+        ref={sortable.setNodeRef}
+        style={chapterStyle}
+        className="grid grid-cols-[3rem_minmax(0,1fr)_5rem_8rem_2rem] items-center gap-3 px-4 py-2.5 bg-[#DBDBDB] border-b border-gray-300"
+      >
+        <span className="flex items-center gap-1.5">
+          <DragHandle
+            attributes={sortable.attributes}
+            listeners={sortable.listeners}
+          />
+          <span className="font-bold text-gray-900 tabular-nums">
+            {chapter.chapterNumber}
+          </span>
         </span>
         <input
           type="text"
@@ -1127,44 +1326,76 @@ function ChapterBlock({
         </button>
       </div>
 
-      {/* Items del capítulo. Los items kind="herrajes" usan un bloque distinto
-          (no muestran componentes ni cotizaciones de proveedor). */}
-      {chapter.items.map((item) =>
-        item.kind === "herrajes" ? (
-          <HerrajePartidaBlock
-            key={item.id}
-            item={item}
-            budgetId={budgetId}
-            onUpdate={(patch) => onUpdateHerrajePartida(item.id, patch)}
-            onDelete={() => onDeleteItem(item.id)}
-            onHerrajeAdded={(line, updated) =>
-              onHerrajeAdded(item.id, line, updated)
-            }
-            onUpdateHerraje={(herrajeId, patch) =>
-              onUpdateHerraje(item.id, herrajeId, patch)
-            }
-            onDeleteHerraje={(herrajeId) => onDeleteHerraje(item.id, herrajeId)}
-          />
-        ) : (
-          <ItemBlock
-            key={item.id}
-            item={item}
-            onUpdate={(patch) => onUpdateItem(item.id, patch)}
-            onDelete={() => onDeleteItem(item.id)}
-            onAddDetail={() => onAddDetail(item.id)}
-            onUpdateDetail={(detailId, patch) =>
-              onUpdateDetail(item.id, detailId, patch)
-            }
-            onDeleteDetail={(detailId) => onDeleteDetail(item.id, detailId)}
-            onAddQuote={() => onAddQuote(item.id)}
-            onUpdateQuote={(quoteId, patch) =>
-              onUpdateQuote(item.id, quoteId, patch)
-            }
-            onDeleteQuote={(quoteId) => onDeleteQuote(item.id, quoteId)}
-            onActivateQuote={(quoteId) => onActivateQuote(item.id, quoteId)}
-          />
-        )
-      )}
+      {/* Items del capítulo. Su PROPIO DndContext (uno por capítulo) para que el
+          arrastre de items quede confinado a este capítulo y no se mezclen
+          partidas entre capítulos. Los items kind="herrajes" usan un bloque
+          distinto (no muestran componentes ni cotizaciones de proveedor). */}
+      <DndContext
+        id={`muebles-items-dnd-${chapter.id}`}
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={(e: DragEndEvent) => {
+          const { active, over } = e;
+          if (!over || active.id === over.id) return;
+          const oldIdx = chapter.items.findIndex((i) => i.id === active.id);
+          const newIdx = chapter.items.findIndex((i) => i.id === over.id);
+          if (oldIdx < 0 || newIdx < 0) return;
+          const reordered = arrayMove(chapter.items, oldIdx, newIdx);
+          onReorderItems(reordered.map((i) => i.id));
+        }}
+      >
+        <SortableContext
+          items={chapter.items.map((i) => i.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {chapter.items.map((item) => (
+            <SortableItemWrapper key={item.id} id={item.id}>
+              {(handle) =>
+                item.kind === "herrajes" ? (
+                  <HerrajePartidaBlock
+                    item={item}
+                    budgetId={budgetId}
+                    dragHandle={handle}
+                    onUpdate={(patch) => onUpdateHerrajePartida(item.id, patch)}
+                    onDelete={() => onDeleteItem(item.id)}
+                    onHerrajeAdded={(line, updated) =>
+                      onHerrajeAdded(item.id, line, updated)
+                    }
+                    onUpdateHerraje={(herrajeId, patch) =>
+                      onUpdateHerraje(item.id, herrajeId, patch)
+                    }
+                    onDeleteHerraje={(herrajeId) =>
+                      onDeleteHerraje(item.id, herrajeId)
+                    }
+                  />
+                ) : (
+                  <ItemBlock
+                    item={item}
+                    dragHandle={handle}
+                    onUpdate={(patch) => onUpdateItem(item.id, patch)}
+                    onDelete={() => onDeleteItem(item.id)}
+                    onAddDetail={() => onAddDetail(item.id)}
+                    onUpdateDetail={(detailId, patch) =>
+                      onUpdateDetail(item.id, detailId, patch)
+                    }
+                    onDeleteDetail={(detailId) =>
+                      onDeleteDetail(item.id, detailId)
+                    }
+                    onAddQuote={() => onAddQuote(item.id)}
+                    onUpdateQuote={(quoteId, patch) =>
+                      onUpdateQuote(item.id, quoteId, patch)
+                    }
+                    onDeleteQuote={(quoteId) => onDeleteQuote(item.id, quoteId)}
+                    onActivateQuote={(quoteId) =>
+                      onActivateQuote(item.id, quoteId)
+                    }
+                  />
+                )
+              }
+            </SortableItemWrapper>
+          ))}
+        </SortableContext>
+      </DndContext>
 
       {/* Dos acciones distintas, separadas a propósito para no confundirlas:
           - "Agregar item" = partida de mueble normal (link gris discreto).
@@ -1200,8 +1431,43 @@ function ChapterBlock({
   );
 }
 
+// Envoltorio sortable para un item (partida) dentro de un capítulo. El item se
+// renderiza como varias filas de grid (fragmento); las metemos en un <div> que
+// es el nodo arrastrable (las filas internas siguen siendo grid de ancho
+// completo, así que el layout no cambia). El handle ⋮⋮ se entrega al bloque por
+// render-prop para que lo coloque en su primera fila (solo el handle arrastra).
+function SortableItemWrapper({
+  id,
+  children,
+}: {
+  id: string;
+  children: (handle: React.ReactNode) => React.ReactNode;
+}) {
+  const sortable = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.5 : 1,
+    zIndex: sortable.isDragging ? 10 : ("auto" as const),
+    position: "relative" as const,
+    background: sortable.isDragging ? "#FAFAFA" : undefined,
+  };
+  const handle = (
+    <DragHandle
+      attributes={sortable.attributes}
+      listeners={sortable.listeners}
+    />
+  );
+  return (
+    <div ref={sortable.setNodeRef} style={style}>
+      {children(handle)}
+    </div>
+  );
+}
+
 function ItemBlock({
   item,
+  dragHandle,
   onUpdate,
   onDelete,
   onAddDetail,
@@ -1213,6 +1479,7 @@ function ItemBlock({
   onActivateQuote,
 }: {
   item: MuebleItem;
+  dragHandle: React.ReactNode;
   onUpdate: (patch: Partial<MuebleItem>) => void;
   onDelete: () => void;
   onAddDetail: () => void;
@@ -1234,14 +1501,17 @@ function ItemBlock({
   const ROW_GRID = "grid grid-cols-[3rem_minmax(0,1fr)_5rem_8rem_2rem] items-baseline gap-3";
   return (
     <>
-      {/* Fila principal del item: número, nombre, cantidad, total */}
+      {/* Fila principal del item: manija + número, nombre, cantidad, total */}
       <div className={`${ROW_GRID} px-4 pt-2 pb-1 border-b border-gray-100`}>
-        <input
-          type="text"
-          value={item.itemNumber}
-          onChange={(e) => onUpdate({ itemNumber: e.target.value })}
-          className="bg-transparent border-0 p-0 text-sm tabular-nums text-gray-700 outline-none"
-        />
+        <span className="flex items-center gap-1">
+          {dragHandle}
+          <input
+            type="text"
+            value={item.itemNumber}
+            onChange={(e) => onUpdate({ itemNumber: e.target.value })}
+            className="w-full min-w-0 bg-transparent border-0 p-0 text-sm tabular-nums text-gray-700 outline-none"
+          />
+        </span>
         <input
           type="text"
           value={item.name}
@@ -1626,6 +1896,7 @@ function ItemBlock({
 function HerrajePartidaBlock({
   item,
   budgetId,
+  dragHandle,
   onUpdate,
   onDelete,
   onHerrajeAdded,
@@ -1634,6 +1905,7 @@ function HerrajePartidaBlock({
 }: {
   item: MuebleItem;
   budgetId: string;
+  dragHandle: React.ReactNode;
   onUpdate: (patch: {
     itemNumber?: string;
     name?: string;
@@ -1678,14 +1950,17 @@ function HerrajePartidaBlock({
 
   return (
     <>
-      {/* Fila de la partida: número (editable), nombre (editable), total. */}
+      {/* Fila de la partida: manija + número (editable), nombre, total. */}
       <div className={`${ROW_GRID} px-4 pt-2 pb-1 border-b border-gray-100`}>
-        <input
-          type="text"
-          value={item.itemNumber}
-          onChange={(e) => onUpdate({ itemNumber: e.target.value })}
-          className="bg-transparent border-0 p-0 text-sm tabular-nums text-gray-700 outline-none"
-        />
+        <span className="flex items-center gap-1">
+          {dragHandle}
+          <input
+            type="text"
+            value={item.itemNumber}
+            onChange={(e) => onUpdate({ itemNumber: e.target.value })}
+            className="w-full min-w-0 bg-transparent border-0 p-0 text-sm tabular-nums text-gray-700 outline-none"
+          />
+        </span>
         <input
           type="text"
           value={item.name}

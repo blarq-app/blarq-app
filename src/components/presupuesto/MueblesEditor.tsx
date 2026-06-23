@@ -1839,6 +1839,12 @@ function HerrajePartidaBlock({
           <span className="text-gray-900 font-medium tabular-nums">
             {formatCLP(item.clientPriceIva)}
           </span>
+          {/* Utilidad de la partida (igual que muebles/cubiertas): el margen en
+              $ = precio neto al cliente − costo. */}
+          <span className="text-gray-300">·</span>
+          <span className="text-green-700 font-medium tabular-nums">
+            util {formatCLP(item.clientPriceNet - item.costDistributor)}
+          </span>
         </div>
       </div>
     </>

@@ -211,7 +211,12 @@ export default function ObraEditor({
   const changeMarkers = useMemo<Map<string, ChangeResult>>(
     () =>
       computeChangeMarkers(
-        items.map((it) => ({ lineageId: it.lineageId, total: it.total })),
+        items.map((it) => ({
+          lineageId: it.lineageId,
+          unitPrice: it.unitPrice,
+          quantity: it.quantity,
+          total: it.total,
+        })),
         baselineItems
       ),
     [items, baselineItems]

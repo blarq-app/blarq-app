@@ -57,5 +57,24 @@ check("sin versión base no marca nada", m3.get("a")?.marker === null);
 const m4 = computeChangeMarkers([{ lineageId: "a", total: 100000 }], []);
 check("base vacía → todo nuevo", m4.get("a")?.marker === "added");
 
+// Ruido de decimales: un recálculo ensució el precio unitario (8179 → 8179,424)
+// sin que nadie tocara la partida. El total crudo se mueve $9,75, pero al
+// comparar sobre el precio REDONDEADO (lo que ve el cliente) ambos dan $188.117
+// → no debe pintar flecha. Caso real: Pintura de cielos, Paseo del Sena V2.
+const m5 = computeChangeMarkers(
+  [{ lineageId: "a", unitPrice: 8179.424, quantity: 23, total: 188126.752 }],
+  [{ lineageId: "a", unitPrice: 8179, quantity: 23, total: 188117 }]
+);
+check("decimales fantasma del recálculo no marcan", m5.get("a")?.marker === null);
+
+// Cambio real de precio unitario ($20.000 → $30.000): sí debe marcar. Caso
+// real: Instalación de puertas, Paseo del Sena V2 (MJ lo subió a propósito).
+const m6 = computeChangeMarkers(
+  [{ lineageId: "a", unitPrice: 30000, quantity: 2, total: 60000 }],
+  [{ lineageId: "a", unitPrice: 20000, quantity: 2, total: 40000 }]
+);
+check("cambio real de precio unitario marca up", m6.get("a")?.marker === "up");
+check("prevTotal del cambio real es el redondeado", m6.get("a")?.prevTotal === 40000);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);

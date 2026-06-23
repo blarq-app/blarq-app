@@ -1292,7 +1292,7 @@ function ItemBlock({
           className={`${ROW_GRID} px-4 py-0.5 border-b border-gray-50`}
         >
           <div></div>
-          <div className="grid grid-cols-[10rem_minmax(0,1fr)_1rem] gap-2 items-baseline">
+          <div className="grid grid-cols-[10rem_minmax(0,1fr)_1.5rem] gap-2 items-center">
             <input
               type="text"
               value={d.name}
@@ -1311,10 +1311,16 @@ function ItemBlock({
               placeholder="materialidad…"
               className="bg-transparent border-0 p-0 text-[11px] text-gray-600 outline-none"
             />
+            {/* Botón eliminar componente. Antes era una ✕ de 10px en gris muy
+                claro dentro de una columna de 1rem: blanco de click minúsculo,
+                MJ no lograba borrar los componentes agregados por error. Ahora
+                es un botón con padding (área de click ~24px), glifo más grande y
+                color más visible que se pone rojo al pasar por encima. */}
             <button
               onClick={() => onDeleteDetail(d.id)}
-              className="text-gray-300 hover:text-red-500 text-[10px]"
+              className="flex items-center justify-center justify-self-end -my-1 h-6 w-6 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 text-sm leading-none cursor-pointer"
               title="Eliminar componente"
+              aria-label="Eliminar componente"
             >
               ✕
             </button>

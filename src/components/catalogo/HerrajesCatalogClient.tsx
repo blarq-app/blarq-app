@@ -163,10 +163,11 @@ function Chevron({ open }: { open: boolean }) {
 
 // Layout de columnas compartido entre encabezado y filas. La primera columna
 // angosta es la manija de arrastre.
-// 11 columnas: manija · img · nombre/marca · medida · color · sku ·
-// costo · cliente · link · editar.
+// 10 columnas: manija · img · nombre/marca · medida · color · costo ·
+// cliente · sku · link · editar. (Costo/Cliente van ANTES del SKU para que el
+// precio se vea sin tener que correr la tabla a la derecha.)
 const GRID_COLS =
-  "grid-cols-[1.25rem_3.25rem_minmax(9rem,1.6fr)_5rem_5rem_5rem_5rem_5rem_3rem_4.25rem]";
+  "grid-cols-[1.25rem_3rem_minmax(7rem,1.5fr)_4.5rem_4.5rem_5rem_5rem_4.5rem_2.75rem_4rem]";
 
 // Input numérico con separadores de miles.
 function ThousandsInput({
@@ -1324,11 +1325,11 @@ export default function HerrajesCatalogClient({
               ))}
             </select>
           </div>
-          <div>SKU</div>
           <div className="text-right">Costo</div>
           <div className="text-right" title="Costo + 20% (salvo override)">
             Cliente
           </div>
+          <div>SKU</div>
           <div className="text-center">Link</div>
           <div></div>
         </div>
@@ -1570,17 +1571,6 @@ function HerrajeItemRow({
         />
       </div>
 
-      {/* SKU (chico gris). */}
-      <div className="min-w-0">
-        <input
-          type="text"
-          value={item.sku ?? ""}
-          placeholder="—"
-          onChange={(e) => onUpdate({ sku: e.target.value || null })}
-          className="w-full bg-transparent border-0 p-0 text-gray-400 text-[10px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
-        />
-      </div>
-
       {/* Costo (editable inline = costNet). */}
       <div>
         <ThousandsInput
@@ -1613,6 +1603,17 @@ function HerrajeItemRow({
             )}
           </span>
         )}
+      </div>
+
+      {/* SKU (chico gris). */}
+      <div className="min-w-0">
+        <input
+          type="text"
+          value={item.sku ?? ""}
+          placeholder="—"
+          onChange={(e) => onUpdate({ sku: e.target.value || null })}
+          className="w-full bg-transparent border-0 p-0 text-gray-400 text-[10px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+        />
       </div>
 
       {/* Link */}
@@ -1820,11 +1821,6 @@ function HerrajeProductRow({
         {selected.finish?.trim() ? selected.finish.toUpperCase() : "—"}
       </div>
 
-      {/* SKU de la variante elegida (solo lectura, chico gris). */}
-      <div className="min-w-0 text-gray-400 text-[10px] break-words">
-        {selected.sku?.trim() ? selected.sku : "—"}
-      </div>
-
       {/* Costo de la variante elegida (editable inline = costNet). */}
       <div>
         <ThousandsInput
@@ -1856,6 +1852,11 @@ function HerrajeProductRow({
             )}
           </span>
         )}
+      </div>
+
+      {/* SKU de la variante elegida (solo lectura, chico gris). */}
+      <div className="min-w-0 text-gray-400 text-[10px] break-words">
+        {selected.sku?.trim() ? selected.sku : "—"}
       </div>
 
       {/* Link de la variante elegida. */}

@@ -19,11 +19,16 @@ export async function PUT(
       select: { kind: true },
     });
 
-    // Partida de herrajes: el costo lo manejan las líneas. Acá solo se editan
-    // campos sueltos (nombre, descripción y sobre todo el MARGEN) y se recalcula
-    // el total DESDE LAS LÍNEAS — nunca desde el costDistributor del body (que
-    // vendría 0 y borraría el costo). El proveedor es por línea: no se toca.
+    // Partida de herrajes. Dos modos:
+    //  - CON líneas del catálogo (itemizado): el costo lo derivan las líneas; NO
+    //    se pisa con el costDistributor del body (vendría 0 y borraría el costo),
+    //    y el proveedor es por línea.
+    //  - SIN líneas (MANUAL, proveedor + total, igual que muebles): se acepta el
+    //    costDistributor y el supplier que cargó MJ.
+    // En ambos casos se recalcula neto/iva con el margen (recompute).
     if (existing?.kind === "herrajes") {
+      const hasLines =
+        (await prisma.muebleHerraje.count({ where: { itemId } })) > 0;
       await prisma.muebleItem.update({
         where: { id: itemId },
         data: {
@@ -33,6 +38,12 @@ export async function PUT(
             utilityPercentage: data.utilityPercentage,
           }),
           ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
+          ...(!hasLines &&
+            data.costDistributor !== undefined && {
+              costDistributor: data.costDistributor,
+            }),
+          ...(!hasLines &&
+            data.supplier !== undefined && { supplier: data.supplier }),
         },
       });
       const recomputed = await recomputeAndPersistHerrajeItem(itemId);

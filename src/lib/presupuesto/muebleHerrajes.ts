@@ -64,16 +64,25 @@ export async function recomputeAndPersistHerrajeItem(itemId: string) {
     include: { herrajes: { select: { costNet: true, quantity: true } } },
   });
   if (!item) return null;
-  const totals = computeHerrajeItemTotals(
-    item.herrajes,
-    item.utilityPercentage,
+  // CON líneas del catálogo: el costo se deriva de la suma (modo itemizado).
+  // SIN líneas: la partida es MANUAL (proveedor + total, igual que muebles) →
+  // se respeta el costDistributor que cargó MJ; solo se recalculan neto/iva con
+  // el margen. Así una misma partida HERRAJES sirve para los dos modos.
+  let costDistributor: number;
+  if (item.herrajes.length > 0) {
+    costDistributor = computeHerrajeItemTotals(
+      item.herrajes,
+      item.utilityPercentage,
+    ).costDistributor;
+  } else {
+    costDistributor = Math.round(item.costDistributor);
+  }
+  const clientPriceNet = Math.round(
+    costDistributor * (1 + (item.utilityPercentage || 0)),
   );
+  const clientPriceIva = Math.round(clientPriceNet * IVA);
   return prisma.muebleItem.update({
     where: { id: itemId },
-    data: {
-      costDistributor: totals.costDistributor,
-      clientPriceNet: totals.clientPriceNet,
-      clientPriceIva: totals.clientPriceIva,
-    },
+    data: { costDistributor, clientPriceNet, clientPriceIva },
   });
 }

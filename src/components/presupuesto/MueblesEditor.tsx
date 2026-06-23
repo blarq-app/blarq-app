@@ -647,7 +647,15 @@ export default function MueblesEditor({
   async function updateHerrajePartida(
     chapterId: string,
     itemId: string,
-    patch: { itemNumber?: string; name?: string; utilityPercentage?: number }
+    patch: {
+      itemNumber?: string;
+      name?: string;
+      utilityPercentage?: number;
+      // Modo MANUAL (partida de herrajes sin líneas del catálogo): costo y
+      // proveedor cargados a mano, igual que una partida de muebles.
+      costDistributor?: number;
+      supplier?: string | null;
+    }
   ) {
     // Optimista en nombre/número/margen; los totales llegan del back.
     setChapters((prev) =>
@@ -677,6 +685,10 @@ export default function MueblesEditor({
           ...(patch.itemNumber !== undefined
             ? { itemNumber: patch.itemNumber }
             : {}),
+          ...(patch.costDistributor !== undefined
+            ? { costDistributor: patch.costDistributor }
+            : {}),
+          ...(patch.supplier !== undefined ? { supplier: patch.supplier } : {}),
         }),
       }
     );
@@ -1258,7 +1270,13 @@ function ChapterBlock({
   onActivateQuote: (itemId: string, quoteId: string) => void;
   onUpdateHerrajePartida: (
     itemId: string,
-    patch: { itemNumber?: string; name?: string; utilityPercentage?: number }
+    patch: {
+      itemNumber?: string;
+      name?: string;
+      utilityPercentage?: number;
+      costDistributor?: number;
+      supplier?: string | null;
+    }
   ) => void;
   onHerrajeAdded: (
     itemId: string,
@@ -1910,6 +1928,8 @@ function HerrajePartidaBlock({
     itemNumber?: string;
     name?: string;
     utilityPercentage?: number;
+    costDistributor?: number;
+    supplier?: string | null;
   }) => void;
   onDelete: () => void;
   onHerrajeAdded: (
@@ -1980,16 +2000,34 @@ function HerrajePartidaBlock({
         </button>
       </div>
 
-      {/* Líneas agrupadas por sector */}
+      {/* Sin líneas del catálogo: modo MANUAL — proveedor + costo total a mano
+          (igual que muebles, para cuando el mueblista cotiza los herrajes). La
+          otra opción ("Agregar del catálogo") sigue abajo; si agrega del
+          catálogo, la partida pasa a modo itemizado y el costo lo derivan las
+          líneas. */}
       {item.herrajes.length === 0 ? (
-        <div className={`${ROW_GRID} px-4 py-1.5 border-b border-gray-100`}>
-          <div></div>
-          <div className="text-[11px] text-gray-400 italic">
-            Agregá herrajes del catálogo.
-          </div>
-          <div></div>
-          <div></div>
-          <div></div>
+        <div className="px-4 py-2 border-b border-gray-100 flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-600">
+          <span className="text-gray-500">Cargar a mano:</span>
+          <span>proveedor</span>
+          <input
+            type="text"
+            value={item.supplier ?? ""}
+            onChange={(e) => onUpdate({ supplier: e.target.value || null })}
+            placeholder="ej. mueblista"
+            className="w-32 bg-white border border-gray-300 rounded px-1.5 py-0.5 outline-none focus:border-gray-500"
+          />
+          <span className="text-gray-300">·</span>
+          <span>costo total</span>
+          <ThousandsInput
+            value={item.costDistributor}
+            onChange={(v) => onUpdate({ costDistributor: v })}
+            placeholder="0"
+            className="w-24 bg-white border border-gray-300 rounded px-1.5 py-0.5 text-right tabular-nums outline-none focus:border-gray-500"
+          />
+          <span className="text-gray-300 mx-1">·</span>
+          <span className="text-gray-400 italic">
+            o usá “Agregar del catálogo” abajo
+          </span>
         </div>
       ) : (
         groups.map((g) => (

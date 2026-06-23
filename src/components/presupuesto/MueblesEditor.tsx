@@ -1,9 +1,54 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
 import AddHerrajeFromCatalog from "./AddHerrajeFromCatalog";
+
+// Cantidad de una línea de herraje. Edita LOCAL mientras se tipea (el subtotal
+// se ve al instante) y recién manda al servidor al SALIR del campo (blur o
+// Enter). Antes mandaba un PUT por cada tecla: con números de 2+ dígitos las
+// respuestas llegaban desordenadas y revertían el valor / el total no cuadraba.
+// Devuelve un fragmento con DOS celdas del grid: el input y el subtotal.
+function HerrajeQtyInput({
+  value,
+  costNet,
+  onCommit,
+}: {
+  value: number;
+  costNet: number;
+  onCommit: (qty: number) => void;
+}) {
+  const [local, setLocal] = useState(String(value));
+  // Si el valor cambia desde afuera (respuesta del back, recarga), re-sincroniza.
+  useEffect(() => {
+    setLocal(String(value));
+  }, [value]);
+  const qty = parseFloat(local) || 0;
+  const commit = () => {
+    if (qty !== value) onCommit(qty);
+  };
+  return (
+    <>
+      <input
+        type="number"
+        min={0}
+        step="1"
+        value={local}
+        onChange={(e) => setLocal(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        className="bg-transparent border-0 p-0 text-center text-[11px] tabular-nums text-gray-700 outline-none"
+      />
+      {/* Subtotal costo (costo × cantidad), en vivo con lo que se tipea. */}
+      <span className="text-right text-[11px] tabular-nums text-gray-600">
+        {formatCLP(costNet * qty)}
+      </span>
+    </>
+  );
+}
 
 // Input numérico con separadores de miles. Sin foco muestra "5.488.460",
 // con foco muestra "5488460" para edición. onChange devuelve el número crudo.
@@ -1688,23 +1733,12 @@ function HerrajePartidaBlock({
                     {formatCLP(h.costNet)}
                   </span>
                 </div>
-                {/* Cantidad editable. */}
-                <input
-                  type="number"
-                  min={0}
-                  step="1"
+                {/* Cantidad editable (commit al salir del campo) + subtotal. */}
+                <HerrajeQtyInput
                   value={h.quantity}
-                  onChange={(e) =>
-                    onUpdateHerraje(h.id, {
-                      quantity: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                  className="bg-transparent border-0 p-0 text-center text-[11px] tabular-nums text-gray-700 outline-none"
+                  costNet={h.costNet}
+                  onCommit={(qty) => onUpdateHerraje(h.id, { quantity: qty })}
                 />
-                {/* Subtotal costo (costo × cantidad). */}
-                <span className="text-right text-[11px] tabular-nums text-gray-600">
-                  {formatCLP(h.costNet * h.quantity)}
-                </span>
                 <button
                   onClick={() => onDeleteHerraje(h.id)}
                   className="text-gray-300 hover:text-red-500 text-xs leading-none"

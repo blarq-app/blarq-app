@@ -239,45 +239,43 @@ const CSS = `
     background: #E5E5E5;
     font-weight: 600;
     text-transform: uppercase;
-    font-size: 7pt;
-    padding: 2pt 5pt;
+    font-size: 6.5pt;
+    padding: 1.5pt 5pt;
     border-bottom: 0.15pt solid #E5E5E5;
     color: #1A1A1A;
     vertical-align: middle;
   }
 
   /* Fila ítem (1.1 MUEBLES, 1.2 CUBIERTA, …) — cada partida arranca un bloque.
-     Línea fina GRIS CLARO arriba + un poco de aire para separar MUEBLES /
-     CUBIERTAS / HERRAJES entre sí. El nombre pesa y mide más que sus
-     componentes para que el título "mande" la jerarquía. */
+     Línea fina GRIS CLARO arriba para separar MUEBLES / CUBIERTAS / HERRAJES
+     entre sí. El nombre pesa y mide un poco más que sus componentes para que el
+     título "mande" la jerarquía. Tipografía e interlineado apretados. */
   .item-row td {
     font-weight: 600;
-    font-size: 7pt;
-    padding: 4pt 5pt 2pt;
+    font-size: 6.5pt;
+    padding: 2.5pt 5pt 1pt;
     border-top: 0.5pt solid #CFCFCF;
   }
   .item-desc-general {
     font-weight: 400;
     font-style: italic;
     color: #555;
-    font-size: 6pt;
-    margin-top: 1pt;
+    font-size: 5.5pt;
+    margin-top: 0.5pt;
   }
 
-  /* Detalle (CUERPO INTERIOR / FRENTES PUERTAS / etc) — colgados de su partida
-     con una guía de sangría (línea vertical gris muy clara a la izquierda).
-     Más chicos que el título de la partida. */
+  /* Detalle (CUERPO INTERIOR / FRENTES PUERTAS / etc) — indentados bajo su
+     partida (sin línea vertical), más chicos que el título. */
   .detail-row td {
-    padding: 1pt 5pt;
-    font-size: 6pt;
+    padding: 0.3pt 5pt;
+    font-size: 5.5pt;
     border-bottom: none;
     color: #1A1A1A;
   }
   .detail-row .col-detail-name {
     font-weight: 500;
     text-transform: uppercase;
-    padding-left: 14px;
-    border-left: 0.75pt solid #DCDCDC;
+    padding-left: 18px;
     color: #1A1A1A;
   }
   .detail-row .col-detail-material {

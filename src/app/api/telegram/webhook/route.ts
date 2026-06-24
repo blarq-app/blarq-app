@@ -57,7 +57,9 @@ interface TgUser {
 interface TgMessage {
   message_id: number;
   from?: TgUser;
-  chat: { id: number };
+  // type: "private" en el chat 1:1; "group"/"supergroup" en el grupo
+  // compartido (MJ + JT + JP). Lo usamos para no spamear el grupo.
+  chat: { id: number; type?: string };
   text?: string;
   caption?: string;
   photo?: TgPhotoSize[];
@@ -140,6 +142,22 @@ export async function POST(request: NextRequest) {
   const fromId = String(msg.from.id);
   const fromName = msg.from.first_name ?? msg.from.username ?? "—";
 
+  // Intake compartido: el bot vive en un GRUPO (MJ + JT + JP) además de los
+  // chats 1:1. Con el modo privacidad apagado en BotFather, en el grupo
+  // recibe TODOS los mensajes — también la conversación normal entre los
+  // tres. Para no convertir al bot en un loro que contesta cada mensaje,
+  // en un grupo ignoramos en silencio lo que claramente NO es una
+  // interacción con él: mensajes sin foto que tampoco son un comando (/...).
+  // En privado (1:1) seguimos respondiendo a todo, que ahí sí ayuda guiar.
+  const texto = (msg.text ?? msg.caption ?? "").trim();
+  const isGroup =
+    msg.chat.type === "group" || msg.chat.type === "supergroup";
+  const tieneFoto = !!(msg.photo && msg.photo.length > 0);
+  const esComando = texto.startsWith("/");
+  if (isGroup && !tieneFoto && !esComando) {
+    return NextResponse.json({ ok: true });
+  }
+
   // 2. Allowlist. Si el usuario no está autorizado, le decimos su ID para
   //    que MJ lo pueda agregar (es como se descubre el ID la primera vez).
   if (!allowedIds().has(fromId)) {
@@ -151,7 +169,6 @@ export async function POST(request: NextRequest) {
   }
 
   // Comando de ayuda / start.
-  const texto = (msg.text ?? msg.caption ?? "").trim();
   if (texto === "/start" || texto === "/ayuda" || texto === "/help") {
     await sendMessage(
       chatId,

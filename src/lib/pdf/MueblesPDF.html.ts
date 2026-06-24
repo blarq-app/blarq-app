@@ -18,7 +18,7 @@ const DEFAULT_PAYMENT_TERMS = [
 const OBSERVACIONES = [
   "Plazos de Entrega: 60 días corridos para muebles al momento de ingreso a producción, excepto en caso de fuerza mayor. Las cubiertas Cuarzo y Granito tiene un plazo de 10 días hábiles para instalar, después de su rectificación.",
   "Condiciones de entrega: Los muebles ingresarán una vez puestos los cerámicos de muros con el frague seco, instalación de agua y desagüe. En caso de haber pintura, debe estar seca. Las cubiertas solo se podrán rectificar una vez instalados los muebles base.",
-  "Garantías: Durante la etapa de diseño se podrá revisar minuciosamente todos los detalles del proyecto hasta que haya una absoluta satisfacción por parte del cliente. Luego de aprobado el diseño, todos los cambios tendrán un costo adicional. No nos hacemos responsables por alteraciones en los muebles y cubiertas una vez recibidos a entera satisfacción del cliente. Los artefactos tienen su garantía directamente con la empresa. Si los artefactos son intervenidos, pierden su garantía.",
+  "Garantías: Durante la etapa de diseño se podrá revisar minuciosamente todos los detalles del proyecto hasta que haya una absoluta satisfacción por parte del cliente. Luego de aprobado el diseño, todos los cambios tendrán un costo adicional. No nos hacemos responsables por alteraciones en los muebles y cubiertas una vez recibidos a entera satisfacción del cliente.",
   "Este presupuesto tiene una validez de 10 días corridos.",
   "Estos valores podrán sufrir modificaciones si existen variaciones considerables con las medidas rectificadas en terreno.",
 ];

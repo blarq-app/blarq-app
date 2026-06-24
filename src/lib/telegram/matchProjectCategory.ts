@@ -124,3 +124,84 @@ export async function matchCategory(
   });
   return matchByName(texto, cats);
 }
+
+/** Categoría que además trae el nombre de su madre, para mostrar "Madre > Hija". */
+export interface CategoryMatch extends NamedMatch {
+  parentName?: string | null;
+}
+
+/**
+ * Resuelve categoría/subcategoría a partir del texto que viene DESPUÉS de la
+ * primera barra del mensaje (ej. "muebles herrajes", o "muebles / herrajes"
+ * ya unido). Pensada para el formato "Obra / Categoría / Subcategoría".
+ *
+ * A diferencia de matchCategory (plano), ENTIENDE la jerarquía madre→hija:
+ *
+ *   - Una factura guarda UNA sola categoría, que puede ser la hija
+ *     (ej. "Materiales > Pisos"). Por eso, si el texto menciona a la vez una
+ *     madre y una de sus hijas ("materiales pisos"), elegimos la HIJA — es la
+ *     más específica y es lo que se quiso decir. Si nos quedáramos con las dos
+ *     empatadas, el bot descartaría todo (el enredo que esto viene a arreglar).
+ *
+ *   - Si quedan dos categorías de RAMAS distintas empatadas (ej. "pisos" que
+ *     existe bajo dos madres), es ambiguo de verdad → devolvemos "ambiguo"
+ *     para que el bot pregunte, en vez de adivinar.
+ */
+export async function matchCategoryPath(
+  texto: string
+): Promise<MatchResult<CategoryMatch>> {
+  const cats = await prisma.costCategory.findMany({
+    where: { appliesTo: { in: ["recibida", "both"] } },
+    select: {
+      id: true,
+      name: true,
+      parentId: true,
+      parent: { select: { name: true } },
+    },
+  });
+
+  const tWords = new Set(
+    norm(texto)
+      .split(" ")
+      .filter((w) => w.length >= 3)
+  );
+  if (tWords.size === 0) return { kind: "ninguno", candidates: [] };
+
+  const scored = cats
+    .map((c) => {
+      const words = norm(c.name)
+        .split(" ")
+        .filter((w) => w.length >= 3);
+      const hits = words.filter((w) => tWords.has(w)).length;
+      return { c, score: hits };
+    })
+    .filter((x) => x.score > 0);
+
+  if (scored.length === 0) return { kind: "ninguno", candidates: [] };
+
+  // Preferir la más específica: si una madre matcheó pero también matcheó una
+  // de sus hijas, descartamos a la madre. `madresConHija` junta los ids de las
+  // categorías que tienen alguna hija entre los matches; las sacamos.
+  const madresConHija = new Set(
+    scored.map((s) => s.c.parentId).filter((p): p is string => !!p)
+  );
+  const finalistas = scored
+    .filter((s) => !madresConHija.has(s.c.id))
+    .sort((a, b) => b.score - a.score);
+
+  const toMatch = (s: (typeof finalistas)[number]): CategoryMatch => ({
+    id: s.c.id,
+    name: s.c.name,
+    parentName: s.c.parent?.name ?? null,
+  });
+
+  const best = finalistas[0];
+  const second = finalistas[1];
+  if (!second || best.score > second.score) {
+    return { kind: "exacto", match: toMatch(best), candidates: finalistas.map(toMatch) };
+  }
+  return {
+    kind: "ambiguo",
+    candidates: finalistas.filter((s) => s.score === best.score).map(toMatch),
+  };
+}

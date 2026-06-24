@@ -132,14 +132,17 @@ export async function computeEstadoResultadoCaja(
       continue;
     }
 
-    // Retiro de socio: solo egresos hacia MJ / JT → bloque NO operativo.
-    if (
+    // ¿Salida hacia un socio (MJ / JT)? Por sí sola sería un RETIRO (bloque NO
+    // operativo). PERO si ese egreso está conciliado a una factura, esa parte
+    // es un REEMBOLSO: el socio adelantó de su bolsillo un gasto del negocio
+    // (ej. pagó Easy con su tarjeta para Portofino) y la empresa se lo devuelve.
+    // La parte conciliada es gasto de operación (con la categoría de la factura),
+    // NO un retiro; solo el resto NO conciliado es retiro de verdad. Por eso NO
+    // cortamos acá: dejamos que el egreso a socio pase por la lógica de payments
+    // de abajo, que ya reparte "aplicado a facturas" vs "resto no conciliado".
+    const egresoSocio =
       tipo === "egreso" &&
-      esRetiroSocio(mov.counterpartyRut, mov.counterpartyName, mov.description)
-    ) {
-      add("no", "egreso", "Retiros de socios", m, mov.amount);
-      continue;
-    }
+      esRetiroSocio(mov.counterpartyRut, mov.counterpartyName, mov.description);
 
     if (mov.payments && mov.payments.length > 0) {
       let aplicado = 0;
@@ -152,7 +155,18 @@ export async function computeEstadoResultadoCaja(
         add("op", tipo, label, m, signo * p.amountApplied);
       }
       const resto = Math.abs(mov.amount) - aplicado;
-      if (resto > 1) add("op", tipo, "No asignado", m, signo * resto);
+      if (resto > 1) {
+        // El resto NO conciliado: si la salida es a un socio → retiro (NO
+        // operativo); si no → "No asignado" del bloque operativo (como siempre).
+        if (egresoSocio) add("no", "egreso", "Retiros de socios", m, signo * resto);
+        else add("op", tipo, "No asignado", m, signo * resto);
+      }
+      continue;
+    }
+
+    // Egreso a socio SIN factura conciliada → retiro entero (como hasta ahora).
+    if (egresoSocio) {
+      add("no", "egreso", "Retiros de socios", m, mov.amount);
       continue;
     }
 

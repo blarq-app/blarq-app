@@ -22,7 +22,12 @@ export async function PATCH(
   try {
     await params; // budgetVersionId — no se usa, el id de cada partida basta
     const { items } = (await request.json()) as {
-      items: { id: string; sortOrder: number; chapter?: string }[];
+      items: {
+        id: string;
+        sortOrder: number;
+        chapter?: string;
+        subChapter?: string | null;
+      }[];
     };
     if (!Array.isArray(items)) {
       return NextResponse.json(
@@ -40,6 +45,12 @@ export async function PATCH(
             // chapter solo si vino — un reorden dentro del mismo capítulo no
             // necesita tocarlo, pero mandarlo igual es inocuo (mismo valor).
             ...(it.chapter ? { chapter: it.chapter } : {}),
+            // subChapter (zona) puede ser null = sin zona, así que NO podemos
+            // usar el truco de "solo si es truthy": distinguimos "vino en el
+            // payload" (presente la propiedad) de "no vino". El arrastre lo
+            // manda siempre para que dejar caer una partida en una zona la
+            // guarde en esa zona (y en un área sin zona, la deje sin zona).
+            ...("subChapter" in it ? { subChapter: it.subChapter ?? null } : {}),
           },
         })
       )

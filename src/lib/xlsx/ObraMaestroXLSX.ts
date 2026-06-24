@@ -13,21 +13,17 @@
 import ExcelJS from "exceljs";
 import fs from "node:fs";
 import path from "node:path";
+import { OBRA_CHAPTERS } from "@/lib/utils";
+import { annotateZones } from "@/lib/presupuesto/zones";
 
 const PROFESSIONAL = "JOSE TOMAS LARRAIN";
-
-const CHAPTERS: Record<string, { label: string; index: number }> = {
-  demoliciones: { label: "DEMOLICIONES", index: 1 },
-  reparaciones: { label: "REPARACIONES", index: 2 },
-  electricas: { label: "INSTALACIONES ELECTRICAS", index: 3 },
-  sanitarias: { label: "INSTALACIONES SANITARIAS Y GASFITERIA", index: 4 },
-  terminaciones: { label: "TERMINACIONES", index: 5 },
-  limpieza: { label: "ASEO Y LIMPIEZA", index: 6 },
-};
 
 export interface ObraMaestroXLSXItemInput {
   chapter: string;
   subChapter: string | null;
+  // Orden manual (el que arma MJ arrastrando en la cotizacion). El Excel
+  // respeta ESTE orden, igual que el PDF.
+  sortOrder: number;
   name: string;
   descriptionMaestro: string | null;
   descriptionCliente: string | null;
@@ -88,25 +84,24 @@ export async function buildObraMaestroXLSX(
 ): Promise<Buffer> {
   const { project, budget, maestro, items } = data;
 
-  // Ordenar items por subChapter (los sin sub-chapter primero), despues
-  // por nombre. Espejo del PDF.
-  const sortItemsBySubChapter = (
-    a: ObraMaestroXLSXItemInput,
-    b: ObraMaestroXLSXItemInput
-  ) => {
-    const aSub = a.subChapter ?? "";
-    const bSub = b.subChapter ?? "";
-    if (aSub !== bSub) return aSub.localeCompare(bSub, "es");
-    return a.name.localeCompare(b.name, "es");
-  };
-
-  const chapters = Object.entries(CHAPTERS)
+  // Capitulos en el MISMO orden y numeracion que la cotizacion (OBRA_CHAPTERS
+  // con reflow saltando vacios) y nombre formal (pdfLabel). Partidas en orden
+  // de sortOrder (el orden manual de MJ), NO alfabetico. Espejo del PDF.
+  const chapters = (
+    Object.entries(OBRA_CHAPTERS) as [
+      string,
+      { label: string; pdfLabel: string; index: number }
+    ][]
+  )
     .map(([key, ch]) => ({
       key,
-      ...ch,
-      items: items.filter((i) => i.chapter === key).sort(sortItemsBySubChapter),
+      label: ch.pdfLabel,
+      items: items
+        .filter((i) => i.chapter === key)
+        .sort((a, b) => a.sortOrder - b.sortOrder),
     }))
-    .filter((ch) => ch.items.length > 0);
+    .filter((ch) => ch.items.length > 0)
+    .map((ch, i) => ({ ...ch, index: i + 1 }));
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "BLARQ";
@@ -238,12 +233,15 @@ export async function buildObraMaestroXLSX(
     chRow.height = 16;
     currentRow++;
 
-    let prevSub: string | null | undefined = undefined;
-    ch.items.forEach((it, idx) => {
-      // Fila separadora de sub-chapter si cambio
-      if (it.subChapter && it.subChapter !== prevSub) {
+    // Zona DERIVADA por posicion (helper compartido): una partida sin zona
+    // hereda la de arriba. El encabezado va en la primera partida de cada zona.
+    const zoneRows = annotateZones(ch.items.map((i) => ({ ...i, total: 0 }))).rows;
+    zoneRows.forEach((row, idx) => {
+      const it = row.item;
+      // Fila separadora de sub-chapter al empezar una zona
+      if (row.isZoneStart) {
         const subRow = ws.getRow(currentRow);
-        subRow.getCell(2).value = it.subChapter;
+        subRow.getCell(2).value = row.zone;
         for (let c = 1; c <= 7; c++) {
           const cell = subRow.getCell(c);
           cell.font = { name: "Calibri", size: 9, italic: true, bold: true, color: { argb: "FF404040" } };
@@ -254,7 +252,6 @@ export async function buildObraMaestroXLSX(
         subRow.height = 15;
         currentRow++;
       }
-      prevSub = it.subChapter;
 
       // Fila de item
       const itRow = ws.getRow(currentRow);

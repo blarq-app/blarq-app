@@ -11,25 +11,21 @@
 import fs from "node:fs";
 import path from "node:path";
 import { sanitizeRichTextHtml } from "@/lib/richText";
+import { OBRA_CHAPTERS } from "@/lib/utils";
+import { annotateZones } from "@/lib/presupuesto/zones";
 
 const PROFESSIONAL = "JOSÉ TOMÁS LARRAÍN";
-
-const CHAPTERS: Record<string, { label: string; index: number }> = {
-  demoliciones: { label: "DEMOLICIONES", index: 1 },
-  reparaciones: { label: "REPARACIONES", index: 2 },
-  electricas: { label: "INSTALACIONES ELECTRICAS", index: 3 },
-  sanitarias: { label: "INSTALACIONES SANITARIAS Y GASFITERIA", index: 4 },
-  terminaciones: { label: "TERMINACIONES", index: 5 },
-  limpieza: { label: "ASEO Y LIMPIEZA", index: 6 },
-};
 
 export interface ObraMaestroItemInput {
   chapter: string;
   // Sub-chapter opcional (ej. "COCINA", "BANO") para agrupar partidas
-  // dentro del capitulo. Si esta presente, se renderiza una fila
-  // separadora antes del primer item con ese subChapter. No hay
+  // dentro del capitulo. La zona se DERIVA por posicion (helper compartido
+  // annotateZones): una partida sin zona hereda la de arriba. No hay
   // subtotales por zona porque el maestro no tiene precios.
   subChapter: string | null;
+  // Orden manual (el que arma MJ arrastrando en la cotizacion). El maestro
+  // respeta ESTE orden, igual que la cotizacion y el PDF al cliente.
+  sortOrder: number;
   name: string;
   // Para el maestro mostramos la descriptionMaestro (instrucciones de
   // ejecucion) cuando existe. Si no, cae a descriptionCliente.
@@ -200,26 +196,24 @@ const CSS = `
 export function renderObraMaestroHTML(data: ObraMaestroHTMLInput): string {
   const { project, budget, maestro, items } = data;
 
-  // Ordenar items dentro del chapter por subChapter (los sin sub-chapter
-  // primero, despues agrupados alfabeticamente), despues por nombre. Espejo
-  // del orden del editor y del PDF de obra al cliente.
-  const sortItemsBySubChapter = (
-    a: ObraMaestroItemInput,
-    b: ObraMaestroItemInput
-  ) => {
-    const aSub = a.subChapter ?? "";
-    const bSub = b.subChapter ?? "";
-    if (aSub !== bSub) return aSub.localeCompare(bSub, "es");
-    return a.name.localeCompare(b.name, "es");
-  };
-
-  const chapters = Object.entries(CHAPTERS)
+  // Capitulos en el MISMO orden y numeracion que la cotizacion (OBRA_CHAPTERS
+  // con reflow saltando vacios) y con el nombre formal (pdfLabel). Las partidas
+  // en orden de sortOrder (el orden manual de MJ), NO alfabetico.
+  const chapters = (
+    Object.entries(OBRA_CHAPTERS) as [
+      string,
+      { label: string; pdfLabel: string; index: number }
+    ][]
+  )
     .map(([key, ch]) => ({
       key,
-      ...ch,
-      items: items.filter((i) => i.chapter === key).sort(sortItemsBySubChapter),
+      label: ch.pdfLabel,
+      items: items
+        .filter((i) => i.chapter === key)
+        .sort((a, b) => a.sortOrder - b.sortOrder),
     }))
-    .filter((ch) => ch.items.length > 0);
+    .filter((ch) => ch.items.length > 0)
+    .map((ch, i) => ({ ...ch, index: i + 1 }));
 
   const logoUri = getLogoDataUri();
   const dateStr = fmtDate(budget.date);
@@ -240,18 +234,17 @@ export function renderObraMaestroHTML(data: ObraMaestroHTMLInput): string {
           <td class="col-pu"></td>
           <td class="col-total"></td>
         </tr>
-        ${ch.items
-          .map((item, idx) => {
-            // Si cambia el subChapter respecto al item anterior, anteponemos
-            // una fila separadora gris clara con el nombre del sub-chapter.
-            const prev = idx > 0 ? ch.items[idx - 1] : null;
-            const showSub =
-              item.subChapter && (!prev || prev.subChapter !== item.subChapter);
+        ${annotateZones(ch.items.map((i) => ({ ...i, total: 0 })))
+          .rows
+          .map((row, idx) => {
+            const item = row.item;
+            // Zona derivada por posicion: el encabezado va en la primera
+            // partida de cada zona (gris claro, con el nombre de la zona).
             return `
           ${
-            showSub
+            row.isZoneStart
               ? `<tr class="sub-chapter-row">
-                  <td colspan="7">${esc(item.subChapter!)}</td>
+                  <td colspan="7">${esc(row.zone!)}</td>
                 </tr>`
               : ""
           }

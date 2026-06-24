@@ -71,6 +71,7 @@ export async function GET(
     const itemsInput = budget.obraItems.map((it) => ({
       chapter: it.chapter,
       subChapter: it.subChapter,
+      sortOrder: it.sortOrder,
       name: it.name,
       descriptionMaestro: it.descriptionMaestro,
       descriptionCliente: it.descriptionCliente,

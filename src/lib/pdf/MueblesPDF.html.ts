@@ -330,6 +330,15 @@ const CSS = `
     font-size: 7.5pt;
     white-space: nowrap;
   }
+  /* Nota bajo el monto: "valor IVA incluido", chica y discreta. */
+  .totals .t-note {
+    text-align: right;
+    font-weight: 400;
+    font-style: italic;
+    font-size: 5.5pt;
+    color: #555;
+    margin-top: 0.5pt;
+  }
 
   /* ── Section titles ─────────────────────────────────────────── */
   .section-title {
@@ -596,7 +605,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
     <table class="totals">
       <tr class="total">
         <td class="t-label">COSTO TOTAL MUEBLES</td>
-        <td class="t-val">${fmtCLP(totalIva)}</td>
+        <td class="t-val">${fmtCLP(totalIva)}<div class="t-note">Valor IVA incluido</div></td>
       </tr>
     </table>
   </div>

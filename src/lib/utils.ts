@@ -90,15 +90,35 @@ export function compareCatalogCategories(a: string, b: string): number {
 // Algunos proyectos no usan todos los capítulos (ej: una remodelación
 // liviana sin obra gruesa) — eso está bien, no es obligatorio que el
 // presupuesto tenga partidas en todos.
+//
+// `label`    → nombre corto que muestra el EDITOR en pantalla ("Eléctricas").
+// `pdfLabel` → nombre formal, en mayúsculas, que va al PDF del cliente
+//              ("INSTALACIONES ELECTRICAS"). Antes el PDF tenía su PROPIA lista
+//              de capítulos (con otro orden, otros números y sin "Obra gruesa"
+//              ni "Adicionales"), por eso el PDF y el editor mostraban capítulos
+//              distintos. Ahora ambos salen de acá: mismo orden, misma
+//              numeración (reflow saltando los vacíos), y el PDF usa pdfLabel.
 export const OBRA_CHAPTERS = {
-  demoliciones: { label: "Demoliciones", index: 1 },
-  obra_gruesa: { label: "Obra gruesa", index: 2 },
-  reparaciones: { label: "Reparaciones", index: 3 },
-  sanitarias: { label: "Sanitarias", index: 4 },
-  electricas: { label: "Eléctricas", index: 5 },
-  terminaciones: { label: "Terminaciones", index: 6 },
-  limpieza: { label: "Limpieza", index: 7 },
-  adicionales: { label: "Adicionales", index: 8 },
+  demoliciones: { label: "Demoliciones", pdfLabel: "DEMOLICIONES", index: 1 },
+  obra_gruesa: { label: "Obra gruesa", pdfLabel: "OBRA GRUESA", index: 2 },
+  reparaciones: { label: "Reparaciones", pdfLabel: "REPARACIONES", index: 3 },
+  sanitarias: {
+    label: "Sanitarias",
+    pdfLabel: "INSTALACIONES SANITARIAS Y GASFITERIA",
+    index: 4,
+  },
+  electricas: {
+    label: "Eléctricas",
+    pdfLabel: "INSTALACIONES ELECTRICAS",
+    index: 5,
+  },
+  terminaciones: {
+    label: "Terminaciones",
+    pdfLabel: "TERMINACIONES",
+    index: 6,
+  },
+  limpieza: { label: "Limpieza", pdfLabel: "LIMPIEZA Y ASEO", index: 7 },
+  adicionales: { label: "Adicionales", pdfLabel: "ADICIONALES", index: 8 },
 } as const;
 
 export type ObraChapter = keyof typeof OBRA_CHAPTERS;

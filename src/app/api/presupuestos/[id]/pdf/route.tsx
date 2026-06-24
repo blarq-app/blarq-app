@@ -179,7 +179,14 @@ export async function GET(
       headerTemplate: useNewFormat ? undefined : "<div></div>",
       footerTemplate: useNewFormat ? undefined : footer,
       margin: useNewFormat
-        ? { top: "10mm", bottom: "10mm", left: "12mm", right: "12mm" }
+        ? {
+            top: "10mm",
+            // Muebles: margen inferior más chico para que el COSTO TOTAL entre
+            // en la misma página que el listado (no salte a la hoja 2).
+            bottom: budget.type === "muebles" ? "6mm" : "10mm",
+            left: "12mm",
+            right: "12mm",
+          }
         : { top: "14mm", bottom: "16mm", left: "15mm", right: "15mm" },
     });
 

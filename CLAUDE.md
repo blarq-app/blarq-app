@@ -121,6 +121,23 @@ Reglas:
   marcadores para confirmar cuál es cuál.
 - Tocar la base viva (`ep-shy-morning`) se confirma con MJ (§4.7), incluso para leer si hay duda.
 
+### 4.10 Cómo MJ aprueba un cambio — NO lee código
+
+MJ no es desarrolladora y NO revisa diffs en GitHub: para ella el código es ilegible. Mandarla a
+"revisá el PR" o "aprobá el código en GitHub" NO sirve. Para que MJ pueda aprobar un cambio, hay
+que mostrarle el RESULTADO, no el código:
+
+- **Cambios visuales (UI, PDF, layout, estilos)**: mostrale el resultado renderizado — un
+  screenshot, el PDF real (idealmente generado con SUS datos reales de prod), o un link de
+  preview de Vercel navegable. Un antes/después ayuda.
+- **Cambios de comportamiento (no visuales: un bot, una regla, un cálculo)**: no hay "dibujo" —
+  decile en una línea QUÉ probar para confirmarlo, o probalo vos y mostrale el resultado. Nunca
+  le pidas que lo deduzca del código.
+- **Nunca** "andá a GitHub y revisá el diff" ni "aprobá el PR #N" a secas. Si pedís aprobación,
+  viene SIEMPRE acompañada de la visualización o de la prueba concreta.
+- OJO: el preview de Vercel puede usar otra base que la viva (datos distintos) → para cambios que
+  dependen de datos puntuales, mejor un screenshot/render con los datos reales de prod.
+
 ## 5. Stack y workflow técnico
 
 Detalle completo en [docs/architecture.md](docs/architecture.md). Resumen:

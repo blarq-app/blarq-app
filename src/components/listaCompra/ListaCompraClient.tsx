@@ -17,6 +17,7 @@ export type ComputedRow = {
   unitPrice: number | null;
   priceSource: string | null;
   referenceLink: string | null;
+  isProvision: boolean;
 };
 
 type Budget = { id: string; version: string; status: string };
@@ -204,8 +205,10 @@ export default function ListaCompraClient({
 
       {itemsWithoutCatalog > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-900">
-          ⚠ {itemsWithoutCatalog} partidas del presupuesto no están vinculadas
-          al catálogo — sus materiales no se incluyen en esta lista.
+          ⚠ {itemsWithoutCatalog} partida{itemsWithoutCatalog > 1 ? "s" : ""} tiene
+          {itemsWithoutCatalog > 1 ? "n" : ""} materiales presupuestados pero todavía
+          sin detallar — no aparecen en esta lista. Detallá su desglose en el
+          presupuesto para que se incluyan.
         </div>
       )}
 
@@ -350,6 +353,11 @@ export default function ListaCompraClient({
                       {i.source === "excess" && (
                         <span className="text-[10px] text-amber-700">
                           excedente (ya no en presupuesto)
+                        </span>
+                      )}
+                      {i.isProvision && (
+                        <span className="text-[10px] uppercase tracking-wide text-gray-500 border border-gray-300 rounded-full px-1.5">
+                          provisión
                         </span>
                       )}
                       {i.partidas.length > 0 && (

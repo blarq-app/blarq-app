@@ -247,14 +247,14 @@ const CSS = `
   }
 
   /* Fila ítem (1.1 MUEBLES, 1.2 CUBIERTA, …) — cada partida arranca un bloque.
-     Línea fina GRIS CLARO arriba para separar MUEBLES / CUBIERTAS / HERRAJES
-     entre sí. El nombre pesa y mide un poco más que sus componentes para que el
-     título "mande" la jerarquía. Tipografía e interlineado apretados. */
+     Separación entre partidas = aire arriba (padding-top) + el título en negrita
+     más grande. NO lleva línea arriba (esa "sobraba" debajo del desglose previo).
+     La única línea de la partida es la tenue de abajo del título (border-bottom
+     heredado), que separa el título de su desglose. */
   .item-row td {
     font-weight: 600;
     font-size: 6.5pt;
-    padding: 2.5pt 5pt 1pt;
-    border-top: 0.5pt solid #CFCFCF;
+    padding: 3pt 5pt 1pt;
   }
   .item-desc-general {
     font-weight: 400;
@@ -271,6 +271,11 @@ const CSS = `
     font-size: 5.5pt;
     border-bottom: none;
     color: #1A1A1A;
+  }
+  /* El primer componente arranca con un poco de aire para que la línea de abajo
+     del título no quede chocando con el desglose. */
+  .detail-row-first td {
+    padding-top: 2pt;
   }
   .detail-row .col-detail-name {
     font-weight: 500;
@@ -493,8 +498,8 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
         </tr>
         ${item.details
           .map(
-            (d) => `
-          <tr class="detail-row">
+            (d, di) => `
+          <tr class="detail-row${di === 0 ? " detail-row-first" : ""}">
             <td></td>
             <td class="col-detail-name" colspan="3">
               <span style="display:inline-block;min-width:120px;">${esc(d.name)}</span>

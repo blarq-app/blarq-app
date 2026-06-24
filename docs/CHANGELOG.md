@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-06-22 — Catálogo: costos "para nosotros" desde cotización MK Paseo del Sena
+
+- **Carga de datos en prod (no es cambio de código).** Desde la cotización MK 2333366 "Paseo del Sena" (Veronica Villarrael, proy 159, emitida 22/06/2026) se cargó el `realCostBlarq` (costo BLARQ, **con IVA = neto × 1,19**) de 27 productos del catálogo de artefactos. El total neto de la cotización ($2.572.373) reconcilió exacto contra la suma de los conjuntos.
+- **WC y muebles se suman.** Se compran desglosados, así que el costo del artefacto = suma de sus componentes (WC = vaso + estanque + asiento + manguito + flexible + llave; mueble = base + lavamanos + sifón + desagüe + goma). El resto (griferías, columnas, accesorios, mamparas, desagües) mapea 1:1.
+- **25 actualizados + 2 creados.** 11 ya tenían costo y se sobreescribió al precio más nuevo (notables: WC Atenas muro $158.291→$147.266, Columna Stellar brushed $140.090→$175.763); 14 estaban vacíos y se rellenaron. Se crearon Mueble Albany 700 ($282.939) y Columna ducha Trend 25cm gun grey ($296.793), ambos sin foto ni link.
+- **2 matches dudosos aplicados con OK de MJ** (a verificar a mano): "Mampara Micenas recep 160 negro mate" → entrada "Mampara corredera 160 cm"; "Grifería lavamanos Stellar 12cm" → "Grifería lavamanos Stellar brushed" (podría ser la de 22cm). Script idempotente: `scripts/set-catalogo-costos-mk-sena.ts`.
+
 ## 2026-06-22 — Cuadro Resumen interactivo + Me paso a Sueldos (evolución #183→#197)
 
 - **Cuadro Resumen interactivo** (`CuadroResumenAvance.tsx`, reemplaza CuadroResumen + tarjetas viejas): por concepto muestra acordado vigente, cobros AGRUPADOS por fecha (un avance = una fila), TOTAL PAGOS, y una fila **AVANCE editable** (% OBJETIVO al que llegar; 100% = cobrar todo el saldo) que calcula el monto a pedir y recalcula SALDO. Es el cuadro que se entrega al cliente. **Se guarda** por obra (`Project.avanceObjetivos` Json, PUT `/api/proyectos/[id]/avance-objetivos`, debounce). Formato 3-col compacto.

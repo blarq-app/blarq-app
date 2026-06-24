@@ -32,7 +32,9 @@ import { readInvoicePhoto } from "@/lib/telegram/readInvoicePhoto";
 import {
   matchProject,
   matchCategory,
+  matchCategoryPath,
   type NamedMatch,
+  type CategoryMatch,
 } from "@/lib/telegram/matchProjectCategory";
 import {
   findInvoiceByRutFolio,
@@ -172,7 +174,7 @@ export async function POST(request: NextRequest) {
   if (texto === "/start" || texto === "/ayuda" || texto === "/help") {
     await sendMessage(
       chatId,
-      "Mandame la *foto de la factura* y escribí el *nombre de la obra* como descripción de la foto.\n\nEjemplo: foto + `Portofino materiales`.\n\nSi anotaste la obra *a mano* sobre el papel, podés mandar la foto sin escribir nada: la leo del papel y te pido que confirmes.\n\nLeo el proveedor y el folio de la foto, y le asigno la obra a esa factura cuando llegue del SII."
+      "Mandame la *foto de la factura* y escribí el *nombre de la obra* como descripción de la foto.\n\nEjemplo simple: foto + `Portofino`.\n\nPara precisar la *categoría* (y subcategoría), separá con barras:\n`Obra / Categoría / Subcategoría`\nEjemplos:\n`JNC / muebles / herrajes`\n`Portofino / materiales / pisos`\nAsí no se confunde la categoría con una obra de nombre parecido.\n\nSi anotaste la obra *a mano* sobre el papel, podés mandar la foto sin escribir nada: la leo del papel y te pido que confirmes.\n\nLeo el proveedor y el folio de la foto, y le asigno la obra a esa factura cuando llegue del SII."
     );
     return NextResponse.json({ ok: true });
   }
@@ -288,13 +290,23 @@ async function asignarDesdeTexto(
   const provLabel = datos.businessName ?? datos.rutIssuer!;
   const folioLabel = datos.folioNumber ? `folio ${datos.folioNumber}` : "folio ?";
 
-  const proj = await matchProject(texto);
+  // Formato opcional con barras: "Obra / Categoría / Subcategoría".
+  // La obra se busca SOLO en la parte ANTES de la primera barra, así una
+  // palabra de categoría (ej. "muebles") no choca con una OBRA parecida (ej.
+  // "Muebles Cruz del Sur"). Sin barras → comportamiento de siempre: todo el
+  // texto va tanto a obra como a categoría.
+  const partes = texto.split("/").map((p) => p.trim()).filter(Boolean);
+  const usaBarras = partes.length >= 2;
+  const obraText = usaBarras ? partes[0] : texto;
+  const catText = usaBarras ? partes.slice(1).join(" ") : texto;
+
+  const proj = await matchProject(obraText);
   if (proj.kind === "ninguno") {
     await sendMessage(
       chatId,
       `Leí la factura (${provLabel}, ${formatMonto(
         datos.totalAmount
-      )}), pero no reconocí ninguna obra en "${texto}".\n\nObras disponibles:\n${listarOpciones(
+      )}), pero no reconocí ninguna obra en "${obraText}".\n\nObras disponibles:\n${listarOpciones(
         proj.candidates
       )}\n\nReenviá la foto con el nombre de la obra.`
     );
@@ -303,16 +315,31 @@ async function asignarDesdeTexto(
   if (proj.kind === "ambiguo" || !proj.match) {
     await sendMessage(
       chatId,
-      `No estoy seguro de a qué obra te referís con "${texto}". ¿Cuál de estas?\n${listarOpciones(
+      `No estoy seguro de a qué obra te referís con "${obraText}". ¿Cuál de estas?\n${listarOpciones(
         proj.candidates
-      )}\n\nReenviá la foto con el nombre más preciso.`
+      )}\n\nReenviá la foto con el nombre más preciso (podés separar con barras: \`Obra / Categoría\`).`
     );
     return;
   }
   const project = proj.match;
 
-  const cat = await matchCategory(texto);
-  const category = cat.kind === "exacto" ? cat.match ?? null : null;
+  // Categoría/subcategoría. Con barras usamos el matcher jerárquico sobre la
+  // parte de después de la primera barra; sin barras, el plano de siempre.
+  let category: CategoryMatch | null = null;
+  let catNote = "";
+  if (usaBarras) {
+    const cat = await matchCategoryPath(catText);
+    if (cat.kind === "exacto") {
+      category = cat.match ?? null;
+    } else if (catText) {
+      // Pidió categoría explícita pero no quedó clara: no bloqueamos la obra,
+      // pero avisamos para que la complete a mano si quiere.
+      catNote = `\nLa categoría "${catText}" no la reconocí clara, la dejé sin categoría.`;
+    }
+  } else {
+    const cat = await matchCategory(texto);
+    category = cat.kind === "exacto" ? cat.match ?? null : null;
+  }
 
   const existing = await findInvoiceByRutFolio(
     datos.rutIssuer!,
@@ -321,7 +348,10 @@ async function asignarDesdeTexto(
     datos.issueDate
   );
 
-  const catLabel = category ? `, ${category.name}` : "";
+  // Etiqueta de categoría para el mensaje: "Madre > Hija" si es subcategoría.
+  const catLabel = category
+    ? `, ${category.parentName ? `${category.parentName} > ` : ""}${category.name}`
+    : "";
   // El monto a mostrar: el de la factura real si existe, si no el leído de
   // la foto (arregla el caso donde la foto no traía total claro).
   const monto = existing ? existing.totalAmount : datos.totalAmount;
@@ -343,7 +373,7 @@ async function asignarDesdeTexto(
         chatId,
         `Listo. ${provLabel}, ${folioLabel}, ${formatMonto(
           monto
-        )} → *${project.name}*${catLabel}.`
+        )} → *${project.name}*${catLabel}.${catNote}`
       );
     }
     return;
@@ -365,7 +395,7 @@ async function asignarDesdeTexto(
     chatId,
     `Anotado. ${provLabel}, ${folioLabel}, ${formatMonto(
       monto
-    )} → *${project.name}*${catLabel}.\n\nLa factura todavía no llegó del SII; se la asigno sola cuando aparezca.`
+    )} → *${project.name}*${catLabel}.${catNote}\n\nLa factura todavía no llegó del SII; se la asigno sola cuando aparezca.`
   );
 }
 

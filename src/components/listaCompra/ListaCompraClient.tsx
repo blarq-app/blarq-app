@@ -17,6 +17,7 @@ export type ComputedRow = {
   unitPrice: number | null;
   priceSource: string | null;
   referenceLink: string | null;
+  isProvision: boolean;
 };
 
 type Budget = { id: string; version: string; status: string };
@@ -350,6 +351,11 @@ export default function ListaCompraClient({
                       {i.source === "excess" && (
                         <span className="text-[10px] text-amber-700">
                           excedente (ya no en presupuesto)
+                        </span>
+                      )}
+                      {i.isProvision && (
+                        <span className="text-[10px] uppercase tracking-wide text-gray-500 border border-gray-300 rounded-full px-1.5">
+                          provisión
                         </span>
                       )}
                       {i.partidas.length > 0 && (

@@ -68,12 +68,15 @@ export default async function ListaCompraPage({
       totalBudgeted: number;
       partidas: Set<string>;
       referenceLink: string | null;
+      isProvision: boolean;
     };
     const agg = new Map<string, Agg>();
 
     for (const obraItem of full?.obraItems || []) {
-      // Excluir provisiones — no son materiales que se compran
-      const comps = obraItem.components.filter((c) => !c.material?.isProvision);
+      // Las provisiones (porcelanato, palmeta) SÍ se muestran en la lista —
+      // MJ las considera material a ver/comprar. Se marcan con isProvision para
+      // distinguirlas de la ferretería normal (etiqueta "provisión" en la UI).
+      const comps = obraItem.components;
       for (const c of comps) {
         const qty = (c.quantity || 0) * (obraItem.quantity || 0);
         if (qty <= 0) continue;
@@ -98,6 +101,7 @@ export default async function ListaCompraPage({
             totalBudgeted: budgeted,
             partidas: new Set([obraItem.name]),
             referenceLink: c.material?.referenceLink || null,
+            isProvision: !!c.material?.isProvision,
           });
         }
       }
@@ -137,6 +141,7 @@ export default async function ListaCompraPage({
         unitPrice,
         priceSource: unitPrice ? "presupuesto" : null,
         referenceLink: a.referenceLink,
+        isProvision: a.isProvision,
       });
       trackingByKey.delete(a.key);
     }
@@ -159,6 +164,7 @@ export default async function ListaCompraPage({
         unitPrice: null,
         priceSource: null,
         referenceLink: null,
+        isProvision: false,
       });
     }
 

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { formatCLP, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import NuevoEPButton from "@/components/estadosPago/NuevoEPButton";
+import EliminarEPButton from "@/components/estadosPago/EliminarEPButton";
 
 export default async function EstadosPagoPage({
   params,
@@ -198,12 +199,19 @@ export default async function EstadosPagoPage({
                     {formatCLP(amountById.get(ep.id) || 0)}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/proyectos/${project.id}/estados-pago/${ep.id}`}
-                      className="text-sm text-blue-600 hover:underline"
-                    >
-                      Abrir
-                    </Link>
+                    <div className="flex items-center justify-end gap-3">
+                      <Link
+                        href={`/proyectos/${project.id}/estados-pago/${ep.id}`}
+                        className="text-sm text-blue-600 hover:underline"
+                      >
+                        Abrir
+                      </Link>
+                      <EliminarEPButton
+                        epId={ep.id}
+                        epNumber={ep.number}
+                        status={ep.status}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}

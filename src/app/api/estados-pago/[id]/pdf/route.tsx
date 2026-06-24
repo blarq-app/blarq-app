@@ -69,6 +69,7 @@ export async function GET(
       return {
         chapter: i.chapter,
         subChapter: i.subChapter,
+        sortOrder: i.sortOrder,
         itemNumber: i.itemNumber,
         name: i.name,
         descriptionMaestro: i.descriptionMaestro,

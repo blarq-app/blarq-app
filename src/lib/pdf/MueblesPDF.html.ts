@@ -297,11 +297,13 @@ const CSS = `
   /* ── Totales — sutil, línea top/bottom, sin marco ───────────── */
   .totals-wrap {
     width: 100%;
-    margin-top: 6pt;
+    margin-top: 2pt;
     display: flex;
     justify-content: flex-end;
     /* Que el bloque del total no se parta entre páginas (la nota "Valor IVA
-       incluido" se quedaba sola en la hoja siguiente). */
+       incluido" se quedaba sola en la hoja siguiente). Margen y padding
+       reducidos para que el bloque (total + nota) entre en la misma página que
+       el listado y no salte a la hoja 2. */
     break-inside: avoid;
     page-break-inside: avoid;
   }
@@ -318,7 +320,7 @@ const CSS = `
     page-break-inside: avoid;
   }
   .totals td {
-    padding: 2.5pt 6pt;
+    padding: 1.5pt 6pt;
     background: transparent;
     color: #1A1A1A;
     font-variant-numeric: tabular-nums;
@@ -347,7 +349,7 @@ const CSS = `
     font-style: italic;
     font-size: 5.5pt;
     color: #555;
-    margin-top: 0.5pt;
+    margin-top: 0;
   }
 
   /* ── Section titles ─────────────────────────────────────────── */

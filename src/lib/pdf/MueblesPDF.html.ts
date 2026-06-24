@@ -536,7 +536,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
     <div class="strip-right">
       <div class="field"><div class="label">Version:</div></div>
       <h1 class="doc-title">${esc(budget.version)} COTIZACION</h1>
-      <div class="doc-subtitle">MUEBLES Y ARTEFACTOS</div>
+      <div class="doc-subtitle">MUEBLES</div>
       <div class="field">
         <div class="label">Profesional a cargo:</div>
         <div class="value">${esc(PROFESSIONAL)}</div>

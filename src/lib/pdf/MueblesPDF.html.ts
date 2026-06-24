@@ -254,7 +254,7 @@ const CSS = `
   .item-row td {
     font-weight: 600;
     font-size: 6.5pt;
-    padding: 3pt 5pt 1pt;
+    padding: 2pt 5pt 1pt;
   }
   .item-desc-general {
     font-weight: 400;

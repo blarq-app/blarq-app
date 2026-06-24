@@ -48,6 +48,13 @@ export default function MaterialSearch({
   });
   const [saving, setSaving] = useState(false);
 
+  // Alta desde link: trae nombre + precio del producto al pegar el link.
+  // - extracting: hay una lectura en curso ("Buscando…").
+  // - extractNote: aviso discreto del resultado (sin datos / error). Si la
+  //   lectura va bien no mostramos nada: los campos quedan rellenos y listos.
+  const [extracting, setExtracting] = useState(false);
+  const [extractNote, setExtractNote] = useState<string | null>(null);
+
   // Edit material state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editMat, setEditMat] = useState({
@@ -166,11 +173,58 @@ export default function MaterialSearch({
       const created = await res.json();
       setMaterials([...materials, created]);
       setNewMat({ name: "", unit: "UN", netPrice: 0, referenceLink: "" });
+      setExtractNote(null);
       setAddingCategory(null);
     } catch {
       alert("Error al crear material");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Lee el producto desde el link pegado y rellena nombre + precio del form
+  // de alta. No pisa lo que MJ ya escribió: solo completa lo que esté vacío,
+  // y todo queda editable para que valide antes de guardar. Si no se pudo
+  // leer, deja un aviso discreto y MJ completa a mano (nunca inventa precio).
+  async function extractFromLink() {
+    const link = newMat.referenceLink.trim();
+    if (!link) {
+      setExtractNote("Pegá un link primero.");
+      return;
+    }
+    setExtracting(true);
+    setExtractNote(null);
+    try {
+      const res = await fetch(
+        `/api/catalogo/materiales/extract?url=${encodeURIComponent(link)}`
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setExtractNote(data.error || "No se pudo leer, completá a mano.");
+        return;
+      }
+      setNewMat((prev) => ({
+        ...prev,
+        // Nombre en MAYÚSCULA para igualar la convención del catálogo. Queda
+        // editable: si MJ ya había escrito algo, no lo pisamos.
+        name:
+          !prev.name.trim() && data.name
+            ? String(data.name).toUpperCase()
+            : prev.name,
+        netPrice: !prev.netPrice && data.netPrice ? data.netPrice : prev.netPrice,
+      }));
+      // Si vino precio pero no nombre (o viceversa), avisamos qué falta.
+      if (!data.name && data.netPrice === null) {
+        setExtractNote("No se pudo leer, completá a mano.");
+      } else if (!data.name) {
+        setExtractNote("Traje el precio; el nombre completalo a mano.");
+      } else if (data.netPrice === null) {
+        setExtractNote("Traje el nombre; el precio completalo a mano.");
+      }
+    } catch {
+      setExtractNote("No se pudo leer, completá a mano.");
+    } finally {
+      setExtracting(false);
     }
   }
 
@@ -413,6 +467,7 @@ export default function MaterialSearch({
                   netPrice: 0,
                   referenceLink: "",
                 });
+                setExtractNote(null);
               }}
               className="text-sm text-gray-600 hover:text-gray-900 font-medium"
             >
@@ -665,11 +720,53 @@ export default function MaterialSearch({
             </table>
           )}
 
-          {/* Add material form */}
+          {/* Add material form. Pensado "link primero": MJ pega el link del
+              producto (Sodimac / Easy / mK), aprieta "Traer del link" y se
+              rellenan nombre y precio. Todo queda editable; si no se pudo leer
+              completa a mano. */}
           {addingCategory === group.category && (
-            <div className="p-4 border-t border-gray-100 bg-blue-50">
+            <div className="p-4 border-t border-gray-100 bg-blue-50 space-y-3">
+              {/* Fila 1: link + traer del link */}
+              <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-600 mb-1">
+                    Link del producto
+                  </label>
+                  <input
+                    type="url"
+                    value={newMat.referenceLink}
+                    onChange={(e) => {
+                      setNewMat({ ...newMat, referenceLink: e.target.value });
+                      setExtractNote(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        extractFromLink();
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
+                    placeholder="https://mk.cl/... · https://sodimac.cl/... (opcional)"
+                    autoFocus
+                  />
+                </div>
+                <button
+                  onClick={extractFromLink}
+                  disabled={extracting || !newMat.referenceLink.trim()}
+                  className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 disabled:opacity-50 whitespace-nowrap"
+                  title="Leer nombre y precio desde el link"
+                >
+                  {extracting ? "Buscando…" : "Traer del link"}
+                </button>
+              </div>
+
+              {extractNote && (
+                <p className="text-xs text-gray-500">{extractNote}</p>
+              )}
+
+              {/* Fila 2: nombre + unidad + precio + acciones */}
               <div className="grid grid-cols-12 gap-2 items-end">
-                <div className="col-span-4">
+                <div className="col-span-5">
                   <label className="block text-xs text-gray-600 mb-1">
                     Nombre
                   </label>
@@ -681,10 +778,9 @@ export default function MaterialSearch({
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
                     placeholder="Nombre del material"
-                    autoFocus
                   />
                 </div>
-                <div className="col-span-1">
+                <div className="col-span-2">
                   <label className="block text-xs text-gray-600 mb-1">
                     Unidad
                   </label>
@@ -716,25 +812,11 @@ export default function MaterialSearch({
                         netPrice: parseFloat(e.target.value) || 0,
                       })
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-right tabular-nums focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
                     placeholder="$0"
                   />
                 </div>
-                <div className="col-span-3">
-                  <label className="block text-xs text-gray-600 mb-1">
-                    Link referencia
-                  </label>
-                  <input
-                    type="url"
-                    value={newMat.referenceLink}
-                    onChange={(e) =>
-                      setNewMat({ ...newMat, referenceLink: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
-                    placeholder="https://sodimac.cl/..."
-                  />
-                </div>
-                <div className="col-span-2 flex gap-2">
+                <div className="col-span-3 flex gap-2">
                   <button
                     onClick={() => handleAddMaterial(group.category)}
                     disabled={saving || !newMat.name.trim()}
@@ -743,7 +825,10 @@ export default function MaterialSearch({
                     {saving ? "..." : "Agregar"}
                   </button>
                   <button
-                    onClick={() => setAddingCategory(null)}
+                    onClick={() => {
+                      setAddingCategory(null);
+                      setExtractNote(null);
+                    }}
                     className="text-gray-500 px-3 py-2 rounded-lg text-sm hover:bg-gray-200"
                   >
                     Cancelar

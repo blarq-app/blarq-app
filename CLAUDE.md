@@ -99,6 +99,28 @@ Protocolo obligatorio para cualquier sesión que vaya a tocar código:
 
 Mantener temas distintos entre sesiones (ej. artefactos vs facturas) ayuda, pero **no sustituye** el aislamiento por rama/carpeta.
 
+### 4.9 Cuál es la base de datos VIVA — verificá antes de concluir
+
+**La base de datos que usa la app en vivo (`blarq-app.vercel.app`) es `ep-shy-morning`.** Es la
+fuente de verdad de los datos reales (proyectos, facturas, plata). Hay otra base, `ep-solitary-mud`,
+que es una **copia VIEJA / de desarrollo** con datos congelados — NO es la viva.
+
+**El problema que esto causó (y por qué esta sección existe):** sesiones que corren un script
+normal (que hace `import "dotenv/config"`, o sea carga `.env`) terminaron leyendo la base VIEJA y
+sacando conclusiones equivocadas sobre datos reales (ej.: "esta factura está sin asignar" cuando en
+la app en vivo sí estaba asignada). Verificado el 2026-06-23.
+
+Reglas:
+- **Los rótulos de los archivos `.env` NO son confiables — se han swapeado.** A veces `.env` apunta
+  a la viva, a veces a la vieja. **No te guíes por el nombre del archivo; guiate por el HOST.** La
+  viva es siempre `ep-shy-morning`; la vieja es `ep-solitary-mud`.
+- **Antes de sacar cualquier conclusión sobre datos**, verificá que estás en la base viva. Marcador
+  rápido: el proyecto **#64 debe ser "Paseo del Sena"** y la **última factura debe ser de hace días,
+  no semanas**. Si no calza, estás en la base vieja → cambiá de conexión.
+- Herramienta de verificación: `scripts/diag-cual-base-viva.ts <ruta-env>` imprime el host y los
+  marcadores para confirmar cuál es cuál.
+- Tocar la base viva (`ep-shy-morning`) se confirma con MJ (§4.7), incluso para leer si hay duda.
+
 ## 5. Stack y workflow técnico
 
 Detalle completo en [docs/architecture.md](docs/architecture.md). Resumen:

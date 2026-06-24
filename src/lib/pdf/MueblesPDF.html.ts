@@ -300,6 +300,10 @@ const CSS = `
     margin-top: 6pt;
     display: flex;
     justify-content: flex-end;
+    /* Que el bloque del total no se parta entre páginas (la nota "Valor IVA
+       incluido" se quedaba sola en la hoja siguiente). */
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   table.totals {
     border-collapse: collapse;
@@ -310,12 +314,18 @@ const CSS = `
     border: none;
     border-top: 0.5pt solid #1A1A1A;
     border-bottom: 0.5pt solid #1A1A1A;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   .totals td {
     padding: 2.5pt 6pt;
     background: transparent;
     color: #1A1A1A;
     font-variant-numeric: tabular-nums;
+  }
+  .totals tr, .totals .t-val {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   .totals .t-label {
     text-align: left;

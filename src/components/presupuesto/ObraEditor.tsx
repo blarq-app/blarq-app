@@ -458,9 +458,17 @@ export default function ObraEditor({
     const newIndex = orderedIds.indexOf(overId);
     if (oldIndex < 0 || newIndex < 0) return;
 
-    // El capítulo de destino = el de la partida sobre la que se soltó.
+    // El capítulo Y la zona de destino = los de la partida sobre la que se
+    // soltó. La zona (subChapter) importa para que ARRASTRAR una partida
+    // debajo del título de una zona (ej. BAÑOS) la deje guardada en esa zona,
+    // sin tener que usar aparte el botón de zona. Antes el arrastre solo
+    // movía la posición: la partida se veía bajo BAÑOS en el editor pero su
+    // zona guardada quedaba vieja (o vacía), y el PDF —que agrupa por la zona
+    // guardada— la mostraba huérfana arriba del capítulo. null = sin zona
+    // (caer en un área sin zona, ej. el capítulo Limpieza, la deja sin zona).
     const overItem = items.find((i) => i.id === overId);
     const targetChapter = overItem?.chapter;
+    const targetSubChapter = overItem ? overItem.subChapter ?? null : null;
 
     const newOrder = arrayMove(orderedIds, oldIndex, newIndex);
     const sortMap = new Map(newOrder.map((id, idx) => [id, idx]));
@@ -469,8 +477,15 @@ export default function ObraEditor({
     const updated = items.map((it) => {
       const so = sortMap.get(it.id);
       const base = so !== undefined ? { ...it, sortOrder: so } : it;
-      if (it.id === activeId && targetChapter && targetChapter !== it.chapter) {
-        return { ...base, chapter: targetChapter };
+      // Solo la partida arrastrada hereda capítulo y zona del destino.
+      if (it.id === activeId) {
+        return {
+          ...base,
+          ...(targetChapter && targetChapter !== it.chapter
+            ? { chapter: targetChapter }
+            : {}),
+          subChapter: targetSubChapter,
+        };
       }
       return base;
     });
@@ -480,7 +495,12 @@ export default function ObraEditor({
     try {
       const payload = newOrder.map((id) => {
         const it = updated.find((u) => u.id === id)!;
-        return { id, sortOrder: it.sortOrder, chapter: it.chapter };
+        return {
+          id,
+          sortOrder: it.sortOrder,
+          chapter: it.chapter,
+          subChapter: it.subChapter ?? null,
+        };
       });
       const res = await fetch(
         `/api/presupuestos/${initialBudget.id}/partidas/reorder`,

@@ -205,8 +205,10 @@ export default function ListaCompraClient({
 
       {itemsWithoutCatalog > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-900">
-          ⚠ {itemsWithoutCatalog} partidas del presupuesto no están vinculadas
-          al catálogo — sus materiales no se incluyen en esta lista.
+          ⚠ {itemsWithoutCatalog} partida{itemsWithoutCatalog > 1 ? "s" : ""} tiene
+          {itemsWithoutCatalog > 1 ? "n" : ""} materiales presupuestados pero todavía
+          sin detallar — no aparecen en esta lista. Detallá su desglose en el
+          presupuesto para que se incluyan.
         </div>
       )}
 

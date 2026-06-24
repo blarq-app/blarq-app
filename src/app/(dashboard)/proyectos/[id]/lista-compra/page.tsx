@@ -56,8 +56,14 @@ export default async function ListaCompraPage({
       },
     });
 
+    // Solo alertar de partidas que TIENEN plata de material presupuestada pero
+    // sin detallar (no aparecen en la lista). Las de pura mano de obra
+    // (demoliciones, instalaciones) tienen costMaterial 0 y NO deben alertar:
+    // no les falta nada, simplemente no compran materiales.
     itemsWithoutCatalog =
-      full?.obraItems.filter((i) => i.components.length === 0).length || 0;
+      full?.obraItems.filter(
+        (i) => i.components.length === 0 && (i.costMaterial ?? 0) > 0
+      ).length || 0;
 
     type Agg = {
       key: string;

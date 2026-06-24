@@ -9,6 +9,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { sanitizeRichTextHtml } from "@/lib/richText";
+import { OBRA_CHAPTERS } from "@/lib/utils";
+import { annotateZones } from "@/lib/presupuesto/zones";
 
 const PROFESSIONAL = "JOSÉ TOMÁS LARRAÍN";
 
@@ -18,15 +20,6 @@ const DEFAULT_PAYMENT_TERMS = [
   { stage: "Avance", percentage: 25 },
   { stage: "Saldo", percentage: 10 },
 ];
-
-const CHAPTERS: Record<string, { label: string; index: number }> = {
-  demoliciones: { label: "DEMOLICIONES", index: 1 },
-  reparaciones: { label: "REPARACIONES", index: 2 },
-  electricas: { label: "INSTALACIONES ELECTRICAS", index: 3 },
-  sanitarias: { label: "INSTALACIONES SANITARIAS Y GASFITERIA", index: 4 },
-  terminaciones: { label: "TERMINACIONES", index: 5 },
-  limpieza: { label: "LIMPIEZA Y ASEO", index: 6 },
-};
 
 const OBSERVACIONES = [
   "Mandante dejara libre los accesos y las superficies a intervenir, dispondra de suministro electrico y de agua potable, ademas de baño para las personas que trabajen en la obra.",
@@ -43,6 +36,10 @@ const OBSERVACIONES = [
 export interface ObraItemInput {
   chapter: string;
   subChapter?: string | null;
+  // Orden manual (el que arma MJ arrastrando en el editor). El PDF respeta ESTE
+  // orden — antes ordenaba alfabéticamente por zona y salía distinto a la
+  // pantalla.
+  sortOrder: number;
   itemNumber: string;
   name: string;
   descriptionCliente: string | null;
@@ -322,15 +319,17 @@ const CSS = `
     line-height: 1;
   }
   .chg-new {
+    /* Pastilla "NUEVO" en gris suave (no negro): es una marca discreta, no
+       compite con el contenido. Estética BLARQ — gris liviano, sin saturar. */
     display: inline-block;
-    border: 0.4pt solid #1A1A1A;
+    border: 0.4pt solid #B8B8B8;
     border-radius: 999px;
     padding: 0.3pt 2.5pt;
     font-size: 4.5pt;
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #1A1A1A;
+    color: #8A8A8A;
     white-space: nowrap;
   }
 
@@ -433,26 +432,30 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   const iva = Math.round(neto * 0.19);
   const total = neto + iva;
 
-  // Ordenar items dentro del chapter por subChapter (los sin sub-chapter
-  // primero, después agrupados alfabéticamente), después por nombre. Esto
-  // permite mostrar los separadores de sub-chapter de forma estable. Espejo
-  // del orden del editor en ObraEditor.tsx.
-  const sortItemsBySubChapter = (a: ObraItemInput, b: ObraItemInput) => {
-    const aSub = a.subChapter ?? "";
-    const bSub = b.subChapter ?? "";
-    if (aSub !== bSub) return aSub.localeCompare(bSub, "es");
-    return a.name.localeCompare(b.name, "es");
-  };
-
-  const chapters = Object.entries(CHAPTERS)
+  // Capítulos en el MISMO orden que el editor (OBRA_CHAPTERS), con la misma
+  // numeración: se saltan los capítulos vacíos y se renumera 1, 2, 3… sobre los
+  // que tienen partidas (reflow), igual que ObraEditor.tsx. El nombre usa
+  // pdfLabel (formal, mayúsculas) para el cliente. Antes el PDF tenía su propia
+  // lista con otro orden y números fijos — por eso salía "3 INSTALACIONES
+  // ELECTRICAS" mientras la pantalla mostraba "4 ELÉCTRICAS".
+  //
+  // Las partidas van en orden de sortOrder (el orden manual de MJ), NO
+  // alfabético: así el PDF queda igual a lo que se ve en el editor.
+  const chapters = (
+    Object.entries(OBRA_CHAPTERS) as [
+      string,
+      { label: string; pdfLabel: string; index: number }
+    ][]
+  )
     .map(([key, ch]) => ({
       key,
-      ...ch,
+      label: ch.pdfLabel,
       items: items
         .filter((i) => i.chapter === key)
-        .sort(sortItemsBySubChapter),
+        .sort((a, b) => a.sortOrder - b.sortOrder),
     }))
-    .filter((ch) => ch.items.length > 0);
+    .filter((ch) => ch.items.length > 0)
+    .map((ch, i) => ({ ...ch, index: i + 1 }));
 
   const terms = paymentTerms.length > 0 ? paymentTerms : DEFAULT_PAYMENT_TERMS;
   const logoUri = getLogoDataUri();
@@ -478,17 +481,12 @@ export function renderObraHTML(data: ObraHTMLInput): string {
 
   const tableRows = chapters
     .map((ch) => {
-      // Subtotales por zona dentro del capítulo, para mostrar al cierre
-      // de cada grupo. Solo se renderizan si hay más de una zona distinta
-      // en el capítulo (sino el subtotal de zona == subtotal del capítulo
-      // y solo agrega ruido visual).
-      const zoneSubtotals = new Map<string, number>();
-      for (const it of ch.items) {
-        const k = it.subChapter ?? "";
-        zoneSubtotals.set(k, (zoneSubtotals.get(k) ?? 0) + it.total);
-      }
-      const distinctZones = new Set(ch.items.map((i) => i.subChapter ?? ""));
-      const showZoneSubtotals = distinctZones.size > 1;
+      // Zona DERIVADA por posición — misma regla que el editor (helper
+      // compartido annotateZones). Una partida sin zona propia hereda la zona
+      // de la de arriba, así que el "extractor" recién creado (sin zona) cae en
+      // la zona donde está parado en vez de quedar huérfano arriba del capítulo.
+      // Los subtotales por zona solo se muestran si hay 2+ zonas distintas.
+      const { rows, zoneSubtotals, showZoneSubtotals } = annotateZones(ch.items);
       return `
         <tr class="chapter-row">
           <td class="col-chg"></td>
@@ -500,25 +498,22 @@ export function renderObraHTML(data: ObraHTMLInput): string {
           <td class="col-pu"></td>
           <td class="col-total"></td>
         </tr>
-        ${ch.items
-          .map((item, idx) => {
+        ${rows
+          .map((row, idx) => {
+            const item = row.item;
             // Renumeramos correlativo dentro del capítulo (ch.index.idx+1),
             // ignorando el item.itemNumber crudo de la BD — los Excel de
             // origen a veces tenían duplicados o saltos (1.3, 1.3, 1.5…).
-            // Si el subChapter cambió respecto al ítem anterior, anteponemos
-            // una fila separadora con el nombre del sub-chapter Y el subtotal
-            // de la zona alineado a la derecha bajo la col Total.
-            const prev = idx > 0 ? ch.items[idx - 1] : null;
-            const showSub =
-              item.subChapter && (!prev || prev.subChapter !== item.subChapter);
+            // En la primera partida de cada zona anteponemos la fila separadora
+            // con el nombre de la zona Y su subtotal alineado a la derecha.
             const subValue = showZoneSubtotals
-              ? fmtMoney(zoneSubtotals.get(item.subChapter ?? "") ?? 0)
+              ? fmtMoney(zoneSubtotals.get(row.zone ?? "") ?? 0)
               : "";
             return `
           ${
-            showSub
+            row.isZoneStart
               ? `<tr class="sub-chapter-row">
-                  <td colspan="7">${esc(item.subChapter!)}</td>
+                  <td colspan="7">${esc(row.zone!)}</td>
                   <td class="col-total">${subValue}</td>
                 </tr>`
               : ""

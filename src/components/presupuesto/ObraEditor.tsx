@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Fragment, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { OBRA_CHAPTERS, ObraChapter, formatCLP } from "@/lib/utils";
+import { annotateZones } from "@/lib/presupuesto/zones";
 import MoneyInput from "@/components/ui/MoneyInput";
 import BudgetAuditBanner from "@/components/presupuesto/BudgetAuditBanner";
 import ObraItemComponentsEditor from "@/components/presupuesto/ObraItemComponentsEditor";
@@ -388,21 +389,21 @@ export default function ObraEditor({
       if (aSub !== bSub) return aSub.localeCompare(bSub, "es");
       return a.name.localeCompare(b.name, "es");
     });
-    // Subtotales por zona (subChapter) dentro de este capítulo. Se muestran
-    // como fila al cierre de cada grupo. La key "" agrupa los items sin zona.
-    const subChapterSubtotals = new Map<string, number>();
-    for (const it of chapterItems) {
-      const k = it.subChapter ?? "";
-      subChapterSubtotals.set(k, (subChapterSubtotals.get(k) ?? 0) + it.total);
-    }
-    const distinctZones = new Set(chapterItems.map((i) => i.subChapter ?? ""));
-    const showZoneSubtotals = distinctZones.size > 1;
+    // Zona DERIVADA por posición (helper compartido con el PDF): una partida
+    // sin zona propia hereda la de arriba. Así la pantalla y el PDF agrupan
+    // IGUAL y los subtotales de zona incluyen las partidas heredadas (ej: el
+    // extractor recién creado sin zona, que cae al fondo de BAÑOS, ahora suma
+    // en BAÑOS en vez de quedar en un grupo invisible). `zoneRows` va alineado
+    // 1:1 con `items` (mismo orden) para leer la zona efectiva en el render.
+    const { rows: zoneRows, zoneSubtotals, showZoneSubtotals } =
+      annotateZones(sortedItems);
     return {
       key,
       ...chapter,
       items: sortedItems,
+      zoneRows,
       subtotal: chapterItems.reduce((sum, item) => sum + item.total, 0),
-      subChapterSubtotals,
+      subChapterSubtotals: zoneSubtotals,
       showZoneSubtotals,
     };
   });
@@ -1138,11 +1139,13 @@ export default function ObraEditor({
                 </colgroup>
                 <tbody className="divide-y divide-gray-50">
                   {chapter.items.map((item, itemIdx) => {
-                    const prevItem = itemIdx > 0 ? chapter.items[itemIdx - 1] : null;
                     const chg = changeMarkers.get(item.lineageId);
-                    const showSubHeader =
-                      item.subChapter &&
-                      (!prevItem || prevItem.subChapter !== item.subChapter);
+                    // Zona EFECTIVA (derivada por posición, alineada 1:1 con
+                    // items): la bandita gris se muestra en la primera partida
+                    // de cada zona, no en cada cambio del campo crudo.
+                    const zoneRow = chapter.zoneRows[itemIdx];
+                    const zone = zoneRow?.zone ?? null;
+                    const showSubHeader = zoneRow?.isZoneStart ?? false;
                     return (
                     <Fragment key={item.id}>
                     {showSubHeader && (
@@ -1153,7 +1156,7 @@ export default function ObraEditor({
                         >
                           {editingZoneGroup &&
                           editingZoneGroup.chapter === chapter.key &&
-                          editingZoneGroup.name === item.subChapter ? (
+                          editingZoneGroup.name === zone ? (
                             <input
                               autoFocus
                               value={zoneDraft}
@@ -1161,7 +1164,7 @@ export default function ObraEditor({
                               onBlur={() => {
                                 handleRenameZoneGroup(
                                   chapter.key,
-                                  item.subChapter!,
+                                  zone!,
                                   zoneDraft
                                 );
                                 setEditingZoneGroup(null);
@@ -1179,16 +1182,16 @@ export default function ObraEditor({
                             <button
                               type="button"
                               onClick={() => {
-                                setZoneDraft(item.subChapter ?? "");
+                                setZoneDraft(zone ?? "");
                                 setEditingZoneGroup({
                                   chapter: chapter.key,
-                                  name: item.subChapter!,
+                                  name: zone!,
                                 });
                               }}
                               className="hover:text-gray-900"
                               title="Renombrar zona (afecta todas las partidas de este grupo)"
                             >
-                              {item.subChapter}
+                              {zone}
                             </button>
                           )}
                         </td>
@@ -1199,9 +1202,7 @@ export default function ObraEditor({
                         <td className="px-3 py-0.5 text-right text-[10px] font-semibold text-gray-600 uppercase tracking-wider tabular-nums whitespace-nowrap">
                           {chapter.showZoneSubtotals
                             ? formatCLP(
-                                chapter.subChapterSubtotals.get(
-                                  item.subChapter ?? ""
-                                ) ?? 0
+                                chapter.subChapterSubtotals.get(zone ?? "") ?? 0
                               )
                             : ""}
                         </td>
@@ -1269,14 +1270,12 @@ export default function ObraEditor({
                           {expandedItems[item.id] ? "▾" : "▸"}
                         </button>
                         {/* Marca de cambio vs. la última versión enviada al
-                            cliente: flecha (subió/bajó) o "nuevo". El número
-                            queda fijo en su lugar (alineado entre filas) y la
-                            marca cuelga hacia la DERECHA con posición absoluta —
-                            así NUEVO no corre el número NI tapa la manija de
-                            arrastre / el botón de desglose, que están a la
-                            izquierda (antes, colgando a la izquierda, la pastilla
-                            "Nuevo" se dibujaba encima del ⋮⋮ y no se podía
-                            arrastrar la fila). Tooltip antes → ahora. */}
+                            cliente. Las flechas (subió/bajó) cuelgan a la DERECHA
+                            del número con posición absoluta — son chiquitas (un
+                            carácter) y no estorban. La pastilla "NUEVO", que es
+                            ancha, se dibuja al INICIO del nombre (celda de al
+                            lado) con su propio espacio, para que no tape el texto
+                            de la partida ni la manija de arrastre. */}
                         <span className="relative inline-block">
                           {chg?.marker === "up" && (
                             <span
@@ -1300,14 +1299,6 @@ export default function ObraEditor({
                               }
                             >
                               ↓
-                            </span>
-                          )}
-                          {chg?.marker === "added" && (
-                            <span
-                              className="absolute left-full top-1/2 -translate-y-1/2 ml-1 inline-block whitespace-nowrap rounded-full border border-gray-900 px-1 text-[8px] font-semibold uppercase leading-none tracking-wide text-gray-900"
-                              title="Partida nueva — no estaba en la versión enviada al cliente"
-                            >
-                              Nuevo
                             </span>
                           )}
                           {chapter.index}.{itemIdx + 1}
@@ -1374,28 +1365,42 @@ export default function ObraEditor({
                             cada tecla dispare setItems + el re-render de toda la
                             tabla. El onChange solo ajusta el alto del textarea
                             (visual); el guardado ocurre en onBlur. Cambia CUÁNDO
-                            se guarda, no QUÉ se guarda. */}
-                        <textarea
-                          ref={(el) => {
-                            if (el) {
-                              el.style.height = "auto";
-                              el.style.height = `${el.scrollHeight}px`;
-                            }
-                          }}
-                          defaultValue={item.name}
-                          onChange={(e) => {
-                            e.currentTarget.style.height = "auto";
-                            e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
-                          }}
-                          onBlur={(e) => {
-                            if (e.target.value !== item.name) {
-                              handleUpdateItem(item.id, "name", e.target.value);
-                            }
-                          }}
-                          rows={1}
-                          className="text-force-11 w-full resize-none bg-transparent border-0 p-0 text-gray-900 focus:ring-0 outline-none uppercase leading-snug overflow-hidden"
-                          style={{ minHeight: "16px" }}
-                        />
+                            se guarda, no QUÉ se guarda.
+
+                            La pastilla "NUEVO" va acá adelante, en un flex, con
+                            su propio espacio (shrink-0): el nombre queda a su
+                            derecha y nunca arranca debajo de ella. */}
+                        <div className="flex items-start gap-1.5">
+                          {chg?.marker === "added" && (
+                            <span
+                              className="mt-0.5 shrink-0 inline-block whitespace-nowrap rounded-full border border-gray-900 px-1 text-[8px] font-semibold uppercase leading-none tracking-wide text-gray-900"
+                              title="Partida nueva — no estaba en la versión enviada al cliente"
+                            >
+                              Nuevo
+                            </span>
+                          )}
+                          <textarea
+                            ref={(el) => {
+                              if (el) {
+                                el.style.height = "auto";
+                                el.style.height = `${el.scrollHeight}px`;
+                              }
+                            }}
+                            defaultValue={item.name}
+                            onChange={(e) => {
+                              e.currentTarget.style.height = "auto";
+                              e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                            }}
+                            onBlur={(e) => {
+                              if (e.target.value !== item.name) {
+                                handleUpdateItem(item.id, "name", e.target.value);
+                              }
+                            }}
+                            rows={1}
+                            className="text-force-11 w-full resize-none bg-transparent border-0 p-0 text-gray-900 focus:ring-0 outline-none uppercase leading-snug overflow-hidden"
+                            style={{ minHeight: "16px" }}
+                          />
+                        </div>
                       </td>
                       <td className="px-3 py-0.5 align-top">
                         {/* DESCRIPCION CLIENTE (la que va al PDF). Se edita INLINE

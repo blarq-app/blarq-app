@@ -114,6 +114,62 @@ interface ObraItemComponent {
   unitCost: number;
   totalCost: number;
   materialId: string | null;
+  // Para reconstruir el total real del desglose (pérdida % sobre un material,
+  // leyes % sobre la mano de obra, etc.) — espejo de recalcObraItem.ts.
+  appliedToComponentId?: string | null;
+  appliedToType?: string | null;
+}
+
+// Suma "real" del desglose de una partida, replicando EXACTAMENTE el cálculo
+// del servidor (src/lib/catalog/recalcObraItem.ts → effectiveTotal). Se usa solo
+// para DETECTAR descuadres (la marquita roja): si el total guardado de la partida
+// no coincide con esta suma, el número de arriba quedó como una "foto" vieja del
+// desglose (pasa cuando el desglose cambió por catálogo/copia sin recalcular el
+// total). NO escribe nada — es solo lectura para avisar.
+function componentEffectiveTotal(
+  c: ObraItemComponent,
+  all: ObraItemComponent[]
+): number {
+  const pct = c.quantity || 0;
+  if (c.unit !== "%") return (c.quantity || 0) * (c.unitCost || 0);
+  if (c.type === "perdida") {
+    if (c.appliedToComponentId) {
+      const t = all.find((x) => x.id === c.appliedToComponentId);
+      return t ? componentEffectiveTotal(t, all) * (pct / 100) : 0;
+    }
+    if (c.appliedToType === "material") {
+      const base = all
+        .filter((x) => x.type === "material" && x.id !== c.id)
+        .reduce((s, x) => s + componentEffectiveTotal(x, all), 0);
+      return base * (pct / 100);
+    }
+    return 0;
+  }
+  if (c.type === "mano_obra" && c.appliedToType === "mano_obra") {
+    const base = all
+      .filter((x) => x.type === "mano_obra" && x.unit !== "%" && x.id !== c.id)
+      .reduce((s, x) => s + componentEffectiveTotal(x, all), 0);
+    return base * (pct / 100);
+  }
+  if (c.type === "margen") {
+    const base = all
+      .filter((x) => x.id !== c.id && x.type !== "margen" && x.type !== "perdida")
+      .reduce((s, x) => s + componentEffectiveTotal(x, all), 0);
+    return base * (pct / 100);
+  }
+  return (c.quantity || 0) * (c.unitCost || 0);
+}
+
+// Devuelve el total que DEBERÍA tener la partida según su desglose, o null si no
+// tiene desglose (ahí no hay con qué descuadrar). Comparar con item.total.
+function totalRealDesglose(item: ObraItem): number | null {
+  const comps = item.components ?? [];
+  if (comps.length === 0) return null;
+  const porUnidad = comps.reduce(
+    (s, c) => s + componentEffectiveTotal(c, comps),
+    0
+  );
+  return porUnidad * (item.quantity ?? 0);
 }
 
 interface ObraItem {
@@ -939,6 +995,9 @@ export default function ObraEditor({
                 costSubcontract: fresh.costSubcontract ?? 0,
                 costLoss: fresh.costLoss ?? 0,
                 costMargin: fresh.costMargin ?? 0,
+                // Desglose fresco → la marca de "descuadrado" se recalcula
+                // contra el detalle al día (si no viene, deja el que había).
+                components: fresh.components ?? it.components,
               }
             : it
         )
@@ -1146,6 +1205,14 @@ export default function ObraEditor({
                     const zoneRow = chapter.zoneRows[itemIdx];
                     const zone = zoneRow?.zone ?? null;
                     const showSubHeader = zoneRow?.isZoneStart ?? false;
+                    // Descuadre: el total guardado no coincide con la suma de su
+                    // desglose → el número de arriba es una "foto" vieja. Marca
+                    // roja para que MJ esté atenta antes de enviar. >1 peso para
+                    // ignorar redondeos.
+                    const realDesglose = totalRealDesglose(item);
+                    const descuadrada =
+                      realDesglose !== null &&
+                      Math.abs((item.total ?? 0) - realDesglose) > 1;
                     return (
                     <Fragment key={item.id}>
                     {showSubHeader && (
@@ -1529,6 +1596,20 @@ export default function ObraEditor({
                           )}
                           {saveStatus === "saved" && (
                             <span className="text-[10px] text-green-600 hidden group-hover:inline">✓</span>
+                          )}
+                          {descuadrada && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedItems((prev) => ({
+                                  ...prev,
+                                  [item.id]: true,
+                                }))
+                              }
+                              title={`Este total (${formatCLP(item.total)}) no coincide con su desglose (suma del desglose: ${formatCLP(realDesglose ?? 0)}). El número de arriba quedó como una "foto" vieja. Hacé clic para abrir el desglose y editá/confirmá una línea: así se recalcula y vuelve a coincidir.`}
+                              aria-label="Total descuadrado respecto al desglose"
+                              className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 hover:ring-2 hover:ring-red-200"
+                            />
                           )}
                           {formatCLP(item.total)}
                         </div>

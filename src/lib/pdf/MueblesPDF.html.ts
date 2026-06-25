@@ -473,28 +473,17 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
     ? `<img class="logo" src="${logoUri}" alt="BLARQ" />`
     : `<div class="logo" style="line-height:60px;font-size:28pt;font-weight:700;letter-spacing:0.15em;">BLARQ</div>`;
 
-  // Orden canónico dentro del capítulo: Muebles → Cubiertas → Herrajes.
-  // El resto (cualquier otro tipo) cae al final por fallback. MJ pidió
-  // este orden específico para que el PDF salga consistente sin importar
-  // cómo se hayan ingresado los items en el editor.
-  function itemOrder(name: string): number {
-    const u = (name || "").toUpperCase();
-    if (u.includes("MUEBLE")) return 1;
-    if (u.includes("CUBIERTA")) return 2;
-    if (u.includes("HERRAJ")) return 3;
-    return 99;
-  }
-
   const tableRows = chapters
     .map((ch, chIdx) => {
-      // Número de capítulo e ítem DERIVADOS por posición (igual que el editor en
-      // pantalla): así nunca queda hueco aunque se haya borrado una partida. No
-      // usamos ch.chapterNumber / item.itemNumber guardados (que arrastran el
-      // hueco). El orden de los ítems lo sigue fijando itemOrder (nombre).
+      // El PDF sale EXACTAMENTE como la vista de la cotización: mismo orden de
+      // partidas (el que MJ deja arrastrando = sortOrder, ya ordenado en el
+      // query) y mismos números. El número de capítulo e ítem se DERIVAN por
+      // posición — no usamos ch.chapterNumber / item.itemNumber guardados, que
+      // arrastran el hueco al borrar una partida. Antes el PDF reordenaba por
+      // nombre (Muebles → Cubiertas → Herrajes); se quitó para que coincida con
+      // la pantalla.
       const chapterNumber = chIdx + 1;
-      const sortedItems = [...ch.items].sort(
-        (a, b) => itemOrder(a.name) - itemOrder(b.name)
-      );
+      const sortedItems = ch.items;
       const chapterSubtotal = sortedItems.reduce(
         (s, i) => s + i.clientPriceIva * i.quantity,
         0

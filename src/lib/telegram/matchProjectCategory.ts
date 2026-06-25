@@ -55,6 +55,16 @@ function matchByName<T extends NamedMatch>(
     return { kind: "ninguno", candidates: candidatos };
   }
 
+  // Prioridad por NOMBRE EXACTO. Si tipeás el nombre tal cual ("CASA"), esa
+  // obra gana aunque otras CONTENGAN la palabra ("Casa Waterloo", "Ampliacion
+  // Casa Arrau"). Sin esto, "casa" empata a las tres (todas suman 1 por la
+  // palabra "casa") y el bot pregunta de gusto. Caso real de un centro de
+  // costo que se llama literalmente "CASA".
+  const exactos = candidatos.filter((c) => norm(c.name) === t);
+  if (exactos.length === 1) {
+    return { kind: "exacto", match: exactos[0], candidates: exactos };
+  }
+
   const scored = candidatos
     .map((c) => {
       const words = norm(c.name)

@@ -21,6 +21,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import MaterialAutocomplete from "./MaterialAutocomplete";
+import RichTextEditor from "@/components/presupuesto/RichTextEditor";
+import { sanitizeRichTextHtml, isRichTextEmpty } from "@/lib/richText";
 
 // Unidades disponibles para una partida (las mismas que usa el editor inline).
 const PARTIDA_UNITS = ["M2", "ML", "UN", "GL", "M3", "KG", "DIA", "HR"];
@@ -155,6 +157,9 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
   const [draft, setDraft] = useState<Partida | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
+  // Qué partida tiene la descripción para cliente abierta para editar INLINE
+  // en la fila (igual que en las cotizaciones). null = ninguna.
+  const [editingDescId, setEditingDescId] = useState<string | null>(null);
 
   // Catálogo de categorías como estado (no prop): al crear una partida con
   // una categoría nueva, la agregamos acá para que aparezca sin recargar.
@@ -383,6 +388,29 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
     return { costMaterial, costLabor, costTools, costSubcontract, costLoss, costMargin, unitPrice };
   }
 
+  // Guarda SOLO la descripción para cliente, editada inline en la fila.
+  // Mismo patrón que la cotización (PR #216): el RichTextEditor dispara su
+  // onChange al SALIR del campo (blur), no en cada tecla, así que esto corre
+  // una sola vez al terminar. Actualiza el estado local de inmediato (para que
+  // la fila refleje el cambio sin recargar) y persiste con un PUT parcial que
+  // toca únicamente descriptionCliente (la API ya soporta updates parciales).
+  async function saveDescCliente(id: string, html: string) {
+    const value = isRichTextEmpty(html) ? null : html;
+    setPartidas((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, descriptionCliente: value } : p))
+    );
+    setEditingDescId(null);
+    try {
+      await fetch(`/api/catalogo/partidas/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ descriptionCliente: value }),
+      });
+    } catch {
+      alert("Error al guardar la descripción");
+    }
+  }
+
   async function saveEdit() {
     if (!draft) return;
     setSaving(true);
@@ -395,7 +423,8 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
           name: draft.name,
           category: draft.category,
           unit: draft.unit,
-          descriptionCliente: draft.descriptionCliente?.trim() || null,
+          // La descripción para cliente se edita INLINE en la fila (no acá),
+          // así que NO la mandamos desde el panel para no pisar ese cambio.
           descriptionMaestro: draft.descriptionMaestro?.trim() || null,
           ...costs,
         }),
@@ -743,6 +772,7 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
                     rowIndex={idx + 1}
                     isExpanded={expanded === partida.id}
                     isEditing={editing === partida.id}
+                    isEditingDesc={editingDescId === partida.id}
                     draft={editing === partida.id ? draft : null}
                     saving={saving}
                     savedFlash={savedFlash === partida.id}
@@ -751,6 +781,8 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
                         expanded === partida.id && editing !== partida.id ? null : partida.id
                       )
                     }
+                    onStartEditDesc={() => setEditingDescId(partida.id)}
+                    onSaveDescCliente={(html) => saveDescCliente(partida.id, html)}
                     onStartEdit={() => startEdit(partida)}
                     onCancelEdit={cancelEdit}
                     onSaveEdit={saveEdit}
@@ -794,10 +826,13 @@ function PartidaRow({
   rowIndex,
   isExpanded,
   isEditing,
+  isEditingDesc,
   draft,
   saving,
   savedFlash,
   onToggleExpand,
+  onStartEditDesc,
+  onSaveDescCliente,
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
@@ -819,10 +854,13 @@ function PartidaRow({
   rowIndex: number;
   isExpanded: boolean;
   isEditing: boolean;
+  isEditingDesc: boolean;
   draft: Partida | null;
   saving: boolean;
   savedFlash: boolean;
   onToggleExpand: () => void;
+  onStartEditDesc: () => void;
+  onSaveDescCliente: (html: string) => void;
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onSaveEdit: () => void;
@@ -900,15 +938,42 @@ function PartidaRow({
         >
           {partida.name}
         </button>
-        <button
-          onClick={onToggleExpand}
-          className="text-left text-[11px] text-gray-500 truncate"
-          title={partida.descriptionCliente || ""}
-        >
-          {partida.descriptionCliente || (
-            <span className="text-gray-300">—</span>
-          )}
-        </button>
+        {/* DESCRIPCIÓN PARA CLIENTE (la que va al PDF). Se edita INLINE acá
+            mismo, igual que en las cotizaciones: un clic monta el editor de
+            texto con formato (barra flotante) y al salir guarda y vuelve a la
+            vista. La del MAESTRO vive solo en el panel expandido (▾). */}
+        {isEditingDesc ? (
+          <div className="[&_.ProseMirror]:!text-[11px] [&_.ProseMirror]:!leading-snug [&_.ProseMirror]:!min-h-[18px] [&_.ProseMirror]:!py-0.5 [&_.ProseMirror]:!px-1.5 [&_.ProseMirror_p]:!my-0 [&_.ProseMirror_li]:!my-0">
+            <RichTextEditor
+              value={partida.descriptionCliente}
+              autoFocus
+              placeholder="Descripción para el cliente (PDF)…"
+              onChange={(html) => {
+                // RichTextEditor dispara onChange en blur (al salir): guarda
+                // el texto final y vuelve a la vista de la fila.
+                onSaveDescCliente(html);
+              }}
+            />
+          </div>
+        ) : (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={onStartEditDesc}
+            title="Clic para editar la descripción del cliente acá mismo"
+            className="text-left text-[11px] text-gray-500 truncate cursor-text min-h-[14px] [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-4 [&_ol]:pl-4 [&_li]:my-0.5"
+          >
+            {isRichTextEmpty(partida.descriptionCliente) ? (
+              <span className="text-gray-300">—</span>
+            ) : (
+              <span
+                dangerouslySetInnerHTML={{
+                  __html: sanitizeRichTextHtml(partida.descriptionCliente),
+                }}
+              />
+            )}
+          </div>
+        )}
         <div className="text-center">
           <span className="text-[11px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
             {partida.unit}
@@ -978,38 +1043,23 @@ function ViewPanel({
 
   return (
     <div className="space-y-4">
-      {/* Descripciones */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-            Descripción para cliente
-            <span className="ml-1 text-gray-400 normal-case font-normal italic">
-              — aparece en el PDF que ve el cliente
-            </span>
-          </div>
-          {partida.descriptionCliente ? (
-            <p className="text-xs text-gray-700 leading-snug whitespace-pre-wrap">
-              {partida.descriptionCliente}
-            </p>
-          ) : (
-            <p className="text-xs text-gray-400 italic">Sin descripción</p>
-          )}
+      {/* Descripción para maestro. La del CLIENTE ya no vive acá: se edita
+          inline en la fila (clic sobre la columna de descripción), igual que
+          en las cotizaciones. El desplegable muestra solo la del maestro. */}
+      <div>
+        <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">
+          Descripción para maestro
+          <span className="ml-1 text-gray-400 normal-case font-normal italic">
+            — aparece en el estado de pago
+          </span>
         </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-            Descripción para maestro
-            <span className="ml-1 text-gray-400 normal-case font-normal italic">
-              — aparece en el estado de pago
-            </span>
-          </div>
-          {partida.descriptionMaestro ? (
-            <p className="text-xs text-gray-700 leading-snug whitespace-pre-wrap">
-              {partida.descriptionMaestro}
-            </p>
-          ) : (
-            <p className="text-xs text-gray-400 italic">Sin descripción</p>
-          )}
-        </div>
+        {partida.descriptionMaestro ? (
+          <p className="text-xs text-gray-700 leading-snug whitespace-pre-wrap">
+            {partida.descriptionMaestro}
+          </p>
+        ) : (
+          <p className="text-xs text-gray-400 italic">Sin descripción</p>
+        )}
       </div>
 
       {/* Breakdown */}
@@ -1242,38 +1292,22 @@ function EditPanel({
         </div>
       </div>
 
-      {/* Descripciones — dos columnas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
-            Descripción para cliente
-            <span className="ml-1 text-gray-400 normal-case font-normal italic">
-              — aparece en el PDF que ve el cliente
-            </span>
-          </label>
-          <textarea
-            value={draft.descriptionCliente ?? ""}
-            onChange={(e) => onUpdateDraft({ descriptionCliente: e.target.value })}
-            placeholder="Ej: Considera retiro de papel mural, empastar, lijar y dejar superficie apta para pintura."
-            rows={3}
-            className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs leading-snug resize-y focus:ring-1 focus:ring-gray-900 outline-none"
-          />
-        </div>
-        <div>
-          <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
-            Descripción para maestro
-            <span className="ml-1 text-gray-400 normal-case font-normal italic">
-              — aparece en el estado de pago
-            </span>
-          </label>
-          <textarea
-            value={draft.descriptionMaestro ?? ""}
-            onChange={(e) => onUpdateDraft({ descriptionMaestro: e.target.value })}
-            placeholder="Ej: Retirar papel + empastar imperfecciones + lijar fino."
-            rows={3}
-            className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs leading-snug resize-y focus:ring-1 focus:ring-gray-900 outline-none"
-          />
-        </div>
+      {/* Solo la descripción para maestro. La del CLIENTE se edita inline en
+          la fila (no acá), igual que en las cotizaciones. */}
+      <div>
+        <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
+          Descripción para maestro
+          <span className="ml-1 text-gray-400 normal-case font-normal italic">
+            — aparece en el estado de pago
+          </span>
+        </label>
+        <textarea
+          value={draft.descriptionMaestro ?? ""}
+          onChange={(e) => onUpdateDraft({ descriptionMaestro: e.target.value })}
+          placeholder="Ej: Retirar papel + empastar imperfecciones + lijar fino."
+          rows={3}
+          className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs leading-snug resize-y focus:ring-1 focus:ring-gray-900 outline-none"
+        />
       </div>
 
       {/* Componentes */}

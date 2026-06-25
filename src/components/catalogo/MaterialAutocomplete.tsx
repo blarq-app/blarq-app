@@ -17,18 +17,34 @@ type Material = {
   category: string;
   unit: string;
   netPrice: number;
+  // La API de materiales devuelve estos campos también; los exponemos para que
+  // quien elija un material del catálogo (ej. al SWAPEAR una línea del
+  // desglose) pueda traerse el link de referencia y la marca de provisión.
+  referenceLink?: string | null;
+  isProvision?: boolean;
 };
 
 export default function MaterialAutocomplete({
   value,
   onChange,
   onSelect,
+  onBlur,
   placeholder,
+  inputClassName,
 }: {
   value: string;
   onChange: (newValue: string) => void;
   onSelect: (material: Material) => void;
+  // Se dispara al SALIR del campo (no al elegir un resultado del menú, porque
+  // esos usan onMouseDown→preventDefault para no robar el foco). Lo usa el
+  // desglose del presupuesto para persistir el nombre cuando MJ deja texto
+  // libre (sin elegir nada del catálogo).
+  onBlur?: (value: string) => void;
   placeholder?: string;
+  // Estilo del input. Por defecto, la cajita con borde del catálogo; el
+  // desglose denso del presupuesto pasa uno sin borde para no romper el look
+  // tipo planilla (filas bajas, sin marcos).
+  inputClassName?: string;
 }) {
   const [results, setResults] = useState<Material[]>([]);
   const [open, setOpen] = useState(false);
@@ -123,6 +139,7 @@ export default function MaterialAutocomplete({
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
+        onBlur={() => onBlur?.(value)}
         onKeyDown={(e) => {
           if (!open) return;
           const total = results.length + (showCreate ? 1 : 0);
@@ -145,7 +162,10 @@ export default function MaterialAutocomplete({
           }
         }}
         placeholder={placeholder ?? "Buscar material…"}
-        className="w-full border border-gray-300 rounded px-2 py-1 text-[11px]"
+        className={
+          inputClassName ??
+          "w-full border border-gray-300 rounded px-2 py-1 text-[11px]"
+        }
       />
       {open && (results.length > 0 || showCreate || loading) && (
         <div className="absolute z-20 left-0 right-0 mt-0.5 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto text-[11px]">

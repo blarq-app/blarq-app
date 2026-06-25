@@ -1051,10 +1051,11 @@ export default function MueblesEditor({
             items={chapters.map((c) => c.id)}
             strategy={verticalListSortingStrategy}
           >
-            {chapters.map((ch) => (
+            {chapters.map((ch, chIdx) => (
               <ChapterBlock
           key={ch.id}
           chapter={ch}
+          displayChapterNumber={chIdx + 1}
           budgetId={budgetId}
           sensors={sensors}
           onReorderItems={(orderedIds) => reorderItems(ch.id, orderedIds)}
@@ -1222,6 +1223,7 @@ export default function MueblesEditor({
 
 function ChapterBlock({
   chapter,
+  displayChapterNumber,
   budgetId,
   sensors,
   onReorderItems,
@@ -1244,6 +1246,9 @@ function ChapterBlock({
   onDeleteHerraje,
 }: {
   chapter: MuebleChapter;
+  // Número de capítulo DERIVADO por posición (1, 2, 3…) al renderizar, no el
+  // chapterNumber guardado: así nunca queda hueco si se borra un capítulo.
+  displayChapterNumber: number;
   budgetId: string;
   sensors: ReturnType<typeof useSensors>;
   onReorderItems: (orderedIds: string[]) => void;
@@ -1322,7 +1327,7 @@ function ChapterBlock({
             listeners={sortable.listeners}
           />
           <span className="font-bold text-gray-900 tabular-nums">
-            {chapter.chapterNumber}
+            {displayChapterNumber}
           </span>
         </span>
         <input
@@ -1366,12 +1371,13 @@ function ChapterBlock({
           items={chapter.items.map((i) => i.id)}
           strategy={verticalListSortingStrategy}
         >
-          {chapter.items.map((item) => (
+          {chapter.items.map((item, itemIdx) => (
             <SortableItemWrapper key={item.id} id={item.id}>
               {(handle) =>
                 item.kind === "herrajes" ? (
                   <HerrajePartidaBlock
                     item={item}
+                    displayNumber={`${displayChapterNumber}.${itemIdx + 1}`}
                     budgetId={budgetId}
                     dragHandle={handle}
                     onUpdate={(patch) => onUpdateHerrajePartida(item.id, patch)}
@@ -1389,6 +1395,7 @@ function ChapterBlock({
                 ) : (
                   <ItemBlock
                     item={item}
+                    displayNumber={`${displayChapterNumber}.${itemIdx + 1}`}
                     dragHandle={handle}
                     onUpdate={(patch) => onUpdateItem(item.id, patch)}
                     onDelete={() => onDeleteItem(item.id)}
@@ -1485,6 +1492,7 @@ function SortableItemWrapper({
 
 function ItemBlock({
   item,
+  displayNumber,
   dragHandle,
   onUpdate,
   onDelete,
@@ -1497,6 +1505,10 @@ function ItemBlock({
   onActivateQuote,
 }: {
   item: MuebleItem;
+  // Número de partida DERIVADO por posición ("1.1", "1.2"…) al renderizar. No es
+  // editable ni se lee de item.itemNumber (que queda con hueco al borrar una
+  // partida): así la numeración siempre sale consecutiva.
+  displayNumber: string;
   dragHandle: React.ReactNode;
   onUpdate: (patch: Partial<MuebleItem>) => void;
   onDelete: () => void;
@@ -1523,12 +1535,9 @@ function ItemBlock({
       <div className={`${ROW_GRID} px-4 pt-2 pb-1 border-b border-gray-100`}>
         <span className="flex items-center gap-1">
           {dragHandle}
-          <input
-            type="text"
-            value={item.itemNumber}
-            onChange={(e) => onUpdate({ itemNumber: e.target.value })}
-            className="w-full min-w-0 bg-transparent border-0 p-0 text-sm tabular-nums text-gray-700 outline-none"
-          />
+          <span className="text-sm tabular-nums text-gray-700">
+            {displayNumber}
+          </span>
         </span>
         <input
           type="text"
@@ -1919,6 +1928,7 @@ function ItemBlock({
 // editable, y muestra el costo interno + margen + precio cliente de la partida.
 function HerrajePartidaBlock({
   item,
+  displayNumber,
   budgetId,
   dragHandle,
   onUpdate,
@@ -1928,6 +1938,8 @@ function HerrajePartidaBlock({
   onDeleteHerraje,
 }: {
   item: MuebleItem;
+  // Número DERIVADO por posición (igual que ItemBlock): consecutivo, no editable.
+  displayNumber: string;
   budgetId: string;
   dragHandle: React.ReactNode;
   onUpdate: (patch: {
@@ -1985,12 +1997,9 @@ function HerrajePartidaBlock({
       <div className={`${ROW_GRID} px-4 pt-2 pb-1 border-b border-gray-100`}>
         <span className="flex items-center gap-1">
           {dragHandle}
-          <input
-            type="text"
-            value={item.itemNumber}
-            onChange={(e) => onUpdate({ itemNumber: e.target.value })}
-            className="w-full min-w-0 bg-transparent border-0 p-0 text-sm tabular-nums text-gray-700 outline-none"
-          />
+          <span className="text-sm tabular-nums text-gray-700">
+            {displayNumber}
+          </span>
         </span>
         <input
           type="text"

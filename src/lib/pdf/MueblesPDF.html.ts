@@ -486,7 +486,12 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
   }
 
   const tableRows = chapters
-    .map((ch) => {
+    .map((ch, chIdx) => {
+      // Número de capítulo e ítem DERIVADOS por posición (igual que el editor en
+      // pantalla): así nunca queda hueco aunque se haya borrado una partida. No
+      // usamos ch.chapterNumber / item.itemNumber guardados (que arrastran el
+      // hueco). El orden de los ítems lo sigue fijando itemOrder (nombre).
+      const chapterNumber = chIdx + 1;
       const sortedItems = [...ch.items].sort(
         (a, b) => itemOrder(a.name) - itemOrder(b.name)
       );
@@ -496,16 +501,16 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
       );
       return `
       <tr class="chapter-row">
-        <td class="col-num">${ch.chapterNumber}</td>
+        <td class="col-num">${chapterNumber}</td>
         <td class="col-name">${esc(ch.name)}</td>
         <td class="col-qty"></td>
         <td class="col-total">${fmtCLP(chapterSubtotal)}</td>
       </tr>
       ${sortedItems
         .map(
-          (item) => `
+          (item, itemIdx) => `
         <tr class="item-row">
-          <td class="col-num">${esc(item.itemNumber)}</td>
+          <td class="col-num">${chapterNumber}.${itemIdx + 1}</td>
           <td class="col-name">
             ${esc(item.name)}
             ${

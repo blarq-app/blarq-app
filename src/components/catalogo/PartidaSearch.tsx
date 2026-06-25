@@ -775,7 +775,7 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
             </div>
 
             {/* Column headers — matches PDF thead */}
-            <div className="grid grid-cols-[4.5rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem_5rem] items-center gap-3 px-4 py-2 border-y-2 border-gray-900 bg-white text-[11px] font-bold text-gray-900 uppercase tracking-wider">
+            <div className="grid grid-cols-[4.5rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem_2.5rem] items-center gap-3 px-4 py-2 border-y-2 border-gray-900 bg-white text-[11px] font-bold text-gray-900 uppercase tracking-wider">
               <div className="text-center">Nº</div>
               <div className="text-left">Partida</div>
               <div className="text-left">Descripción Cliente</div>
@@ -942,7 +942,7 @@ function PartidaRow({
   return (
     <div ref={setNodeRef} style={style} id={`partida-row-${partida.id}`}>
       <div
-        className={`grid grid-cols-[4.5rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem_5rem] items-center gap-3 px-4 py-1.5 border-b border-gray-100 hover:bg-gray-50/60 group ${
+        className={`grid grid-cols-[4.5rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem_2.5rem] items-center gap-3 px-4 py-1.5 border-b border-gray-100 hover:bg-gray-50/60 group ${
           isExpanded ? "bg-gray-50/60" : ""
         } ${savedFlash ? "bg-green-50" : ""} ${
           isFocused ? "ring-2 ring-inset ring-gray-900" : ""
@@ -1018,17 +1018,31 @@ function PartidaRow({
           {formatCLP(partida.unitPrice)}
         </div>
         {/* Duplicar de un toque, sin tener que expandir la partida. Aparece al
-            pasar el mouse por la fila. Mismo botón que en el panel desplegado. */}
-        <div className="text-right">
+            pasar el mouse por la fila. Ícono de dos cuadraditos (copiar). */}
+        <div className="flex justify-end">
           <button
             onClick={(e) => {
               e.stopPropagation();
               onDuplicate();
             }}
-            className="text-[11px] text-gray-400 hover:text-gray-900 opacity-0 group-hover:opacity-100 transition-opacity"
+            className="text-gray-400 hover:text-gray-900 opacity-0 group-hover:opacity-100 transition-opacity"
             title="Duplicar esta partida en el catálogo"
+            aria-label="Duplicar partida"
           >
-            Duplicar
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
           </button>
         </div>
       </div>
@@ -1473,28 +1487,33 @@ function ComponentsEditTable({
   }
 
   return (
-    <table className="w-full text-[11px]">
-      <thead>
-        <tr className="border-y border-gray-300 text-gray-500 uppercase tracking-wider">
-          <th className="w-6"></th>
-          <th className="text-left py-1 px-1 w-28 font-semibold">Tipo</th>
-          <th className="text-left py-1 px-1 font-semibold">Descripción</th>
-          <th className="text-center py-1 px-1 w-14 font-semibold">Un.</th>
-          <th className="text-right py-1 px-1 w-20 font-semibold">Cant.</th>
-          <th className="text-right py-1 px-1 w-24 font-semibold">Costo</th>
-          <th className="text-right py-1 px-1 w-24 font-semibold">Total</th>
-          <th className="w-6"></th>
-        </tr>
-      </thead>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
+    // El DndContext/SortableContext envuelve TODA la <table>, no va dentro de
+    // ella. dnd-kit inserta un <div> oculto de accesibilidad como hijo directo
+    // de su contenedor; si ese contenedor está entre <thead> y <tbody> el HTML
+    // queda inválido (<div> hijo de <table>) y React tira el warning de
+    // hidratación. Afuera de la tabla el <div> es un hermano legítimo.
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
+      <SortableContext
+        items={regulares.map((c) => c.id)}
+        strategy={verticalListSortingStrategy}
       >
-        <SortableContext
-          items={regulares.map((c) => c.id)}
-          strategy={verticalListSortingStrategy}
-        >
+        <table className="w-full text-[11px]">
+          <thead>
+            <tr className="border-y border-gray-300 text-gray-500 uppercase tracking-wider">
+              <th className="w-6"></th>
+              <th className="text-left py-1 px-1 w-28 font-semibold">Tipo</th>
+              <th className="text-left py-1 px-1 font-semibold">Descripción</th>
+              <th className="text-center py-1 px-1 w-14 font-semibold">Un.</th>
+              <th className="text-right py-1 px-1 w-20 font-semibold">Cant.</th>
+              <th className="text-right py-1 px-1 w-24 font-semibold">Costo</th>
+              <th className="text-right py-1 px-1 w-24 font-semibold">Total</th>
+              <th className="w-6"></th>
+            </tr>
+          </thead>
           <tbody>
             {regulares.map((comp) => (
               <ComponentEditRow
@@ -1534,9 +1553,9 @@ function ComponentsEditTable({
               <td></td>
             </tr>
           </tbody>
-        </SortableContext>
-      </DndContext>
-    </table>
+        </table>
+      </SortableContext>
+    </DndContext>
   );
 }
 

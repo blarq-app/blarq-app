@@ -176,6 +176,18 @@ function CatalogButtons(p: Props) {
   if (!p.item.catalogPartidaId) return null;
   return (
     <div className="flex justify-end gap-2">
+      {/* Abrir ESTA partida en el Catálogo de Partidas, en pestaña nueva, para
+          editar la receta MAESTRA (la que se usa en próximos proyectos), NO la
+          copia de este presupuesto. La etiqueta lo deja claro. */}
+      <a
+        href={`/catalogo/partidas?focus=${p.item.catalogPartidaId}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-xs text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-2 py-0.5 rounded-lg transition-colors whitespace-nowrap"
+        title="Abre la partida en el Catálogo (pestaña nueva). Editás la receta maestra para los próximos proyectos, no esta cotización."
+      >
+        Editar en catálogo ↗
+      </a>
       <button
         onClick={p.onUpdateCatalogDescription}
         className="text-xs text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-2 py-0.5 rounded-lg transition-colors whitespace-nowrap"

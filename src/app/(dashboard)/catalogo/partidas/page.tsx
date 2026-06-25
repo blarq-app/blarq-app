@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import { compareCatalogCategories } from "@/lib/utils";
 import PartidaSearch from "@/components/catalogo/PartidaSearch";
@@ -28,7 +29,9 @@ export default async function CatalogoPartidasPage() {
         </div>
       </div>
 
-      <PartidaSearch categories={categories} />
+      <Suspense>
+        <PartidaSearch categories={categories} />
+      </Suspense>
     </div>
   );
 }

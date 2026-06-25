@@ -1,7 +1,8 @@
 "use client";
 
-import { Fragment, useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { formatCLP } from "@/lib/utils";
 import {
   DndContext,
@@ -167,11 +168,39 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
   const [creating, setCreating] = useState(false);
   const [newForm, setNewForm] = useState({ name: "", category: "", unit: "GL" });
 
+  // Foco desde el presupuesto: al apretar "Editar en catálogo" en el desglose
+  // de una partida, se llega con ?focus=<catalogPartidaId>. Abrimos esa partida
+  // directo en modo edición, hacemos scroll a su fila y la resaltamos un par de
+  // segundos para ubicarla. (Mismo patrón que el catálogo de materiales.)
+  const searchParams = useSearchParams();
+  const focusId = searchParams.get("focus");
+  const handledFocusRef = useRef<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+
   useEffect(() => {
     const timer = setTimeout(fetchPartidas, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, category]);
+
+  useEffect(() => {
+    if (!focusId || handledFocusRef.current === focusId || partidas.length === 0)
+      return;
+    const partida = partidas.find((p) => p.id === focusId);
+    if (!partida) return;
+    handledFocusRef.current = focusId;
+    startEdit(partida);
+    setHighlightId(partida.id);
+  }, [focusId, partidas]);
+
+  // Scroll + apagado del resaltado, una vez que la fila enfocada está montada.
+  useEffect(() => {
+    if (!highlightId) return;
+    const el = document.getElementById(`partida-row-${highlightId}`);
+    el?.scrollIntoView({ block: "center" });
+    const t = setTimeout(() => setHighlightId(null), 2500);
+    return () => clearTimeout(t);
+  }, [highlightId]);
 
   async function fetchPartidas() {
     setLoading(true);
@@ -746,12 +775,13 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
             </div>
 
             {/* Column headers — matches PDF thead */}
-            <div className="grid grid-cols-[4.5rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem] items-center gap-3 px-4 py-2 border-y-2 border-gray-900 bg-white text-[11px] font-bold text-gray-900 uppercase tracking-wider">
+            <div className="grid grid-cols-[4.5rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem_5rem] items-center gap-3 px-4 py-2 border-y-2 border-gray-900 bg-white text-[11px] font-bold text-gray-900 uppercase tracking-wider">
               <div className="text-center">Nº</div>
               <div className="text-left">Partida</div>
               <div className="text-left">Descripción Cliente</div>
               <div className="text-center">Un.</div>
               <div className="text-right">P.U.</div>
+              <div></div>
             </div>
 
             {/* Filas con drag & drop */}
@@ -772,6 +802,7 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
                     rowIndex={idx + 1}
                     isExpanded={expanded === partida.id}
                     isEditing={editing === partida.id}
+                    isFocused={highlightId === partida.id}
                     isEditingDesc={editingDescId === partida.id}
                     draft={editing === partida.id ? draft : null}
                     saving={saving}
@@ -826,6 +857,7 @@ function PartidaRow({
   rowIndex,
   isExpanded,
   isEditing,
+  isFocused,
   isEditingDesc,
   draft,
   saving,
@@ -854,6 +886,7 @@ function PartidaRow({
   rowIndex: number;
   isExpanded: boolean;
   isEditing: boolean;
+  isFocused: boolean;
   isEditingDesc: boolean;
   draft: Partida | null;
   saving: boolean;
@@ -907,11 +940,13 @@ function PartidaRow({
   const d = isEditing && draft ? draft : partida;
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} id={`partida-row-${partida.id}`}>
       <div
-        className={`grid grid-cols-[4.5rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem] items-center gap-3 px-4 py-1.5 border-b border-gray-100 hover:bg-gray-50/60 group ${
+        className={`grid grid-cols-[4.5rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem_5rem] items-center gap-3 px-4 py-1.5 border-b border-gray-100 hover:bg-gray-50/60 group ${
           isExpanded ? "bg-gray-50/60" : ""
-        } ${savedFlash ? "bg-green-50" : ""}`}
+        } ${savedFlash ? "bg-green-50" : ""} ${
+          isFocused ? "ring-2 ring-inset ring-gray-900" : ""
+        }`}
       >
         <div className="flex items-center gap-1 text-xs text-gray-700 tabular-nums">
           <span
@@ -981,6 +1016,20 @@ function PartidaRow({
         </div>
         <div className="text-right text-xs font-medium text-gray-900 tabular-nums">
           {formatCLP(partida.unitPrice)}
+        </div>
+        {/* Duplicar de un toque, sin tener que expandir la partida. Aparece al
+            pasar el mouse por la fila. Mismo botón que en el panel desplegado. */}
+        <div className="text-right">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDuplicate();
+            }}
+            className="text-[11px] text-gray-400 hover:text-gray-900 opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Duplicar esta partida en el catálogo"
+          >
+            Duplicar
+          </button>
         </div>
       </div>
 
@@ -1139,7 +1188,11 @@ function ViewPanel({
                     <td className="py-1 px-2 text-right text-gray-700 tabular-nums">
                       {c.quantity}
                     </td>
-                    <td className="py-1 px-2 text-right text-gray-700 tabular-nums">
+                    <td
+                      className={`py-1 px-2 text-right tabular-nums ${
+                        c.type === "mano_obra" ? "text-red-700" : "text-gray-700"
+                      }`}
+                    >
                       {c.unit === "%" ? (
                         <span className="text-[10px] text-gray-400 italic">
                           {c.type === "perdida"
@@ -1154,7 +1207,14 @@ function ViewPanel({
                         formatCLP(c.unitCost)
                       )}
                     </td>
-                    <td className="py-1 px-2 text-right font-medium text-gray-900 tabular-nums">
+                    {/* Mano de obra en rojo ladrillo apagado (mismo tono que la
+                        Pérdida), a propósito: resalta lo que MJ negocia con el
+                        maestro. */}
+                    <td
+                      className={`py-1 px-2 text-right font-medium tabular-nums ${
+                        c.type === "mano_obra" ? "text-red-700" : "text-gray-900"
+                      }`}
+                    >
                       {formatCLP(effectiveTotal(c, allActive))}
                     </td>
                   </tr>
@@ -1637,11 +1697,18 @@ function ComponentEditRow({
             step="1"
             value={Math.round(comp.unitCost)}
             onChange={(e) => onUpdate(comp.id, "unitCost", parseFloat(e.target.value) || 0)}
-            className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-right tabular-nums"
+            className={`w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-right tabular-nums ${
+              comp.type === "mano_obra" ? "text-red-700" : ""
+            }`}
           />
         )}
       </td>
-      <td className="py-1 px-1 text-right font-medium text-gray-700 tabular-nums">
+      {/* Mano de obra en rojo ladrillo apagado (mismo tono que la Pérdida). */}
+      <td
+        className={`py-1 px-1 text-right font-medium tabular-nums ${
+          comp.type === "mano_obra" ? "text-red-700" : "text-gray-700"
+        }`}
+      >
         {formatCLP(effectiveTotal(comp, allActive))}
       </td>
       <td className="py-1 px-1 text-center">

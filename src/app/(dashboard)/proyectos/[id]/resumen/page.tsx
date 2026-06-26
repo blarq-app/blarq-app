@@ -471,6 +471,7 @@ export default async function ResultadosPage({
         data={cuadroData}
         transferido={transferido}
         projectId={id}
+        projectName={project.name}
         objetivosGuardados={
           (project.avanceObjetivos as Record<string, number> | null) ?? null
         }

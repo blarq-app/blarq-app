@@ -175,7 +175,7 @@ export default async function MovimientosPage({
   if (q) statsWhere.OR = where.OR;
   if (andFilters.length > 0) statsWhere.AND = andFilters;
 
-  const [movements, accounts, statusCounts, ingresos, egresos, projects, categories] = await Promise.all([
+  const [movements, accounts, statusCounts, ingresos, egresos, parcialMovs, projects, categories] = await Promise.all([
     prisma.bankMovement.findMany({
       where,
       orderBy: { date: "desc" },
@@ -206,6 +206,14 @@ export default async function MovimientosPage({
       by: ["status"],
       where: { ...statsWhere, amount: { lt: 0 } },
       _sum: { amount: true },
+    }),
+    // Movimientos PARCIALES con sus payments: los necesitamos para repartir
+    // su monto entre las tarjetas de arriba. Un mov parcial tiene una parte
+    // aplicada a factura(s) (= conciliada) y un resto libre (= pendiente);
+    // sumarlo entero a "pendientes" sobreestima lo que falta conciliar.
+    prisma.bankMovement.findMany({
+      where: { ...statsWhere, status: "parcial" },
+      select: { amount: true, payments: { select: { amountApplied: true } } },
     }),
     // Proyectos y categorías para el modal "pago sin factura" (asignar un
     // movimiento a un costo de proyecto sin que exista factura).
@@ -251,7 +259,6 @@ export default async function MovimientosPage({
   const conciliablesAprox =
     (countByStatus.sin_asignar ?? 0) + (countByStatus.sin_factura ?? 0);
   const conciliados = countByStatus.conciliado ?? 0;
-  const pctConciliado = totalCount > 0 ? Math.round((conciliados / totalCount) * 100) : 0;
 
   // Sumas para las cards: total = todo; conciliados = status conciliado;
   // pendientes = sin_asignar + parcial. Las devoluciones "neto cero" se
@@ -263,12 +270,45 @@ export default async function MovimientosPage({
       .reduce((acc, [, v]) => acc + v, 0);
   const totalIngresos = sumExcluyendoNetoCero(ingresoByStatus);
   const totalEgresos = sumExcluyendoNetoCero(egresoByStatus);
-  const conciliadosIngresos = ingresoByStatus.conciliado ?? 0;
-  const conciliadosEgresos = egresoByStatus.conciliado ?? 0;
-  const pendientesIngresos =
-    (ingresoByStatus.sin_asignar ?? 0) + (ingresoByStatus.parcial ?? 0);
-  const pendientesEgresos =
-    (egresoByStatus.sin_asignar ?? 0) + (egresoByStatus.parcial ?? 0);
+
+  // Reparto del monto de los movimientos PARCIALES entre conciliado y
+  // pendiente. Un parcial NO es "todo pendiente": tiene una parte aplicada a
+  // factura (conciliada) y un resto libre (pendiente). Repartimos por MONTO:
+  //   aplicado = Σ amountApplied de sus payments  → va a CONCILIADO
+  //   libre    = |monto| − aplicado               → va a PENDIENTE
+  // Ingresos (monto>0) y egresos (monto<0) por separado, igual que las cards.
+  let parcialAplicadoIngresos = 0;
+  let parcialLibreIngresos = 0;
+  let parcialAplicadoEgresos = 0;
+  let parcialLibreEgresos = 0;
+  for (const m of parcialMovs) {
+    const aplicado = m.payments.reduce((s, p) => s + p.amountApplied, 0);
+    const libre = Math.max(0, Math.abs(m.amount) - aplicado);
+    if (m.amount >= 0) {
+      parcialAplicadoIngresos += aplicado;
+      parcialLibreIngresos += libre;
+    } else {
+      parcialAplicadoEgresos += aplicado;
+      parcialLibreEgresos += libre;
+    }
+  }
+
+  // Conciliado = movs 100% conciliados + la parte aplicada de los parciales.
+  // Pendiente  = movs sin asignar enteros + la parte libre de los parciales.
+  // Así TOTAL = Conciliado + Pendiente sigue cuadrando: el monto del parcial
+  // (aplicado + libre) es el mismo, solo se reparte entre las dos tarjetas.
+  const conciliadosIngresos = (ingresoByStatus.conciliado ?? 0) + parcialAplicadoIngresos;
+  const conciliadosEgresos = (egresoByStatus.conciliado ?? 0) + parcialAplicadoEgresos;
+  const pendientesIngresos = (ingresoByStatus.sin_asignar ?? 0) + parcialLibreIngresos;
+  const pendientesEgresos = (egresoByStatus.sin_asignar ?? 0) + parcialLibreEgresos;
+
+  // "% conciliado" por MONTO (no por conteo de movimientos), para que sea
+  // consistente con las tarjetas, que ahora también reparten por plata. Antes
+  // era conciliados/totalCount (un parcial contaba como 0% aunque tuviera casi
+  // todo aplicado). Denominador = plata total (excluye neto cero).
+  const totalMonto = totalIngresos + totalEgresos;
+  const conciliadoMonto = conciliadosIngresos + conciliadosEgresos;
+  const pctConciliado = totalMonto > 0 ? Math.round((conciliadoMonto / totalMonto) * 100) : 0;
 
   // Match hints: para cada mov pendiente con counterparty RUT, buscamos si
   // hay UNA factura abierta con saldo restante = |amount| (±$10) y mismo

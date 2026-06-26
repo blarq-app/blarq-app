@@ -48,6 +48,7 @@ next-env.d.ts
 
 # certificados digitales (SII Chile) — NUNCA commitear
 *.pfx
+*.pfx.old
 *.p12
 sii-cert/
 cert/

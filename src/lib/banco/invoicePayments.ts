@@ -57,6 +57,66 @@ export async function recomputeInvoiceStatus(invoiceId: string) {
   });
 }
 
+// Rango de "avance de cobro" de un status, para comparaciones monótonas.
+const STATUS_RANK: Record<string, number> = { pendiente: 0, parcial: 1, pagada: 2 };
+
+/**
+ * Variante CONSERVADORA de recomputeInvoiceStatus: recalcula el status desde
+ * los pagos pero SOLO lo deja AVANZAR (pendiente → parcial → pagada). Nunca
+ * lo hace retroceder.
+ *
+ * Por qué: hay facturas marcadas "pagada"/"parcial" a mano o migradas de Maxxa
+ * cuyo pago NO está (o está incompleto) como InvoicePayment a propósito —
+ * boletas de honorarios pagadas al líquido (la diferencia es la retención),
+ * pagos a maestros fuera del banco, diferencias de redondeo de $1-$2. Para esas,
+ * derivar el status de los pagos y BAJARLO sería pisar la verdad manual de MJ
+ * ("auditar lo automático, no lo manual"). En cambio, SUBIR el status cuando
+ * aparecen pagos que cubren la factura siempre es seguro: el dinero entró y
+ * está trazado. Este es el caso del bug que motivó la función — facturas 100%
+ * pagadas por transferencia que seguían en "pendiente".
+ *
+ * La usa el sync del SII (contexto automático/desatendido). El recompute
+ * normal — que SÍ puede bajar el status — se sigue usando en los caminos
+ * manuales (borrar un pago debe poder devolver la factura a parcial/pendiente).
+ *
+ * "anulada" no se toca. Devuelve true si cambió algo.
+ */
+export async function bumpInvoiceStatusUpwards(invoiceId: string): Promise<boolean> {
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { totalAmount: true, status: true },
+  });
+  if (!invoice) return false;
+  if (invoice.status === "anulada") return false;
+
+  const payments = await prisma.invoicePayment.findMany({
+    where: { invoiceId },
+    select: { amountApplied: true, bankMovement: { select: { date: true } } },
+  });
+  const sumApplied = payments.reduce((s, p) => s + p.amountApplied, 0);
+
+  let derived: "pendiente" | "parcial" | "pagada" = "pendiente";
+  let paidAt: Date | null = null;
+  if (sumApplied >= invoice.totalAmount - 1) {
+    derived = "pagada";
+    paidAt = payments.reduce<Date | null>((latest, p) => {
+      const d = p.bankMovement.date;
+      return !latest || d > latest ? d : latest;
+    }, null);
+  } else if (sumApplied > 0) {
+    derived = "parcial";
+  }
+
+  // Solo avanzar: si el status derivado no es MÁS alto que el actual, no tocar.
+  if (STATUS_RANK[derived] <= (STATUS_RANK[invoice.status] ?? 0)) return false;
+
+  await prisma.invoice.update({
+    where: { id: invoiceId },
+    data: { status: derived, paidAt },
+  });
+  return true;
+}
+
 /**
  * Devuelve cuánto del monto de un movimiento bancario ya está imputado
  * a facturas (suma de InvoicePayment.amountApplied para ese mov).

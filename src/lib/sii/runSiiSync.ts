@@ -21,7 +21,10 @@
 // no, el job local cubre igual.
 
 import { prisma } from "@/lib/prisma";
-import { tryAutoMatchInvoiceWithExistingMovs } from "@/lib/banco/invoicePayments";
+import {
+  tryAutoMatchInvoiceWithExistingMovs,
+  bumpInvoiceStatusUpwards,
+} from "@/lib/banco/invoicePayments";
 import { applyInvoiceRule } from "@/lib/facturas/categorizationRules";
 import { applyPendingTagsForInvoice } from "@/lib/facturas/pendingTags";
 import { mockDTEs, type RemoteDTE } from "@/lib/sii/simpleFacturaClient";
@@ -183,8 +186,24 @@ async function upsertInvoice(
     await applyPendingTagsForInvoice(existing.id).catch(() => 0);
   }
 
+  // RED DE SEGURIDAD del status. El status (pendiente/parcial/pagada) es
+  // DERIVADO de los pagos (Σ InvoicePayment). Si una corrida masiva/script
+  // histórico creó InvoicePayment sin recomputar, el status quedó atrás (pasó:
+  // facturas 100% pagadas por transferencia que seguían en "pendiente"). Al
+  // re-sincronizar lo subimos desde los pagos para que se auto-corrija.
+  //
+  // SOLO SUBE, nunca baja (bumpInvoiceStatusUpwards): bajarlo pisaría facturas
+  // marcadas "pagada" a mano o migradas de Maxxa cuyo pago está incompleto como
+  // InvoicePayment a propósito (honorarios al líquido, pagos fuera del banco,
+  // redondeo). Las NC (tipoDoc 61) no derivan status de pagos → se excluyen.
+  if (existing.tipoDoc !== 61) {
+    await bumpInvoiceStatusUpwards(existing.id).catch(() => {});
+  }
+
   // Después actualizar montos si cambiaron. Preservamos projectId /
-  // categoryId / status (lo que MJ haya asignado manualmente).
+  // categoryId (lo asignado manualmente). El status ya lo subió la red de
+  // seguridad de arriba; "anulada" y las marcas manuales "pagada" quedan
+  // intactas (la red solo sube, no baja).
   const changed =
     existing.netAmount !== dte.netAmount ||
     existing.iva !== dte.iva ||

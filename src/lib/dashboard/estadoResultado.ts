@@ -73,8 +73,8 @@ export async function getAvailableYears(): Promise<number[]> {
     orderBy: { issueDate: "asc" },
     select: { issueDate: true },
   });
-  const currentYear = new Date().getFullYear();
-  const firstYear = first ? first.issueDate.getFullYear() : currentYear;
+  const currentYear = new Date().getUTCFullYear();
+  const firstYear = first ? first.issueDate.getUTCFullYear() : currentYear;
   const years: number[] = [];
   for (let y = currentYear; y >= firstYear; y--) years.push(y);
   return years;
@@ -83,8 +83,12 @@ export async function getAvailableYears(): Promise<number[]> {
 export async function computeEstadoResultadoFacturacion(
   year: number
 ): Promise<EstadoResultadoFacturacion> {
-  const start = new Date(year, 0, 1);
-  const end = new Date(year + 1, 0, 1);
+  // El corte mensual es por período tributario (mes calendario). issueDate se
+  // guarda en UTC (medianoche del día), así que hay que leer mes/año en UTC: con
+  // hora local las facturas del día 1 se corrían al mes anterior (Chile es
+  // UTC−3/−4). Mismo criterio que f29.ts (validado al peso vs F29 abril 2026).
+  const start = new Date(Date.UTC(year, 0, 1));
+  const end = new Date(Date.UTC(year + 1, 0, 1));
 
   const ventas = Array(12).fill(0);
   const devoluciones = Array(12).fill(0);
@@ -114,7 +118,7 @@ export async function computeEstadoResultadoFacturacion(
   });
 
   for (const inv of invoices) {
-    const m = inv.issueDate.getMonth();
+    const m = inv.issueDate.getUTCMonth();
     const s = ncSign(inv.tipoDoc);
 
     if (inv.type === "emitida") {

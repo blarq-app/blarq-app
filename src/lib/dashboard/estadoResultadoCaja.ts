@@ -86,14 +86,19 @@ export type CajaRow = {
   total: number;
 };
 
-// Saldo de préstamos con un socio, ACUMULADO hasta fin del año mostrado.
-//   saldo > 0  → el socio le debe a la empresa (cuenta por cobrar).
-//   saldo < 0  → la empresa le debe al socio (cuenta por pagar).
-// Se calcula como −Σ(monto de los movimientos categoría "prestamo_socio"): un
-// egreso (empresa presta, monto negativo) sube lo que el socio debe; un ingreso
-// (el socio devuelve o presta, monto positivo) lo baja.
+// Préstamos entre un socio y la empresa, ACUMULADO hasta fin del año mostrado.
+// El caso real de BLARQ: los socios le prestaron plata a la empresa (ej. ~$14M
+// hace años) y la empresa se los devuelve de a poco. Por eso separamos:
+//   - prestado: plata que ENTRÓ del socio a la empresa (ingresos / abonos).
+//   - devuelto: plata que la empresa le DEVOLVIÓ al socio (egresos / cargos).
+//   - saldo = prestado − devuelto = lo que la empresa AÚN le debe al socio.
+// Mientras el préstamo original no esté registrado (prestado = 0), solo se
+// puede mostrar lo devuelto a la fecha; el saldo aparece cuando MJ etiqueta ese
+// depósito original como "Préstamo socio".
 export type SaldoPrestamoSocio = {
   socio: string;
+  prestado: number;
+  devuelto: number;
   saldo: number;
 };
 
@@ -118,9 +123,9 @@ export type EstadoResultadoCaja = {
   saldoPrestamos: SaldoPrestamoSocio[];
 };
 
-// Saldo acumulado de préstamos por socio, considerando TODOS los movimientos
-// categoría "prestamo_socio" hasta `hasta` (fin del año mostrado). Cross-year a
-// propósito: un préstamo de 2024 sigue debiéndose en 2026 hasta que se devuelva.
+// Préstamos por socio, considerando TODOS los movimientos categoría
+// "prestamo_socio" hasta `hasta` (fin del año mostrado). Cross-year a propósito:
+// un préstamo de hace años sigue vivo hasta que se devuelva entero.
 export async function computeSaldoPrestamosSocios(
   hasta: Date
 ): Promise<SaldoPrestamoSocio[]> {
@@ -128,16 +133,25 @@ export async function computeSaldoPrestamosSocios(
     where: { category: CATEGORIA_PRESTAMO_SOCIO, date: { lt: hasta } },
     select: { amount: true, counterpartyRut: true, counterpartyName: true },
   });
-  const porSocio = new Map<string, number>();
+  const porSocio = new Map<string, { prestado: number; devuelto: number }>();
   for (const mov of movs) {
     const socio = nombreSocio(mov.counterpartyRut, mov.counterpartyName);
-    // saldo a cobrar = −Σmonto (egreso negativo sube la deuda del socio).
-    porSocio.set(socio, (porSocio.get(socio) ?? 0) - mov.amount);
+    const e = porSocio.get(socio) ?? { prestado: 0, devuelto: 0 };
+    // Abono (monto > 0): entró plata del socio a la empresa = préstamo.
+    // Cargo (monto < 0): salió plata al socio = la empresa le devolvió.
+    if (mov.amount > 0) e.prestado += mov.amount;
+    else e.devuelto += -mov.amount;
+    porSocio.set(socio, e);
   }
   return Array.from(porSocio.entries())
-    .map(([socio, saldo]) => ({ socio, saldo: Math.round(saldo) }))
-    .filter((s) => Math.abs(s.saldo) > 1)
-    .sort((a, b) => Math.abs(b.saldo) - Math.abs(a.saldo));
+    .map(([socio, e]) => ({
+      socio,
+      prestado: Math.round(e.prestado),
+      devuelto: Math.round(e.devuelto),
+      saldo: Math.round(e.prestado - e.devuelto),
+    }))
+    .filter((s) => s.prestado > 1 || s.devuelto > 1)
+    .sort((a, b) => b.prestado + b.devuelto - (a.prestado + a.devuelto));
 }
 
 export async function computeEstadoResultadoCaja(

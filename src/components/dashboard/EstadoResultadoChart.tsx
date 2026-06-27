@@ -479,28 +479,38 @@ function VistaCaja({ data, year }: { data: EstadoResultadoCaja; year: number }) 
   );
 }
 
-// Saldo acumulado de préstamos con cada socio. Un préstamo no es gasto ni
-// retiro: es una cuenta por cobrar/pagar que se devuelve después. Acá se ve el
-// neto (préstamos − devoluciones) hasta fin del año mostrado.
+// Préstamos entre los socios y la empresa. No es gasto ni retiro: es plata que
+// se devuelve. El caso real: los socios le prestaron a la empresa y la empresa
+// se los devuelve de a poco. Mientras el préstamo original no esté registrado
+// (prestado = 0) solo mostramos lo devuelto a la fecha; cuando se etiqueta el
+// depósito original, aparece el saldo pendiente.
 function SaldoPrestamos({ saldos }: { saldos: EstadoResultadoCaja["saldoPrestamos"] }) {
+  const faltaOriginal = saldos.some((s) => s.prestado === 0);
   return (
     <div className="mt-4 border-t border-gray-100 pt-4">
       <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-2">
-        Saldo de préstamos con socios
+        Préstamos de socios a la empresa
       </p>
       <div className="max-w-md space-y-1.5">
         {saldos.map((s) => {
-          // saldo > 0 → el socio le debe a la empresa; < 0 → la empresa le debe.
-          const empresaDebe = s.saldo < 0;
+          const tienePrestado = s.prestado > 0;
+          // Con el préstamo original registrado: saldo > 0 → la empresa aún le
+          // debe; saldo < 0 → el socio le debe a la empresa. Sin él, solo se
+          // muestra lo que la empresa ya devolvió.
+          const empresaDebe = s.saldo >= 0;
           return (
             <div key={s.socio} className="flex items-baseline justify-between text-sm">
               <span className="text-gray-700">{s.socio}</span>
               <span className="flex items-baseline gap-2">
                 <span className="text-[11px] text-gray-400">
-                  {empresaDebe ? "le debe la empresa" : "le debe a la empresa"}
+                  {tienePrestado
+                    ? empresaDebe
+                      ? "le debe la empresa"
+                      : "le debe a la empresa"
+                    : "la empresa le devolvió"}
                 </span>
                 <span className="tabular-nums font-medium text-gray-900">
-                  {formatCLP(Math.abs(s.saldo))}
+                  {formatCLP(tienePrestado ? Math.abs(s.saldo) : s.devuelto)}
                 </span>
               </span>
             </div>
@@ -508,7 +518,9 @@ function SaldoPrestamos({ saldos }: { saldos: EstadoResultadoCaja["saldoPrestamo
         })}
       </div>
       <p className="text-[11px] text-gray-400 mt-2 leading-snug">
-        Préstamos menos devoluciones. No cuenta como gasto ni como retiro — es plata que se devuelve.
+        {faltaOriginal
+          ? "Lo que la empresa ya les devolvió. Para ver el saldo pendiente, etiquetá el préstamo original de socios (el depósito que entró a la empresa) como “Préstamo socio”."
+          : "Saldo pendiente = lo prestado por el socio menos lo que la empresa ya le devolvió."}
       </p>
     </div>
   );

@@ -256,7 +256,11 @@ function Linea({
         {note && <span className="text-xs text-gray-400 italic">— {note}</span>}
       </span>
       <span className={valorClass}>
-        {valor === null ? "pendiente" : formatCLP(valor)}
+        {valor === null
+          ? "pendiente"
+          : valor < 0
+            ? `−${formatCLP(-valor)}`
+            : formatCLP(valor)}
       </span>
     </div>
   );

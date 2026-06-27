@@ -26,6 +26,7 @@
 // entran al F29.
 
 import { prisma } from "@/lib/prisma";
+import { computeCodigo048 } from "./remuneraciones";
 
 // Tasa de PPM (Pago Provisional Mensual) de 1ra categoría. 0,5% es la tasa
 // vigente de BLARQ; las tasas de PPM se recalculan una vez al año en la
@@ -58,8 +59,10 @@ export type F29Mes = {
   ppmRate: number; // 115 — tasa aplicada
   ppm: number; // 062 — base × tasa
 
-  // Renglones pendientes (otras etapas del módulo)
-  impuestoUnico: number; // 048 — 0 hoy (depende de sueldos)
+  // Impuesto único de los sueldos (de las liquidaciones del mes)
+  impuestoUnico: number; // 048 — suma del impuesto único retenido
+  impuestoUnicoPendiente: boolean; // true si no hay remuneraciones cargadas ese mes
+  // Renglón pendiente (otra etapa del módulo)
   retencionHonorarios: number; // 0 hoy (depende de boletas de honorarios)
 
   totalAPagar: number; // 547 — IVA a pagar + PPM (+ pendientes cuando existan)
@@ -153,7 +156,12 @@ export async function computeF29Year(
     const baseImponiblePpm = Math.round(Math.max(0, baseV[m]));
     const ppm = Math.round(baseImponiblePpm * ppmRate);
 
-    const totalAPagar = ivaAPagar + ppm; // + impuestoUnico + retención (pendientes)
+    // 048 — impuesto único de los sueldos del mes (null si no hay
+    // remuneraciones cargadas todavía para ese mes).
+    const imp048 = computeCodigo048(year, m + 1);
+    const impuestoUnico = imp048 ?? 0;
+
+    const totalAPagar = ivaAPagar + ppm + impuestoUnico; // + retención (pendiente)
 
     meses.push({
       year,
@@ -171,7 +179,8 @@ export async function computeF29Year(
       baseImponiblePpm,
       ppmRate,
       ppm,
-      impuestoUnico: 0,
+      impuestoUnico,
+      impuestoUnicoPendiente: imp048 === null,
       retencionHonorarios: 0,
       totalAPagar,
       countVentas: cV[m],

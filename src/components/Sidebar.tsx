@@ -10,6 +10,7 @@ const navigation = [
   { name: "Proyectos", href: "/proyectos", icon: "🏗️" },
   { name: "Facturas", href: "/facturas", icon: "💵" },
   { name: "Banco", href: "/banco", icon: "🏦" },
+  { name: "Contabilidad", href: "/contabilidad/f29", icon: "🧾" },
   { name: "Partidas", href: "/catalogo/partidas", icon: "📋" },
   { name: "Materiales", href: "/catalogo/materiales", icon: "🧱" },
   { name: "Artefactos", href: "/catalogo/artefactos", icon: "🚿" },

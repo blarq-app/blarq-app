@@ -467,9 +467,48 @@ function VistaCaja({ data, year }: { data: EstadoResultadoCaja; year: number }) 
       </table>
       <p className="text-[11px] text-gray-400 mt-3 leading-snug">
         Plata real del banco según la conciliación. El <span className="text-gray-500">resultado de
-        operación</span> dice si el negocio gana; abajo, separados, los retiros de los socios y el
-        pago de IVA (plata que sale pero no es costo de operar). &quot;No asignado&quot; = movimientos
-        que todavía no catalogaste.
+        operación</span> dice si el negocio gana; abajo, separados, los pagos a los socios (retiros,
+        sueldos, bonos, préstamos) y el pago de IVA (plata que sale pero no es costo de operar).
+        &quot;No asignado&quot; = movimientos que todavía no catalogaste.
+      </p>
+
+      {data.saldoPrestamos.length > 0 && (
+        <SaldoPrestamos saldos={data.saldoPrestamos} />
+      )}
+    </div>
+  );
+}
+
+// Saldo acumulado de préstamos con cada socio. Un préstamo no es gasto ni
+// retiro: es una cuenta por cobrar/pagar que se devuelve después. Acá se ve el
+// neto (préstamos − devoluciones) hasta fin del año mostrado.
+function SaldoPrestamos({ saldos }: { saldos: EstadoResultadoCaja["saldoPrestamos"] }) {
+  return (
+    <div className="mt-4 border-t border-gray-100 pt-4">
+      <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-2">
+        Saldo de préstamos con socios
+      </p>
+      <div className="max-w-md space-y-1.5">
+        {saldos.map((s) => {
+          // saldo > 0 → el socio le debe a la empresa; < 0 → la empresa le debe.
+          const empresaDebe = s.saldo < 0;
+          return (
+            <div key={s.socio} className="flex items-baseline justify-between text-sm">
+              <span className="text-gray-700">{s.socio}</span>
+              <span className="flex items-baseline gap-2">
+                <span className="text-[11px] text-gray-400">
+                  {empresaDebe ? "le debe la empresa" : "le debe a la empresa"}
+                </span>
+                <span className="tabular-nums font-medium text-gray-900">
+                  {formatCLP(Math.abs(s.saldo))}
+                </span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-gray-400 mt-2 leading-snug">
+        Préstamos menos devoluciones. No cuenta como gasto ni como retiro — es plata que se devuelve.
       </p>
     </div>
   );

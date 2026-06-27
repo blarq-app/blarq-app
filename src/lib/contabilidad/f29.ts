@@ -27,6 +27,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { computeCodigo048 } from "./remuneraciones";
+import { tasaRetencionHonorarios } from "./honorarios";
 
 // Tasa de PPM (Pago Provisional Mensual) de 1ra categoría. 0,5% es la tasa
 // vigente de BLARQ; las tasas de PPM se recalculan una vez al año en la
@@ -62,8 +63,8 @@ export type F29Mes = {
   // Impuesto único de los sueldos (de las liquidaciones del mes)
   impuestoUnico: number; // 048 — suma del impuesto único retenido
   impuestoUnicoPendiente: boolean; // true si no hay remuneraciones cargadas ese mes
-  // Renglón pendiente (otra etapa del módulo)
-  retencionHonorarios: number; // 0 hoy (depende de boletas de honorarios)
+  // Retención de boletas de honorarios recibidas en el mes (código 151)
+  retencionHonorarios: number;
 
   totalAPagar: number; // 547 — IVA a pagar + PPM (+ pendientes cuando existan)
 
@@ -95,6 +96,7 @@ export async function computeF29Year(
       issueDate: true,
       netAmount: true,
       iva: true,
+      totalAmount: true, // bruto de las boletas de honorarios (tipoDoc 1039)
     },
   });
 
@@ -107,6 +109,7 @@ export async function computeF29Year(
   const cVNC = zeros();
   const cC = zeros();
   const cCNC = zeros();
+  const bheBruto = zeros(); // bruto de boletas de honorarios (tipoDoc 1039)
 
   for (const inv of invoices) {
     const m = inv.issueDate.getUTCMonth();
@@ -123,6 +126,12 @@ export async function computeF29Year(
     } else {
       // Recibidas. Los pagos sin factura (1043) no son DTE → fuera del F29.
       if (inv.tipoDoc === 1043) continue;
+      // Boletas de honorarios (1039): no llevan IVA; alimentan el código 151
+      // (retención), no el crédito de IVA.
+      if (inv.tipoDoc === 1039) {
+        bheBruto[m] += inv.totalAmount;
+        continue;
+      }
       if (inv.tipoDoc === 61) {
         creNC[m] += inv.iva;
         cCNC[m] += 1;
@@ -161,7 +170,12 @@ export async function computeF29Year(
     const imp048 = computeCodigo048(year, m + 1);
     const impuestoUnico = imp048 ?? 0;
 
-    const totalAPagar = ivaAPagar + ppm + impuestoUnico; // + retención (pendiente)
+    // 151 — retención de boletas de honorarios del mes (bruto × tasa del año).
+    const retencionHonorarios = Math.round(
+      bheBruto[m] * tasaRetencionHonorarios(year)
+    );
+
+    const totalAPagar = ivaAPagar + ppm + impuestoUnico + retencionHonorarios;
 
     meses.push({
       year,
@@ -181,7 +195,7 @@ export async function computeF29Year(
       ppm,
       impuestoUnico,
       impuestoUnicoPendiente: imp048 === null,
-      retencionHonorarios: 0,
+      retencionHonorarios,
       totalAPagar,
       countVentas: cV[m],
       countNotasCreditoEmitidas: cVNC[m],

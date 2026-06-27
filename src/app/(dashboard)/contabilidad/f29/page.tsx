@@ -174,14 +174,16 @@ export default async function F29Page({
             />
           </Bloque>
 
-          {/* Pendiente de otra etapa */}
-          <Bloque titulo="Pendiente (otra etapa del módulo)">
-            <Linea
-              glosa="Retención de honorarios"
-              valor={null}
-              note="cuando sumemos boletas de honorarios"
-            />
-          </Bloque>
+          {/* Retención de honorarios — solo en meses que la tienen */}
+          {mes.retencionHonorarios > 0 && (
+            <Bloque titulo="Honorarios">
+              <Linea
+                codigo="151"
+                glosa="Retención de boletas de honorarios"
+                valor={mes.retencionHonorarios}
+              />
+            </Bloque>
+          )}
         </div>
 
         {/* Total */}
@@ -189,9 +191,12 @@ export default async function F29Page({
           <div>
             <p className="text-sm font-semibold text-gray-900">Total a pagar</p>
             <p className="text-xs text-gray-400">
-              {mes.impuestoUnicoPendiente
-                ? "IVA a pagar + PPM (sin impuesto único todavía)"
-                : "IVA a pagar + PPM + impuesto único de sueldos"}
+              {"IVA a pagar + PPM" +
+                (mes.impuestoUnicoPendiente ? "" : " + impuesto único") +
+                (mes.retencionHonorarios > 0 ? " + retención honorarios" : "") +
+                (mes.impuestoUnicoPendiente
+                  ? " (falta el impuesto único del mes)"
+                  : "")}
             </p>
           </div>
           <p className="text-xl font-bold text-gray-900 tabular-nums">
@@ -202,10 +207,11 @@ export default async function F29Page({
 
       {/* Nota de validación */}
       <p className="text-xs text-gray-400 mt-3 leading-relaxed">
-        Calculado en vivo desde las facturas de compra y venta, y el impuesto
-        único de las liquidaciones de sueldo. Validado al peso contra el F29 real
-        del SII (abril y mayo 2026). Falta solo la retención de honorarios, que
-        depende de la etapa de boletas de honorarios.
+        Calculado en vivo desde las facturas, el impuesto único de las
+        liquidaciones de sueldo y la retención de las boletas de honorarios.
+        Validado al peso contra el F29 real del SII (abril y mayo 2026, y la
+        retención de honorarios de marzo). El impuesto único solo aparece en los
+        meses con remuneraciones cargadas.
       </p>
     </div>
   );

@@ -28,3 +28,16 @@ export function esSocio(
   const t = `${nombre ?? ""} ${desc ?? ""}`.toLowerCase();
   return SOCIO_NOMBRES.some((n) => t.includes(n));
 }
+
+// Nombre legible de un socio, para el saldo de préstamos. Resuelve por RUT
+// (lo más confiable); si no, cae al nombre de la glosa del banco. Se usa solo
+// para etiquetar el recuadro de saldos, no para clasificar plata.
+export function nombreSocio(rut: string | null, nombre: string | null): string {
+  const r = (rut ?? "").replace(/\D/g, "");
+  if (r.includes("18022887")) return "José Tomás";
+  if (r.includes("18023983")) return "María José";
+  const t = (nombre ?? "").toLowerCase();
+  if (t.includes("jose tomas")) return "José Tomás";
+  if (t.includes("maria jose") || t.includes("maría josé")) return "María José";
+  return nombre?.trim() || "Socio";
+}

@@ -160,20 +160,30 @@ export default async function F29Page({
             />
           </Bloque>
 
-          {/* Pendientes de otras etapas */}
-          <Bloque titulo="Pendiente (otras etapas del módulo)">
+          {/* Impuesto único de los sueldos */}
+          <Bloque titulo="Sueldos">
             <Linea
               codigo="048"
-              glosa="Impuesto único de sueldos"
-              valor={null}
-              note="cuando sumemos remuneraciones"
-            />
-            <Linea
-              glosa="Retención de honorarios"
-              valor={null}
-              note="cuando sumemos boletas de honorarios"
+              glosa="Impuesto único de los sueldos"
+              valor={mes.impuestoUnicoPendiente ? null : mes.impuestoUnico}
+              note={
+                mes.impuestoUnicoPendiente
+                  ? "falta cargar las remuneraciones del mes"
+                  : undefined
+              }
             />
           </Bloque>
+
+          {/* Retención de honorarios — solo en meses que la tienen */}
+          {mes.retencionHonorarios > 0 && (
+            <Bloque titulo="Honorarios">
+              <Linea
+                codigo="151"
+                glosa="Retención de boletas de honorarios"
+                valor={mes.retencionHonorarios}
+              />
+            </Bloque>
+          )}
         </div>
 
         {/* Total */}
@@ -181,7 +191,12 @@ export default async function F29Page({
           <div>
             <p className="text-sm font-semibold text-gray-900">Total a pagar</p>
             <p className="text-xs text-gray-400">
-              IVA a pagar + PPM (sin impuesto único todavía)
+              {"IVA a pagar + PPM" +
+                (mes.impuestoUnicoPendiente ? "" : " + impuesto único") +
+                (mes.retencionHonorarios > 0 ? " + retención honorarios" : "") +
+                (mes.impuestoUnicoPendiente
+                  ? " (falta el impuesto único del mes)"
+                  : "")}
             </p>
           </div>
           <p className="text-xl font-bold text-gray-900 tabular-nums">
@@ -192,10 +207,11 @@ export default async function F29Page({
 
       {/* Nota de validación */}
       <p className="text-xs text-gray-400 mt-3 leading-relaxed">
-        Calculado en vivo desde las facturas de compra y venta. Validado contra el
-        F29 real presentado al SII en abril 2026 (coincide al peso en débitos,
-        créditos, IVA y PPM). Falta sumar el impuesto único de los sueldos (código
-        048) y la retención de honorarios, que dependen de etapas posteriores.
+        Calculado en vivo desde las facturas, el impuesto único de las
+        liquidaciones de sueldo y la retención de las boletas de honorarios.
+        Validado al peso contra el F29 real del SII (abril y mayo 2026, y la
+        retención de honorarios de marzo). El impuesto único solo aparece en los
+        meses con remuneraciones cargadas.
       </p>
     </div>
   );

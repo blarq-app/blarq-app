@@ -26,7 +26,7 @@
 // entran al F29.
 
 import { prisma } from "@/lib/prisma";
-import { computeCodigo048 } from "./remuneraciones";
+import { loadRemuneracionesData, codigo048From } from "./remuneraciones";
 import { tasaRetencionHonorarios } from "./honorarios";
 
 // Tasa de PPM (Pago Provisional Mensual) de 1ra categoría. 0,5% es la tasa
@@ -100,6 +100,10 @@ export async function computeF29Year(
     },
   });
 
+  // Empleados + indicadores se cargan UNA vez para todo el año; así el cálculo
+  // del código 048 por mes (codigo048From) queda sincrónico dentro del loop.
+  const remuneraciones = await loadRemuneracionesData();
+
   const debV = zeros();
   const debNC = zeros();
   const creC = zeros();
@@ -167,7 +171,7 @@ export async function computeF29Year(
 
     // 048 — impuesto único de los sueldos del mes (null si no hay
     // remuneraciones cargadas todavía para ese mes).
-    const imp048 = computeCodigo048(year, m + 1);
+    const imp048 = codigo048From(remuneraciones, year, m + 1);
     const impuestoUnico = imp048 ?? 0;
 
     // 151 — retención de boletas de honorarios del mes (bruto × tasa del año).

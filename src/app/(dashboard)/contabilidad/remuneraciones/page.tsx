@@ -131,11 +131,14 @@ export default async function RemuneracionesPage({
                   <th className="text-right font-medium px-3 py-2">Salud</th>
                   <th className="text-right font-medium px-3 py-2">Cesantía</th>
                   <th className="text-right font-medium px-3 py-2">Imp. único</th>
-                  <th className="text-right font-medium px-5 py-2">Líquido</th>
+                  <th className="text-right font-medium px-3 py-2">Líquido</th>
+                  <th className="text-right font-medium px-5 py-2"></th>
                 </tr>
               </thead>
               <tbody>
-                {liq.liquidaciones.map((l) => (
+                {liq.liquidaciones.map((l) => {
+                  const empId = empleados.find((e) => e.rut === l.rut)?.id;
+                  return (
                   <tr key={l.rut} className="border-b border-gray-50">
                     <td className="px-5 py-2.5">
                       <div className="font-medium text-gray-900">{l.nombre}</div>
@@ -146,9 +149,22 @@ export default async function RemuneracionesPage({
                     <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatCLP(l.totalSalud)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatCLP(l.cesantia)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-gray-900 font-medium">{formatCLP(l.impuestoUnico)}</td>
-                    <td className="px-5 py-2.5 text-right tabular-nums text-gray-900 font-semibold">{formatCLP(l.liquido)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-gray-900 font-semibold">{formatCLP(l.liquido)}</td>
+                    <td className="px-5 py-2.5 text-right">
+                      {empId && (
+                        <a
+                          href={`/api/contabilidad/liquidacion/pdf?year=${year}&month=${month}&empleadoId=${empId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-gray-500 hover:text-gray-900 underline"
+                        >
+                          PDF
+                        </a>
+                      )}
+                    </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="bg-gray-50 text-sm">
@@ -160,7 +176,7 @@ export default async function RemuneracionesPage({
                       liq.liquidaciones.reduce((s, l) => s + l.impuestoUnico, 0)
                     )}
                   </td>
-                  <td className="px-5 py-2.5" />
+                  <td className="px-5 py-2.5" colSpan={2} />
                 </tr>
               </tfoot>
             </table>

@@ -19,6 +19,10 @@ import {
   type IndicadoresMes,
   type Liquidacion,
 } from "./sueldos";
+import {
+  computePlanillaPrevired,
+  type PlanillaPrevired,
+} from "./previred";
 
 function claveMes(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, "0")}`;
@@ -147,6 +151,22 @@ export async function getLiquidacionesMes(
     }),
     indicadores,
   };
+}
+
+// Planilla Previred del mes (cotizaciones por institución), respetando el
+// ajuste de sueldo del mes. Devuelve null si no hay indicadores cargados.
+export async function getPlanillaPreviredMes(
+  year: number,
+  month: number
+): Promise<PlanillaPrevired | null> {
+  const data = await loadRemuneracionesData();
+  const ind = data.indicadoresPorMes.get(claveMes(year, month));
+  if (!ind) return null;
+  const empleados = data.empleados.map((emp) => ({
+    ...emp,
+    sueldoBase: sueldoDelMes(data, emp, year, month),
+  }));
+  return computePlanillaPrevired(empleados, ind);
 }
 
 // Sueldo del mes por empleado, para la pantalla (efectivo + estándar + si está

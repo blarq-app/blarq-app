@@ -28,10 +28,18 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const [empleado, indicador] = await Promise.all([
+  const [empleado, indicador, sueldoMensual] = await Promise.all([
     prisma.empleado.findUnique({ where: { id: empleadoId } }),
     prisma.indicadorMensual.findUnique({
       where: { year_month: { year, month } },
+    }),
+    // Ajuste de sueldo del mes (base + bono variable). Si existe, pisa el
+    // sueldo estándar solo para este período — igual que hace la pantalla de
+    // remuneraciones (sueldoDelMes) y el código 048 del F29. Sin esto, el PDF
+    // mostraría el sueldo estándar y quedaría desalineado con la pantalla en
+    // los meses con bono distinto.
+    prisma.sueldoMensual.findUnique({
+      where: { empleadoId_year_month: { empleadoId, year, month } },
     }),
   ]);
 
@@ -49,7 +57,7 @@ export async function GET(request: NextRequest) {
     {
       nombre: empleado.nombre,
       rut: empleado.rut,
-      sueldoBase: empleado.sueldoBase,
+      sueldoBase: sueldoMensual?.sueldoBase ?? empleado.sueldoBase,
       colacion: empleado.colacion,
       movilizacion: empleado.movilizacion,
       afpComisionRate: empleado.afpComisionRate,

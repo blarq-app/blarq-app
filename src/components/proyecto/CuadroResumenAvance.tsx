@@ -173,7 +173,14 @@ export default function CuadroResumenAvance({
       {/* ── Cuadro Resumen + AVANCE editable (esto va al cliente) ─────────── */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="flex items-start justify-between mb-1 gap-3">
-          <h2 className="text-lg font-semibold text-gray-900">Cuadro Resumen</h2>
+          {/* El rótulo de unidad evita la confusión A1/A9: este cuadro va
+              c/IVA (réplica del Excel que va al cliente), mientras las cards
+              de arriba están en neto. Sin esta nota, "Total pagos" (c/IVA,
+              conciliado) parece contradecir la card "Cobrado" (neto, facturado). */}
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-gray-900">Cuadro Resumen</h2>
+            <p className="text-[11px] text-gray-400 mt-0.5">Valores con IVA incluido</p>
+          </div>
           <button
             type="button"
             onClick={descargarImagen}

@@ -98,7 +98,7 @@ export default async function PreviredPage({
           </div>
 
           {/* Total a pagar */}
-          <div className="bg-gray-900 text-white rounded-xl px-5 py-4 flex items-baseline justify-between mb-6">
+          <div className="bg-gray-900 text-white rounded-xl px-5 py-4 flex items-baseline justify-between mb-3">
             <div>
               <p className="text-sm font-semibold">Total a pagar a Previred</p>
               <p className="text-xs text-gray-400">
@@ -106,6 +106,20 @@ export default async function PreviredPage({
               </p>
             </div>
             <p className="text-2xl font-bold tabular-nums">{formatCLP(planilla.totalGeneral)}</p>
+          </div>
+
+          {/* Descargar archivo para subir a Previred */}
+          <div className="flex items-center gap-3 mb-6">
+            <a
+              href={`/api/contabilidad/previred/archivo?year=${year}&month=${month}`}
+              className="px-3 py-1.5 rounded bg-gray-900 text-white text-sm font-medium hover:bg-gray-800"
+            >
+              Descargar archivo Previred (.txt)
+            </a>
+            <span className="text-xs text-amber-700">
+              Borrador v1 — antes de pagar, subilo al validador de Previred (valida
+              sin pagar). A confirmar: código del Mutual y N° FUN de la Isapre.
+            </span>
           </div>
 
           {/* Detalle por trabajador */}

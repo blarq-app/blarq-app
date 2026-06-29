@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { getLiquidacionesMes } from "@/lib/contabilidad/remuneraciones";
+import {
+  getLiquidacionesMes,
+  getSueldosDelMes,
+} from "@/lib/contabilidad/remuneraciones";
 import { formatCLP } from "@/lib/utils";
 import EmpleadosEditor from "./EmpleadosEditor";
 import IndicadoresEditor from "./IndicadoresEditor";
+import SueldoMensualEditor from "./SueldoMensualEditor";
 
 const MESES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -44,6 +48,7 @@ export default async function RemuneracionesPage({
   const indicadorActual =
     indicadores.find((i) => i.year === year && i.month === month) ?? null;
   const liq = await getLiquidacionesMes(year, month);
+  const sueldosDelMes = await getSueldosDelMes(year, month);
 
   const mesesConIndicador = new Set(
     indicadoresAnio.map((i) => i.month)
@@ -109,6 +114,16 @@ export default async function RemuneracionesPage({
         mesNombre={MESES[month - 1]}
         indicador={indicadorActual}
       />
+
+      {/* Sueldo imponible del mes (base + bono) por empleado, editable */}
+      {sueldosDelMes.length > 0 && (
+        <SueldoMensualEditor
+          sueldos={sueldosDelMes}
+          year={year}
+          month={month}
+          mesNombre={MESES[month - 1]}
+        />
+      )}
 
       {/* Liquidaciones calculadas del mes */}
       {liq ? (

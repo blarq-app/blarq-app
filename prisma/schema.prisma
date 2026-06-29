@@ -1233,8 +1233,35 @@ model Empleado {
   // de liquidaciones de los meses en que estuvo activo).
   activo Boolean @default(true)
 
+  // Ajustes del sueldo imponible mes a mes (cuando el bono varía).
+  sueldosMensuales SueldoMensual[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Ajuste del sueldo imponible de un empleado en un mes concreto. El sueldo de
+// BLARQ es "base + bono" y el bono puede variar de un mes a otro; cuando eso
+// pasa, este registro pisa el `sueldoBase` estándar del empleado SOLO para ese
+// período. Si no hay registro para un mes, se usa el `Empleado.sueldoBase`.
+//
+// `sueldoBase` acá = base + bono imponible del mes (ANTES de la gratificación,
+// igual que el campo del empleado). La gratificación se sigue derivando.
+model SueldoMensual {
+  id         String @id @default(cuid())
+  empleadoId String
+  year       Int
+  month      Int // 1..12
+
+  sueldoBase Int // base + bono imponible de ese mes
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  empleado Empleado @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+
+  @@unique([empleadoId, year, month])
+  @@index([empleadoId])
 }
 
 // Indicadores económicos de un mes (período tributario). UF y UTM se traen

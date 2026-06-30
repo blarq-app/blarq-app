@@ -4,9 +4,11 @@ import { requireSession } from "@/lib/apiAuth";
 import { getPlanillaPreviredMes } from "@/lib/contabilidad/remuneraciones";
 import { generarArchivoPrevired } from "@/lib/contabilidad/previredArchivo";
 
-// Código de la Mutual de BLARQ (Tabla N°19 Previred): 02 = Mutual de Seguridad
-// CCHC (la de la construcción). A CONFIRMAR con la carga de prueba en Previred.
-const MUTUAL_CODIGO_BLARQ = "02";
+// Código de la Mutual de BLARQ (Tabla N°19 Previred): 00 = "Sin Mutual, la
+// empresa entrega el aporte de accidentes del trabajo al ISL". Confirmado con la
+// carga de prueba en Previred (2026-06-30): BLARQ cotiza accidentes vía ISL, no
+// vía mutual privada. Con 00, el generador pone la cotización en el campo 71.
+const MUTUAL_CODIGO_BLARQ = "00";
 
 // Archivo de pago de cotizaciones para subir a Previred (formato 105 campos).
 //   GET /api/contabilidad/previred/archivo?year=2026&month=5

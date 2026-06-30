@@ -10,10 +10,19 @@
 // = 04; Mutual: 01 ACHS, 02 Mutual de Seguridad CCHC, 03 IST; CCAF: 00 = sin
 // CCAF; Régimen = AFP; Tipo nómina 01 = remuneraciones del mes.
 //
-// ESTADO: v1 a la especificación oficial. Los montos están validados al peso
-// (ver previred.ts), pero el FORMATO debe confirmarse subiendo el archivo al
-// validador de PREVIRED (valida sin pagar). Campos a confirmar ahí: 76 (N° FUN
-// Isapre), 79 (cotización pactada en UF), 96 (código de la Mutual de BLARQ).
+// ESTADO: validado contra el validador real de PREVIRED (carga de prueba, sin
+// pagar, 2026-06-30). Hallazgos aplicados:
+//   - Campo 76 (FUN Isapre): NO se exige — el validador no lo marcó con FUN vacío.
+//   - Campo 79 (cotización UF, 4 decimales con coma): aceptado.
+//   - Mutual: BLARQ está en ISL (Instituto de Seguridad Laboral), NO en mutual
+//     privada. Tabla N°19: código 00 = "Sin Mutual, aporte de accidentes al ISL".
+//     Con ISL, la cotización de accidentes va en el campo 71 (Acc. Trabajo ISL),
+//     NO en el 98 (Mutual). El 96/97/98 van en 00/0/0 y se llena el 64 (renta
+//     imponible ISL, obligatorio cuando el 71 > 0).
+//   - Campo 28 (cotización obligatoria AFP): debe INCLUIR el 0,1% adicional de
+//     la reforma (cargo del empleador). No cambia lo que paga BLARQ (ese 0,1%
+//     ya estaba en el total AFP), solo el casillero del archivo.
+//   - Campo 25 (Subsidio Trabajador Joven): "N" explícito (Tabla N°9).
 
 import type { CotizacionEmpleado } from "./previred";
 
@@ -67,9 +76,13 @@ export function generarLineaTrabajador(
   const afpCodigo = AFP_CODIGOS[(emp.afpNombre ?? "").toLowerCase().trim()] ?? "29";
   const imp = String(cot.imponible);
 
-  // Cotización pactada de salud, en UF con coma decimal (campo 79). Formato a
-  // confirmar con el validador.
+  // Cotización pactada de salud, en UF con coma decimal (campo 79).
   const planUF = emp.isaprePlanUF.toFixed(4).replace(".", ",");
+
+  // ¿La empresa entrega el aporte de accidentes al ISL (código 00) en vez de a
+  // una mutual privada? BLARQ está en ISL. Con ISL la cotización de accidentes
+  // va en el campo 71 (y obliga el 64); el bloque Mutual (96/97/98) va en 00/0/0.
+  const esISL = cfg.mutualCodigo === "00";
 
   // 105 campos en orden. Empezamos todos vacíos y llenamos los que aplican.
   const c: string[] = new Array(105).fill("");
@@ -102,12 +115,15 @@ export function generarLineaTrabajador(
   set(22, "0");
   set(23, "0");
   set(24, "0");
-  set(25, "");
+  set(25, "N"); // Subsidio Trabajador Joven: no (Tabla N°9)
 
   // 26-39 AFP
   set(26, afpCodigo);
   set(27, imp); // Renta imponible AFP / Seguro Social
-  set(28, String(cot.afpTrabajador)); // Cotización obligatoria (10% + comisión)
+  // Cotización obligatoria AFP: 10% + comisión + 0,1% adicional de la reforma.
+  // Previred exige el 0,1% sumado acá (lo verificó su validador). No cambia lo
+  // que paga BLARQ — ese 0,1% ya estaba contado en el total AFP.
+  set(28, String(cot.afpTrabajador + cot.afpEmpleador));
   set(29, String(cot.sis)); // SIS (empleador)
   set(30, "0");
   set(31, "0");
@@ -138,14 +154,18 @@ export function generarLineaTrabajador(
   // 62-74 IPS/ISL/Fonasa (no aplica — está en AFP/Isapre/Mutual)
   set(62, "0000");
   set(63, "00,00");
-  set(64, "0");
+  // Renta imponible ISL (campo 64): obligatoria cuando se informa la cotización
+  // de accidentes al ISL (campo 71). Para régimen AFP el tope es el de AFP.
+  set(64, esISL ? imp : "0");
   set(65, "0");
   set(66, "0");
   set(67, "0000");
   set(68, "00,00");
   set(69, "0");
   set(70, "0");
-  set(71, "0"); // ISL = 0 (tiene Mutual)
+  // Cotización accidentes del trabajo al ISL (campo 71): el monto va acá cuando
+  // la empresa no está en mutual privada (BLARQ = ISL). Si fuera mutual, va 0.
+  set(71, esISL ? String(cot.mutual) : "0");
   set(72, "0");
   set(73, "0");
   set(74, "0");
@@ -179,10 +199,12 @@ export function generarLineaTrabajador(
   set(94, String(cot.seguroSocial)); // Expectativa de Vida 0,9% (empleador)
   set(95, "0");
 
-  // 96-99 Mutualidad
+  // 96-99 Mutualidad. Con ISL (código 00) este bloque va en 0 — el accidente se
+  // informó en el campo 71. Con mutual privada, acá va el código, la renta
+  // imponible y la cotización de accidentes.
   set(96, cfg.mutualCodigo);
-  set(97, imp);
-  set(98, String(cot.mutual)); // Cotización accidentes del trabajo
+  set(97, esISL ? "0" : imp);
+  set(98, esISL ? "0" : String(cot.mutual));
   set(99, ""); // Sucursal (condicional)
 
   // 100-102 Seguro de cesantía (AFC)

@@ -10,22 +10,52 @@
 //
 //   npx tsx scripts/previred-cargar.ts [ruta-al-txt]
 
-import "dotenv/config"; // carga TELEGRAM_BOT_TOKEN de .env para el aviso
+import "dotenv/config"; // carga DB viva + TELEGRAM_BOT_TOKEN (correr con DOTENV_CONFIG_PATH=.env.prod)
 import { chromium, type Page, type BrowserContext } from "playwright";
-import { mkdirSync } from "fs";
+import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { execSync } from "child_process";
 import { sendMessage } from "../src/lib/telegram/api";
+import { prisma } from "../src/lib/prisma";
+import { getPlanillaPreviredMes } from "../src/lib/contabilidad/remuneraciones";
+import { generarArchivoPrevired } from "../src/lib/contabilidad/previredArchivo";
 
 // Chat de Telegram de MJ (sacado de los registros del bot de facturas).
 const MJ_CHAT_ID = 5407683316;
 
+// Mes a presentar: por args (year month) o, por default, el mes en curso.
+const hoy = new Date();
+const YEAR = Number(process.argv[2]) || hoy.getFullYear();
+const MONTH = Number(process.argv[3]) || hoy.getMonth() + 1;
+const MUTUAL_ISL = "00";
+
 const LOGIN_URL = "https://www.previred.com/wPortal/login/login.jsp";
-const ARCHIVO = process.argv[2] ?? "/Users/mjblanco/Desktop/previred-may-2026.txt";
 const OUTDIR =
   "/private/tmp/claude-501/-Users-mjblanco-Desktop-blarq-app/7b8dcedc-2b0e-411c-afaa-9ee7edabe7bb/scratchpad/previred-robot";
-const NOMBRE_NOMINA = "Carga prueba robot"; // sin símbolos: Previred los rechaza
+const NOMBRE_NOMINA = "Cotizaciones del mes"; // sin símbolos: Previred los rechaza
 const EMPRESA_RUT = "77.270.733-9"; // Blarq SpA
+
+// Genera el .txt de cotizaciones del mes desde la base VIVA y lo escribe a disco.
+async function generarArchivoMes(year: number, month: number): Promise<{ path: string; total: number }> {
+  const planilla = await getPlanillaPreviredMes(year, month);
+  if (!planilla) throw new Error(`No hay indicadores cargados para ${month}/${year}`);
+  const empleados = await prisma.empleado.findMany({ where: { activo: true } });
+  const items = planilla.empleados.map((cot) => {
+    const e = empleados.find((x) => x.rut === cot.rut)!;
+    return {
+      emp: {
+        rut: e.rut, sexo: e.sexo, apellidoPaterno: e.apellidoPaterno,
+        apellidoMaterno: e.apellidoMaterno, nombres: e.nombres, afpNombre: e.afpNombre,
+        isapreCodigo: e.isapreCodigo, isapreFun: e.isapreFun, isaprePlanUF: e.isaprePlanUF,
+      },
+      cot,
+    };
+  });
+  const contenido = generarArchivoPrevired(items, { year, month, mutualCodigo: MUTUAL_ISL });
+  const path = join(OUTDIR, `previred-${year}-${String(month).padStart(2, "0")}.txt`);
+  writeFileSync(path, contenido);
+  return { path, total: planilla.totalGeneral };
+}
 
 // Login automático: RUT de JT (administra Blarq en Previred) + clave leída del
 // llavero (Keychain) de la Mac. La clave NUNCA se loguea ni se ve; se teclea
@@ -94,8 +124,11 @@ async function clickTexto(page: Page, texto: string, exact = true) {
 }
 
 async function main() {
-  console.log("Robot Previred v2. Archivo:", ARCHIVO);
-  console.log("Abriendo Chromium. Logueate (poné tu clave); de ahí sigo yo solo.\n");
+  console.log(`Robot Previred — período ${MONTH}/${YEAR}`);
+  // Generar el archivo del mes desde la base viva.
+  const { path: ARCHIVO, total } = await generarArchivoMes(YEAR, MONTH);
+  console.log(`Archivo generado: ${ARCHIVO} (total a pagar estimado $${total.toLocaleString("es-CL")})`);
+  console.log("Abriendo Chromium...\n");
   const browser = await chromium.launch({ headless: false, args: ["--start-maximized"] });
   const ctx = await browser.newContext({ viewport: null });
   const page = await ctx.newPage();
@@ -195,7 +228,9 @@ async function main() {
     for (const p of abiertas(ctx)) {
       try {
         const t = await p.evaluate(() => document.body?.innerText ?? "");
-        if (/N[úu]mero de Errores|Reingresar N[óo]mina|ingresada correctamente|se encuentra con/i.test(t)) return p;
+        // Caso con errores (Número de Errores / Reingresar) o caso LIMPIO
+        // (resumen "Cotizaciones del mes" con "Total a pagar" y botón Aceptar).
+        if (/N[úu]mero de Errores|Reingresar N[óo]mina|ingresada correctamente|se encuentra con|Total a pagar|Cotizaciones del mes/i.test(t)) return p;
       } catch {}
     }
     return null;
@@ -255,9 +290,9 @@ async function main() {
     const soloPeriodo = nErr > 0 && /Periodo Remuneraciones/i.test(texto) &&
       !/(Mutual|Cotizaci[oó]n Obligatoria|FUN|Isapre|AFP)/i.test(texto);
     if (nErr === 0 || /ingresada correctamente|exitosa/i.test(texto)) {
-      aviso = "Previred: el archivo de cotizaciones validó sin errores, listo para pagar. (El robot dejó todo cargado; el pago lo confirmás vos en previred.com.)";
+      aviso = `Previred ${MONTH}/${YEAR}: el archivo validó sin errores. Total a pagar: $${total.toLocaleString("es-CL")}. El robot lo dejó cargado; entrá a previred.com y confirmá el pago.`;
     } else if (soloPeriodo) {
-      aviso = `Previred (prueba): el archivo validó bien; solo aparece el aviso de período (${nErr}) por ser una corrida de prueba de mayo en la pantalla del mes actual. En uso real, sin errores.`;
+      aviso = `Previred ${MONTH}/${YEAR} (prueba): el archivo validó bien; solo aparece el aviso de período (${nErr}), artefacto de probar un mes en la pantalla de otro. En uso real, sin errores. Total estimado $${total.toLocaleString("es-CL")}.`;
     } else {
       aviso = `Previred: la validación marcó ${nErr} error(es) que hay que revisar antes de pagar. El robot no avanzó al pago.`;
     }
@@ -282,4 +317,6 @@ async function main() {
   await browser.close().catch(() => {});
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main()
+  .catch((e) => { console.error(e); process.exitCode = 1; })
+  .finally(() => prisma.$disconnect());

@@ -10,10 +10,15 @@
 //
 //   npx tsx scripts/previred-cargar.ts [ruta-al-txt]
 
+import "dotenv/config"; // carga TELEGRAM_BOT_TOKEN de .env para el aviso
 import { chromium, type Page, type BrowserContext } from "playwright";
 import { mkdirSync } from "fs";
 import { join } from "path";
 import { execSync } from "child_process";
+import { sendMessage } from "../src/lib/telegram/api";
+
+// Chat de Telegram de MJ (sacado de los registros del bot de facturas).
+const MJ_CHAT_ID = 5407683316;
 
 const LOGIN_URL = "https://www.previred.com/wPortal/login/login.jsp";
 const ARCHIVO = process.argv[2] ?? "/Users/mjblanco/Desktop/previred-may-2026.txt";
@@ -236,16 +241,40 @@ async function main() {
     if (p) res = { page: p };
   }
   console.log("\n================ RESULTADO ================");
+  let aviso = "";
   if (res) {
     await shot(res.page, "30-resultado");
     const texto = await res.page.evaluate(() => document.body?.innerText ?? "").catch(() => "");
     const idx = texto.search(/N[úu]mero de Errores|Advertencias|correctamente|exitosa|ingresada/i);
     console.log(idx >= 0 ? texto.slice(Math.max(0, idx - 60), idx + 1200) : texto.slice(0, 1500));
+
+    // Resumen para el aviso por Telegram. Si solo quedan errores de "Período"
+    // (artefacto de probar un mes en la pantalla de otro), se considera OK.
+    const mErr = texto.match(/N[úu]mero de Errores:\s*(\d+)/i);
+    const nErr = mErr ? Number(mErr[1]) : 0;
+    const soloPeriodo = nErr > 0 && /Periodo Remuneraciones/i.test(texto) &&
+      !/(Mutual|Cotizaci[oó]n Obligatoria|FUN|Isapre|AFP)/i.test(texto);
+    if (nErr === 0 || /ingresada correctamente|exitosa/i.test(texto)) {
+      aviso = "Previred: el archivo de cotizaciones validó sin errores, listo para pagar. (El robot dejó todo cargado; el pago lo confirmás vos en previred.com.)";
+    } else if (soloPeriodo) {
+      aviso = `Previred (prueba): el archivo validó bien; solo aparece el aviso de período (${nErr}) por ser una corrida de prueba de mayo en la pantalla del mes actual. En uso real, sin errores.`;
+    } else {
+      aviso = `Previred: la validación marcó ${nErr} error(es) que hay que revisar antes de pagar. El robot no avanzó al pago.`;
+    }
   } else {
     console.log("No pude leer el resultado solo. Mirá la captura 30 / la ventana.");
     if (abiertas(ctx)[0]) await shot(abiertas(ctx)[abiertas(ctx).length - 1], "30-estado-final");
+    aviso = "Previred: el robot corrió pero no pudo leer el resultado de la validación. Revisá en previred.com.";
   }
   console.log("==========================================");
+
+  // Aviso a MJ por Telegram (no se paga nada; solo informa).
+  try {
+    await sendMessage(MJ_CHAT_ID, aviso);
+    console.log("Aviso enviado a MJ por Telegram.");
+  } catch (e) {
+    console.log("No pude enviar el aviso por Telegram:", (e as Error).message);
+  }
   console.log("\nNO se pagó nada. Cerrá la ventana cuando termines.");
 
   const fin = Date.now() + 5 * 60_000;

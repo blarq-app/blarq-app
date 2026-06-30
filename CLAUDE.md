@@ -89,10 +89,16 @@ Si un campo tiene un motor de automatización que decide en base a "está vacío
 
 MJ trabaja con **varias sesiones a la vez** (a propósito, es más eficiente). El riesgo es perder trabajo o enredar dos features. Regla base: **una sesión = una rama propia = una carpeta de trabajo propia (worktree)**. Si cada sesión vive en su carpeta, son incapaces de pisarse aunque corran al mismo tiempo. El enredo clásico ocurre cuando dos sesiones editan la **misma** carpeta sobre la **misma** rama.
 
+**El aislamiento se hace AL ABRIR la sesión, NO con un comando adentro** — una sesión no se puede mudar sola de carpeta, trabaja donde se la lanza. Un worktree es una **copia COMPLETA** del proyecto en otra carpeta (todo el código, compartiendo ramas/historial/GitHub) — NO una carpeta vacía ni otro proyecto. Cómo se abre aislada:
+- **App de Claude Code**: cada **"Nueva sesión"** arranca en su propio worktree automáticamente. NO reabrir `blarq-app` para cada sesión paralela.
+- **Terminal**: `claude --worktree <nombre>`.
+
+(Histórico: hasta 2026-06-26 esta sección sugería `git switch -c` como si aislara — NO aísla, solo crea una rama en la MISMA carpeta; por eso dos sesiones en `blarq-app` se enredaban. El aislamiento real es al abrir, no por comando.)
+
 Protocolo obligatorio para cualquier sesión que vaya a tocar código:
 
 1. **Al arrancar**: correr `git status` + `git branch --show-current`. Si hay cambios sin guardar de **otro tema** (no del tuyo), **parar y avisar a MJ** — no tocarlos, no commitearlos, no mezclarlos. Son de otra sesión.
-2. **Rama propia**: trabajar en una rama que arranque de `main` (`git switch -c feat/<tema> main`), nunca encima de la rama de otra sesión. Para paralelo real, pedir/usar un worktree propio (carpeta separada).
+2. **Rama propia**: trabajá en una rama desde `origin/main` (`git fetch origin && git switch -c feat/<tema> origin/main`). OJO: `git switch -c` NO aísla por sí solo (solo crea rama en la misma carpeta). Si estás en la carpeta principal compartida (`blarq-app`) y hay OTRA sesión activa ahí, **NO te cambies de rama** — pará y avisá a MJ (el aislamiento se hace al abrir, ver arriba).
 3. **Commitear solo lo propio**: stagear archivos explícitos (`git add <ruta>`), **nunca `git add -A` ni `git add .`**. Antes de commitear, verificar con `git diff <archivo>` que el archivo compartido (ej. `MovementsTable.tsx`, `CHANGELOG.md`) solo tenga TUS cambios.
 4. **Al cerrar**: dejar todo commiteado en tu rama y decir el nombre. No dejar trabajo sin guardar "para después" en una carpeta compartida.
 5. **Borrar ramas / cerrar worktrees**: blast radius alto → confirmar con MJ (ver §4.7). Borrar solo ramas ya integradas a `main` con `git branch -d` (el `-d` se niega si no están integradas; nunca usar `-D` sin OK).

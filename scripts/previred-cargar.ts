@@ -19,6 +19,33 @@ import { sendMessage } from "../src/lib/telegram/api";
 import { prisma } from "../src/lib/prisma";
 import { getPlanillaPreviredMes } from "../src/lib/contabilidad/remuneraciones";
 import { generarArchivoPrevired } from "../src/lib/contabilidad/previredArchivo";
+import { fetchIndicadoresMes } from "../src/lib/contabilidad/indicadores";
+
+// Topes por default si no hay un mes previo del cual arrastrar (de mayo 2026).
+const TOPE_GRATIFICACION_DEFAULT = 213354;
+const TOPE_SALUD_UF_DEFAULT = 90;
+
+// Asegura que el indicador del mes exista (igual que el botón "Traer indicadores"
+// de la app): si falta, trae UF/UTM de internet y arrastra los topes del último
+// mes conocido. Así MJ no tiene que apretar nada de indicadores.
+async function asegurarIndicadores(year: number, month: number): Promise<void> {
+  const existe = await prisma.indicadorMensual.findUnique({
+    where: { year_month: { year, month } },
+  });
+  if (existe) return;
+  const { uf, utm } = await fetchIndicadoresMes(year, month);
+  const ultimo = await prisma.indicadorMensual.findFirst({
+    orderBy: [{ year: "desc" }, { month: "desc" }],
+  });
+  await prisma.indicadorMensual.create({
+    data: {
+      year, month, uf, utm,
+      gratificacionTopeMensual: ultimo?.gratificacionTopeMensual ?? TOPE_GRATIFICACION_DEFAULT,
+      topeImponibleSaludUF: ultimo?.topeImponibleSaludUF ?? TOPE_SALUD_UF_DEFAULT,
+    },
+  });
+  console.log(`Indicadores de ${month}/${year} traídos automáticamente (UF ${uf}, UTM ${utm}).`);
+}
 
 // Chat de Telegram de MJ (sacado de los registros del bot de facturas).
 const MJ_CHAT_ID = 5407683316;
@@ -125,7 +152,8 @@ async function clickTexto(page: Page, texto: string, exact = true) {
 
 async function main() {
   console.log(`Robot Previred — período ${MONTH}/${YEAR}`);
-  // Generar el archivo del mes desde la base viva.
+  // Asegurar indicadores del mes (trae UF/UTM si faltan) + generar el archivo.
+  await asegurarIndicadores(YEAR, MONTH);
   const { path: ARCHIVO, total } = await generarArchivoMes(YEAR, MONTH);
   console.log(`Archivo generado: ${ARCHIVO} (total a pagar estimado $${total.toLocaleString("es-CL")})`);
   console.log("Abriendo Chromium...\n");
@@ -290,7 +318,31 @@ async function main() {
     const soloPeriodo = nErr > 0 && /Periodo Remuneraciones/i.test(texto) &&
       !/(Mutual|Cotizaci[oó]n Obligatoria|FUN|Isapre|AFP)/i.test(texto);
     if (nErr === 0 || /ingresada correctamente|exitosa/i.test(texto)) {
-      aviso = `Previred ${MONTH}/${YEAR}: el archivo validó sin errores. Total a pagar: $${total.toLocaleString("es-CL")}. El robot lo dejó cargado; entrá a previred.com y confirmá el pago.`;
+      // Validó sin errores → registrar la planilla con "Aceptar" (deja todo
+      // listo en "Planillas por Pagar"). NO es el pago. Previred ignora el click
+      // de mouse en sus botones, así que usamos teclado + fallbacks.
+      let registrada = false;
+      try {
+        const btn = res.page.getByText("Aceptar", { exact: true }).first();
+        await btn.scrollIntoViewIfNeeded().catch(() => {});
+        await btn.focus().catch(() => {});
+        await res.page.keyboard.press("Space").catch(() => {});
+        await res.page.waitForTimeout(2500);
+        if (await res.page.getByText("Total a pagar", { exact: false }).count()) {
+          // todavía en el resumen: probar Enter y click forzado
+          await btn.focus().catch(() => {});
+          await res.page.keyboard.press("Enter").catch(() => {});
+          await res.page.waitForTimeout(1500);
+          await btn.click({ force: true }).catch(() => {});
+          await res.page.waitForTimeout(2000);
+        }
+        // Si el resumen ya no está, se registró.
+        registrada = (await res.page.getByText("Total a pagar", { exact: false }).count()) === 0;
+        await shot(res.page, "31-post-aceptar");
+      } catch {}
+      aviso = registrada
+        ? `Previred ${MONTH}/${YEAR}: listo. Validó sin errores y dejé la planilla registrada. Total a pagar $${total.toLocaleString("es-CL")}. Acordate de pagar antes del 13 en previred.com (Planillas por Pagar).`
+        : `Previred ${MONTH}/${YEAR}: validó sin errores (total $${total.toLocaleString("es-CL")}), pero no pude apretar "Aceptar" solo. Entrá a previred.com, apretá Aceptar y pagá antes del 13.`;
     } else if (soloPeriodo) {
       aviso = `Previred ${MONTH}/${YEAR} (prueba): el archivo validó bien; solo aparece el aviso de período (${nErr}), artefacto de probar un mes en la pantalla de otro. En uso real, sin errores. Total estimado $${total.toLocaleString("es-CL")}.`;
     } else {

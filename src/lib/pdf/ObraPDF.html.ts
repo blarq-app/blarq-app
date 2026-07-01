@@ -148,7 +148,10 @@ function isotipo(px: number, color: string, opacity: number): string {
 //   Piedra banda #6F6A60 · descripción #7a7468 · versión clara #b0a596
 //   Banda/fila #EDEDEB · bordes #eee8dd (fila) #e2dcd0 (sección) #c7bfb2 (hairline)
 const CSS = `
-  @page { size: A4; margin: 0; }
+  /* OJO: no declarar margin en @page — pisaría el margin que pasa el route a
+     Puppeteer (14mm arriba/abajo, 0 a los lados) y el contenido se cortaría
+     contra el borde. Los márgenes verticales los controla SOLO el route. */
+  @page { size: A4; }
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0;
@@ -199,10 +202,12 @@ const CSS = `
   .hd { border-bottom: 1.5px solid #34332E; padding: 7pt 0; margin-top: 8mm; font-size: 6.5pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
   .hd span:nth-child(4){ text-align:center; } .hd span:nth-child(5),.hd span:nth-child(6),.hd span:nth-child(7){ text-align:right; }
 
-  .cap { border-bottom: 1.5px solid #34332E; padding: 12pt 2pt 6pt; margin-top: 10pt; }
+  .cap { border-bottom: 1.5px solid #34332E; padding: 12pt 2pt 6pt; margin-top: 10pt; break-inside: avoid; break-after: avoid; }
   .cap b { font-family: 'Hanken Grotesk', sans-serif; font-size: 10pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: #34332E; }
 
-  .zone { background: #EDEDEB; padding: 4pt 10pt; margin-top: 4pt; font-size: 7pt; letter-spacing: .14em; text-transform: uppercase; color: #6F6A60; font-weight: 700; }
+  /* La banda de zona y el título de capítulo no deben quedar solos al pie de
+     una página (huérfanos): break-after:avoid los mantiene con su primera fila. */
+  .zone { background: #EDEDEB; padding: 4pt 10pt; margin-top: 4pt; font-size: 7pt; letter-spacing: .14em; text-transform: uppercase; color: #6F6A60; font-weight: 700; break-inside: avoid; break-after: avoid; }
 
   .r { align-items: start; padding: 5pt 0; border-bottom: 1px solid #eee8dd; font-size: 8pt; page-break-inside: avoid; }
   .r span { line-height: 1.32; }

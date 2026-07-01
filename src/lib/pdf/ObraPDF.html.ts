@@ -1,9 +1,20 @@
 /**
- * HTML+CSS renderer for the Obra budget PDF.
- * Consumed by renderPDF() (Puppeteer). Meant to render as an exact
- * visual match to the Excel reference PDF.
+ * HTML+CSS renderer del PDF de Obra.
+ * Consumido por renderPDF() (Puppeteer). Se renderiza a A4 SIN márgenes
+ * (el route pasa margin:0 para obra) — el aire lo pone el padding interno.
  *
- * Iteration 5 — full Montserrat, specs pulled directly from Excel XML.
+ * Línea editorial: Manual de Marca BLARQ v2 (Claro). Fuente de verdad del
+ * diseño: "Presupuesto Obra Imprimible" de Claude Design. Tres roles
+ * tipográficos: Hanken Grotesk (títulos, altas finas), Spectral (bajadas
+ * itálicas) y Nunito Sans (cuerpo, datos y cifras tabulares). Paleta greige.
+ *
+ * Correcciones pedidas por MJ sobre el borrador de Design:
+ *   - Portada SIN "Inversión total" (no se muestra el total en la portada).
+ *   - Tablas SIN subtotales: ni el de capítulo ("Subtotal $X") ni los de zona
+ *     ("Cocina $X" / "Baños $X"). Quedan solo las partidas; la banda de zona
+ *     se mantiene como separador (sin monto).
+ *   - "Formas de pago" bien visible.
+ * El cuadro final (costo directo → costo total) y las observaciones se mantienen.
  */
 
 import fs from "node:fs";
@@ -20,22 +31,22 @@ const DEFAULT_PAYMENT_TERMS = [
 ];
 
 const CHAPTERS: Record<string, { label: string; index: number }> = {
-  demoliciones: { label: "DEMOLICIONES", index: 1 },
-  reparaciones: { label: "REPARACIONES", index: 2 },
-  electricas: { label: "INSTALACIONES ELECTRICAS", index: 3 },
-  sanitarias: { label: "INSTALACIONES SANITARIAS Y GASFITERIA", index: 4 },
-  terminaciones: { label: "TERMINACIONES", index: 5 },
-  limpieza: { label: "LIMPIEZA Y ASEO", index: 6 },
+  demoliciones: { label: "Demoliciones", index: 1 },
+  reparaciones: { label: "Reparaciones", index: 2 },
+  sanitarias: { label: "Instalaciones sanitarias y gasfitería", index: 3 },
+  electricas: { label: "Instalaciones eléctricas", index: 4 },
+  terminaciones: { label: "Terminaciones", index: 5 },
+  limpieza: { label: "Limpieza y aseo", index: 6 },
 };
 
 const OBSERVACIONES = [
-  "Mandante dejara libre los accesos y las superficies a intervenir, dispondra de suministro electrico y de agua potable, ademas de baño para las personas que trabajen en la obra.",
-  "Todo aumento de obra se recargara al costo directo según los precios unitarios más un recargo del mismo porcentaje en GG expresado en la oferta.",
-  "No se consideran Permisos Municipales ni de administacion del Condominio dentro de este presupuesto.",
-  "Esta cotizacion tiene una validez de 10 dias corridos.",
-  "Los pagos se haran con el valor de la UF del dia, y solo se aceptaran pagos por transferencia bancaria o con tarjeta por medio de link de pago, en cuyo caso se agregara la comision de Transbank.",
-  "Los valores expresados en la cotizacion podrian variar luego de visitar la propiedad.",
-  "Al aprobar la cotizacion se autoriza a la empresa Blarq a publicar contenido en Redes Sociales y pagina web. Fotos, videos del avance y estado de la obra y a la instalacion de publicidad hacia el exterior de la obra (terrazas, balcones, porton).",
+  "Mandante dejará libre los accesos y las superficies a intervenir, dispondrá de suministro eléctrico y de agua potable, además de baño para las personas que trabajen en la obra.",
+  "Todo aumento de obra se recargará al costo directo según los precios unitarios más un recargo del mismo porcentaje en GG expresado en la oferta.",
+  "No se consideran Permisos Municipales ni de administración del Condominio dentro de este presupuesto.",
+  "Esta cotización tiene una validez de 10 días corridos.",
+  "Los pagos se harán con el valor de la UF del día, y solo se aceptarán pagos por transferencia bancaria o con tarjeta por medio de link de pago, en cuyo caso se agregará la comisión de Transbank.",
+  "Los valores expresados en la cotización podrían variar luego de visitar la propiedad.",
+  "Al aprobar la cotización se autoriza a la empresa BLARQ a publicar contenido en Redes Sociales y página web: fotos y videos del avance y estado de la obra, y a la instalación de publicidad hacia el exterior de la obra (terrazas, balcones, portón).",
   "Una vez aprobado el presupuesto, se solicita pago de anticipo al menos 2 semanas antes del comienzo de la obra.",
 ];
 
@@ -50,10 +61,6 @@ export interface ObraItemInput {
   quantity: number;
   unitPrice: number;
   total: number;
-  // Marca de cambio respecto a la última versión enviada al cliente.
-  // "added" = NUEVO · "up" = subió el total · "down" = bajó · null/undefined =
-  // sin cambio (no se muestra nada). Se calcula al vuelo en el route, no se
-  // guarda. Ver src/lib/presupuesto/versionDiff.ts.
   changeMarker?: "added" | "up" | "down" | null;
 }
 
@@ -90,21 +97,24 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function fmtCLP(n: number): string {
-  return "$" + Math.round(n).toLocaleString("es-CL");
+function fmtQty(n: number): string {
+  return new Intl.NumberFormat("es-CL", { maximumFractionDigits: 2 }).format(n);
 }
 
-function fmtQty(n: number): string {
-  // Chilean comma decimals: 15,4
-  return new Intl.NumberFormat("es-CL", { maximumFractionDigits: 2 }).format(n);
+function fmtNum(n: number): string {
+  return Math.round(n).toLocaleString("es-CL");
+}
+
+function fmtMoney(n: number): string {
+  return "$ " + Math.round(n).toLocaleString("es-CL");
 }
 
 function fmtDate(d: string | Date): string {
   const date = typeof d === "string" ? new Date(d) : d;
   const day = String(date.getUTCDate()).padStart(2, "0");
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const year = String(date.getUTCFullYear()).slice(-2);
-  return `${day}-${month}-${year}`;
+  const year = String(date.getUTCFullYear());
+  return `${day}·${month}·${year}`;
 }
 
 function getLogoDataUri(): string {
@@ -122,301 +132,116 @@ function getLogoDataUri(): string {
   }
 }
 
-// ─── CSS ──────────────────────────────────────────────────────────────────
-// El layout y proporciones replican el cuadro Excel master que MJ usaba
-// para sus cotizaciones. Cambios clave vs versiones anteriores:
-//   - Header en 2 columnas: lado izq (logo + Mandante/Proyecto/Direccion),
-//     lado der (Version big + Pro a cargo + Celular/Fecha/Valor UF).
-//   - Tabla con bordes en TODAS las celdas (estilo Excel), no solo bottom.
-//   - Headers de tabla con bg gris #DBDBDB.
-//   - Totales en 4 columnas: LABEL | % | $ | VALUE — el $ separado del nro.
-//   - Forma de Pago + Observaciones más compactas estilo Excel.
+// Isotipo "A" de marca (triángulo con barra) como SVG inline. Se usa como
+// marca de agua (opacidad muy baja) y como sello chico en el encabezado del
+// detalle. Reemplaza a assets/blarq-isotipo-piedra.png del diseño original.
+function isotipo(px: number, color: string, opacity: number): string {
+  return `<svg width="${px}" height="${px}" viewBox="0 0 100 100" style="opacity:${opacity};display:block;">
+    <path d="M50 9 L91 91 L9 91 Z" fill="none" stroke="${color}" stroke-width="2"/>
+    <line x1="34" y1="68" x2="66" y2="68" stroke="${color}" stroke-width="2"/>
+  </svg>`;
+}
+
+// ─── CSS — paleta y tipografía del Manual v2 (Claro) ────────────────────────
+// Colores exactos de la fuente de diseño:
+//   Tinta #34332E · Grafito/valores #5f5b52 · Taupe/labels #9A9183
+//   Piedra banda #6F6A60 · descripción #7a7468 · versión clara #b0a596
+//   Banda/fila #EDEDEB · bordes #eee8dd (fila) #e2dcd0 (sección) #c7bfb2 (hairline)
 const CSS = `
-  @page { size: A4; margin: 10mm 12mm; }
-
+  @page { size: A4; margin: 0; }
   * { box-sizing: border-box; }
-
   html, body {
-    margin: 0;
-    padding: 0;
-    font-family: 'Montserrat', sans-serif;
-    font-size: 7pt;
-    font-weight: 400;
-    color: #1A1A1A;
+    margin: 0; padding: 0;
+    font-family: 'Nunito Sans', sans-serif;
+    color: #34332E;
     -webkit-font-smoothing: antialiased;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
 
-  /* ── Header — match IGUALAR reference ───────────────────────── */
-  /* Layout en 2 bloques:
-     1) Franja superior: logo (izq) + título "V1 COTIZACION / OBRA /
-        Profesional a cargo / JTL" (der).
-     2) Grilla 2×3 abajo con campos pareados:
-        Mandante | Celular
-        Proyecto | Fecha
-        Direccion | Valor UF
-  */
-  .header-strip {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    column-gap: 30px;
-    margin-bottom: 4pt;
-    align-items: start;
-  }
-  .header-strip .strip-left  { text-align: left; }
-  .header-strip .strip-right { text-align: right; }
+  .page { position: relative; width: 210mm; min-height: 297mm; overflow: hidden; page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .pad-cover { padding: 20mm 17mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 297mm; }
+  .pad-detail { padding: 13mm 17mm 14mm; display: flex; flex-direction: column; }
 
-  .header-fields {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 6pt;
-  }
-  .header-fields .col-left,
-  .header-fields .col-right {
-    display: flex;
-    flex-direction: column;
-    gap: 2pt;
-  }
-  .header-fields .col-right { text-align: left; }
+  /* ── Portada ─────────────────────────────────────────────── */
+  .wm { position: absolute; right: -20mm; bottom: -26mm; z-index: 0; }
+  .cover-top, .cover-mid, .cover-foot { position: relative; z-index: 1; }
+  .cover-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .cover-logo { width: 46mm; height: auto; }
+  .cover-meta { text-align: right; font-family: 'Nunito Sans', sans-serif; }
+  .cover-meta .m1 { font-size: 8.5pt; letter-spacing: .3em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
+  .cover-meta .m2 { font-size: 8.5pt; letter-spacing: .3em; text-transform: uppercase; color: #b0a596; font-weight: 600; margin-top: 4pt; }
+  .cover-mid { display: flex; flex-direction: column; align-items: flex-start; gap: 6mm; }
+  .cover-rule { width: 20mm; height: 1px; background: #c7bfb2; }
+  .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 34pt; line-height: 1.12; letter-spacing: .1em; text-transform: uppercase; color: #34332E; }
+  .cover-sub { font-family: 'Spectral', serif; font-weight: 300; font-style: italic; font-size: 16pt; color: #9A9183; }
+  .cover-foot { display: flex; flex-direction: column; gap: 4mm; font-family: 'Nunito Sans', sans-serif; border-top: 1px solid #e2dcd0; padding-top: 6mm; }
+  .cover-foot .row { display: flex; justify-content: space-between; align-items: baseline; }
+  .cover-foot .lbl { font-size: 8pt; letter-spacing: .16em; text-transform: uppercase; color: #9A9183; }
+  .cover-foot .val { font-size: 10.5pt; color: #34332E; }
 
-  .logo {
-    display: block;
-    height: 45px;
-    width: auto;
-    margin-bottom: 2pt;
-  }
+  /* ── Detalle: encabezado ─────────────────────────────────── */
+  .dhead-iso { opacity: .55; margin-bottom: 7mm; }
+  .dhead { display: flex; justify-content: space-between; align-items: flex-start; }
+  .dhead .kick { font-size: 7.5pt; letter-spacing: .26em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
+  .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 18pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
+  .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 9.5pt; color: #9A9183; margin-top: 3pt; }
+  .dhead .right { text-align: right; }
+  .dhead .ver { font-size: 7pt; letter-spacing: .28em; text-transform: uppercase; color: #b0a596; font-weight: 600; }
+  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 18pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
+  .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 9pt; letter-spacing: .34em; text-transform: uppercase; color: #9A9183; margin-top: 3pt; }
 
-  .doc-title {
-    font-family: 'Montserrat', sans-serif;
-    font-size: 18pt;
-    font-weight: 400;
-    color: #808080;
-    line-height: 1;
-    margin: 0;
-    letter-spacing: 0.02em;
-  }
-  .doc-subtitle {
-    font-size: 9pt;
-    font-weight: 400;
-    color: #808080;
-    letter-spacing: 0.06em;
-    margin: 0 0 4pt 0;
-    text-transform: uppercase;
-  }
+  /* ── Tabla de partidas ───────────────────────────────────── */
+  .grid { display: grid; grid-template-columns: 8% 24% 1fr 6% 7% 11% 13%; }
+  .hd { border-bottom: 1.5px solid #34332E; padding: 7pt 0; margin-top: 8mm; font-size: 6.5pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
+  .hd span:nth-child(4){ text-align:center; } .hd span:nth-child(5),.hd span:nth-child(6),.hd span:nth-child(7){ text-align:right; }
 
-  .field { margin-bottom: 1pt; }
-  .field .label {
-    font-size: 6pt;
-    font-weight: 400;
-    color: #808080;
-    letter-spacing: 0;
-    margin-bottom: 0;
-    line-height: 1.1;
-  }
-  .field .value {
-    font-size: 8pt;
-    font-weight: 500;
-    color: #1A1A1A;
-    line-height: 1.1;
-    text-transform: uppercase;
-  }
+  .cap { border-bottom: 1.5px solid #34332E; padding: 12pt 2pt 6pt; margin-top: 10pt; }
+  .cap b { font-family: 'Hanken Grotesk', sans-serif; font-size: 10pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: #34332E; }
 
-  /* ── Table — spec definitivo MJ ─────────────────────────────── */
-  table.partidas {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-    font-family: 'Montserrat', sans-serif;
-    font-size: 6.5pt;
-    margin-top: 0;
-  }
-  /* Cuerpo: SIN bordes verticales, líneas internas muy sutiles. */
-  .partidas th, .partidas td {
-    border: none;
-    border-bottom: 0.15pt solid #E5E5E5;
-    padding: 2pt 5pt;
-    vertical-align: top;
-    word-wrap: break-word;
-    line-height: 1.2;
-    font-weight: 400;
-    font-size: 6.5pt;
-    color: #1A1A1A;
-  }
-  /* Header de tabla (ITEM | PARTIDA | …) — sin fill, solo líneas */
-  .partidas thead th {
-    background: transparent;
-    color: #1A1A1A;
-    font-weight: 500;
-    text-transform: uppercase;
-    text-align: center;
-    font-size: 7pt;
-    padding: 2pt 5pt;
-    white-space: nowrap;
-    vertical-align: middle;
-    border-top: 0.5pt solid #1A1A1A;
-    border-bottom: 0.5pt solid #1A1A1A;
-  }
-  /* Filas de capítulo (1 DEMOLICIONES, …) — gris sutil */
-  .partidas tr.chapter-row td {
-    background: #E5E5E5;
-    font-weight: 600;
-    text-transform: uppercase;
-    border-bottom: 0.15pt solid #E5E5E5;
-    font-size: 7pt;
-    vertical-align: middle;
-    padding: 2pt 5pt;
-    color: #1A1A1A;
-  }
-  .partidas tr.chapter-row td.chapter-idx { text-align: center; }
-  /* Filas de sub-chapter (COCINA, BAÑO PRINCIPAL, …) — separador suave
-     dentro de un capítulo. Más sutil que la fila de capítulo. El
-     subtotal de la zona va en la última celda alineado a la derecha,
-     con el mismo peso/tamaño que el nombre de la zona para que se lean
-     como un solo titular: "COCINA ........ $ 972.188". */
-  .partidas tr.sub-chapter-row td {
-    background: #F5F5F5;
-    font-weight: 500;
-    text-transform: uppercase;
-    border-bottom: 0.15pt solid #E5E5E5;
-    font-size: 6pt;
-    vertical-align: middle;
-    padding: 1.5pt 5pt 1.5pt 15pt;
-    color: #555;
-    letter-spacing: 0.04em;
-  }
-  .partidas tr.sub-chapter-row td.col-total {
-    text-align: right;
-    padding: 1.5pt 5pt;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
+  .zone { background: #EDEDEB; padding: 4pt 10pt; margin-top: 4pt; font-size: 7pt; letter-spacing: .14em; text-transform: uppercase; color: #6F6A60; font-weight: 700; }
 
-  /* Anchos de columna (suman 100%). TOTAL en peso regular per spec.
-     La col-chg (marca de cambio) es una columna estrecha a la IZQUIERDA del
-     número de ítem; se le saca el ancho a partida + descripción. */
-  .col-chg    { width: 5%;  text-align: right; white-space: nowrap; vertical-align: middle; padding-right: 2pt; }
-  .col-item   { width: 4%;  text-align: center; white-space: nowrap; }
-  .col-name   { width: 26%; text-align: left; }
-  .col-desc   { width: 34%; text-align: left; }
-  /* Descripción con formato (negrita/cursiva/listas/color del editor). */
-  .col-desc p  { margin: 0; }
-  .col-desc ul { margin: 0; padding-left: 14px; list-style: disc; }
-  .col-desc ol { margin: 0; padding-left: 16px; list-style: decimal; }
-  .col-desc li { margin: 0; }
-  .col-desc strong { font-weight: 700; }
-  .col-desc em { font-style: italic; }
-  .col-unit   { width: 6%;  text-align: center; white-space: nowrap; }
-  .col-qty    { width: 7%;  text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .col-pu     { width: 8%;  text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .col-total  { width: 10%; text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .r { align-items: start; padding: 5pt 0; border-bottom: 1px solid #eee8dd; font-size: 8pt; page-break-inside: avoid; }
+  .r span { line-height: 1.32; }
+  .it { color: #9A9183; font-variant-numeric: tabular-nums; }
+  .pt { color: #34332E; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; padding-right: 8pt; }
+  .ds { color: #7a7468; padding-right: 10pt; }
+  .un { text-align: center; color: #9A9183; }
+  .ct { text-align: right; color: #5f5b52; font-variant-numeric: tabular-nums; }
+  .pu { text-align: right; color: #5f5b52; font-variant-numeric: tabular-nums; }
+  .tt { text-align: right; color: #34332E; font-variant-numeric: tabular-nums; }
+  .ds p { margin: 0; } .ds ul { margin: 0; padding-left: 12px; } .ds ol { margin: 0; padding-left: 14px; }
+  .ds strong { font-weight: 700; } .ds em { font-style: italic; }
 
-  /* ── Marca de cambio entre versiones — monocromática ──────────
-     Flecha negra para subió/bajó; pastilla con borde para "NUEVO".
-     Sin color semántico: rojo/verde están reservados a otros usos. */
-  .chg-arrow {
-    font-weight: 700;
-    color: #1A1A1A;
-    font-size: 8pt;
-    line-height: 1;
-  }
-  .chg-new {
-    display: inline-block;
-    border: 0.4pt solid #1A1A1A;
-    border-radius: 999px;
-    padding: 0.3pt 2.5pt;
-    font-size: 4.5pt;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #1A1A1A;
-    white-space: nowrap;
-  }
+  /* marca de cambio entre versiones */
+  .chg { color: #34332E; font-weight: 700; }
+  .chg-new { display:inline-block; border:0.5px solid #9A9183; border-radius:999px; padding:0 4px; font-size:5pt; letter-spacing:.04em; text-transform:uppercase; color:#6F6A60; }
 
-  /* ── Totals — apilado vertical, 55% ancho derecha (spec MJ) ──── */
-  .totals-wrap {
-    width: 100%;
-    margin-top: 6pt;
-    display: flex;
-    justify-content: flex-end;
-  }
-  table.totals {
-    border-collapse: collapse;
-    font-family: 'Montserrat', sans-serif;
-    font-size: 7pt;
-    width: 55%;
-    margin-left: auto;
-    border: none;
-    border-top: 0.5pt solid #1A1A1A;
-    border-bottom: 0.5pt solid #1A1A1A;
-  }
-  .totals td {
-    padding: 2.5pt 6pt;
-    border-bottom: 0.3pt solid #BFBFBF;
-    background: transparent;
-    color: #1A1A1A;
-    font-weight: 400;
-    font-variant-numeric: tabular-nums;
-  }
-  .totals tr:last-child td { border-bottom: none; }
+  /* ── Cierre: formas de pago + cuadro ─────────────────────── */
+  .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 14mm; margin-top: 12mm; align-items: start; page-break-inside: avoid; }
+  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #34332E; font-weight: 700; }
+  .pagos { margin-top: 6pt; border-top: 1px solid #e2dcd0; }
+  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 6pt 0; border-bottom: 1px solid #eee8dd; }
+  .pagos .row:last-child { border-bottom: none; }
+  .pagos .s { font-size: 10pt; color: #34332E; }
+  .pagos .p { font-size: 10pt; color: #6F6A60; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .cuadro { border-top: 1.5px solid #34332E; }
+  .cuadro .row { display: grid; grid-template-columns: 1fr 34px 108px; align-items: baseline; padding: 4.5pt 0; border-bottom: 1px solid #e2dcd0; }
+  .cuadro .cl { font-size: 9.5pt; color: #5f5b52; }
+  .cuadro .cl.strong { color: #34332E; font-weight: 600; }
+  .cuadro .cp { text-align: right; font-size: 8.5pt; color: #9A9183; font-variant-numeric: tabular-nums; }
+  .cuadro .cv { text-align: right; font-size: 9.5pt; color: #5f5b52; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cuadro .cv.strong { color: #34332E; font-weight: 600; }
+  .cuadro .row.grand { grid-template-columns: 1fr 130px; border-top: 1.5px solid #34332E; border-bottom: none; padding-top: 8pt; margin-top: 2pt; }
+  .cuadro .row.grand .cl { font-family: 'Hanken Grotesk', sans-serif; font-size: 11pt; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #34332E; }
+  .cuadro .row.grand .cv { font-size: 13pt; font-weight: 700; color: #34332E; }
+  .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-size: 8pt; color: #9A9183; margin-top: 4pt; }
 
-  .totals .t-label { text-align: left; text-transform: uppercase; white-space: nowrap; padding-left: 2pt; }
-  .totals .t-pct   { text-align: center; width: 12%; }
-  .totals .t-cur   { text-align: center; width: 6%; }
-  .totals .t-val   { text-align: right; white-space: nowrap; }
-
-  .totals tr.total td {
-    font-weight: 700;
-    font-size: 7.5pt;
-    border-top: 0.5pt solid #1A1A1A;
-  }
-
-  /* ── Section titles — subrayado fino sin negrita */
-  .section-title {
-    font-size: 7pt;
-    font-weight: 400;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: #1A1A1A;
-    margin: 0 0 2pt 0;
-    padding: 0;
-    border-bottom: 0.5pt solid #1A1A1A;
-    padding-bottom: 1px;
-    display: inline-block;
-  }
-  .section-title-italic {
-    font-size: 7pt;
-    font-weight: 400;
-    font-style: italic;
-    color: #1A1A1A;
-    margin: 0 0 2pt 0;
-    padding-bottom: 1px;
-    border-bottom: 0.5pt solid #1A1A1A;
-    display: inline-block;
-  }
-
-  /* ── Payment terms ─────────────────────────────────────────── */
-  .payment-wrap { margin-top: 8pt; }
-  table.payment { border-collapse: collapse; font-size: 6.5pt; }
-  .payment td { padding: 0.5pt 0; border: none; line-height: 1.2; }
-  .payment .p-stage { padding-right: 24px; font-weight: 400; }
-  .payment .p-pct { text-align: right; font-variant-numeric: tabular-nums; min-width: 30px; }
-
-  /* ── Observaciones — lista numerada ─────────────────────────── */
-  .obs-wrap  { margin-top: 8pt; }
-  .obs-item {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 0;
-    font-size: 6.5pt;
-    line-height: 1.25;
-  }
-  .obs-num { flex: 0 0 12px; font-weight: 400; color: #1A1A1A; }
-  .obs-text { flex: 1; color: #1A1A1A; }
-
-  /* Avoid splitting rows ONLY in totals (más legible si queda junto). */
-  .totals tr { page-break-inside: avoid; }
+  /* ── Observaciones ───────────────────────────────────────── */
+  .obs { margin-top: 12mm; page-break-inside: avoid; }
+  .obs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5pt 14mm; margin-top: 7pt; }
+  .obs-item { display: flex; gap: 8pt; font-size: 7.5pt; line-height: 1.4; color: #5f5b52; }
+  .obs-num { color: #9A9183; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 `;
 
 // ─── Renderer ─────────────────────────────────────────────────────────────
@@ -425,7 +250,6 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   const ggPct = budget.ggPercentage ?? 0;
   const utilPct = budget.utilityPercentage ?? 0;
 
-  // Integer math with Math.round at each total line (spec §6).
   const costoDirecto = Math.round(items.reduce((s, i) => s + i.total, 0));
   const gg = Math.round(costoDirecto * (ggPct / 100));
   const utilidad = Math.round(costoDirecto * (utilPct / 100));
@@ -433,266 +257,172 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   const iva = Math.round(neto * 0.19);
   const total = neto + iva;
 
-  // Ordenar items dentro del chapter por subChapter (los sin sub-chapter
-  // primero, después agrupados alfabéticamente), después por nombre. Esto
-  // permite mostrar los separadores de sub-chapter de forma estable. Espejo
-  // del orden del editor en ObraEditor.tsx.
-  const sortItemsBySubChapter = (a: ObraItemInput, b: ObraItemInput) => {
-    const aSub = a.subChapter ?? "";
-    const bSub = b.subChapter ?? "";
-    if (aSub !== bSub) return aSub.localeCompare(bSub, "es");
-    return a.name.localeCompare(b.name, "es");
+  // Agrupamos por zona (sub-capítulo) respetando el orden de llegada — que en
+  // la app viene por sortOrder (Cocina antes que Baños, como en el diseño). NO
+  // alfabetizamos: eso reordenaba las zonas (Baños antes que Cocina) y rompía
+  // el orden del cuadro.
+  const groupByZone = (chapterItems: ObraItemInput[]): ObraItemInput[] => {
+    const zoneOrder: string[] = [];
+    const buckets = new Map<string, ObraItemInput[]>();
+    for (const it of chapterItems) {
+      const z = it.subChapter ?? "";
+      if (!buckets.has(z)) {
+        buckets.set(z, []);
+        zoneOrder.push(z);
+      }
+      buckets.get(z)!.push(it);
+    }
+    return zoneOrder.flatMap((z) => buckets.get(z)!);
   };
 
   const chapters = Object.entries(CHAPTERS)
     .map(([key, ch]) => ({
       key,
       ...ch,
-      items: items
-        .filter((i) => i.chapter === key)
-        .sort(sortItemsBySubChapter),
+      items: groupByZone(items.filter((i) => i.chapter === key)),
     }))
     .filter((ch) => ch.items.length > 0);
 
   const terms = paymentTerms.length > 0 ? paymentTerms : DEFAULT_PAYMENT_TERMS;
   const logoUri = getLogoDataUri();
   const dateStr = fmtDate(budget.date);
+  const versionLarga = `Versión ${budget.version.replace(/^V/i, "")} · ${dateStr}`;
 
   const logoHtml = logoUri
-    ? `<img class="logo" src="${logoUri}" alt="BLARQ" />`
-    : `<div class="logo" style="line-height:60px;font-size:28pt;font-weight:700;letter-spacing:0.15em;">BLARQ</div>`;
+    ? `<img class="cover-logo" src="${logoUri}" alt="BLARQ" />`
+    : `<div class="cover-logo" style="font-family:'Hanken Grotesk';font-size:24pt;letter-spacing:.15em;">BLARQ</div>`;
 
-  // Formato CLP en tabla: P.U. va sin $ (solo número), TOTAL va con
-  // "$ XXX.XXX" con espacio — para que matchee al cuadro Excel master.
-  const fmtNum = (n: number) => Math.round(n).toLocaleString("es-CL");
-  const fmtMoney = (n: number) => "$ " + Math.round(n).toLocaleString("es-CL");
-
-  // Marca de cambio a la izquierda del número de ítem. Flecha (subió/bajó)
-  // o pastilla "NUEVO"; vacío si no cambió o no hay versión base.
   const renderMarker = (m?: "added" | "up" | "down" | null) => {
-    if (m === "up") return `<span class="chg-arrow">&#8593;</span>`;
-    if (m === "down") return `<span class="chg-arrow">&#8595;</span>`;
-    if (m === "added") return `<span class="chg-new">Nuevo</span>`;
+    if (m === "up") return `<span class="chg">&#8593;</span> `;
+    if (m === "down") return `<span class="chg">&#8595;</span> `;
+    if (m === "added") return `<span class="chg-new">Nuevo</span> `;
     return "";
   };
 
+  // Filas de la tabla. CORRECCIÓN MJ: sin subtotal de capítulo y sin monto de
+  // zona — la banda de zona queda solo como separador.
   const tableRows = chapters
     .map((ch) => {
-      // Subtotales por zona dentro del capítulo, para mostrar al cierre
-      // de cada grupo. Solo se renderizan si hay más de una zona distinta
-      // en el capítulo (sino el subtotal de zona == subtotal del capítulo
-      // y solo agrega ruido visual).
-      const zoneSubtotals = new Map<string, number>();
-      for (const it of ch.items) {
-        const k = it.subChapter ?? "";
-        zoneSubtotals.set(k, (zoneSubtotals.get(k) ?? 0) + it.total);
-      }
-      const distinctZones = new Set(ch.items.map((i) => i.subChapter ?? ""));
-      const showZoneSubtotals = distinctZones.size > 1;
+      const rows = ch.items
+        .map((item, idx) => {
+          const prev = idx > 0 ? ch.items[idx - 1] : null;
+          const showZone =
+            item.subChapter && (!prev || prev.subChapter !== item.subChapter);
+          return `
+          ${showZone ? `<div class="zone">${esc(item.subChapter!)}</div>` : ""}
+          <div class="grid r">
+            <span class="it">${renderMarker(item.changeMarker)}${ch.index}.${idx + 1}</span>
+            <span class="pt">${esc(item.name)}</span>
+            <span class="ds">${sanitizeRichTextHtml(item.descriptionCliente)}</span>
+            <span class="un">${esc(item.unit)}</span>
+            <span class="ct">${fmtQty(item.quantity)}</span>
+            <span class="pu">${fmtNum(item.unitPrice)}</span>
+            <span class="tt">${fmtMoney(item.total)}</span>
+          </div>`;
+        })
+        .join("");
       return `
-        <tr class="chapter-row">
-          <td class="col-chg"></td>
-          <td class="col-item">${ch.index}</td>
-          <td class="col-name">${esc(ch.label)}</td>
-          <td class="col-desc"></td>
-          <td class="col-unit"></td>
-          <td class="col-qty"></td>
-          <td class="col-pu"></td>
-          <td class="col-total"></td>
-        </tr>
-        ${ch.items
-          .map((item, idx) => {
-            // Renumeramos correlativo dentro del capítulo (ch.index.idx+1),
-            // ignorando el item.itemNumber crudo de la BD — los Excel de
-            // origen a veces tenían duplicados o saltos (1.3, 1.3, 1.5…).
-            // Si el subChapter cambió respecto al ítem anterior, anteponemos
-            // una fila separadora con el nombre del sub-chapter Y el subtotal
-            // de la zona alineado a la derecha bajo la col Total.
-            const prev = idx > 0 ? ch.items[idx - 1] : null;
-            const showSub =
-              item.subChapter && (!prev || prev.subChapter !== item.subChapter);
-            const subValue = showZoneSubtotals
-              ? fmtMoney(zoneSubtotals.get(item.subChapter ?? "") ?? 0)
-              : "";
-            return `
-          ${
-            showSub
-              ? `<tr class="sub-chapter-row">
-                  <td colspan="7">${esc(item.subChapter!)}</td>
-                  <td class="col-total">${subValue}</td>
-                </tr>`
-              : ""
-          }
-          <tr>
-            <td class="col-chg">${renderMarker(item.changeMarker)}</td>
-            <td class="col-item">${ch.index}.${idx + 1}</td>
-            <td class="col-name">${esc(item.name)}</td>
-            <td class="col-desc">${sanitizeRichTextHtml(item.descriptionCliente)}</td>
-            <td class="col-unit">${esc(item.unit)}</td>
-            <td class="col-qty">${fmtQty(item.quantity)}</td>
-            <td class="col-pu">${fmtNum(item.unitPrice)}</td>
-            <td class="col-total">${fmtMoney(item.total)}</td>
-          </tr>`;
-          })
-          .join("")}
-      `;
+        <div class="cap"><b>${ch.index} · ${esc(ch.label)}</b></div>
+        ${rows}`;
     })
     .join("");
+
+  const detailHeader = `
+    <div class="dhead-iso">${isotipo(40, "#9A9183", 0.55)}</div>
+    <div class="dhead">
+      <div>
+        <div class="kick">Cotización de obra · detalle</div>
+        <div class="proj">${esc(project.name)}</div>
+        <div class="psub">${esc(project.clientName)} · Remodelación cocina y baños</div>
+      </div>
+      <div class="right">
+        <div class="ver">${esc(versionLarga)}</div>
+        <div class="doc">${esc(budget.version)} Cotización</div>
+        <div class="docsub">Obra</div>
+      </div>
+    </div>`;
 
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>${esc(budget.version)} COTIZACION OBRA — ${esc(project.name)}</title>
+  <title>${esc(budget.version)} Cotización Obra — ${esc(project.name)}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@200;300;400;500;600;700&family=Nunito+Sans:wght@300;400;600;700&family=Spectral:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
   <style>${CSS}</style>
 </head>
 <body>
 
-  <!-- HEADER — match IGUALAR reference -->
-  <!-- 1) Franja: logo (izq) + título + Pro a cargo (der) -->
-  <div class="header-strip">
-    <div class="strip-left">
-      ${logoHtml}
-    </div>
-    <div class="strip-right">
-      <div class="field"><div class="label">Version:</div></div>
-      <h1 class="doc-title">${esc(budget.version)} COTIZACION</h1>
-      <div class="doc-subtitle">OBRA</div>
-      <div class="field">
-        <div class="label">Profesional a cargo:</div>
-        <div class="value">${esc(PROFESSIONAL)}</div>
+  <!-- PORTADA -->
+  <div class="page">
+    <div class="wm">${isotipo(430, "#34332E", 0.06)}</div>
+    <div class="pad-cover">
+      <div class="cover-top">
+        ${logoHtml}
+        <div class="cover-meta">
+          <div class="m1">Cotización · Obra</div>
+          <div class="m2">${esc(versionLarga)}</div>
+        </div>
+      </div>
+      <div class="cover-mid">
+        <div class="cover-rule"></div>
+        <div class="cover-title">Remodelación de<br/>cocina y baños</div>
+        <div class="cover-sub">${esc(project.name)}${project.address ? " · " + esc(project.address) : ""}</div>
+      </div>
+      <div class="cover-foot">
+        <div class="row"><span class="lbl">Mandante</span><span class="val">${esc(project.clientName)}</span></div>
+        <div class="row"><span class="lbl">Profesional a cargo</span><span class="val">${esc(PROFESSIONAL)}</span></div>
       </div>
     </div>
   </div>
 
-  <!-- 2) Header fields: izquierda (Mandante/Proyecto/Direccion)
-       pegada al borde izq; derecha (Celular/Fecha/Valor UF)
-       pegada al borde derecho. -->
-  <div class="header-fields">
-    <div class="col-left">
-      <div class="field">
-        <div class="label">Mandante:</div>
-        <div class="value">${esc(project.clientName)}</div>
+  <!-- DETALLE -->
+  <div class="page">
+    <div class="wm">${isotipo(290, "#34332E", 0.05)}</div>
+    <div class="pad-detail">
+      ${detailHeader}
+      <div class="grid hd">
+        <span>Ítem</span><span>Partida</span><span>Descripción</span>
+        <span>Un</span><span>Cant</span><span>P. Unit.</span><span>Total</span>
       </div>
-      <div class="field">
-        <div class="label">Proyecto:</div>
-        <div class="value">${esc(project.name)}</div>
-      </div>
-      <div class="field">
-        <div class="label">Direccion:</div>
-        <div class="value">${esc(project.address || "—")}</div>
-      </div>
-    </div>
-    <div class="col-right">
-      <div class="field">
-        <div class="label">Celular:</div>
-        <div class="value">${esc(project.clientPhone || "—")}</div>
-      </div>
-      <div class="field">
-        <div class="label">Fecha:</div>
-        <div class="value">${dateStr}</div>
-      </div>
-      <div class="field">
-        <div class="label">Valor UF:</div>
-        <div class="value">${project.ufReference != null ? "$ " + Math.round(project.ufReference).toLocaleString("es-CL") : "—"}</div>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- TABLE -->
-  <table class="partidas">
-    <thead>
-      <tr>
-        <th class="col-chg"></th>
-        <th class="col-item">ITEM</th>
-        <th class="col-name">PARTIDA</th>
-        <th class="col-desc">DESCRIPCION</th>
-        <th class="col-unit">UNIDAD</th>
-        <th class="col-qty">CANTIDAD</th>
-        <th class="col-pu">P.U</th>
-        <th class="col-total">TOTAL</th>
-      </tr>
-    </thead>
-    <tbody>
       ${tableRows}
-    </tbody>
-  </table>
 
-  <!-- TOTALS — alineado a la derecha al 55% -->
-  <div class="totals-wrap">
-    <table class="totals">
-      <tr>
-        <td class="t-label">COSTO DIRECTO</td>
-        <td class="t-pct"></td>
-        <td class="t-cur">$</td>
-        <td class="t-val">${Math.round(costoDirecto).toLocaleString("es-CL")}</td>
-      </tr>
-      <tr>
-        <td class="t-label">GASTOS GENERALES</td>
-        <td class="t-pct">${ggPct}%</td>
-        <td class="t-cur">$</td>
-        <td class="t-val">${Math.round(gg).toLocaleString("es-CL")}</td>
-      </tr>
-      <tr>
-        <td class="t-label">UTILIDADES</td>
-        <td class="t-pct">${utilPct}%</td>
-        <td class="t-cur">$</td>
-        <td class="t-val">${Math.round(utilidad).toLocaleString("es-CL")}</td>
-      </tr>
-      <tr>
-        <td class="t-label">COSTO NETO</td>
-        <td class="t-pct"></td>
-        <td class="t-cur">$</td>
-        <td class="t-val">${Math.round(neto).toLocaleString("es-CL")}</td>
-      </tr>
-      <tr>
-        <td class="t-label">IVA</td>
-        <td class="t-pct">19%</td>
-        <td class="t-cur">$</td>
-        <td class="t-val">${Math.round(iva).toLocaleString("es-CL")}</td>
-      </tr>
-      <tr class="total">
-        <td class="t-label">COSTO TOTAL</td>
-        <td class="t-pct"></td>
-        <td class="t-cur">$</td>
-        <td class="t-val">${Math.round(total).toLocaleString("es-CL")}</td>
-      </tr>
-    </table>
-  </div>
+      <div class="cierre">
+        <div>
+          <div class="blk-title">Formas de pago</div>
+          <div class="pagos">
+            ${terms
+              .map(
+                (t) => `<div class="row"><span class="s">${esc(t.stage)}</span><span class="p">${t.percentage}%</span></div>`
+              )
+              .join("")}
+          </div>
+        </div>
+        <div>
+          <div class="cuadro">
+            <div class="row"><span class="cl">Costo directo</span><span class="cp"></span><span class="cv">${fmtMoney(costoDirecto)}</span></div>
+            <div class="row"><span class="cl">Gastos generales</span><span class="cp">${ggPct}%</span><span class="cv">${fmtMoney(gg)}</span></div>
+            <div class="row"><span class="cl">Utilidades</span><span class="cp">${utilPct}%</span><span class="cv">${fmtMoney(utilidad)}</span></div>
+            <div class="row"><span class="cl strong">Costo neto</span><span class="cp"></span><span class="cv strong">${fmtMoney(neto)}</span></div>
+            <div class="row"><span class="cl">IVA</span><span class="cp">19%</span><span class="cv">${fmtMoney(iva)}</span></div>
+            <div class="row grand"><span class="cl">Costo total</span><span class="cv">${fmtMoney(total)}</span></div>
+          </div>
+          <div class="iva-note">Valor IVA incluido</div>
+        </div>
+      </div>
 
-  <!-- FORMAS DE PAGO -->
-  <div class="payment-wrap">
-    <div class="section-title-italic">Formas de Pago</div>
-    <table class="payment">
-      ${terms
-        .map(
-          (t) => `
-        <tr>
-          <td class="p-stage">${esc(t.stage)}</td>
-          <td class="p-pct">${t.percentage}%</td>
-        </tr>`
-        )
-        .join("")}
-    </table>
-  </div>
-
-  <!-- OBSERVACIONES GENERALES -->
-  <div class="obs-wrap">
-    <div class="section-title">OBSERVACIONES GENERALES:</div>
-    ${OBSERVACIONES.map(
-      (obs, i) => `
-      <div class="obs-item">
-        <div class="obs-num">${i + 1}.</div>
-        <div class="obs-text">${esc(obs)}</div>
-      </div>`
-    ).join("")}
+      <div class="obs">
+        <div class="blk-title">Observaciones generales</div>
+        <div class="obs-grid">
+          ${OBSERVACIONES.map(
+            (o, i) => `<div class="obs-item"><span class="obs-num">${i + 1}</span><span>${esc(o)}</span></div>`
+          ).join("")}
+        </div>
+      </div>
+    </div>
   </div>
 
 </body>
 </html>`;
 }
-

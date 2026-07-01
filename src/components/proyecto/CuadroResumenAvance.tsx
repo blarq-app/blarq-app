@@ -257,6 +257,14 @@ export default function CuadroResumenAvance({
                 </tr>
               ))}
 
+              {/* Aire entre el detalle de transferencias y el bloque de
+                  totales de abajo (pedido de MJ): una fila vacía que da
+                  espacio en blanco para separar visualmente el detalle de
+                  los subtotales (Total pagos / Avance / Saldo pendiente). */}
+              <tr aria-hidden="true">
+                <td colSpan={2 + conceptos.length * 3} className="h-4"></td>
+              </tr>
+
               {/* TOTAL PAGOS */}
               <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold text-gray-900">
                 <td className="py-1 pr-1 text-left uppercase tracking-wide">Total pagos</td>

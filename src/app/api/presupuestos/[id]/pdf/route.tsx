@@ -163,7 +163,7 @@ export async function GET(
           percentage: t.percentage,
         })),
       });
-      footer = buildArtefactosFooter(budget.version, budget.date);
+      footer = buildArtefactosFooter();
       filename = `BLARQ_Artefactos_${baseName}_${budget.version}.pdf`;
     }
 
@@ -182,6 +182,7 @@ export async function GET(
     // previo; el de muebles al cliente ya usa la marca v2 como obra.
     const isBrandObra =
       budget.type === "obra" ||
+      budget.type === "artefactos" ||
       (budget.type === "muebles" && tipo !== "mueblista");
     const pdfBuffer = await renderPDF(html, {
       format: "A4",

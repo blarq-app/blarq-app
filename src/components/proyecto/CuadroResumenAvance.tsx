@@ -172,8 +172,15 @@ export default function CuadroResumenAvance({
     <div className="space-y-4 mb-8">
       {/* ── Cuadro Resumen + AVANCE editable (esto va al cliente) ─────────── */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-start justify-between mb-1 gap-3">
-          <h2 className="text-lg font-semibold text-gray-900">Cuadro Resumen</h2>
+        <div className="flex items-start justify-between mb-4 gap-3">
+          {/* El rótulo de unidad evita la confusión A1/A9: este cuadro va
+              c/IVA (réplica del Excel que va al cliente), mientras las cards
+              de arriba están en neto. Sin esta nota, "Total pagos" (c/IVA,
+              conciliado) parece contradecir la card "Cobrado" (neto, facturado). */}
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-gray-900">Cuadro Resumen</h2>
+            <p className="text-[11px] text-gray-400 mt-0.5">Valores con IVA incluido</p>
+          </div>
           <button
             type="button"
             onClick={descargarImagen}
@@ -186,12 +193,6 @@ export default function CuadroResumenAvance({
             {descargando ? "Generando…" : "Descargar imagen"}
           </button>
         </div>
-        <p className="text-xs text-gray-500 mb-4">
-          Acordado por concepto, lo ya cobrado, y el avance que pedís ahora.
-          Completá el % AL QUE QUERÉS LLEGAR por concepto (100% = cobrar todo el
-          saldo) y te calcula cuánto pedir. Las columnas son las del
-          presupuesto entregado al cliente.
-        </p>
         {/* Mismo formato que antes (Fecha/Monto/Factura por concepto), pero con
             letra y padding chicos para que entre completo. */}
         <div className="overflow-x-auto">
@@ -249,6 +250,14 @@ export default function CuadroResumenAvance({
                   <td className="py-1 pl-1 border-l border-gray-200"></td>
                 </tr>
               ))}
+
+              {/* Aire entre el detalle de transferencias y el bloque de
+                  totales de abajo (pedido de MJ): una fila vacía que da
+                  espacio en blanco para separar visualmente el detalle de
+                  los subtotales (Total pagos / Avance / Saldo pendiente). */}
+              <tr aria-hidden="true">
+                <td colSpan={2 + conceptos.length * 3} className="h-4"></td>
+              </tr>
 
               {/* TOTAL PAGOS */}
               <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold text-gray-900">

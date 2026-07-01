@@ -1,7 +1,15 @@
 /**
- * HTML+CSS renderer for the Muebles budget PDF.
- * Match exacto al formato BLARQ Excel: capítulos numerados, items con
- * descripción general, detalles de componentes con materialidad multi-línea.
+ * HTML+CSS renderer del PDF de Muebles.
+ * Consumido por renderPDF() (Puppeteer). Se renderiza a A4 con márgenes
+ * verticales 14mm en TODAS las páginas (el route los pasa) para que la tabla,
+ * que fluye entre páginas, no se corte contra el borde.
+ *
+ * Línea editorial: Manual de Marca BLARQ v2 (Claro). Fuente de verdad del
+ * diseño: "Presupuesto Muebles Imprimible" de Claude Design. Hanken Grotesk
+ * (títulos), Spectral (bajadas itálicas) y Nunito Sans (cuerpo y cifras).
+ *
+ * Corrección de MJ: la portada NO muestra "Inversión total". El resto del
+ * diseño (subtotal por capítulo, "Valor IVA incluido", total) se mantiene.
  */
 
 import fs from "node:fs";
@@ -11,16 +19,17 @@ const PROFESSIONAL = "MARÍA JOSÉ BLANCO";
 
 const DEFAULT_PAYMENT_TERMS = [
   { stage: "Anticipo", percentage: 60 },
-  { stage: "Inicio Instalación", percentage: 30 },
+  { stage: "Inicio instalación", percentage: 30 },
   { stage: "Saldo", percentage: 10 },
 ];
 
-const OBSERVACIONES = [
-  "Plazos de Entrega: 60 días corridos para muebles al momento de ingreso a producción, excepto en caso de fuerza mayor. Las cubiertas Cuarzo y Granito tiene un plazo de 10 días hábiles para instalar, después de su rectificación.",
-  "Condiciones de entrega: Los muebles ingresarán una vez puestos los cerámicos de muros con el frague seco, instalación de agua y desagüe. En caso de haber pintura, debe estar seca. Las cubiertas solo se podrán rectificar una vez instalados los muebles base.",
-  "Garantías: Durante la etapa de diseño se podrá revisar minuciosamente todos los detalles del proyecto hasta que haya una absoluta satisfacción por parte del cliente. Luego de aprobado el diseño, todos los cambios tendrán un costo adicional. No nos hacemos responsables por alteraciones en los muebles y cubiertas una vez recibidos a entera satisfacción del cliente. Los artefactos tienen su garantía directamente con la empresa. Si los artefactos son intervenidos, pierden su garantía.",
-  "Este presupuesto tiene una validez de 10 días corridos.",
-  "Estos valores podrán sufrir modificaciones si existen variaciones considerables con las medidas rectificadas en terreno.",
+// Observaciones con "entradilla" en negrita, igual que el diseño.
+const OBSERVACIONES: Array<{ lead?: string; text: string }> = [
+  { lead: "Plazos de entrega.", text: "60 días corridos para muebles desde el ingreso a producción, salvo fuerza mayor. Las cubiertas de cuarzo y granito tienen un plazo de 10 días hábiles para instalación, posterior a su rectificación." },
+  { lead: "Condiciones de entrega.", text: "Los muebles ingresan una vez puestos los cerámicos de muros con el frague seco, instalación de agua y desagüe. De haber pintura, debe estar seca. Las cubiertas solo se rectifican una vez instalados los muebles base." },
+  { lead: "Garantías.", text: "Durante la etapa de diseño se revisan minuciosamente todos los detalles hasta lograr la plena satisfacción del cliente. Aprobado el diseño, todo cambio tiene costo adicional. No nos hacemos responsables por alteraciones en muebles y cubiertas una vez recibidos a conformidad." },
+  { text: "Este presupuesto tiene una validez de 10 días corridos." },
+  { text: "Los valores podrán sufrir modificaciones si existen variaciones considerables respecto de las medidas rectificadas en terreno." },
 ];
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -44,8 +53,6 @@ export interface MuebleItemInput {
   quantity: number;
   clientPriceIva: number;
   details: MuebleDetailInput[];
-  // Partidas de herrajes: el detalle son herrajes agrupados por sector, sin
-  // precio por línea (el precio es el total de la partida). null/[] = no aplica.
   herrajes?: MuebleHerrajeInput[];
 }
 
@@ -86,423 +93,186 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function fmtCLP(n: number): string {
-  return "$" + Math.round(n).toLocaleString("es-CL");
-}
-
 function fmtQty(n: number): string {
   return new Intl.NumberFormat("es-CL", { maximumFractionDigits: 2 }).format(n);
+}
+
+function fmtMoney(n: number): string {
+  return "$ " + Math.round(n).toLocaleString("es-CL");
 }
 
 function fmtDate(d: string | Date): string {
   const date = typeof d === "string" ? new Date(d) : d;
   const day = String(date.getUTCDate()).padStart(2, "0");
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const year = String(date.getUTCFullYear()).slice(-2);
-  return `${day}-${month}-${year}`;
+  const year = String(date.getUTCFullYear());
+  return `${day}·${month}·${year}`;
 }
 
-function getLogoDataUri(): string {
-  const logoPath = path.join(
-    process.cwd(),
-    "public",
-    "assets",
-    "logo-blarq.png"
-  );
+function assetDataUri(file: string): string {
   try {
-    const bytes = fs.readFileSync(logoPath);
+    const bytes = fs.readFileSync(path.join(process.cwd(), "public", "assets", file));
     return `data:image/png;base64,${bytes.toString("base64")}`;
   } catch {
     return "";
   }
 }
 
-// ─── CSS ──────────────────────────────────────────────────────────────────
-// Misma línea editorial que ObraPDF: tipografía suave (#1A1A1A, no negro),
-// header con grilla 2-cols pareadas, tabla sin verticales y con líneas
-// internas finísimas, totales sutiles sin marco rectangular.
+// ─── CSS — marca v2 (Claro), misma base que ObraPDF ─────────────────────────
 const CSS = `
-  @page { size: A4; margin: 10mm 12mm; }
-
+  @page { size: A4; }
   * { box-sizing: border-box; }
-
   html, body {
-    margin: 0;
-    padding: 0;
-    font-family: 'Montserrat', sans-serif;
-    font-size: 7pt;
-    font-weight: 400;
-    color: #1A1A1A;
+    margin: 0; padding: 0;
+    font-family: 'Nunito Sans', sans-serif;
+    color: #34332E;
     -webkit-font-smoothing: antialiased;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
+  .page { position: relative; width: 210mm; overflow: hidden; }
+  .page + .page { page-break-before: always; }
+  .pad-cover { padding: 0 17mm; display: flex; flex-direction: column; justify-content: space-between; min-height: calc(297mm - 28mm); }
+  .pad-detail { padding: 0 17mm; display: flex; flex-direction: column; }
 
-  /* ── Header ─────────────────────────────────────────────────── */
-  .header-strip {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    column-gap: 30px;
-    margin-bottom: 4pt;
-    align-items: start;
-  }
-  .header-strip .strip-left  { text-align: left; }
-  .header-strip .strip-right { text-align: right; }
+  /* Portada */
+  .wm { position: absolute; right: -20mm; bottom: -26mm; z-index: 0; }
+  .cover-top, .cover-mid, .cover-foot { position: relative; z-index: 1; }
+  .cover-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .cover-logo { width: 46mm; height: auto; }
+  .cover-meta { text-align: right; }
+  .cover-meta .m1 { font-size: 8.5pt; letter-spacing: .3em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
+  .cover-meta .m2 { font-size: 8.5pt; letter-spacing: .3em; text-transform: uppercase; color: #b0a596; font-weight: 600; margin-top: 4pt; }
+  .cover-mid { display: flex; flex-direction: column; align-items: flex-start; gap: 6mm; }
+  .cover-rule { width: 20mm; height: 1px; background: #c7bfb2; }
+  .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 34pt; line-height: 1.12; letter-spacing: .1em; text-transform: uppercase; color: #34332E; }
+  .cover-sub { font-family: 'Spectral', serif; font-weight: 300; font-style: italic; font-size: 16pt; color: #9A9183; }
+  .cover-foot { display: flex; flex-direction: column; gap: 4mm; border-top: 1px solid #e2dcd0; padding-top: 6mm; }
+  .cover-foot .row { display: flex; justify-content: space-between; align-items: baseline; }
+  .cover-foot .lbl { font-size: 8pt; letter-spacing: .16em; text-transform: uppercase; color: #9A9183; }
+  .cover-foot .val { font-size: 10.5pt; color: #34332E; }
 
-  .header-fields {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 6pt;
-  }
-  .header-fields .col-left,
-  .header-fields .col-right {
-    display: flex;
-    flex-direction: column;
-    gap: 2pt;
-  }
-  .header-fields .col-right { text-align: left; }
+  /* Detalle: encabezado */
+  .dhead-iso { width: 40px; opacity: .55; margin-bottom: 7mm; display: block; }
+  .dhead { display: flex; justify-content: space-between; align-items: flex-start; }
+  .dhead .kick { font-size: 7.5pt; letter-spacing: .26em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
+  .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 18pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
+  .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 9.5pt; color: #9A9183; margin-top: 3pt; }
+  .dhead .right { text-align: right; }
+  .dhead .ver { font-size: 7pt; letter-spacing: .28em; text-transform: uppercase; color: #b0a596; font-weight: 600; }
+  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 18pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
+  .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 9pt; letter-spacing: .34em; text-transform: uppercase; color: #9A9183; margin-top: 3pt; }
 
-  .logo { display: block; height: 45px; width: auto; margin-bottom: 2pt; }
+  /* Tabla */
+  .mhd { display: grid; grid-template-columns: 7% 1fr 9% 16%; padding: 7pt 0; border-bottom: 1.5px solid #34332E; margin-top: 8mm; font-size: 6.5pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
+  .mhd .ct { text-align: center; } .mhd .rt { text-align: right; }
 
-  .doc-title {
-    font-family: 'Montserrat', sans-serif;
-    font-size: 18pt;
-    font-weight: 400;
-    color: #808080;
-    line-height: 1;
-    margin: 0;
-    letter-spacing: 0.02em;
-  }
-  .doc-subtitle {
-    font-size: 9pt;
-    font-weight: 400;
-    color: #808080;
-    letter-spacing: 0.06em;
-    margin: 0 0 4pt 0;
-    text-transform: uppercase;
-  }
+  .cap { display: flex; justify-content: space-between; align-items: center; background: #EDEDEB; padding: 6pt 10pt; margin-top: 12pt; break-inside: avoid; break-after: avoid; }
+  .cap b { font-family: 'Hanken Grotesk', sans-serif; font-size: 9pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: #34332E; }
+  .cap span { font-variant-numeric: tabular-nums; font-size: 8pt; color: #6F6A60; letter-spacing: .04em; }
 
-  .field { margin-bottom: 1pt; }
-  .field .label {
-    font-size: 6pt;
-    font-weight: 400;
-    color: #808080;
-    line-height: 1.1;
-  }
-  .field .value {
-    font-size: 8pt;
-    font-weight: 500;
-    color: #1A1A1A;
-    line-height: 1.1;
-    text-transform: uppercase;
-  }
+  /* Cada partida (fila + su bloque de especificaciones/herrajes) se mantiene
+     junta: no se separa el título de sus specs entre páginas. */
+  .partida { break-inside: avoid; }
+  .mr { display: grid; grid-template-columns: 7% 1fr 9% 16%; align-items: baseline; padding: 8pt 0 2pt; border-top: 1px solid #e7e1d7; }
+  .mit { color: #9A9183; font-variant-numeric: tabular-nums; font-size: 8.5pt; }
+  .mpt { color: #34332E; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 8.5pt; }
+  .msub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; color: #9A9183; font-size: 8.5pt; display: block; margin-top: 2pt; }
+  .mct { text-align: center; color: #5f5b52; font-variant-numeric: tabular-nums; font-size: 8.5pt; }
+  .mtt { text-align: right; color: #34332E; font-variant-numeric: tabular-nums; font-size: 9pt; font-weight: 700; }
 
-  /* ── Tabla principal — misma estética que Obra ──────────────── */
-  table.partidas {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-    font-family: 'Montserrat', sans-serif;
-    font-size: 6.5pt;
-    margin-top: 0;
-  }
-  /* Cuerpo: sin bordes verticales, líneas internas muy sutiles. */
-  .partidas th, .partidas td {
-    border: none;
-    border-bottom: 0.15pt solid #E5E5E5;
-    padding: 2pt 5pt;
-    vertical-align: top;
-    word-wrap: break-word;
-    line-height: 1.2;
-    font-weight: 400;
-    font-size: 6.5pt;
-    color: #1A1A1A;
-  }
-  /* Header tabla — sin fill, solo líneas top/bottom */
-  .partidas thead th {
-    background: transparent;
-    color: #1A1A1A;
-    font-weight: 500;
-    text-transform: uppercase;
-    text-align: center;
-    font-size: 7pt;
-    padding: 2pt 5pt;
-    white-space: nowrap;
-    vertical-align: middle;
-    border-top: 0.5pt solid #1A1A1A;
-    border-bottom: 0.5pt solid #1A1A1A;
-  }
+  .spec { margin: 4pt 0 7pt 7%; padding: 5pt 0 5pt 12pt; border-left: 2px solid #E7E1D7; }
+  .specrow { display: grid; grid-template-columns: 34% 1fr; padding: 2pt 0; font-size: 7.5pt; line-height: 1.38; }
+  .speclbl { letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
+  .specval { color: #5f5b52; }
+  .hrow { display: flex; justify-content: space-between; align-items: baseline; padding: 3pt 0; border-bottom: 1px solid #f1ece3; font-size: 7.5pt; }
+  .hrow:last-child { border-bottom: none; }
+  .hname { color: #5f5b52; }
+  .hmut { color: #aaa294; }
+  .hqty { color: #9A9183; font-variant-numeric: tabular-nums; letter-spacing: .05em; flex-shrink: 0; padding-left: 14pt; }
 
-  /* Fila de capítulo (1 COCINA, 2 BAÑO, …) */
-  .chapter-row td {
-    background: #E5E5E5;
-    font-weight: 600;
-    text-transform: uppercase;
-    font-size: 7pt;
-    padding: 2pt 5pt;
-    border-bottom: 0.15pt solid #E5E5E5;
-    color: #1A1A1A;
-    vertical-align: middle;
-  }
+  /* Cierre */
+  .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 14mm; margin-top: 12mm; align-items: start; break-inside: avoid; }
+  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #34332E; font-weight: 700; }
+  .pagos { margin-top: 6pt; border-top: 1px solid #e2dcd0; }
+  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 6pt 0; border-bottom: 1px solid #eee8dd; }
+  .pagos .row:last-child { border-bottom: none; }
+  .pagos .s { font-size: 10pt; color: #34332E; }
+  .pagos .p { font-size: 10pt; color: #6F6A60; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .totalbox { border-top: 1.5px solid #34332E; padding-top: 8pt; display: flex; flex-direction: column; align-items: flex-end; gap: 4pt; }
+  .totalbox .tl { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #34332E; font-weight: 700; }
+  .totalbox .tv { font-variant-numeric: tabular-nums; font-size: 15pt; color: #34332E; font-weight: 700; }
+  .totalbox .tn { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 8pt; color: #9A9183; }
 
-  /* Fila ítem (1.1 MUEBLES, 1.2 CUBIERTA, …) */
-  .item-row td {
-    font-weight: 500;
-    font-size: 6.5pt;
-    padding: 2pt 5pt;
-  }
-  .item-desc-general {
-    font-weight: 400;
-    font-style: italic;
-    color: #555;
-    font-size: 6pt;
-    margin-top: 1pt;
-  }
-
-  /* Detalle (CUERPO INTERIOR / FRENTES PUERTAS / etc) — indented */
-  .detail-row td {
-    padding: 1pt 5pt;
-    font-size: 6pt;
-    border-bottom: none;
-    color: #1A1A1A;
-  }
-  .detail-row .col-detail-name {
-    font-weight: 500;
-    text-transform: uppercase;
-    padding-left: 18px;
-    color: #1A1A1A;
-  }
-  .detail-row .col-detail-material {
-    color: #555;
-    font-weight: 400;
-  }
-
-  /* Column widths (suman 100%) */
-  .col-num   { width: 6%;  text-align: center; white-space: nowrap; }
-  .col-name  { width: 70%; text-align: left; }
-  .col-qty   { width: 9%;  text-align: center; font-variant-numeric: tabular-nums; }
-  .col-total { width: 15%; text-align: right; font-variant-numeric: tabular-nums; }
-
-  /* ── Totales — sutil, línea top/bottom, sin marco ───────────── */
-  .totals-wrap {
-    width: 100%;
-    margin-top: 6pt;
-    display: flex;
-    justify-content: flex-end;
-  }
-  table.totals {
-    border-collapse: collapse;
-    font-family: 'Montserrat', sans-serif;
-    font-size: 7pt;
-    width: 55%;
-    margin-left: auto;
-    border: none;
-    border-top: 0.5pt solid #1A1A1A;
-    border-bottom: 0.5pt solid #1A1A1A;
-  }
-  .totals td {
-    padding: 2.5pt 6pt;
-    background: transparent;
-    color: #1A1A1A;
-    font-variant-numeric: tabular-nums;
-  }
-  .totals .t-label {
-    text-align: left;
-    text-transform: uppercase;
-    font-weight: 700;
-    font-size: 7.5pt;
-    padding-left: 2pt;
-  }
-  .totals .t-val {
-    text-align: right;
-    font-weight: 700;
-    font-size: 7.5pt;
-    white-space: nowrap;
-  }
-
-  /* ── Section titles ─────────────────────────────────────────── */
-  .section-title {
-    font-size: 7pt;
-    font-weight: 400;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: #1A1A1A;
-    margin: 0 0 2pt 0;
-    border-bottom: 0.5pt solid #1A1A1A;
-    padding-bottom: 1px;
-    display: inline-block;
-  }
-  .section-title-italic {
-    font-size: 7pt;
-    font-weight: 400;
-    font-style: italic;
-    color: #1A1A1A;
-    margin: 0 0 2pt 0;
-    padding-bottom: 1px;
-    border-bottom: 0.5pt solid #1A1A1A;
-    display: inline-block;
-  }
-
-  /* ── Formas de pago ─────────────────────────────────────────── */
-  .payment-wrap { margin-top: 8pt; }
-  table.payment { border-collapse: collapse; font-size: 6.5pt; }
-  .payment td { padding: 0.5pt 0; border: none; line-height: 1.2; color: #1A1A1A; }
-  .payment .p-stage { padding-right: 24px; font-weight: 400; }
-  .payment .p-pct { text-align: right; font-variant-numeric: tabular-nums; min-width: 30px; }
-
-  /* ── Observaciones ──────────────────────────────────────────── */
-  .obs-wrap { margin-top: 8pt; }
-  .obs-item {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 0;
-    font-size: 6.5pt;
-    line-height: 1.25;
-  }
-  .obs-num { flex: 0 0 12px; font-weight: 400; color: #1A1A1A; }
-  .obs-text { flex: 1; color: #1A1A1A; }
-
-  .extra-obs {
-    margin-top: 6pt;
-    padding: 6px;
-    background: #F8F8F8;
-    border-left: 1.5pt solid #999;
-    font-size: 6pt;
-    line-height: 1.35;
-    color: #333;
-  }
+  /* Observaciones */
+  .obs { margin-top: 12mm; break-inside: avoid; }
+  .obs-list { display: flex; flex-direction: column; gap: 6pt; margin-top: 7pt; }
+  .obs-item { display: flex; gap: 8pt; font-size: 7.5pt; line-height: 1.45; color: #5f5b52; }
+  .obs-num { color: #9A9183; font-variant-numeric: tabular-nums; flex-shrink: 0; font-weight: 600; }
+  .obs-item b { color: #34332E; font-weight: 600; }
 `;
 
-// ─── HTML render ──────────────────────────────────────────────────────────
-// Detalle de una partida de herrajes en el PDF al cliente: los herrajes
-// agrupados por SECTOR (sub-encabezado) y listados con su medida/color y
-// cantidad, SIN precio por línea (el precio es el total de la partida). Es el
-// equivalente, para herrajes, del detalle de componentes de un mueble.
-function renderHerrajeDetailRows(
-  herrajes: MuebleHerrajeInput[] | undefined
-): string {
+// ─── Render herrajes (lista plana: nombre · medida/color · cantidad) ────────
+function renderHerrajes(herrajes?: MuebleHerrajeInput[]): string {
   if (!herrajes || herrajes.length === 0) return "";
-  // Agrupar por sector preservando el orden de aparición.
-  const order: string[] = [];
-  const bySector = new Map<string, MuebleHerrajeInput[]>();
-  for (const h of herrajes) {
-    const key = h.sector || "";
-    if (!bySector.has(key)) {
-      bySector.set(key, []);
-      order.push(key);
-    }
-    bySector.get(key)!.push(h);
-  }
-  return order
-    .map((sector) => {
-      const lines = bySector.get(sector)!;
-      const header = sector
-        ? `<tr class="detail-row"><td></td><td class="col-detail-name" colspan="3"><strong>${esc(
-            sector.toUpperCase()
-          )}</strong></td></tr>`
-        : "";
-      const rows = lines
-        .map((h) => {
-          // Medida/color en MAYÚSCULA, como en el editor y el catálogo.
-          const spec = [h.measure, h.finish]
-            .filter(Boolean)
-            .join(" · ")
-            .toUpperCase();
-          const qty = `${fmtQty(h.quantity)} un`;
-          return `
-          <tr class="detail-row">
-            <td></td>
-            <td class="col-detail-name" colspan="3">
-              <span style="display:inline-block;min-width:120px;">${esc(h.name)}</span>
-              <span class="col-detail-material">${esc(spec)}${
-                spec ? " · " : ""
-              }${esc(qty)}</span>
-            </td>
-          </tr>`;
-        })
-        .join("");
-      return header + rows;
+  return herrajes
+    .map((h) => {
+      const spec = [h.measure, h.finish].filter(Boolean).join(" · ");
+      const mut = spec ? ` <span class="hmut">· ${esc(spec)}</span>` : "";
+      return `<div class="hrow"><span class="hname">${esc(h.name)}${mut}</span><span class="hqty">${fmtQty(h.quantity)} UN</span></div>`;
     })
     .join("");
 }
 
+// ─── HTML render ────────────────────────────────────────────────────────────
 export function renderMueblesHTML(input: MueblesHTMLInput): string {
   const { project, budget, chapters, paymentTerms } = input;
 
-  const totalIva = chapters
+  const total = chapters
     .flatMap((c) => c.items)
     .reduce((sum, i) => sum + i.clientPriceIva * i.quantity, 0);
 
   const terms = paymentTerms.length > 0 ? paymentTerms : DEFAULT_PAYMENT_TERMS;
-  const logoUri = getLogoDataUri();
+  const logo = assetDataUri("blarq-logo-horizontal-ink.png") || assetDataUri("logo-blarq.png");
+  const iso = assetDataUri("blarq-isotipo-piedra.png");
   const dateStr = fmtDate(budget.date);
+  const versionLarga = `Versión ${budget.version.replace(/^V/i, "")} · ${dateStr}`;
 
-  const logoHtml = logoUri
-    ? `<img class="logo" src="${logoUri}" alt="BLARQ" />`
-    : `<div class="logo" style="line-height:60px;font-size:28pt;font-weight:700;letter-spacing:0.15em;">BLARQ</div>`;
-
-  // Orden canónico dentro del capítulo: Muebles → Cubiertas → Herrajes.
-  // El resto (cualquier otro tipo) cae al final por fallback. MJ pidió
-  // este orden específico para que el PDF salga consistente sin importar
-  // cómo se hayan ingresado los items en el editor.
-  function itemOrder(name: string): number {
-    const u = (name || "").toUpperCase();
-    if (u.includes("MUEBLE")) return 1;
-    if (u.includes("CUBIERTA")) return 2;
-    if (u.includes("HERRAJ")) return 3;
-    return 99;
-  }
+  const logoHtml = logo
+    ? `<img class="cover-logo" src="${logo}" alt="BLARQ" />`
+    : `<div class="cover-logo" style="font-family:'Hanken Grotesk';font-size:24pt;letter-spacing:.15em;">BLARQ</div>`;
+  const wm = iso ? `<img src="${iso}" style="width:150mm;opacity:.06;" />` : "";
+  const dhIso = iso ? `<img class="dhead-iso" src="${iso}" alt="" />` : "";
 
   const tableRows = chapters
     .map((ch) => {
-      const sortedItems = [...ch.items].sort(
-        (a, b) => itemOrder(a.name) - itemOrder(b.name)
-      );
-      const chapterSubtotal = sortedItems.reduce(
-        (s, i) => s + i.clientPriceIva * i.quantity,
-        0
-      );
+      // Orden de entrada (sortOrder), como en el diseño: los itemNumber quedan
+      // en secuencia. No re-ordenamos por tipo (eso dejaba 2.3 antes que 2.2).
+      const items = ch.items;
+      const subtotal = items.reduce((s, i) => s + i.clientPriceIva * i.quantity, 0);
+      const rows = items
+        .map((item) => {
+          const specBody = item.herrajes && item.herrajes.length > 0
+            ? renderHerrajes(item.herrajes)
+            : item.details
+                .map(
+                  (d) => `<div class="specrow"><span class="speclbl">${esc(d.name)}</span><span class="specval">${esc(d.material)}</span></div>`
+                )
+                .join("");
+          return `
+          <div class="partida">
+            <div class="mr">
+              <span class="mit">${esc(item.itemNumber)}</span>
+              <span><span class="mpt">${esc(item.name)}</span>${item.descriptionGeneral ? `<span class="msub">${esc(item.descriptionGeneral)}</span>` : ""}</span>
+              <span class="mct">${fmtQty(item.quantity)}</span>
+              <span class="mtt">${fmtMoney(item.clientPriceIva * item.quantity)}</span>
+            </div>
+            ${specBody ? `<div class="spec">${specBody}</div>` : ""}
+          </div>`;
+        })
+        .join("");
       return `
-      <tr class="chapter-row">
-        <td class="col-num">${ch.chapterNumber}</td>
-        <td class="col-name">${esc(ch.name)}</td>
-        <td class="col-qty"></td>
-        <td class="col-total">${fmtCLP(chapterSubtotal)}</td>
-      </tr>
-      ${sortedItems
-        .map(
-          (item) => `
-        <tr class="item-row">
-          <td class="col-num">${esc(item.itemNumber)}</td>
-          <td class="col-name">
-            ${esc(item.name)}
-            ${
-              item.descriptionGeneral
-                ? `<div class="item-desc-general">${esc(item.descriptionGeneral)}</div>`
-                : ""
-            }
-          </td>
-          <td class="col-qty">${fmtQty(item.quantity)}</td>
-          <td class="col-total">${fmtCLP(item.clientPriceIva * item.quantity)}</td>
-        </tr>
-        ${item.details
-          .map(
-            (d) => `
-          <tr class="detail-row">
-            <td></td>
-            <td class="col-detail-name" colspan="3">
-              <span style="display:inline-block;min-width:120px;">${esc(d.name)}</span>
-              <span class="col-detail-material">${esc(d.material)}</span>
-            </td>
-          </tr>`
-          )
-          .join("")}
-        ${renderHerrajeDetailRows(item.herrajes)}
-      `
-        )
-        .join("")}
-    `;
+        <div class="cap"><b>${ch.chapterNumber} · ${esc(ch.name)}</b><span>Subtotal&nbsp;&nbsp;${fmtMoney(subtotal)}</span></div>
+        ${rows}`;
     })
     .join("");
 
@@ -510,119 +280,87 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>${esc(budget.version)} COTIZACION MUEBLES — ${esc(project.name)}</title>
+  <title>${esc(budget.version)} Cotización Muebles — ${esc(project.name)}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@200;300;400;500;600;700&family=Nunito+Sans:wght@300;400;600;700&family=Spectral:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
   <style>${CSS}</style>
 </head>
 <body>
 
-  <!-- 1) Franja: logo (izq) + título + Pro a cargo (der) -->
-  <div class="header-strip">
-    <div class="strip-left">
-      ${logoHtml}
-    </div>
-    <div class="strip-right">
-      <div class="field"><div class="label">Version:</div></div>
-      <h1 class="doc-title">${esc(budget.version)} COTIZACION</h1>
-      <div class="doc-subtitle">MUEBLES Y ARTEFACTOS</div>
-      <div class="field">
-        <div class="label">Profesional a cargo:</div>
-        <div class="value">${esc(PROFESSIONAL)}</div>
+  <!-- PORTADA -->
+  <div class="page">
+    <div class="wm">${wm}</div>
+    <div class="pad-cover">
+      <div class="cover-top">
+        ${logoHtml}
+        <div class="cover-meta">
+          <div class="m1">Cotización · Muebles</div>
+          <div class="m2">${esc(versionLarga)}</div>
+        </div>
+      </div>
+      <div class="cover-mid">
+        <div class="cover-rule"></div>
+        <div class="cover-title">Mobiliario<br/>a medida</div>
+        <div class="cover-sub">${esc(project.name)}${project.address ? " · " + esc(project.address) : ""}</div>
+      </div>
+      <div class="cover-foot">
+        <div class="row"><span class="lbl">Mandante</span><span class="val">${esc(project.clientName)}</span></div>
+        <div class="row"><span class="lbl">Profesional a cargo</span><span class="val">${esc(PROFESSIONAL)}</span></div>
       </div>
     </div>
   </div>
 
-  <!-- 2) Header fields: izquierda (Mandante/Proyecto/Direccion)
-       pegada al borde izq; derecha (Celular/Fecha/Valor UF)
-       pegada al borde derecho. -->
-  <div class="header-fields">
-    <div class="col-left">
-      <div class="field">
-        <div class="label">Mandante:</div>
-        <div class="value">${esc(project.clientName)}</div>
+  <!-- DETALLE -->
+  <div class="page">
+    <div class="wm">${iso ? `<img src="${iso}" style="width:100mm;opacity:.05;" />` : ""}</div>
+    <div class="pad-detail">
+      ${dhIso}
+      <div class="dhead">
+        <div>
+          <div class="kick">Cotización de muebles · detalle</div>
+          <div class="proj">${esc(project.name)}</div>
+          <div class="psub">${esc(project.clientName)} · Mobiliario a medida</div>
+        </div>
+        <div class="right">
+          <div class="ver">${esc(versionLarga)}</div>
+          <div class="doc">${esc(budget.version)} Cotización</div>
+          <div class="docsub">Muebles</div>
+        </div>
       </div>
-      <div class="field">
-        <div class="label">Proyecto:</div>
-        <div class="value">${esc(project.name)}</div>
-      </div>
-      <div class="field">
-        <div class="label">Direccion:</div>
-        <div class="value">${esc(project.address || "—")}</div>
-      </div>
-    </div>
-    <div class="col-right">
-      <div class="field">
-        <div class="label">Celular:</div>
-        <div class="value">${esc(project.clientPhone || "—")}</div>
-      </div>
-      <div class="field">
-        <div class="label">Fecha:</div>
-        <div class="value">${dateStr}</div>
-      </div>
-      <div class="field">
-        <div class="label">Valor UF:</div>
-        <div class="value">${project.ufReference != null ? "$ " + Math.round(project.ufReference).toLocaleString("es-CL") : "—"}</div>
-      </div>
-    </div>
-  </div>
-
-  <table class="partidas">
-    <thead>
-      <tr>
-        <th class="col-num">ITEM</th>
-        <th class="col-name">PARTIDA / DESCRIPCION</th>
-        <th class="col-qty">CANTIDAD</th>
-        <th class="col-total">TOTAL</th>
-      </tr>
-    </thead>
-    <tbody>
+      <div class="mhd"><span>Ítem</span><span>Partida · Descripción</span><span class="ct">Cant</span><span class="rt">Total</span></div>
       ${tableRows}
-    </tbody>
-  </table>
 
-  <div class="totals-wrap">
-    <table class="totals">
-      <tr class="total">
-        <td class="t-label">COSTO TOTAL MUEBLES</td>
-        <td class="t-val">${fmtCLP(totalIva)}</td>
-      </tr>
-    </table>
-  </div>
+      <div class="cierre">
+        <div>
+          <div class="blk-title">Formas de pago</div>
+          <div class="pagos">
+            ${terms
+              .map(
+                (t) => `<div class="row"><span class="s">${esc(t.stage)}</span><span class="p">${t.percentage}%</span></div>`
+              )
+              .join("")}
+          </div>
+        </div>
+        <div class="totalbox">
+          <div class="tl">Costo total muebles</div>
+          <div class="tv">${fmtMoney(total)}</div>
+          <div class="tn">Valor IVA incluido</div>
+        </div>
+      </div>
 
-  <div class="payment-wrap">
-    <div class="section-title-italic">Formas de Pago</div>
-    <table class="payment">
-      ${terms
-        .map(
-          (t) => `
-        <tr>
-          <td class="p-stage">${esc(t.stage)}</td>
-          <td class="p-pct">${t.percentage}%</td>
-        </tr>`
-        )
-        .join("")}
-    </table>
-  </div>
-
-  <div class="obs-wrap">
-    <div class="section-title">OBSERVACIONES GENERALES:</div>
-    ${OBSERVACIONES.map(
-      (obs, i) => `
-      <div class="obs-item">
-        <div class="obs-num">${i + 1}.</div>
-        <div class="obs-text">${esc(obs)}</div>
-      </div>`
-    ).join("")}
-    ${
-      budget.observations
-        ? `<div class="extra-obs">${esc(budget.observations)}</div>`
-        : ""
-    }
+      <div class="obs">
+        <div class="blk-title">Observaciones generales</div>
+        <div class="obs-list">
+          ${OBSERVACIONES.map(
+            (o, i) => `<div class="obs-item"><span class="obs-num">${i + 1}</span><span>${o.lead ? `<b>${esc(o.lead)}</b> ` : ""}${esc(o.text)}</span></div>`
+          ).join("")}
+          ${budget.observations ? `<div class="obs-item"><span class="obs-num">·</span><span>${esc(budget.observations)}</span></div>` : ""}
+        </div>
+      </div>
+    </div>
   </div>
 
 </body>
 </html>`;
 }
-

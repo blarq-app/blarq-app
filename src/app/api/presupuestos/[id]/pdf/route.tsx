@@ -178,7 +178,11 @@ export async function GET(
     // corte contra el borde) y laterales 0 — el aire lateral lo pone el padding
     // de la plantilla. La portada calcula su alto contra estos 14mm+14mm.
     // Muebles/artefactos siguen con el formato previo hasta migrar.
-    const isBrandObra = budget.type === "obra";
+    // El PDF mueblista (herrajes por sector, sin precios) sigue con el formato
+    // previo; el de muebles al cliente ya usa la marca v2 como obra.
+    const isBrandObra =
+      budget.type === "obra" ||
+      (budget.type === "muebles" && tipo !== "mueblista");
     const pdfBuffer = await renderPDF(html, {
       format: "A4",
       displayHeaderFooter: !useNewFormat,

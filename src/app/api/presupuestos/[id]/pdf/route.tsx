@@ -173,17 +173,19 @@ export async function GET(
       budget.type === "obra" ||
       budget.type === "muebles" ||
       budget.type === "artefactos";
-    // Obra ya usa el diseño de marca v2 (Manual Claro): la plantilla maneja su
-    // propio padding y sangra a borde, así que se renderiza SIN márgenes.
-    // Muebles/artefactos siguen con el formato previo (márgenes) hasta migrar.
-    const isBrandFullBleed = budget.type === "obra";
+    // Obra usa el diseño de marca v2 (Manual Claro). Márgenes verticales 14mm
+    // en TODAS las páginas (para que la tabla, que fluye entre páginas, no se
+    // corte contra el borde) y laterales 0 — el aire lateral lo pone el padding
+    // de la plantilla. La portada calcula su alto contra estos 14mm+14mm.
+    // Muebles/artefactos siguen con el formato previo hasta migrar.
+    const isBrandObra = budget.type === "obra";
     const pdfBuffer = await renderPDF(html, {
       format: "A4",
       displayHeaderFooter: !useNewFormat,
       headerTemplate: useNewFormat ? undefined : "<div></div>",
       footerTemplate: useNewFormat ? undefined : footer,
-      margin: isBrandFullBleed
-        ? { top: "0", bottom: "0", left: "0", right: "0" }
+      margin: isBrandObra
+        ? { top: "14mm", bottom: "14mm", left: "0", right: "0" }
         : useNewFormat
           ? { top: "10mm", bottom: "10mm", left: "12mm", right: "12mm" }
           : { top: "14mm", bottom: "16mm", left: "15mm", right: "15mm" },

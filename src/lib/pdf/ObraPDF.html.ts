@@ -158,10 +158,13 @@ const CSS = `
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
 
-  .page { position: relative; width: 210mm; min-height: 297mm; overflow: hidden; page-break-after: always; }
-  .page:last-child { page-break-after: auto; }
-  .pad-cover { padding: 20mm 17mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 297mm; }
-  .pad-detail { padding: 13mm 17mm 14mm; display: flex; flex-direction: column; }
+  /* Los márgenes verticales (14mm) los pone el renderer en TODAS las páginas
+     (route: margin top/bottom 14mm, left/right 0). Por eso acá el padding es
+     solo lateral y la portada calcula su alto contra el área útil (297-28mm). */
+  .page { position: relative; width: 210mm; overflow: hidden; }
+  .page + .page { page-break-before: always; }
+  .pad-cover { padding: 0 17mm; display: flex; flex-direction: column; justify-content: space-between; min-height: calc(297mm - 28mm); }
+  .pad-detail { padding: 0 17mm; display: flex; flex-direction: column; }
 
   /* ── Portada ─────────────────────────────────────────────── */
   .wm { position: absolute; right: -20mm; bottom: -26mm; z-index: 0; }

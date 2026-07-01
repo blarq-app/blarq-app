@@ -172,7 +172,7 @@ export default function CuadroResumenAvance({
     <div className="space-y-4 mb-8">
       {/* ── Cuadro Resumen + AVANCE editable (esto va al cliente) ─────────── */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-start justify-between mb-1 gap-3">
+        <div className="flex items-start justify-between mb-4 gap-3">
           {/* El rótulo de unidad evita la confusión A1/A9: este cuadro va
               c/IVA (réplica del Excel que va al cliente), mientras las cards
               de arriba están en neto. Sin esta nota, "Total pagos" (c/IVA,
@@ -193,12 +193,6 @@ export default function CuadroResumenAvance({
             {descargando ? "Generando…" : "Descargar imagen"}
           </button>
         </div>
-        <p className="text-xs text-gray-500 mb-4">
-          Acordado por concepto, lo ya cobrado, y el avance que pedís ahora.
-          Completá el % AL QUE QUERÉS LLEGAR por concepto (100% = cobrar todo el
-          saldo) y te calcula cuánto pedir. Las columnas son las del
-          presupuesto entregado al cliente.
-        </p>
         {/* Mismo formato que antes (Fecha/Monto/Factura por concepto), pero con
             letra y padding chicos para que entre completo. */}
         <div className="overflow-x-auto">

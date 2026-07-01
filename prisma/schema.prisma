@@ -1214,6 +1214,16 @@ model Empleado {
   nombre      String
   rut         String  @unique // formato con puntos y guion, ej "18.022.887-K"
 
+  // Datos para el archivo de pago de Previred (formato 105 campos). El nombre
+  // de pila se separa en apellidos + nombres como lo pide Previred; `nombre`
+  // arriba es solo para mostrar en pantalla.
+  sexo            String? // "M" o "F"
+  apellidoPaterno String?
+  apellidoMaterno String?
+  nombres         String?
+  isapreCodigo    String? // código Previred de la Isapre (ej "04" Colmena)
+  isapreFun       String? // N° de contrato/FUN de salud (campo 76 Previred)
+
   // Haberes fijos del contrato
   sueldoBase   Int
   colacion     Int @default(0) // no imponible, no tributable

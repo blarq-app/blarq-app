@@ -4,6 +4,7 @@ import Link from "next/link";
 import ObraEditor from "@/components/presupuesto/ObraEditor";
 import MueblesEditor from "@/components/presupuesto/MueblesEditor";
 import ArtefactosEditor from "@/components/presupuesto/ArtefactosEditor";
+import CoverFields from "@/components/presupuesto/CoverFields";
 import { getObraBaselineItems } from "@/lib/presupuesto/versionDiff";
 
 export default async function PresupuestoDetailPage({
@@ -112,6 +113,16 @@ export default async function PresupuestoDetailPage({
           </a>
         </div>
       </div>
+
+      <CoverFields
+        budgetId={budget.id}
+        type={budget.type}
+        projectName={project.name}
+        address={project.address}
+        initialTitle={budget.coverTitle}
+        initialSubtitle={budget.coverSubtitle}
+        initialNote={budget.coverNote}
+      />
 
       {budget.type === "obra" && (
         <ObraEditor

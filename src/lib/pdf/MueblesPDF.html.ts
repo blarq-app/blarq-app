@@ -79,6 +79,9 @@ export interface MueblesHTMLInput {
     version: string;
     date: string | Date;
     observations: string | null;
+    coverTitle?: string | null;
+    coverSubtitle?: string | null;
+    coverNote?: string | null;
   };
   chapters: MuebleChapterInput[];
   paymentTerms: PaymentTermInput[];
@@ -146,6 +149,7 @@ const CSS = `
   .cover-rule { width: 20mm; height: 1px; background: #c7bfb2; }
   .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 34pt; line-height: 1.12; letter-spacing: .1em; text-transform: uppercase; color: #34332E; }
   .cover-sub { font-family: 'Spectral', serif; font-weight: 300; font-style: italic; font-size: 16pt; color: #9A9183; }
+  .cover-note { font-size: 10pt; color: #6F6A60; line-height: 1.5; max-width: 130mm; }
   .cover-foot { display: flex; flex-direction: column; gap: 4mm; border-top: 1px solid #e2dcd0; padding-top: 6mm; }
   .cover-foot .row { display: flex; justify-content: space-between; align-items: baseline; }
   .cover-foot .lbl { font-size: 8pt; letter-spacing: .16em; text-transform: uppercase; color: #9A9183; }
@@ -237,6 +241,12 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
   const dateStr = fmtDate(budget.date);
   const versionLarga = `Versión ${budget.version.replace(/^V/i, "")} · ${dateStr}`;
 
+  const coverTitle = budget.coverTitle?.trim() || "Mobiliario a medida";
+  const coverSubtitle =
+    budget.coverSubtitle?.trim() ||
+    `${project.name}${project.address ? " · " + project.address : ""}`;
+  const coverNote = budget.coverNote?.trim() || "";
+
   const logoHtml = logo
     ? `<img class="cover-logo" src="${logo}" alt="BLARQ" />`
     : `<div class="cover-logo" style="font-family:'Hanken Grotesk';font-size:24pt;letter-spacing:.15em;">BLARQ</div>`;
@@ -301,8 +311,9 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
       </div>
       <div class="cover-mid">
         <div class="cover-rule"></div>
-        <div class="cover-title">Mobiliario<br/>a medida</div>
-        <div class="cover-sub">${esc(project.name)}${project.address ? " · " + esc(project.address) : ""}</div>
+        <div class="cover-title">${esc(coverTitle)}</div>
+        <div class="cover-sub">${esc(coverSubtitle)}</div>
+        ${coverNote ? `<div class="cover-note">${esc(coverNote)}</div>` : ""}
       </div>
       <div class="cover-foot">
         <div class="row"><span class="lbl">Mandante</span><span class="val">${esc(project.clientName)}</span></div>
@@ -320,7 +331,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
         <div>
           <div class="kick">Cotización de muebles · detalle</div>
           <div class="proj">${esc(project.name)}</div>
-          <div class="psub">${esc(project.clientName)} · Mobiliario a medida</div>
+          <div class="psub">${esc(project.clientName)} · ${esc(coverTitle)}</div>
         </div>
         <div class="right">
           <div class="ver">${esc(versionLarga)}</div>

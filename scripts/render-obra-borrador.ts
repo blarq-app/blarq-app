@@ -110,7 +110,12 @@ const html = renderObraHTML({
     address: "Las Condes",
     ufReference: null,
   },
-  budget: { version: "V2", date: "2026-05-22", ggPercentage: 20, utilityPercentage: 10 },
+  budget: {
+    version: "V2", date: "2026-05-22", ggPercentage: 20, utilityPercentage: 10,
+    coverTitle: "Remodelación de cocina y baños",
+    coverSubtitle: null,
+    coverNote: "Cotización sujeta a visita técnica y rectificación de medidas en terreno.",
+  },
   items,
   paymentTerms: [
     { stage: "Anticipo", percentage: 40 },

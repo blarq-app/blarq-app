@@ -81,6 +81,9 @@ export async function GET(
           date: budget.date,
           ggPercentage: budget.ggPercentage,
           utilityPercentage: budget.utilityPercentage,
+          coverTitle: budget.coverTitle,
+          coverSubtitle: budget.coverSubtitle,
+          coverNote: budget.coverNote,
         },
         items: budget.obraItems.map((it) => ({
           ...it,
@@ -120,6 +123,9 @@ export async function GET(
           version: budget.version,
           date: budget.date,
           observations: budget.observations,
+          coverTitle: budget.coverTitle,
+          coverSubtitle: budget.coverSubtitle,
+          coverNote: budget.coverNote,
         },
         chapters: budget.muebleChapters.map((ch) => ({
           chapterNumber: ch.chapterNumber,
@@ -156,6 +162,9 @@ export async function GET(
           version: budget.version,
           date: budget.date,
           observations: budget.observations,
+          coverTitle: budget.coverTitle,
+          coverSubtitle: budget.coverSubtitle,
+          coverNote: budget.coverNote,
         },
         items: budget.artefactoItems,
         paymentTerms: budget.paymentTerms.map((t) => ({

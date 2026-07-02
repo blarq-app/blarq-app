@@ -161,6 +161,16 @@ model BudgetVersion {
   status      String   @default("borrador") // borrador | enviado | aprobado | rechazado
   type        String   // obra | muebles | artefactos
   observations String?
+  // Textos editables de la PORTADA del PDF (Manual de Marca v2). Si quedan
+  // null, el generador usa un default por tipo (ver *PDF.html.ts):
+  //   coverTitle    → título grande (Obra: lo escribe MJ; Muebles/Artefactos
+  //                   default "Mobiliario a medida" / "Artefactos y equipamiento").
+  //                   También alimenta la bajada del encabezado del detalle.
+  //   coverSubtitle → línea en cursiva (default "Proyecto · Dirección").
+  //   coverNote     → línea de contexto opcional bajo la bajada.
+  coverTitle    String?
+  coverSubtitle String?
+  coverNote     String?
   ggPercentage    Float?  @default(20)  // Solo para obra
   utilityPercentage Float? @default(5)  // Solo para obra
   // Descuento global aplicado al subtotal (decimal: 0.02 = 2%). Usado

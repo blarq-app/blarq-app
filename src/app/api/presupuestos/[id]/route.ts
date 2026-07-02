@@ -19,6 +19,13 @@ export async function PUT(
     // Permite renombrar version (ej. "V3" → "Alternativa A") sin tocar el resto.
     const updateData: Record<string, unknown> = {};
     if (data.observations !== undefined) updateData.observations = data.observations;
+    // Textos de portada del PDF. Vacío → null para que el generador use el default.
+    if (data.coverTitle !== undefined)
+      updateData.coverTitle = String(data.coverTitle).trim() || null;
+    if (data.coverSubtitle !== undefined)
+      updateData.coverSubtitle = String(data.coverSubtitle).trim() || null;
+    if (data.coverNote !== undefined)
+      updateData.coverNote = String(data.coverNote).trim() || null;
     if (data.ggPercentage !== undefined) updateData.ggPercentage = data.ggPercentage;
     if (data.utilityPercentage !== undefined) updateData.utilityPercentage = data.utilityPercentage;
     if (data.status !== undefined) updateData.status = data.status;

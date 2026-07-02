@@ -13,7 +13,10 @@ import * as React from "react";
 // alerta vuelve a aparecer; así no se pierde un empeoramiento. Se recuerda en
 // el navegador (localStorage), por proyecto — no toca la base.
 
-type Alerta = { severity: "danger" | "warning"; message: string };
+// Acepta el tipo de alerta que produce metrics.ts (fuente única). Incluye
+// "info" por completitud del tipo, aunque hoy solo se emiten danger/warning;
+// cualquier severidad no-danger se muestra en ámbar.
+type Alerta = { severity: "info" | "warning" | "danger"; message: string };
 
 export default function ProjectAlerts({
   projectId,

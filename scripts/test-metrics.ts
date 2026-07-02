@@ -189,9 +189,10 @@ console.log("\nTest 2: Cobrado al cliente (c/IVA) vs total acordado");
     ],
   });
   const m = computeProjectMetrics(project);
-  // totalAcordado = obraTotal (c/IVA al cliente)
-  //   = 1.000.000 * 1.20 (GG) * 1.05 (Util) * 1.19 (IVA) = 1.499.400
-  const expectedAcordado = 1_000_000 * 1.20 * 1.05 * 1.19;
+  // totalAcordado = obraTotal (c/IVA al cliente). GG y Utilidad son ADITIVOS
+  // sobre el costo directo (no encadenados): cd*(1 + 0.20 + 0.05) * 1.19.
+  //   = 1.000.000 * 1.25 * 1.19 = 1.487.500
+  const expectedAcordado = 1_000_000 * 1.25 * 1.19;
   assertEq(m.totalAcordado, expectedAcordado, "totalAcordado = obra c/IVA + muebles + artefactos");
   // totalCobrado = totalAmount de emitidas (c/IVA)
   assertEq(m.totalCobrado, 5_000_000, "totalCobrado suma totalAmount (c/IVA)");
@@ -266,8 +267,9 @@ console.log("\nTest 5: Sin presupuesto aprobado — fallback al más reciente");
     ],
   });
   const m = computeProjectMetrics(project);
-  // Debe usar V2 (más reciente) → 1.000.000 * 1.20 * 1.05 * 1.19 = 1.499.400
-  assertEq(m.totalAcordado, 1_000_000 * 1.20 * 1.05 * 1.19, "usa V2 (más reciente) cuando no hay aprobado");
+  // Debe usar V2 (más reciente) → 1.000.000 * 1.25 * 1.19 = 1.487.500
+  // (GG+Util aditivos sobre el costo directo, no encadenados)
+  assertEq(m.totalAcordado, 1_000_000 * 1.25 * 1.19, "usa V2 (más reciente) cuando no hay aprobado");
   assert(m.versionLabels.obra === "V2", `versionLabels.obra = "V2" (era ${m.versionLabels.obra})`);
 }
 

@@ -198,11 +198,15 @@ export async function GET(
       displayHeaderFooter: !useNewFormat,
       headerTemplate: useNewFormat ? undefined : "<div></div>",
       footerTemplate: useNewFormat ? undefined : footer,
-      margin: isBrandObra
-        ? { top: "14mm", bottom: "14mm", left: "0", right: "0" }
-        : useNewFormat
-          ? { top: "10mm", bottom: "10mm", left: "12mm", right: "12mm" }
-          : { top: "14mm", bottom: "16mm", left: "15mm", right: "15mm" },
+      // Marca v2: los márgenes los controla el CSS @page (portada full-bleed +
+      // detalle con 14mm). El resto usa la opción margin clásica.
+      ...(isBrandObra
+        ? { preferCSSPageSize: true }
+        : {
+            margin: useNewFormat
+              ? { top: "10mm", bottom: "10mm", left: "12mm", right: "12mm" }
+              : { top: "14mm", bottom: "16mm", left: "15mm", right: "15mm" },
+          }),
     });
 
     const body = new Uint8Array(pdfBuffer.byteLength);

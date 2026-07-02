@@ -158,7 +158,8 @@ function assetDataUri(file: string): string {
 
 // ─── CSS — marca v2 (Claro) ─────────────────────────────────────────────────
 const CSS = `
-  @page { size: A4; }
+  @page { size: A4; margin: 14mm 0; }
+  @page :first { margin: 0; }
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0;
@@ -170,7 +171,7 @@ const CSS = `
   .page { position: relative; width: 210mm; overflow: hidden; }
   .page:first-child { overflow: visible; }
   .page + .page { page-break-before: always; }
-  .pad-cover { padding: 0 15mm; display: flex; flex-direction: column; justify-content: space-between; min-height: calc(297mm - 28mm); }
+  .pad-cover { padding: 16mm 15mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 297mm; }
   /* Padding lateral más ajustado que obra/muebles: la tabla tiene 10 columnas
      + imágenes grandes, necesita ancho. */
   .pad-detail { padding: 0 11mm; display: flex; flex-direction: column; }
@@ -194,30 +195,30 @@ const CSS = `
 
   .dhead-iso { width: 40px; opacity: .55; margin-bottom: 7mm; display: block; }
   .dhead { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2mm; }
-  .dhead .kick { font-size: 7.5pt; letter-spacing: .26em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
-  .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 18pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
-  .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 9.5pt; color: #9A9183; margin-top: 3pt; }
+  .dhead .kick { font-size: 5.5pt; letter-spacing: .26em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
+  .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 13pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
+  .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 7pt; color: #9A9183; margin-top: 3pt; }
   .dhead .right { text-align: right; }
-  .dhead .ver { font-size: 7pt; letter-spacing: .28em; text-transform: uppercase; color: #b0a596; font-weight: 600; }
-  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 18pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
-  .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 9pt; letter-spacing: .34em; text-transform: uppercase; color: #9A9183; margin-top: 3pt; }
+  .dhead .ver { font-size: 5pt; letter-spacing: .28em; text-transform: uppercase; color: #b0a596; font-weight: 600; }
+  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 13pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
+  .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 6.5pt; letter-spacing: .34em; text-transform: uppercase; color: #9A9183; margin-top: 3pt; }
 
   /* Banda de subcategoría (piedra) y de ambiente (banda gris) */
   .band { display: flex; align-items: center; background: #6F6A60; padding: 6pt 12pt; margin-top: 10pt; break-inside: avoid; break-after: avoid; }
-  .band span { font-size: 9pt; letter-spacing: .22em; text-transform: uppercase; color: #F7F4EF; font-weight: 700; }
+  .band span { font-size: 7pt; letter-spacing: .22em; text-transform: uppercase; color: #F7F4EF; font-weight: 700; }
   .grp { display: flex; align-items: center; background: #EDEDEB; padding: 4pt 12pt; margin-top: 8pt; break-inside: avoid; break-after: avoid; }
-  .grp span { font-size: 7.5pt; letter-spacing: .2em; text-transform: uppercase; color: #6F6A60; font-weight: 700; }
+  .grp span { font-size: 6pt; letter-spacing: .2em; text-transform: uppercase; color: #6F6A60; font-weight: 700; }
 
   /* Tabla 10 columnas. Foto ancha para imagen grande (correción MJ). */
   .ahd, .ar { display: grid; grid-template-columns: 27mm 15% 7% 7% 1fr 8% 4% 9% 5% 11%; gap: 0 5pt; }
-  .ahd { padding: 6pt 3pt; border-bottom: 2px solid #34332E; font-size: 6pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; break-inside: avoid; break-after: avoid; margin-top: 2pt; }
+  .ahd { padding: 5pt 3pt; border-bottom: 2px solid #34332E; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; break-inside: avoid; break-after: avoid; margin-top: 2pt; }
   .ahd .c { text-align: center; } .ahd .r { text-align: right; }
-  .ar { align-items: center; padding: 4pt 3pt; border-bottom: 1px solid #eee8dd; font-size: 7pt; line-height: 1.3; break-inside: avoid; }
+  .ar { align-items: center; padding: 3.5pt 3pt; border-bottom: 1px solid #eee8dd; font-size: 6pt; line-height: 1.3; break-inside: avoid; }
   .ar .foto { width: 27mm; }
   .ar .foto img { max-width: 25mm; max-height: 25mm; object-fit: contain; display: block; }
   .ar .foto .ph { width: 25mm; height: 25mm; background: #F7F4EF; border: 1px solid #e7e1d7; }
   /* Texto oscuro (Grafito) — corrección MJ: que no "desaparezca". */
-  .a-it { color: #34332E; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; font-size: 7pt; }
+  .a-it { color: #34332E; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; font-size: 6pt; }
   .a-ln { color: #54534E; text-transform: uppercase; letter-spacing: .04em; font-size: 6.5pt; }
   .a-co { color: #54534E; font-size: 6.5pt; }
   .a-de { color: #54534E; font-size: 6.5pt; }

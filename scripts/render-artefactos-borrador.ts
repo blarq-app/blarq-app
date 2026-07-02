@@ -40,7 +40,7 @@ async function main() {
   const out = process.env.OUT || "/tmp/artefactos_gen.pdf";
   const pdf = await renderPDF(html, {
     format: "A4",
-    margin: { top: "14mm", bottom: "14mm", left: "0", right: "0" },
+    preferCSSPageSize: true,
   });
   fs.writeFileSync(out, pdf);
   console.log("PDF:", out);

@@ -463,7 +463,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
       </div>
       ${
         hasMarkers
-          ? `<div class="leyenda">Respecto a la versión anterior: <span class="mk">*</span> partida nueva · <span class="mk">&#8593;</span> subió · <span class="mk">&#8595;</span> bajó de precio.</div>`
+          ? `<div class="leyenda">Respecto a la versión anterior: <span class="mk">*</span> partida nueva · <span class="mk">&#8593;</span> subió · <span class="mk">&#8595;</span> bajó.</div>`
           : ""
       }
     </div>

@@ -8,13 +8,13 @@
  * tipográficos: Hanken Grotesk (títulos, altas finas), Spectral (bajadas
  * itálicas) y Nunito Sans (cuerpo, datos y cifras tabulares). Paleta greige.
  *
- * Correcciones pedidas por MJ sobre el borrador de Design:
- *   - Portada SIN "Inversión total" (no se muestra el total en la portada).
- *   - Tablas SIN subtotales: ni el de capítulo ("Subtotal $X") ni los de zona
- *     ("Cocina $X" / "Baños $X"). Quedan solo las partidas; la banda de zona
- *     se mantiene como separador (sin monto).
- *   - "Formas de pago" bien visible.
- * El cuadro final (costo directo → costo total) y las observaciones se mantienen.
+ * Fidelidad: debe quedar idéntico a "Final Presupuesto Obra Imprimible" (el PDF
+ * definitivo de MJ). Eso incluye: portada CON "Inversión total · IVA incl.",
+ * tablas CON subtotal por capítulo ("Subtotal $X") y monto por zona
+ * ("Cocina $X" / "Baños $X"), tipografía a la escala exacta de la referencia
+ * (filas 11px→5.3pt, etc.), y portada full-bleed (isotipo "A" sangra al borde).
+ * NOTA: en iteraciones previas MJ había pedido quitar subtotales e inversión
+ * total; el PDF Final los repone, así que van incluidos.
  */
 
 import fs from "node:fs";
@@ -181,6 +181,9 @@ const CSS = `
   .cover-foot .row { display: flex; justify-content: space-between; align-items: baseline; }
   .cover-foot .lbl { font-size: 8pt; letter-spacing: .16em; text-transform: uppercase; color: #9A9183; }
   .cover-foot .val { font-size: 10.5pt; color: #34332E; }
+  /* Fila de inversión total: separada con hairline y valor en negrita, como la referencia. */
+  .cover-foot .inv { border-top: 1px solid #e2dcd0; padding-top: 4mm; }
+  .cover-foot .inv .val { font-size: 12pt; font-weight: 700; }
 
   /* ── Detalle: encabezado ─────────────────────────────────── */
   .dhead-iso { width: 40px; height: auto; opacity: .55; margin-bottom: 7mm; display: block; }
@@ -201,12 +204,14 @@ const CSS = `
   .hd { border-bottom: 1.5px solid #34332E; padding: 5pt 0; margin-top: 8mm; font-size: 4.3pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
   .hd span:nth-child(4){ text-align:center; } .hd span:nth-child(5),.hd span:nth-child(6),.hd span:nth-child(7){ text-align:right; }
 
-  .cap { border-bottom: 1.5px solid #34332E; padding: 8pt 2pt 4pt; margin-top: 8pt; break-inside: avoid; break-after: avoid; }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1.5px solid #34332E; padding: 8pt 2pt 4pt; margin-top: 8pt; break-inside: avoid; break-after: avoid; }
   .cap b { font-family: 'Hanken Grotesk', sans-serif; font-size: 5.75pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: #34332E; }
+  .cap span { font-size: 5.3pt; color: #9A9183; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
 
   /* La banda de zona y el título de capítulo no deben quedar solos al pie de
      una página (huérfanos): break-after:avoid los mantiene con su primera fila. */
-  .zone { background: #EDEDEB; padding: 3pt 10pt; margin-top: 3pt; font-size: 4.8pt; letter-spacing: .14em; text-transform: uppercase; color: #6F6A60; font-weight: 700; break-inside: avoid; break-after: avoid; }
+  .zone { display: flex; justify-content: space-between; align-items: baseline; background: #EDEDEB; padding: 3pt 10pt; margin-top: 3pt; font-size: 4.8pt; letter-spacing: .14em; text-transform: uppercase; color: #6F6A60; font-weight: 700; break-inside: avoid; break-after: avoid; }
+  .zone .zamt { font-size: 5.3pt; letter-spacing: 0; text-transform: none; font-weight: 400; color: #6F6A60; font-variant-numeric: tabular-nums; }
 
   .r { align-items: start; padding: 3.3pt 0; border-bottom: 1px solid #eee8dd; font-size: 5.3pt; page-break-inside: avoid; }
   .r span { line-height: 1.32; }
@@ -321,13 +326,24 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   // zona — la banda de zona queda solo como separador.
   const tableRows = chapters
     .map((ch) => {
+      // Subtotal del capítulo y montos por zona (igual que la referencia final).
+      const chapterTotal = ch.items.reduce((s, i) => s + i.total, 0);
+      const zoneTotals = new Map<string, number>();
+      for (const it of ch.items) {
+        const z = it.subChapter ?? "";
+        zoneTotals.set(z, (zoneTotals.get(z) ?? 0) + it.total);
+      }
       const rows = ch.items
         .map((item, idx) => {
           const prev = idx > 0 ? ch.items[idx - 1] : null;
           const showZone =
             item.subChapter && (!prev || prev.subChapter !== item.subChapter);
           return `
-          ${showZone ? `<div class="zone">${esc(item.subChapter!)}</div>` : ""}
+          ${
+            showZone
+              ? `<div class="zone"><span>${esc(item.subChapter!)}</span><span class="zamt">${fmtMoney(zoneTotals.get(item.subChapter!) ?? 0)}</span></div>`
+              : ""
+          }
           <div class="grid r">
             <span class="it">${renderMarker(item.changeMarker)}${ch.index}.${idx + 1}</span>
             <span class="pt">${esc(item.name)}</span>
@@ -340,7 +356,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
         })
         .join("");
       return `
-        <div class="cap"><b>${ch.index} · ${esc(ch.label)}</b></div>
+        <div class="cap"><b>${ch.index} · ${esc(ch.label)}</b><span>Subtotal ${fmtMoney(chapterTotal)}</span></div>
         ${rows}`;
     })
     .join("");
@@ -392,6 +408,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
       <div class="cover-foot">
         <div class="row"><span class="lbl">Mandante</span><span class="val">${esc(project.clientName)}</span></div>
         <div class="row"><span class="lbl">Profesional a cargo</span><span class="val">${esc(PROFESSIONAL)}</span></div>
+        <div class="row inv"><span class="lbl">Inversión total · IVA incl.</span><span class="val">${fmtMoney(total)}</span></div>
       </div>
     </div>
   </div>

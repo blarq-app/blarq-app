@@ -186,7 +186,7 @@ const CSS = `
   .cover-foot .inv .val { font-size: 12pt; font-weight: 700; }
 
   /* ── Detalle: encabezado ─────────────────────────────────── */
-  .dhead-iso { width: 40px; height: auto; opacity: .55; margin-bottom: 7mm; display: block; }
+  .dhead-iso { width: 40px; height: auto; opacity: .55; margin-bottom: 4mm; display: block; }
   .dhead { display: flex; justify-content: space-between; align-items: flex-start; }
   .dhead .kick { font-size: 5.3pt; letter-spacing: .26em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
   .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 12.5pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
@@ -201,19 +201,19 @@ const CSS = `
      · descripción ~50% · un 3.5 · cant 4.4 · p.unit 8 · total 9.1). La
      descripción ancha evita que el texto se apile en muchas líneas. */
   .grid { display: grid; grid-template-columns: 3.9% 20% 1fr 3.5% 4.4% 8% 9.1%; }
-  .hd { border-bottom: 1.5px solid #34332E; padding: 5pt 0; margin-top: 8mm; font-size: 4.3pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
+  .hd { border-bottom: 1.5px solid #34332E; padding: 3.5pt 0; margin-top: 3mm; font-size: 4.3pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
   .hd span:nth-child(4){ text-align:center; } .hd span:nth-child(5),.hd span:nth-child(6),.hd span:nth-child(7){ text-align:right; }
 
-  .cap { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1.5px solid #34332E; padding: 8pt 2pt 4pt; margin-top: 8pt; break-inside: avoid; break-after: avoid; }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1.5px solid #34332E; padding: 5pt 2pt 3pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }
   .cap b { font-family: 'Hanken Grotesk', sans-serif; font-size: 5.75pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: #34332E; }
   .cap span { font-size: 5.3pt; color: #9A9183; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
 
   /* La banda de zona y el título de capítulo no deben quedar solos al pie de
      una página (huérfanos): break-after:avoid los mantiene con su primera fila. */
-  .zone { display: flex; justify-content: space-between; align-items: baseline; background: #EDEDEB; padding: 3pt 10pt; margin-top: 3pt; font-size: 4.8pt; letter-spacing: .14em; text-transform: uppercase; color: #6F6A60; font-weight: 700; break-inside: avoid; break-after: avoid; }
+  .zone { display: flex; justify-content: space-between; align-items: baseline; background: #EDEDEB; padding: 2pt 10pt; margin-top: 1.5pt; font-size: 4.8pt; letter-spacing: .14em; text-transform: uppercase; color: #6F6A60; font-weight: 700; break-inside: avoid; break-after: avoid; }
   .zone .zamt { font-size: 5.3pt; letter-spacing: 0; text-transform: none; font-weight: 400; color: #6F6A60; font-variant-numeric: tabular-nums; }
 
-  .r { align-items: start; padding: 3.3pt 0; border-bottom: 1px solid #eee8dd; font-size: 5.3pt; page-break-inside: avoid; }
+  .r { align-items: start; padding: 2.5pt 0; border-bottom: 1px solid #eee8dd; font-size: 5.3pt; page-break-inside: avoid; }
   .r span { line-height: 1.32; }
   .it { color: #9A9183; font-variant-numeric: tabular-nums; }
   .pt { color: #34332E; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; padding-right: 8pt; }
@@ -230,15 +230,15 @@ const CSS = `
   .chg-new { display:inline-block; border:0.5px solid #9A9183; border-radius:999px; padding:0 4px; font-size:5pt; letter-spacing:.04em; text-transform:uppercase; color:#6F6A60; }
 
   /* ── Cierre: formas de pago + cuadro ─────────────────────── */
-  .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 14mm; margin-top: 12mm; align-items: start; page-break-inside: avoid; }
+  .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 7mm; align-items: start; page-break-inside: avoid; }
   .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #34332E; font-weight: 700; }
   .pagos { margin-top: 6pt; border-top: 1px solid #e2dcd0; }
-  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 6pt 0; border-bottom: 1px solid #eee8dd; }
+  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 3.5pt 0; border-bottom: 1px solid #eee8dd; }
   .pagos .row:last-child { border-bottom: none; }
   .pagos .s { font-size: 10pt; color: #34332E; }
   .pagos .p { font-size: 10pt; color: #6F6A60; font-weight: 700; font-variant-numeric: tabular-nums; }
   .cuadro { border-top: 1.5px solid #34332E; }
-  .cuadro .row { display: grid; grid-template-columns: 1fr 34px 108px; align-items: baseline; padding: 4.5pt 0; border-bottom: 1px solid #e2dcd0; }
+  .cuadro .row { display: grid; grid-template-columns: 1fr 34px 108px; align-items: baseline; padding: 3pt 0; border-bottom: 1px solid #e2dcd0; }
   .cuadro .cl { font-size: 9.5pt; color: #5f5b52; }
   .cuadro .cl.strong { color: #34332E; font-weight: 600; }
   .cuadro .cp { text-align: right; font-size: 8.5pt; color: #9A9183; font-variant-numeric: tabular-nums; }
@@ -250,9 +250,9 @@ const CSS = `
   .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-size: 8pt; color: #9A9183; margin-top: 4pt; }
 
   /* ── Observaciones ───────────────────────────────────────── */
-  .obs { margin-top: 12mm; page-break-inside: avoid; }
+  .obs { margin-top: 6mm; page-break-inside: avoid; }
   .obs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5pt 14mm; margin-top: 7pt; }
-  .obs-item { display: flex; gap: 8pt; font-size: 7.5pt; line-height: 1.4; color: #5f5b52; }
+  .obs-item { display: flex; gap: 8pt; font-size: 6.5pt; line-height: 1.35; color: #5f5b52; }
   .obs-num { color: #9A9183; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 `;
 

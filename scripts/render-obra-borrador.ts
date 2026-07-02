@@ -101,6 +101,16 @@ const items: ObraItemInput[] = [
   ]),
 ];
 
+// Marcas de prueba para verificar el render (nuevo "*", flechitas ↑/↓). En
+// producción vienen de computeChangeMarkers; acá se fuerzan a mano.
+const marks: Record<string, "added" | "up" | "down"> = {
+  "4.7": "added", "4.8": "added", "4.9": "added", "4.10": "added",
+  "4.11": "added", "4.12": "added", "4.1": "up", "4.4": "down", "3.13": "up",
+};
+for (const it of items) {
+  if (marks[it.itemNumber]) it.changeMarker = marks[it.itemNumber];
+}
+
 const html = renderObraHTML({
   project: {
     name: "Paseo del Sena",

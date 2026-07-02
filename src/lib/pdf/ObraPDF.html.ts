@@ -203,7 +203,7 @@ const CSS = `
   /* Proporciones de columnas idénticas a la referencia (item 3.9 · partida 20
      · descripción ~50% · un 3.5 · cant 4.4 · p.unit 8 · total 9.1). La
      descripción ancha evita que el texto se apile en muchas líneas. */
-  .grid { display: grid; grid-template-columns: 3.9% 20% 1fr 3.5% 4.4% 8% 9.1%; }
+  .grid { display: grid; grid-template-columns: 6% 20% 1fr 3.5% 4.4% 8% 9.1%; }
   .hd { border-bottom: 1.5px solid #34332E; padding: 3.5pt 0; margin-top: 3mm; font-size: 4.3pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
   .hd span:nth-child(4){ text-align:center; } .hd span:nth-child(5),.hd span:nth-child(6),.hd span:nth-child(7){ text-align:right; }
 
@@ -218,7 +218,7 @@ const CSS = `
 
   .r { align-items: start; padding: 2.5pt 0; border-bottom: 1px solid #eee8dd; font-size: 5.3pt; page-break-inside: avoid; }
   .r span { line-height: 1.32; }
-  .it { color: #9A9183; font-variant-numeric: tabular-nums; }
+  .it { color: #9A9183; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .pt { color: #34332E; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; padding-right: 8pt; }
   .ds { color: #7a7468; padding-right: 10pt; }
   .un { text-align: center; color: #9A9183; }
@@ -229,8 +229,11 @@ const CSS = `
   .ds strong { font-weight: 700; } .ds em { font-style: italic; }
 
   /* marca de cambio entre versiones */
-  .chg { color: #34332E; font-weight: 700; }
-  .chg-new { display:inline-block; border:0.5px solid #9A9183; border-radius:999px; padding:0 4px; font-size:5pt; letter-spacing:.04em; text-transform:uppercase; color:#6F6A60; }
+  /* Marca de cambio: símbolo compacto antes del número de ítem. */
+  .chg { color: #34332E; font-weight: 700; margin-right: 2pt; }
+  /* Leyenda de símbolos, arriba del listado (solo si hay marcas de cambio). */
+  .leyenda { margin: 2mm 0 3.5mm; font-size: 6pt; color: #9A9183; }
+  .leyenda .chg { color: #34332E; }
 
   /* ── Cierre: formas de pago + cuadro ─────────────────────── */
   .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 12mm; align-items: start; page-break-inside: avoid; }
@@ -319,10 +322,14 @@ export function renderObraHTML(data: ObraHTMLInput): string {
     ? `<img class="cover-logo" src="${logoUri}" alt="BLARQ" />`
     : `<div class="cover-logo" style="font-family:'Hanken Grotesk';font-size:24pt;letter-spacing:.15em;">BLARQ</div>`;
 
+  // Marca de cambio vs versión anterior, COMPACTA para que entre en la columna
+  // angosta del ítem: "*" = partida nueva, ↑ = subió, ↓ = bajó. La leyenda al
+  // pie explica los símbolos. Solo se muestra la leyenda si hay alguna marca.
+  const hasMarkers = items.some((i) => i.changeMarker);
   const renderMarker = (m?: "added" | "up" | "down" | null) => {
-    if (m === "up") return `<span class="chg">&#8593;</span> `;
-    if (m === "down") return `<span class="chg">&#8595;</span> `;
-    if (m === "added") return `<span class="chg-new">Nuevo</span> `;
+    if (m === "up") return `<span class="chg">&#8593;</span>`;
+    if (m === "down") return `<span class="chg">&#8595;</span>`;
+    if (m === "added") return `<span class="chg">*</span>`;
     return "";
   };
 
@@ -417,6 +424,11 @@ export function renderObraHTML(data: ObraHTMLInput): string {
     <div class="pad-detail">
       ${detailHeader}
       ${columnHeader}
+      ${
+        hasMarkers
+          ? `<div class="leyenda">Respecto a la versión anterior: <span class="chg">*</span> partida nueva · <span class="chg">&#8593;</span> subió · <span class="chg">&#8595;</span> bajó de precio.</div>`
+          : ""
+      }
       ${tableRows}
 
       <div class="cierre">

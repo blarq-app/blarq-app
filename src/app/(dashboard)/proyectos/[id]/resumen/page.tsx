@@ -125,6 +125,7 @@ export default async function ResultadosPage({
     budgetByType,
     realByCategory: realByTop,
     realBySpecific,
+    budgetBySubcategory,
   } = m;
   // Margen proyectado: utilidad / total acordado neto. La fórmula única
   // que MJ acordó: presupuestado − gastado, no cobrado − gastado.
@@ -145,9 +146,6 @@ export default async function ResultadosPage({
 
   // Aliases para mantener compatibilidad con el resto del archivo
   const obraItems = lastObra?.obraItems ?? [];
-  const mueblesAllItems = lastMuebles
-    ? lastMuebles.muebleChapters.flatMap((c) => c.items)
-    : [];
   // (obraTotal/mueblesTotal/artefactosTotal se borraron porque ya no se
   // usan en el JSX — la sección "Desglose por tipo" se eliminó en commit
   // c5c6000. totalVendido viene de metrics.totalAcordado.)
@@ -187,25 +185,10 @@ export default async function ResultadosPage({
   // entrega el mueble armado completo, no se desagrega). Por eso ese real
   // se agrega a la fila "Mueble", no aparece como "(Sin subcategoría)".
   //
-  // Presupuesto: usar costDistributor (lo que BLARQ paga al proveedor =
-  // costo presupuestado real). Fallback a clientPriceNet si costDistributor
-  // está vacío (asume "sin margen" implícito en ese item).
-  function muebleNameToSub(name: string): "Mueble" | "Herrajes" | "Cubiertas" {
-    const u = (name || "").toUpperCase();
-    if (u.includes("CUBIERTA")) return "Cubiertas";
-    if (u.includes("HERRAJ")) return "Herrajes";
-    return "Mueble";
-  }
-  const mueblesPresupBySub = { Mueble: 0, Herrajes: 0, Cubiertas: 0 };
-  for (const it of mueblesAllItems) {
-    const costoPorUnidad =
-      it.costDistributor > 0
-        ? it.costDistributor
-        : it.clientPriceNet > 0
-          ? it.clientPriceNet
-          : it.clientPriceIva / 1.19;
-    mueblesPresupBySub[muebleNameToSub(it.name)] += costoPorUnidad * it.quantity;
-  }
+  // Presupuesto por sub (Mueble / Herrajes / Cubiertas): viene de metrics.ts
+  // (fuente única). Antes se calculaba acá con costDistributor; se movió a
+  // computeProjectMetrics para no duplicar el criterio de costeo.
+  const mueblesPresupBySub = budgetBySubcategory.muebles;
   // Real de "Muebles" top (sin sub específica) cuenta como "Mueble".
   const realMuebleTopSinSub = realBySpecific["Muebles"] || 0;
   const mueblesSection: ResumenSection = {
@@ -222,25 +205,10 @@ export default async function ResultadosPage({
   };
 
   // 3) ARTEFACTOS — agrupar por subcategory del item.
-  // Presupuesto: usar realCostBlarq (lo que BLARQ paga al proveedor =
-  // costo presupuestado real). Fallback a clientPrice/1.19 si
-  // realCostBlarq está vacío (asume "sin margen" — caso típico de
-  // iluminación donde MJ no marca, simplemente cobra lo mismo que paga).
-  function artefactoSubToCat(sub: string): "Cocina" | "Baño" | "Iluminación" {
-    if (sub === "iluminacion") return "Iluminación";
-    if (sub === "sanitario") return "Baño";
-    return "Cocina";
-  }
-  const artefactosPresupBySub = { Cocina: 0, Baño: 0, Iluminación: 0 };
-  if (lastArtefactos) {
-    for (const it of lastArtefactos.artefactoItems) {
-      const costoPorItem =
-        it.realCostBlarq && it.realCostBlarq > 0
-          ? it.realCostBlarq
-          : (it.clientPrice ?? 0) / 1.19;
-      artefactosPresupBySub[artefactoSubToCat(it.subcategory)] += costoPorItem;
-    }
-  }
+  // Presupuesto por sub (Cocina / Baño / Iluminación): viene de metrics.ts
+  // (fuente única). Antes se calculaba acá con realCostBlarq; se movió a
+  // computeProjectMetrics para no duplicar el criterio de costeo.
+  const artefactosPresupBySub = budgetBySubcategory.artefactos;
   const artefactosSection: ResumenSection = {
     title: "3. Artefactos",
     rows: [
@@ -332,36 +300,12 @@ export default async function ResultadosPage({
   // (utilidadProyectada y margenProyectado se declaran arriba)
 
   // ==================== Alertas ====================
-  const now = new Date();
-  const facturasVencidas = facturasRecibidas.filter(
-    (i) => i.status === "pendiente" && i.dueDate && i.dueDate < now
-  );
-  const alertas: Array<{ severity: "danger" | "warning"; message: string }> = [];
-  // Alertas sobre los conceptos de cada sección con presupuesto y desviación
-  for (const section of resumenSections) {
-    for (const r of section.rows) {
-      if (r.presupuesto === 0) continue;
-      const pct = (r.real / r.presupuesto) * 100;
-      if (pct >= 100) {
-        alertas.push({
-          severity: "danger",
-          message: `${r.label}: ${pct.toFixed(0)}% del presupuesto consumido (excedido)`,
-        });
-      } else if (pct >= 80) {
-        alertas.push({
-          severity: "warning",
-          message: `${r.label}: ${pct.toFixed(0)}% del presupuesto consumido`,
-        });
-      }
-    }
-  }
-  if (facturasVencidas.length > 0) {
-    const monto = facturasVencidas.reduce((s, i) => s + i.totalAmount, 0);
-    alertas.push({
-      severity: "danger",
-      message: `${facturasVencidas.length} factura${facturasVencidas.length > 1 ? "s" : ""} vencida${facturasVencidas.length > 1 ? "s" : ""} pendiente${facturasVencidas.length > 1 ? "s" : ""} de pago — ${formatCLP(monto)}`,
-    });
-  }
+  // Las alertas vienen de metrics.ts (fuente única: computeProjectMetrics)
+  // — las mismas que usa el dashboard de inicio. Antes se recalculaban acá
+  // por separado, lo que arriesgaba que dashboard y detalle mostraran
+  // alertas distintas para el mismo proyecto (hallazgo A5). Cubren obra +
+  // muebles + artefactos + facturas vencidas con monto.
+  const alertas = m.alerts;
 
   // ==================== Desglose por categoría (tabla general) ====================
   const categories = await prisma.costCategory.findMany({

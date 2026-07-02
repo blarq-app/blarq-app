@@ -4,6 +4,7 @@
 // Toda la lógica vive acá — los consumidores solo eligen qué mostrar.
 
 import type { Prisma } from "@prisma/client";
+import { formatCLP } from "@/lib/utils";
 
 // Forma del proyecto que necesitamos: con sus relaciones financieras.
 // Definida como tipo Prisma para que cualquier llamador haga el include
@@ -92,6 +93,15 @@ export type ProjectMetrics = {
   budgetByType: Record<string, number>; // por costMaterial/costLabor/...
   realByCategory: Record<string, number>; // por nombre de top category
   realBySpecific: Record<string, number>; // por nombre exacto de category
+  // Presupuesto de muebles/artefactos desglosado por sub-concepto, en costo
+  // (lo que BLARQ paga al proveedor) — es la contraparte "presupuestada" que
+  // se compara contra el real (realBySpecific) tanto para la tabla
+  // "Presupuesto vs Real" del resumen como para las alertas de desviación.
+  // Vive acá (fuente única) para que la página no lo recalcule por su cuenta.
+  budgetBySubcategory: {
+    muebles: { Mueble: number; Herrajes: number; Cubiertas: number };
+    artefactos: { Cocina: number; Baño: number; Iluminación: number };
+  };
 
   // Compromisos / cosas que requieren atención
   invoicesOverdueCount: number;
@@ -361,51 +371,104 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
     (ep) => ep.status === "borrador"
   ).length;
 
-  // ── Alertas ───────────────────────────────────────────────────────────
-  const alerts: ProjectAlert[] = [];
-  for (const d of conceptDeviations) {
-    if (d.presupuestado === 0) continue;
-    if (d.pct >= 100) {
-      alerts.push({
-        severity: "danger",
-        message: `${d.name}: ${d.pct.toFixed(0)}% del presupuesto consumido (excedido)`,
-      });
-    } else if (d.pct >= 80) {
-      alerts.push({
-        severity: "warning",
-        message: `${d.name}: ${d.pct.toFixed(0)}% del presupuesto consumido`,
-      });
+  // ── Presupuesto por sub-concepto (muebles / artefactos) ────────────────
+  // Costo presupuestado (lo que BLARQ paga al proveedor) por sub. Es la
+  // contraparte del real (realBySpecific) para la tabla del resumen y para
+  // las alertas de desviación. Antes esto se calculaba SOLO en resumen/page
+  // — se movió acá para no duplicar el criterio de costeo.
+  //
+  // Muebles: costDistributor si existe; si no, clientPriceNet; último
+  // recurso clientPriceIva/1.19 (asume "sin margen" en ese ítem).
+  function muebleNameToSub(name: string): "Mueble" | "Herrajes" | "Cubiertas" {
+    const u = (name || "").toUpperCase();
+    if (u.includes("CUBIERTA")) return "Cubiertas";
+    if (u.includes("HERRAJ")) return "Herrajes";
+    return "Mueble";
+  }
+  const mueblesBudgetBySub = { Mueble: 0, Herrajes: 0, Cubiertas: 0 };
+  for (const it of mueblesItems) {
+    const costoPorUnidad =
+      it.costDistributor > 0
+        ? it.costDistributor
+        : it.clientPriceNet > 0
+          ? it.clientPriceNet
+          : it.clientPriceIva / 1.19;
+    mueblesBudgetBySub[muebleNameToSub(it.name)] += costoPorUnidad * it.quantity;
+  }
+  // Artefactos: realCostBlarq si existe; si no, clientPrice/1.19.
+  function artefactoSubToCat(sub: string): "Cocina" | "Baño" | "Iluminación" {
+    if (sub === "iluminacion") return "Iluminación";
+    if (sub === "sanitario") return "Baño";
+    return "Cocina";
+  }
+  const artefactosBudgetBySub = { Cocina: 0, Baño: 0, Iluminación: 0 };
+  if (artefactos) {
+    for (const it of artefactos.artefactoItems) {
+      const costoPorItem =
+        it.realCostBlarq && it.realCostBlarq > 0
+          ? it.realCostBlarq
+          : (it.clientPrice ?? 0) / 1.19;
+      artefactosBudgetBySub[artefactoSubToCat(it.subcategory)] += costoPorItem;
     }
   }
+  const budgetBySubcategory = {
+    muebles: mueblesBudgetBySub,
+    artefactos: artefactosBudgetBySub,
+  };
+
+  // ── Alertas ───────────────────────────────────────────────────────────
+  // Fuente única de las alertas que ve tanto el dashboard (flag de peligro)
+  // como la pantalla de Resumen (banners). Cubre desviación de presupuesto
+  // en los tres frentes — obra, muebles y artefactos — más facturas
+  // vencidas con su monto. El orden replica el de la tabla del resumen
+  // (obra → muebles → artefactos → vencidas) para que ambas vistas
+  // coincidan exactamente.
+  const alerts: ProjectAlert[] = [];
+  // Genera alerta danger/warning para una fila (presupuesto vs real) con la
+  // misma regla en todos lados: ≥100% excedido (rojo), ≥80% atención (ámbar).
+  const pushDeviationAlert = (label: string, presupuesto: number, real: number) => {
+    if (presupuesto === 0) return;
+    const pct = (real / presupuesto) * 100;
+    if (pct >= 100) {
+      alerts.push({
+        severity: "danger",
+        message: `${label}: ${pct.toFixed(0)}% del presupuesto consumido (excedido)`,
+      });
+    } else if (pct >= 80) {
+      alerts.push({
+        severity: "warning",
+        message: `${label}: ${pct.toFixed(0)}% del presupuesto consumido`,
+      });
+    }
+  };
+  // Obra — conceptos del costo directo (Materiales, MO, Herramientas, ...)
+  for (const d of conceptDeviations) {
+    pushDeviationAlert(d.name, d.presupuestado, d.real);
+  }
+  // Muebles — el real de "Mueble" incluye las facturas categorizadas como
+  // "Muebles" top sin subcategoría (convención BLARQ: mueble armado completo).
+  pushDeviationAlert(
+    "Mueble",
+    mueblesBudgetBySub.Mueble,
+    (realBySpecific["Mueble"] ?? 0) + (realBySpecific["Muebles"] ?? 0)
+  );
+  pushDeviationAlert("Herrajes", mueblesBudgetBySub.Herrajes, realBySpecific["Herrajes"] ?? 0);
+  pushDeviationAlert("Cubiertas", mueblesBudgetBySub.Cubiertas, realBySpecific["Cubiertas"] ?? 0);
+  // Artefactos
+  pushDeviationAlert("Cocina", artefactosBudgetBySub.Cocina, realBySpecific["Cocina"] ?? 0);
+  pushDeviationAlert("Baño", artefactosBudgetBySub.Baño, realBySpecific["Baño"] ?? 0);
+  pushDeviationAlert("Iluminación", artefactosBudgetBySub.Iluminación, realBySpecific["Iluminación"] ?? 0);
+  // Facturas vencidas — con el monto total pendiente.
   if (invoicesOverdueCount > 0) {
     alerts.push({
       severity: "danger",
-      message: `${invoicesOverdueCount} factura${invoicesOverdueCount > 1 ? "s" : ""} vencida${invoicesOverdueCount > 1 ? "s" : ""} pendiente${invoicesOverdueCount > 1 ? "s" : ""} de pago`,
+      message: `${invoicesOverdueCount} factura${invoicesOverdueCount > 1 ? "s" : ""} vencida${invoicesOverdueCount > 1 ? "s" : ""} pendiente${invoicesOverdueCount > 1 ? "s" : ""} de pago — ${formatCLP(invoicesOverdueAmount)}`,
     });
   }
-  // EP atrasado: proyecto en ejecución >60 días sin EP nuevo en los
-  // últimos 30 días. Solo aplica si el proyecto tiene presupuesto MO
-  // (sino no hay nada que avanzar).
-  const projectStart = (project as { startDate: Date | null }).startDate ?? project.createdAt;
-  const daysSinceStart = (now.getTime() - new Date(projectStart).getTime()) / (1000 * 60 * 60 * 24);
-  if (presupuestoMO > 0 && daysSinceStart > 60) {
-    const lastEPDate = project.estadosPago.length > 0
-      ? new Date(
-          Math.max(...project.estadosPago.map((ep) => new Date(ep.date).getTime()))
-        )
-      : null;
-    const daysSinceLastEP = lastEPDate
-      ? (now.getTime() - lastEPDate.getTime()) / (1000 * 60 * 60 * 24)
-      : Infinity;
-    if (daysSinceLastEP > 30) {
-      alerts.push({
-        severity: "warning",
-        message: lastEPDate
-          ? `Sin EP nuevo hace ${Math.floor(daysSinceLastEP)} días`
-          : `Sin EPs cargados aún (proyecto activo hace ${Math.floor(daysSinceStart)} días)`,
-      });
-    }
-  }
+  // Nota: la alerta "Sin EP nuevo hace N días" se calculaba acá pero no se
+  // mostraba en ninguna pantalla (el dashboard solo mira severity=danger y
+  // el resumen nunca la incluyó). MJ pidió NO mostrarla (hallazgo A6), así
+  // que ya no se genera.
 
   return {
     versionLabels: {
@@ -431,6 +494,7 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
     budgetByType,
     realByCategory,
     realBySpecific,
+    budgetBySubcategory,
     invoicesOverdueCount,
     invoicesOverdueAmount,
     invoicesPendingCount,

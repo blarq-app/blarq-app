@@ -36,6 +36,11 @@ export default function CoverFields({
   const [subtitle, setSubtitle] = useState(initialSubtitle ?? "");
   const [note, setNote] = useState(initialNote ?? "");
   const [saved, setSaved] = useState<string | null>(null);
+  // Plegable: arranca cerrado para no ocupar espacio. Si ya hay algo escrito,
+  // arranca abierto para que se vea que la portada está personalizada.
+  const [open, setOpen] = useState(
+    Boolean(initialTitle || initialSubtitle || initialNote)
+  );
 
   const subtitleDefault = `${projectName}${address ? " · " + address : ""}`;
 
@@ -58,14 +63,46 @@ export default function CoverFields({
   const inputCls =
     "w-full rounded border border-gray-300 px-2.5 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-gray-500 focus:outline-none";
 
+  const personalizada = Boolean(title.trim() || subtitle.trim() || note.trim());
+
   return (
-    <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold text-gray-900">Portada del PDF</h2>
-        <span className="text-[11px] text-gray-400">
-          {saved ? "Guardado" : "Se completa solo si lo dejás en blanco"}
+    <div className="mb-4 rounded-xl border border-gray-200 bg-white shadow-sm">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left"
+      >
+        <span className="flex items-center gap-2">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            className={`text-gray-400 transition-transform ${open ? "rotate-90" : ""}`}
+          >
+            <path
+              d="M9 6l6 6-6 6"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span className="text-sm font-semibold text-gray-900">Portada del PDF</span>
         </span>
-      </div>
+        <span className="text-[11px] text-gray-400">
+          {saved
+            ? "Guardado"
+            : open
+              ? "Se completa solo si lo dejás en blanco"
+              : personalizada
+                ? "Personalizada"
+                : "Textos por defecto"}
+        </span>
+      </button>
+
+      {open && (
+      <div className="px-4 pb-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[1.4fr_1fr]">
         <div>
           <label className={labelCls}>Título</label>
@@ -98,6 +135,8 @@ export default function CoverFields({
           onBlur={(e) => save("coverNote", e.target.value)}
         />
       </div>
+      </div>
+      )}
     </div>
   );
 }

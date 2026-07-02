@@ -218,7 +218,7 @@ const CSS = `
 
   .r { align-items: start; padding: 2.5pt 0; border-bottom: 1px solid #eee8dd; font-size: 5.3pt; page-break-inside: avoid; }
   .r span { line-height: 1.32; }
-  .it { color: #9A9183; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .it { position: relative; padding-left: 9pt; color: #9A9183; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .pt { color: #34332E; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; padding-right: 8pt; }
   .ds { color: #7a7468; padding-right: 10pt; }
   .un { text-align: center; color: #9A9183; }
@@ -229,14 +229,16 @@ const CSS = `
   .ds strong { font-weight: 700; } .ds em { font-style: italic; }
 
   /* marca de cambio entre versiones */
-  /* Marca de cambio: símbolo compacto antes del número de ítem. */
-  .chg { color: #34332E; font-weight: 700; margin-right: 2pt; }
-  /* Leyenda de símbolos, arriba del listado (solo si hay marcas de cambio). */
-  .leyenda { margin: 2mm 0 3.5mm; font-size: 6pt; color: #9A9183; }
-  .leyenda .chg { color: #34332E; }
+  /* Marca de cambio: símbolo absoluto en un gutter a la IZQUIERDA del número.
+     Así el número siempre arranca en la misma x (padding-left de .it) y queda
+     alineado en columna, con o sin marca. */
+  .mk { position: absolute; left: 0; top: 0; color: #34332E; font-weight: 700; }
+  /* Leyenda de símbolos, al PIE del detalle, italica muy sutil. */
+  .leyenda { margin-top: 4mm; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9A9183; }
+  .leyenda .mk { position: static; font-weight: 700; color: #6F6A60; }
 
   /* ── Cierre: formas de pago + cuadro ─────────────────────── */
-  .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 12mm; align-items: start; page-break-inside: avoid; }
+  .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 8mm; align-items: start; page-break-inside: avoid; }
   /* "Formas de pago" / "Observaciones": tinta oscura, más grande y subrayado. */
   .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #34332E; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
   .pagos { margin-top: 6pt; border-top: 1px solid #e2dcd0; }
@@ -257,7 +259,7 @@ const CSS = `
   .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9A9183; margin-top: 3pt; }
 
   /* ── Observaciones ───────────────────────────────────────── */
-  .obs { margin-top: 6mm; page-break-inside: avoid; }
+  .obs { margin-top: 5mm; page-break-inside: avoid; }
   .obs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5pt 14mm; margin-top: 7pt; }
   .obs-item { display: flex; gap: 8pt; font-size: 6pt; line-height: 1.3; color: #5f5b52; }
   .obs-num { color: #9A9183; font-variant-numeric: tabular-nums; flex-shrink: 0; }
@@ -322,15 +324,16 @@ export function renderObraHTML(data: ObraHTMLInput): string {
     ? `<img class="cover-logo" src="${logoUri}" alt="BLARQ" />`
     : `<div class="cover-logo" style="font-family:'Hanken Grotesk';font-size:24pt;letter-spacing:.15em;">BLARQ</div>`;
 
-  // Marca de cambio vs versión anterior, COMPACTA para que entre en la columna
-  // angosta del ítem: "*" = partida nueva, ↑ = subió, ↓ = bajó. La leyenda al
-  // pie explica los símbolos. Solo se muestra la leyenda si hay alguna marca.
+  // Marca de cambio vs versión anterior: un símbolo compacto que CUELGA a la
+  // izquierda del número, en un slot de ancho fijo, para que los números queden
+  // SIEMPRE alineados en columna (tengan marca o no). "*" = partida nueva,
+  // ↑ = subió, ↓ = bajó. La leyenda al pie (italica sutil) explica los símbolos;
+  // solo se muestra si hay alguna marca.
   const hasMarkers = items.some((i) => i.changeMarker);
   const renderMarker = (m?: "added" | "up" | "down" | null) => {
-    if (m === "up") return `<span class="chg">&#8593;</span>`;
-    if (m === "down") return `<span class="chg">&#8595;</span>`;
-    if (m === "added") return `<span class="chg">*</span>`;
-    return "";
+    const sym =
+      m === "up" ? "&#8593;" : m === "down" ? "&#8595;" : m === "added" ? "*" : "";
+    return `<span class="mk">${sym}</span>`;
   };
 
   const detailHeader = `
@@ -424,11 +427,6 @@ export function renderObraHTML(data: ObraHTMLInput): string {
     <div class="pad-detail">
       ${detailHeader}
       ${columnHeader}
-      ${
-        hasMarkers
-          ? `<div class="leyenda">Respecto a la versión anterior: <span class="chg">*</span> partida nueva · <span class="chg">&#8593;</span> subió · <span class="chg">&#8595;</span> bajó de precio.</div>`
-          : ""
-      }
       ${tableRows}
 
       <div class="cierre">
@@ -463,6 +461,11 @@ export function renderObraHTML(data: ObraHTMLInput): string {
           ).join("")}
         </div>
       </div>
+      ${
+        hasMarkers
+          ? `<div class="leyenda">Respecto a la versión anterior: <span class="mk">*</span> partida nueva · <span class="mk">&#8593;</span> subió · <span class="mk">&#8595;</span> bajó de precio.</div>`
+          : ""
+      }
     </div>
   </div>
 

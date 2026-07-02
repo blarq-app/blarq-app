@@ -122,29 +122,16 @@ function fmtDate(d: string | Date): string {
   return `${day}·${month}·${year}`;
 }
 
-function getLogoDataUri(): string {
-  const logoPath = path.join(
-    process.cwd(),
-    "public",
-    "assets",
-    "logo-blarq.png"
-  );
+// Lee un asset de public/assets como data URI (logo, isotipo de marca).
+function assetDataUri(file: string): string {
   try {
-    const bytes = fs.readFileSync(logoPath);
+    const bytes = fs.readFileSync(
+      path.join(process.cwd(), "public", "assets", file)
+    );
     return `data:image/png;base64,${bytes.toString("base64")}`;
   } catch {
     return "";
   }
-}
-
-// Isotipo "A" de marca (triángulo con barra) como SVG inline. Se usa como
-// marca de agua (opacidad muy baja) y como sello chico en el encabezado del
-// detalle. Reemplaza a assets/blarq-isotipo-piedra.png del diseño original.
-function isotipo(px: number, color: string, opacity: number): string {
-  return `<svg width="${px}" height="${px}" viewBox="0 0 100 100" style="opacity:${opacity};display:block;">
-    <path d="M50 9 L91 91 L9 91 Z" fill="none" stroke="${color}" stroke-width="2"/>
-    <line x1="34" y1="68" x2="66" y2="68" stroke="${color}" stroke-width="2"/>
-  </svg>`;
 }
 
 // ─── CSS — paleta y tipografía del Manual v2 (Claro) ────────────────────────
@@ -170,12 +157,13 @@ const CSS = `
      (route: margin top/bottom 14mm, left/right 0). Por eso acá el padding es
      solo lateral y la portada calcula su alto contra el área útil (297-28mm). */
   .page { position: relative; width: 210mm; overflow: hidden; }
+  .page:first-child { overflow: visible; }
   .page + .page { page-break-before: always; }
-  .pad-cover { padding: 0 17mm; display: flex; flex-direction: column; justify-content: space-between; min-height: calc(297mm - 28mm); }
-  .pad-detail { padding: 0 17mm; display: flex; flex-direction: column; }
+  .pad-cover { padding: 0 15mm; display: flex; flex-direction: column; justify-content: space-between; min-height: calc(297mm - 28mm); }
+  .pad-detail { padding: 0 13mm; display: flex; flex-direction: column; }
 
   /* ── Portada ─────────────────────────────────────────────── */
-  .wm { position: absolute; right: -20mm; bottom: -26mm; z-index: 0; }
+  .wm { position: absolute; right: -6mm; bottom: -8mm; z-index: 0; }
   .cover-top, .cover-mid, .cover-foot { position: relative; z-index: 1; }
   .cover-top { display: flex; justify-content: space-between; align-items: flex-start; }
   .cover-logo { width: 46mm; height: auto; }
@@ -193,7 +181,7 @@ const CSS = `
   .cover-foot .val { font-size: 10.5pt; color: #34332E; }
 
   /* ── Detalle: encabezado ─────────────────────────────────── */
-  .dhead-iso { opacity: .55; margin-bottom: 7mm; }
+  .dhead-iso { width: 40px; height: auto; opacity: .55; margin-bottom: 7mm; display: block; }
   .dhead { display: flex; justify-content: space-between; align-items: flex-start; }
   .dhead .kick { font-size: 7.5pt; letter-spacing: .26em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
   .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 18pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
@@ -204,7 +192,10 @@ const CSS = `
   .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 9pt; letter-spacing: .34em; text-transform: uppercase; color: #9A9183; margin-top: 3pt; }
 
   /* ── Tabla de partidas ───────────────────────────────────── */
-  .grid { display: grid; grid-template-columns: 8% 24% 1fr 6% 7% 11% 13%; }
+  /* Proporciones de columnas idénticas a la referencia (item 3.9 · partida 20
+     · descripción ~50% · un 3.5 · cant 4.4 · p.unit 8 · total 9.1). La
+     descripción ancha evita que el texto se apile en muchas líneas. */
+  .grid { display: grid; grid-template-columns: 3.9% 20% 1fr 3.5% 4.4% 8% 9.1%; }
   .hd { border-bottom: 1.5px solid #34332E; padding: 7pt 0; margin-top: 8mm; font-size: 6.5pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
   .hd span:nth-child(4){ text-align:center; } .hd span:nth-child(5),.hd span:nth-child(6),.hd span:nth-child(7){ text-align:right; }
 
@@ -298,7 +289,8 @@ export function renderObraHTML(data: ObraHTMLInput): string {
     .filter((ch) => ch.items.length > 0);
 
   const terms = paymentTerms.length > 0 ? paymentTerms : DEFAULT_PAYMENT_TERMS;
-  const logoUri = getLogoDataUri();
+  const logoUri = assetDataUri("blarq-logo-horizontal-ink.png") || assetDataUri("logo-blarq.png");
+  const iso = assetDataUri("blarq-isotipo-piedra.png");
   const dateStr = fmtDate(budget.date);
   const versionLarga = `Versión ${budget.version.replace(/^V/i, "")} · ${dateStr}`;
 
@@ -352,7 +344,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
     .join("");
 
   const detailHeader = `
-    <div class="dhead-iso">${isotipo(40, "#9A9183", 0.55)}</div>
+    ${iso ? `<img class="dhead-iso" src="${iso}" alt="" />` : ""}
     <div class="dhead">
       <div>
         <div class="kick">Cotización de obra · detalle</div>
@@ -380,7 +372,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
 
   <!-- PORTADA -->
   <div class="page">
-    <div class="wm">${isotipo(430, "#34332E", 0.06)}</div>
+    <div class="wm">${iso ? `<img src="${iso}" style="width:95mm;opacity:.12;" />` : ""}</div>
     <div class="pad-cover">
       <div class="cover-top">
         ${logoHtml}
@@ -404,7 +396,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
 
   <!-- DETALLE -->
   <div class="page">
-    <div class="wm">${isotipo(290, "#34332E", 0.05)}</div>
+    <div class="wm">${iso ? `<img src="${iso}" style="width:70mm;opacity:.06;" />` : ""}</div>
     <div class="pad-detail">
       ${detailHeader}
       <div class="grid hd">

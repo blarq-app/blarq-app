@@ -24,7 +24,7 @@ function mk(chapter: string, zone: string | null, rows: Row[]): ObraItemInput[] 
 
 const items: ObraItemInput[] = [
   ...mk("demoliciones", "Cocina", [
-    ["1.1", "Perforación muro / losa hormigón", "Nueva pasada a comedor y escritorio. Valor sujeto a consulta con ing. calculista.", "GL", "1", "330.000", "330.000"],
+    ["1.1", "Perforación muro / losa hormigón", "SE CONSIDERA PERFORACIÓN EN MURO PARA NUEVA PASADA A COMEDOR Y ESCRITORIO. VALOR SUJETO A CONSULTA CON ING.CALCULISTA", "GL", "1", "330.000", "330.000"],
     ["1.2", "Retiro mobiliario cocina", "Considera retiro de muebles y artefactos.", "GL", "1", "232.000", "232.000"],
     ["1.3", "Retiro piso cerámico", "", "M²", "12,1", "8.263", "99.985"],
     ["1.4", "Retiro puertas", "", "UN", "2", "26.000", "52.000"],

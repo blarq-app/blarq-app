@@ -133,12 +133,13 @@ const CSS = `
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
   .page { position: relative; width: 210mm; overflow: hidden; }
+  .page:first-child { overflow: visible; }
   .page + .page { page-break-before: always; }
-  .pad-cover { padding: 0 17mm; display: flex; flex-direction: column; justify-content: space-between; min-height: calc(297mm - 28mm); }
-  .pad-detail { padding: 0 17mm; display: flex; flex-direction: column; }
+  .pad-cover { padding: 0 15mm; display: flex; flex-direction: column; justify-content: space-between; min-height: calc(297mm - 28mm); }
+  .pad-detail { padding: 0 13mm; display: flex; flex-direction: column; }
 
   /* Portada */
-  .wm { position: absolute; right: -20mm; bottom: -26mm; z-index: 0; }
+  .wm { position: absolute; right: -6mm; bottom: -8mm; z-index: 0; }
   .cover-top, .cover-mid, .cover-foot { position: relative; z-index: 1; }
   .cover-top { display: flex; justify-content: space-between; align-items: flex-start; }
   .cover-logo { width: 46mm; height: auto; }
@@ -167,7 +168,7 @@ const CSS = `
   .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 9pt; letter-spacing: .34em; text-transform: uppercase; color: #9A9183; margin-top: 3pt; }
 
   /* Tabla */
-  .mhd { display: grid; grid-template-columns: 7% 1fr 9% 16%; padding: 7pt 0; border-bottom: 1.5px solid #34332E; margin-top: 8mm; font-size: 6.5pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
+  .mhd { display: grid; grid-template-columns: 4.5% 1fr 7% 13%; padding: 7pt 0; border-bottom: 1.5px solid #34332E; margin-top: 8mm; font-size: 6.5pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
   .mhd .ct { text-align: center; } .mhd .rt { text-align: right; }
 
   .cap { display: flex; justify-content: space-between; align-items: center; background: #EDEDEB; padding: 6pt 10pt; margin-top: 12pt; break-inside: avoid; break-after: avoid; }
@@ -177,7 +178,7 @@ const CSS = `
   /* Cada partida (fila + su bloque de especificaciones/herrajes) se mantiene
      junta: no se separa el título de sus specs entre páginas. */
   .partida { break-inside: avoid; }
-  .mr { display: grid; grid-template-columns: 7% 1fr 9% 16%; align-items: baseline; padding: 8pt 0 2pt; border-top: 1px solid #e7e1d7; }
+  .mr { display: grid; grid-template-columns: 4.5% 1fr 7% 13%; align-items: baseline; padding: 8pt 0 2pt; border-top: 1px solid #e7e1d7; }
   .mit { color: #9A9183; font-variant-numeric: tabular-nums; font-size: 8.5pt; }
   .mpt { color: #34332E; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 8.5pt; }
   .msub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; color: #9A9183; font-size: 8.5pt; display: block; margin-top: 2pt; }
@@ -250,7 +251,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
   const logoHtml = logo
     ? `<img class="cover-logo" src="${logo}" alt="BLARQ" />`
     : `<div class="cover-logo" style="font-family:'Hanken Grotesk';font-size:24pt;letter-spacing:.15em;">BLARQ</div>`;
-  const wm = iso ? `<img src="${iso}" style="width:150mm;opacity:.06;" />` : "";
+  const wm = iso ? `<img src="${iso}" style="width:95mm;opacity:.12;" />` : "";
   const dhIso = iso ? `<img class="dhead-iso" src="${iso}" alt="" />` : "";
 
   const tableRows = chapters
@@ -324,7 +325,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
 
   <!-- DETALLE -->
   <div class="page">
-    <div class="wm">${iso ? `<img src="${iso}" style="width:100mm;opacity:.05;" />` : ""}</div>
+    <div class="wm">${iso ? `<img src="${iso}" style="width:70mm;opacity:.06;" />` : ""}</div>
     <div class="pad-detail">
       ${dhIso}
       <div class="dhead">

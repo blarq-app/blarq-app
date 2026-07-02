@@ -168,13 +168,14 @@ const CSS = `
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
   .page { position: relative; width: 210mm; overflow: hidden; }
+  .page:first-child { overflow: visible; }
   .page + .page { page-break-before: always; }
-  .pad-cover { padding: 0 17mm; display: flex; flex-direction: column; justify-content: space-between; min-height: calc(297mm - 28mm); }
+  .pad-cover { padding: 0 15mm; display: flex; flex-direction: column; justify-content: space-between; min-height: calc(297mm - 28mm); }
   /* Padding lateral más ajustado que obra/muebles: la tabla tiene 10 columnas
      + imágenes grandes, necesita ancho. */
   .pad-detail { padding: 0 11mm; display: flex; flex-direction: column; }
 
-  .wm { position: absolute; right: -20mm; bottom: -26mm; z-index: 0; }
+  .wm { position: absolute; right: -6mm; bottom: -8mm; z-index: 0; }
   .cover-top, .cover-mid, .cover-foot { position: relative; z-index: 1; }
   .cover-top { display: flex; justify-content: space-between; align-items: flex-start; }
   .cover-logo { width: 46mm; height: auto; }
@@ -368,7 +369,7 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
 
   <!-- PORTADA -->
   <div class="page">
-    <div class="wm">${iso ? `<img src="${iso}" style="width:150mm;opacity:.06;" />` : ""}</div>
+    <div class="wm">${iso ? `<img src="${iso}" style="width:95mm;opacity:.12;" />` : ""}</div>
     <div class="pad-cover">
       <div class="cover-top">
         ${logoHtml}
@@ -392,7 +393,7 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
 
   <!-- DETALLE -->
   <div class="page">
-    <div class="wm">${iso ? `<img src="${iso}" style="width:100mm;opacity:.05;" />` : ""}</div>
+    <div class="wm">${iso ? `<img src="${iso}" style="width:70mm;opacity:.06;" />` : ""}</div>
     <div class="pad-detail">
       ${dhIso}
       <div class="dhead">

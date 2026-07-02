@@ -8,13 +8,13 @@
  * tipográficos: Hanken Grotesk (títulos, altas finas), Spectral (bajadas
  * itálicas) y Nunito Sans (cuerpo, datos y cifras tabulares). Paleta greige.
  *
- * Fidelidad: debe quedar idéntico a "Final Presupuesto Obra Imprimible" (el PDF
- * definitivo de MJ). Eso incluye: portada CON "Inversión total · IVA incl.",
- * tablas CON subtotal por capítulo ("Subtotal $X") y monto por zona
- * ("Cocina $X" / "Baños $X"), tipografía a la escala exacta de la referencia
- * (filas 11px→5.3pt, etc.), y portada full-bleed (isotipo "A" sangra al borde).
- * NOTA: en iteraciones previas MJ había pedido quitar subtotales e inversión
- * total; el PDF Final los repone, así que van incluidos.
+ * Reglas de MJ (2026-07-02, sobre el PDF Final):
+ *   - Portada CON "Inversión total · IVA incl." + full-bleed (isotipo sangra).
+ *   - Tipografía a la escala exacta de la referencia (filas 11px→5.3pt, etc.).
+ *   - CADA CAPÍTULO EN SU PROPIA HOJA (.chpage con break-before), con el
+ *     encabezado + títulos de columna repetidos arriba.
+ *   - SIN subtotales (ni de capítulo ni de zona) — banda de zona solo separador.
+ *   - Bloque de cierre (formas de pago + cuadro) compacto, no gigante.
  */
 
 import fs from "node:fs";
@@ -160,6 +160,8 @@ const CSS = `
      solo lateral y la portada calcula su alto contra el área útil (297-28mm). */
   .page { position: relative; width: 210mm; overflow: hidden; }
   .page:first-child { overflow: visible; }
+  /* Cada capítulo en su propia hoja (regla MJ). */
+  .chpage.brk { break-before: page; }
   .page + .page { page-break-before: always; }
   .pad-cover { padding: 16mm 15mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 297mm; }
   .pad-detail { padding: 0 13mm; display: flex; flex-direction: column; }
@@ -231,28 +233,28 @@ const CSS = `
 
   /* ── Cierre: formas de pago + cuadro ─────────────────────── */
   .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 7mm; align-items: start; page-break-inside: avoid; }
-  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #34332E; font-weight: 700; }
+  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 6.5pt; letter-spacing: .2em; text-transform: uppercase; color: #34332E; font-weight: 700; }
   .pagos { margin-top: 6pt; border-top: 1px solid #e2dcd0; }
-  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 3.5pt 0; border-bottom: 1px solid #eee8dd; }
+  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 2.5pt 0; border-bottom: 1px solid #eee8dd; }
   .pagos .row:last-child { border-bottom: none; }
-  .pagos .s { font-size: 10pt; color: #34332E; }
-  .pagos .p { font-size: 10pt; color: #6F6A60; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .pagos .s { font-size: 7pt; color: #34332E; }
+  .pagos .p { font-size: 7pt; color: #6F6A60; font-weight: 700; font-variant-numeric: tabular-nums; }
   .cuadro { border-top: 1.5px solid #34332E; }
-  .cuadro .row { display: grid; grid-template-columns: 1fr 34px 108px; align-items: baseline; padding: 3pt 0; border-bottom: 1px solid #e2dcd0; }
-  .cuadro .cl { font-size: 9.5pt; color: #5f5b52; }
+  .cuadro .row { display: grid; grid-template-columns: 1fr 30px 92px; align-items: baseline; padding: 2pt 0; border-bottom: 1px solid #e2dcd0; }
+  .cuadro .cl { font-size: 7pt; color: #5f5b52; }
   .cuadro .cl.strong { color: #34332E; font-weight: 600; }
-  .cuadro .cp { text-align: right; font-size: 8.5pt; color: #9A9183; font-variant-numeric: tabular-nums; }
-  .cuadro .cv { text-align: right; font-size: 9.5pt; color: #5f5b52; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cuadro .cp { text-align: right; font-size: 6pt; color: #9A9183; font-variant-numeric: tabular-nums; }
+  .cuadro .cv { text-align: right; font-size: 7pt; color: #5f5b52; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .cuadro .cv.strong { color: #34332E; font-weight: 600; }
-  .cuadro .row.grand { grid-template-columns: 1fr 130px; border-top: 1.5px solid #34332E; border-bottom: none; padding-top: 8pt; margin-top: 2pt; }
-  .cuadro .row.grand .cl { font-family: 'Hanken Grotesk', sans-serif; font-size: 11pt; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #34332E; }
-  .cuadro .row.grand .cv { font-size: 13pt; font-weight: 700; color: #34332E; }
-  .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-size: 8pt; color: #9A9183; margin-top: 4pt; }
+  .cuadro .row.grand { grid-template-columns: 1fr 110px; border-top: 1.5px solid #34332E; border-bottom: none; padding-top: 6pt; margin-top: 2pt; }
+  .cuadro .row.grand .cl { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #34332E; }
+  .cuadro .row.grand .cv { font-size: 10.5pt; font-weight: 700; color: #34332E; }
+  .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9A9183; margin-top: 3pt; }
 
   /* ── Observaciones ───────────────────────────────────────── */
   .obs { margin-top: 6mm; page-break-inside: avoid; }
   .obs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5pt 14mm; margin-top: 7pt; }
-  .obs-item { display: flex; gap: 8pt; font-size: 6.5pt; line-height: 1.35; color: #5f5b52; }
+  .obs-item { display: flex; gap: 8pt; font-size: 6pt; line-height: 1.3; color: #5f5b52; }
   .obs-num { color: #9A9183; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 `;
 
@@ -322,45 +324,6 @@ export function renderObraHTML(data: ObraHTMLInput): string {
     return "";
   };
 
-  // Filas de la tabla. CORRECCIÓN MJ: sin subtotal de capítulo y sin monto de
-  // zona — la banda de zona queda solo como separador.
-  const tableRows = chapters
-    .map((ch) => {
-      // Subtotal del capítulo y montos por zona (igual que la referencia final).
-      const chapterTotal = ch.items.reduce((s, i) => s + i.total, 0);
-      const zoneTotals = new Map<string, number>();
-      for (const it of ch.items) {
-        const z = it.subChapter ?? "";
-        zoneTotals.set(z, (zoneTotals.get(z) ?? 0) + it.total);
-      }
-      const rows = ch.items
-        .map((item, idx) => {
-          const prev = idx > 0 ? ch.items[idx - 1] : null;
-          const showZone =
-            item.subChapter && (!prev || prev.subChapter !== item.subChapter);
-          return `
-          ${
-            showZone
-              ? `<div class="zone"><span>${esc(item.subChapter!)}</span><span class="zamt">${fmtMoney(zoneTotals.get(item.subChapter!) ?? 0)}</span></div>`
-              : ""
-          }
-          <div class="grid r">
-            <span class="it">${renderMarker(item.changeMarker)}${ch.index}.${idx + 1}</span>
-            <span class="pt">${esc(item.name)}</span>
-            <span class="ds">${sanitizeRichTextHtml(item.descriptionCliente)}</span>
-            <span class="un">${esc(item.unit)}</span>
-            <span class="ct">${fmtQty(item.quantity)}</span>
-            <span class="pu">${fmtNum(item.unitPrice)}</span>
-            <span class="tt">${fmtMoney(item.total)}</span>
-          </div>`;
-        })
-        .join("");
-      return `
-        <div class="cap"><b>${ch.index} · ${esc(ch.label)}</b><span>Subtotal ${fmtMoney(chapterTotal)}</span></div>
-        ${rows}`;
-    })
-    .join("");
-
   const detailHeader = `
     ${iso ? `<img class="dhead-iso" src="${iso}" alt="" />` : ""}
     <div class="dhead">
@@ -375,6 +338,41 @@ export function renderObraHTML(data: ObraHTMLInput): string {
         <div class="docsub">Obra</div>
       </div>
     </div>`;
+  const columnHeader = `<div class="grid hd"><span>Ítem</span><span>Partida</span><span>Descripción</span><span>Un</span><span>Cant</span><span>P. Unit.</span><span>Total</span></div>`;
+
+  // Regla MJ (2026-07-02): cada capítulo empieza en hoja nueva (.chpage con
+  // break-before), con el encabezado y los títulos de columna repetidos arriba.
+  // SIN subtotales (ni de capítulo ni de zona) — la banda de zona queda solo
+  // como separador.
+  const tableRows = chapters
+    .map((ch, chIdx) => {
+      const rows = ch.items
+        .map((item, idx) => {
+          const prev = idx > 0 ? ch.items[idx - 1] : null;
+          const showZone =
+            item.subChapter && (!prev || prev.subChapter !== item.subChapter);
+          return `
+          ${showZone ? `<div class="zone">${esc(item.subChapter!)}</div>` : ""}
+          <div class="grid r">
+            <span class="it">${renderMarker(item.changeMarker)}${ch.index}.${idx + 1}</span>
+            <span class="pt">${esc(item.name)}</span>
+            <span class="ds">${sanitizeRichTextHtml(item.descriptionCliente)}</span>
+            <span class="un">${esc(item.unit)}</span>
+            <span class="ct">${fmtQty(item.quantity)}</span>
+            <span class="pu">${fmtNum(item.unitPrice)}</span>
+            <span class="tt">${fmtMoney(item.total)}</span>
+          </div>`;
+        })
+        .join("");
+      return `
+        <div class="chpage${chIdx > 0 ? " brk" : ""}">
+          ${detailHeader}
+          ${columnHeader}
+          <div class="cap"><b>${ch.index} · ${esc(ch.label)}</b></div>
+          ${rows}
+        </div>`;
+    })
+    .join("");
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -417,11 +415,6 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   <div class="page">
     <div class="wm">${iso ? `<img src="${iso}" style="width:70mm;opacity:.06;" />` : ""}</div>
     <div class="pad-detail">
-      ${detailHeader}
-      <div class="grid hd">
-        <span>Ítem</span><span>Partida</span><span>Descripción</span>
-        <span>Un</span><span>Cant</span><span>P. Unit.</span><span>Total</span>
-      </div>
       ${tableRows}
 
       <div class="cierre">

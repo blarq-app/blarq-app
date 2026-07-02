@@ -232,8 +232,9 @@ const CSS = `
   .chg-new { display:inline-block; border:0.5px solid #9A9183; border-radius:999px; padding:0 4px; font-size:5pt; letter-spacing:.04em; text-transform:uppercase; color:#6F6A60; }
 
   /* ── Cierre: formas de pago + cuadro ─────────────────────── */
-  .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 7mm; align-items: start; page-break-inside: avoid; }
-  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 6.5pt; letter-spacing: .2em; text-transform: uppercase; color: #34332E; font-weight: 700; }
+  .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 12mm; align-items: start; page-break-inside: avoid; }
+  /* "Formas de pago" / "Observaciones": tinta oscura, más grande y subrayado. */
+  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #34332E; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
   .pagos { margin-top: 6pt; border-top: 1px solid #e2dcd0; }
   .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 2.5pt 0; border-bottom: 1px solid #eee8dd; }
   .pagos .row:last-child { border-bottom: none; }
@@ -406,7 +407,6 @@ export function renderObraHTML(data: ObraHTMLInput): string {
       <div class="cover-foot">
         <div class="row"><span class="lbl">Mandante</span><span class="val">${esc(project.clientName)}</span></div>
         <div class="row"><span class="lbl">Profesional a cargo</span><span class="val">${esc(PROFESSIONAL)}</span></div>
-        <div class="row inv"><span class="lbl">Inversión total · IVA incl.</span><span class="val">${fmtMoney(total)}</span></div>
       </div>
     </div>
   </div>

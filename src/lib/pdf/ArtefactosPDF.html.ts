@@ -210,29 +210,29 @@ const CSS = `
   .grp span { font-size: 6pt; letter-spacing: .2em; text-transform: uppercase; color: #6F6A60; font-weight: 700; }
 
   /* Tabla 10 columnas. Foto ancha para imagen grande (correción MJ). */
-  .ahd, .ar { display: grid; grid-template-columns: 27mm 15% 7% 7% 1fr 8% 4% 9% 5% 11%; gap: 0 5pt; }
+  .ahd, .ar { display: grid; grid-template-columns: 34mm 14% 7% 7% 1fr 8% 4% 9% 5% 11%; gap: 0 5pt; }
   .ahd { padding: 5pt 3pt; border-bottom: 2px solid #34332E; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; break-inside: avoid; break-after: avoid; margin-top: 2pt; }
   .ahd .c { text-align: center; } .ahd .r { text-align: right; }
   .ar { align-items: center; padding: 3.5pt 3pt; border-bottom: 1px solid #eee8dd; font-size: 6pt; line-height: 1.3; break-inside: avoid; }
-  .ar .foto { width: 27mm; }
-  .ar .foto img { max-width: 25mm; max-height: 25mm; object-fit: contain; display: block; }
-  .ar .foto .ph { width: 25mm; height: 25mm; background: #F7F4EF; border: 1px solid #e7e1d7; }
+  .ar .foto { width: 34mm; }
+  .ar .foto img { max-width: 32mm; max-height: 32mm; object-fit: contain; display: block; }
+  .ar .foto .ph { width: 32mm; height: 32mm; background: #F7F4EF; border: 1px solid #e7e1d7; }
   /* Texto oscuro (Grafito) — corrección MJ: que no "desaparezca". */
   .a-it { color: #34332E; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; font-size: 6pt; }
-  .a-ln { color: #54534E; text-transform: uppercase; letter-spacing: .04em; font-size: 6.5pt; }
-  .a-co { color: #54534E; font-size: 6.5pt; }
-  .a-de { color: #54534E; font-size: 6.5pt; }
-  .a-ma { color: #54534E; font-size: 6.5pt; }
+  .a-ln { color: #34332E; text-transform: uppercase; letter-spacing: .04em; font-size: 6.5pt; }
+  .a-co { color: #34332E; font-size: 6.5pt; }
+  .a-de { color: #34332E; font-size: 6.5pt; }
+  .a-ma { color: #34332E; font-size: 6.5pt; }
   .a-ct { text-align: center; color: #34332E; font-variant-numeric: tabular-nums; }
-  .a-pl { text-align: right; color: #54534E; font-variant-numeric: tabular-nums; }
+  .a-pl { text-align: right; color: #34332E; font-variant-numeric: tabular-nums; }
   .a-dc { text-align: right; color: #9A9183; font-variant-numeric: tabular-nums; }
   .a-dc.on { color: #8a7f54; font-weight: 700; }
   .a-tt { text-align: right; color: #34332E; font-weight: 700; font-variant-numeric: tabular-nums; }
 
   /* Total por ambiente — más visible (corrección MJ): banda bruma + valor
      Tinta bold, no la itálica tenue original. */
-  .gtot { display: flex; justify-content: space-between; align-items: baseline; padding: 5pt 12pt; margin-top: 3pt; background: #F7F4EF; border-top: 1px solid #ddd6ca; break-inside: avoid; }
-  .gtot .lbl { font-family: 'Spectral', serif; font-style: italic; font-size: 9pt; color: #6F6A60; }
+  .gtot { display: flex; justify-content: space-between; align-items: baseline; padding: 6pt 12pt; margin-top: 3pt; background: #EDEDEB; break-inside: avoid; }
+  .gtot .lbl { font-size: 7.5pt; letter-spacing: .1em; text-transform: uppercase; color: #6F6A60; font-weight: 700; }
   .gtot .val { font-variant-numeric: tabular-nums; font-size: 11pt; color: #34332E; font-weight: 700; }
 
   /* Cierre: forma de pago + resumen por subcategoría + total */

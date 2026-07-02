@@ -185,30 +185,30 @@ const CSS = `
   /* ── Detalle: encabezado ─────────────────────────────────── */
   .dhead-iso { width: 40px; height: auto; opacity: .55; margin-bottom: 7mm; display: block; }
   .dhead { display: flex; justify-content: space-between; align-items: flex-start; }
-  .dhead .kick { font-size: 5.5pt; letter-spacing: .26em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
-  .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 13pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
-  .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 7pt; color: #9A9183; margin-top: 3pt; }
+  .dhead .kick { font-size: 5.3pt; letter-spacing: .26em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
+  .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 12.5pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
+  .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 6.7pt; color: #9A9183; margin-top: 3pt; }
   .dhead .right { text-align: right; }
-  .dhead .ver { font-size: 5pt; letter-spacing: .28em; text-transform: uppercase; color: #b0a596; font-weight: 600; }
-  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 13pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
-  .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 6.5pt; letter-spacing: .34em; text-transform: uppercase; color: #9A9183; margin-top: 3pt; }
+  .dhead .ver { font-size: 4.8pt; letter-spacing: .28em; text-transform: uppercase; color: #b0a596; font-weight: 600; }
+  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 12.5pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
+  .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 6.2pt; letter-spacing: .34em; text-transform: uppercase; color: #9A9183; margin-top: 3pt; }
 
   /* ── Tabla de partidas ───────────────────────────────────── */
   /* Proporciones de columnas idénticas a la referencia (item 3.9 · partida 20
      · descripción ~50% · un 3.5 · cant 4.4 · p.unit 8 · total 9.1). La
      descripción ancha evita que el texto se apile en muchas líneas. */
   .grid { display: grid; grid-template-columns: 3.9% 20% 1fr 3.5% 4.4% 8% 9.1%; }
-  .hd { border-bottom: 1.5px solid #34332E; padding: 5pt 0; margin-top: 8mm; font-size: 4.5pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
+  .hd { border-bottom: 1.5px solid #34332E; padding: 5pt 0; margin-top: 8mm; font-size: 4.3pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
   .hd span:nth-child(4){ text-align:center; } .hd span:nth-child(5),.hd span:nth-child(6),.hd span:nth-child(7){ text-align:right; }
 
   .cap { border-bottom: 1.5px solid #34332E; padding: 8pt 2pt 4pt; margin-top: 8pt; break-inside: avoid; break-after: avoid; }
-  .cap b { font-family: 'Hanken Grotesk', sans-serif; font-size: 6.5pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: #34332E; }
+  .cap b { font-family: 'Hanken Grotesk', sans-serif; font-size: 5.75pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: #34332E; }
 
   /* La banda de zona y el título de capítulo no deben quedar solos al pie de
      una página (huérfanos): break-after:avoid los mantiene con su primera fila. */
-  .zone { background: #EDEDEB; padding: 3pt 10pt; margin-top: 3pt; font-size: 5pt; letter-spacing: .14em; text-transform: uppercase; color: #6F6A60; font-weight: 700; break-inside: avoid; break-after: avoid; }
+  .zone { background: #EDEDEB; padding: 3pt 10pt; margin-top: 3pt; font-size: 4.8pt; letter-spacing: .14em; text-transform: uppercase; color: #6F6A60; font-weight: 700; break-inside: avoid; break-after: avoid; }
 
-  .r { align-items: start; padding: 3.5pt 0; border-bottom: 1px solid #eee8dd; font-size: 5.8pt; page-break-inside: avoid; }
+  .r { align-items: start; padding: 3.3pt 0; border-bottom: 1px solid #eee8dd; font-size: 5.3pt; page-break-inside: avoid; }
   .r span { line-height: 1.32; }
   .it { color: #9A9183; font-variant-numeric: tabular-nums; }
   .pt { color: #34332E; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; padding-right: 8pt; }

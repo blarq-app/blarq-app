@@ -32,6 +32,20 @@ const BLARQ_RUT = "77270733-9";
 //        gasto entra en los costos del proyecto sin que exista factura.
 //        Omite movs que ya tienen imputaciones o que no son egresos.
 //
+//   { action: "registrar_gasto", movementIds: [], projectId, categoryId,
+//     tipoGasto: "boleta" | "internacional", conciliar?: boolean }
+//      → captura gastos reales que NO llegan como factura del SII: compras
+//        con BOLETA (no dan crédito de IVA) y GASTOS INTERNACIONALES
+//        (suscripciones tipo Claude/Google, sin IVA chileno). Por cada
+//        egreso crea un Invoice type=recibida, tipoDoc=1043 (gasto sin
+//        documento tributario → fuera del F29 / vista Facturación, igual
+//        que los pagos a maestros), iva=0 y netAmount = total pagado (no
+//        hay IVA que recuperar, así que el costo es el bruto). Se distingue
+//        del pago a maestro por el origin (gasto_boleta / gasto_internacional)
+//        para poder separarlos después (ej. gastos de empresa del F22). Con
+//        conciliar=true (default) queda pagado y pegado al movimiento; con
+//        conciliar=false se crea pendiente, para conciliar más tarde.
+//
 // No toca movimientos "interno".
 export async function POST(request: NextRequest) {
   const gate = await requireSession();
@@ -39,11 +53,19 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = (await request.json()) as Partial<{
-      action: "desasignar" | "asignar" | "pago_sin_factura" | "neto_cero";
+      action:
+        | "desasignar"
+        | "asignar"
+        | "pago_sin_factura"
+        | "registrar_gasto"
+        | "neto_cero";
       movementIds: string[];
       invoiceId: string;
       projectId: string;
       categoryId: string;
+      // Solo para "registrar_gasto":
+      tipoGasto: "boleta" | "internacional";
+      conciliar: boolean;
     }>;
 
     const action = body.action;
@@ -52,6 +74,7 @@ export async function POST(request: NextRequest) {
       action !== "desasignar" &&
       action !== "asignar" &&
       action !== "pago_sin_factura" &&
+      action !== "registrar_gasto" &&
       action !== "neto_cero"
     ) {
       return NextResponse.json({ error: "Acción inválida" }, { status: 400 });
@@ -259,6 +282,122 @@ export async function POST(request: NextRequest) {
         ok: true,
         creados: procesables.length,
         omitidos,
+      });
+    }
+
+    // ── REGISTRAR GASTO (boleta / internacional, sin documento del SII) ──
+    if (action === "registrar_gasto") {
+      const { projectId, categoryId, tipoGasto } = body;
+      // conciliar por default: el gasto nace pegado al movimiento y pagado.
+      const conciliar = body.conciliar !== false;
+      if (!projectId || !categoryId) {
+        return NextResponse.json(
+          { error: "Falta el proyecto o la categoría" },
+          { status: 400 }
+        );
+      }
+      if (tipoGasto !== "boleta" && tipoGasto !== "internacional") {
+        return NextResponse.json(
+          { error: "Tipo de gasto inválido (boleta | internacional)" },
+          { status: 400 }
+        );
+      }
+      const [project, category] = await Promise.all([
+        prisma.project.findUnique({
+          where: { id: projectId },
+          select: { id: true },
+        }),
+        prisma.costCategory.findUnique({
+          where: { id: categoryId },
+          select: { id: true },
+        }),
+      ]);
+      if (!project) {
+        return NextResponse.json(
+          { error: "El proyecto no existe" },
+          { status: 404 }
+        );
+      }
+      if (!category) {
+        return NextResponse.json(
+          { error: "La categoría no existe" },
+          { status: 404 }
+        );
+      }
+
+      // Procesables: egresos (amount < 0) sin imputación previa.
+      const procesables = targetMovs.filter(
+        (m) => m.amount < 0 && m.payments.length === 0
+      );
+      const omitidos = targetMovs.length - procesables.length;
+      if (procesables.length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              "Ningún movimiento es procesable (ya tienen imputación o no son egresos).",
+          },
+          { status: 400 }
+        );
+      }
+
+      // origin distingue el tipo de gasto para poder separarlos después
+      // (ej. gastos de empresa del F22). El prefijo del folio los hace únicos
+      // dentro de (type, tipoDoc, rutIssuer) y legibles en la lista.
+      const origin =
+        tipoGasto === "boleta" ? "gasto_boleta" : "gasto_internacional";
+      const prefijo = tipoGasto === "boleta" ? "BOL" : "INT";
+      const etiqueta =
+        tipoGasto === "boleta" ? "Boleta" : "Gasto internacional";
+
+      await prisma.$transaction(async (tx) => {
+        for (const m of procesables) {
+          const monto = Math.abs(m.amount);
+          const folio = `${prefijo}-${m.externalRef || m.id}`;
+          const inv = await tx.invoice.create({
+            data: {
+              projectId,
+              categoryId,
+              type: "recibida",
+              // 1043 = gasto sin documento tributario del SII → fuera del F29
+              // y de la vista Facturación (igual que el pago a maestro).
+              tipoDoc: 1043,
+              folioNumber: folio,
+              rutIssuer: m.counterpartyRut,
+              rutReceiver: BLARQ_RUT,
+              businessName: m.counterpartyName,
+              issueDate: m.date,
+              dueDate: m.date,
+              // Sin IVA recuperable: el costo real es el total pagado.
+              netAmount: monto,
+              iva: 0,
+              totalAmount: monto,
+              status: conciliar ? "pagada" : "pendiente",
+              paidAt: conciliar ? m.date : null,
+              origin,
+              notes: `${etiqueta}. Registrado desde el movimiento bancario.`,
+            },
+          });
+          if (conciliar) {
+            await tx.invoicePayment.create({
+              data: {
+                bankMovementId: m.id,
+                invoiceId: inv.id,
+                amountApplied: monto,
+              },
+            });
+            await tx.bankMovement.update({
+              where: { id: m.id },
+              data: { status: "conciliado", category: null },
+            });
+          }
+        }
+      });
+
+      return NextResponse.json({
+        ok: true,
+        creados: procesables.length,
+        omitidos,
+        conciliado: conciliar,
       });
     }
 

@@ -50,6 +50,7 @@ export default function MovementsBulkBar({
   const [busy, setBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [sinFacturaOpen, setSinFacturaOpen] = useState(false);
+  const [gastoOpen, setGastoOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   if (selected.length === 0 && !toast) return null;
@@ -198,6 +199,53 @@ export default function MovementsBulkBar({
     }
   }
 
+  async function registrarGasto(
+    projectId: string,
+    categoryId: string,
+    tipoGasto: "boleta" | "internacional",
+    conciliar: boolean
+  ) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/banco/movimientos/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "registrar_gasto",
+          movementIds: ids,
+          projectId,
+          categoryId,
+          tipoGasto,
+          conciliar,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error ?? "Error al registrar el gasto");
+        return;
+      }
+      const nombre =
+        tipoGasto === "boleta" ? "gasto (boleta)" : "gasto internacional";
+      const partes = [
+        `${data.creados} ${nombre}${data.creados !== 1 ? "s" : ""} registrado${data.creados !== 1 ? "s" : ""}` +
+          (conciliar ? "" : " (pendiente)"),
+      ];
+      if (data.omitidos > 0) {
+        partes.push(
+          `${data.omitidos} omitido${data.omitidos !== 1 ? "s" : ""} (ya asignados o no son egresos)`
+        );
+      }
+      setToast(`Listo · ${partes.join(" · ")}`);
+      setGastoOpen(false);
+      onClear();
+      router.refresh();
+      setTimeout(() => setToast(null), 8000);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-[calc(100vw-2rem)]">
@@ -237,6 +285,14 @@ export default function MovementsBulkBar({
               className="text-xs bg-white text-gray-900 px-3 py-1 rounded hover:bg-gray-100 disabled:opacity-50"
             >
               Pago sin factura…
+            </button>
+            <button
+              onClick={() => setGastoOpen(true)}
+              disabled={busy}
+              title="Gastos reales que no llegan como factura del SII: compras con boleta o suscripciones internacionales (Claude, Google…). Cuentan como gasto sin IVA."
+              className="text-xs bg-white text-gray-900 px-3 py-1 rounded hover:bg-gray-100 disabled:opacity-50"
+            >
+              Registrar gasto…
             </button>
             <button
               onClick={marcarNetoCero}
@@ -304,6 +360,18 @@ export default function MovementsBulkBar({
           categories={categories}
           onClose={() => setSinFacturaOpen(false)}
           onConfirm={pagoSinFactura}
+        />
+      )}
+
+      {gastoOpen && (
+        <RegistrarGastoModal
+          movementCount={selected.length}
+          totalNeto={neto}
+          busy={busy}
+          projects={projects}
+          categories={categories}
+          onClose={() => setGastoOpen(false)}
+          onConfirm={registrarGasto}
         />
       )}
     </>
@@ -417,6 +485,183 @@ function PagoSinFacturaModal({
             className="text-xs bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
           >
             {busy ? "Registrando…" : "Registrar pago sin factura"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Modal para capturar gastos reales que NO llegan como factura del SII:
+// compras con BOLETA (sin crédito de IVA) y GASTOS INTERNACIONALES
+// (suscripciones tipo Claude/Google, sin IVA chileno). Elige tipo +
+// proyecto/empresa + categoría; el proveedor, monto y fecha salen solos del
+// movimiento. Puede quedar conciliado (pegado al movimiento, pagado) o solo
+// guardado (pendiente, para conciliar después).
+function RegistrarGastoModal({
+  movementCount,
+  totalNeto,
+  busy,
+  projects,
+  categories,
+  onClose,
+  onConfirm,
+}: {
+  movementCount: number;
+  totalNeto: number;
+  busy: boolean;
+  projects: { id: string; name: string; numeroProyecto: number | null }[];
+  categories: { id: string; label: string }[];
+  onClose: () => void;
+  onConfirm: (
+    projectId: string,
+    categoryId: string,
+    tipoGasto: "boleta" | "internacional",
+    conciliar: boolean
+  ) => void;
+}) {
+  const [tipoGasto, setTipoGasto] = useState<"boleta" | "internacional">(
+    "boleta"
+  );
+  const [projectId, setProjectId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [conciliar, setConciliar] = useState(true);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-xl w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">
+              Registrar gasto
+            </h2>
+            <p className="text-xs text-gray-500 mt-1 tabular-nums">
+              {movementCount} movimiento{movementCount !== 1 ? "s" : ""} · neto{" "}
+              {formatCLP(totalNeto)}. Para gastos que no llegan como factura
+              del SII. Cuenta el total como costo (sin IVA).
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 text-xl leading-none px-2"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Tipo de gasto
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setTipoGasto("boleta")}
+                className={`text-xs px-3 py-2 rounded border ${
+                  tipoGasto === "boleta"
+                    ? "border-gray-900 bg-gray-900 text-white"
+                    : "border-gray-300 text-gray-700 hover:border-gray-400"
+                }`}
+              >
+                Boleta
+              </button>
+              <button
+                type="button"
+                onClick={() => setTipoGasto("internacional")}
+                className={`text-xs px-3 py-2 rounded border ${
+                  tipoGasto === "internacional"
+                    ? "border-gray-900 bg-gray-900 text-white"
+                    : "border-gray-300 text-gray-700 hover:border-gray-400"
+                }`}
+              >
+                Internacional
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1">
+              {tipoGasto === "boleta"
+                ? "Compra con boleta (no da crédito de IVA)."
+                : "Servicio del exterior (Claude, Google…). Sin IVA chileno."}
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Proyecto / centro de costo
+            </label>
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
+            >
+              <option value="">Elegí un proyecto…</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.numeroProyecto ? `${p.numeroProyecto} · ` : ""}
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Las suscripciones de la oficina van al proyecto interno de BLARQ.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Categoría
+            </label>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
+            >
+              <option value="">Elegí una categoría…</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <label className="flex items-start gap-2 text-xs text-gray-700">
+            <input
+              type="checkbox"
+              checked={conciliar}
+              onChange={(e) => setConciliar(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Conciliar con el movimiento (queda pagado y pegado al cargo del
+              banco). Si lo destildás, el gasto se guarda pendiente para
+              conciliar después.
+            </span>
+          </label>
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="text-xs text-gray-600 px-3 py-2 hover:text-gray-900"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() =>
+              onConfirm(projectId, categoryId, tipoGasto, conciliar)
+            }
+            disabled={busy || !projectId || !categoryId}
+            className="text-xs bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
+          >
+            {busy ? "Registrando…" : "Registrar gasto"}
           </button>
         </div>
       </div>

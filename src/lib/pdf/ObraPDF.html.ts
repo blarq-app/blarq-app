@@ -11,8 +11,8 @@
  * Reglas de MJ (2026-07-02, sobre el PDF Final):
  *   - Portada CON "Inversión total · IVA incl." + full-bleed (isotipo sangra).
  *   - Tipografía a la escala exacta de la referencia (filas 11px→5.3pt, etc.).
- *   - CADA CAPÍTULO EN SU PROPIA HOJA (.chpage con break-before), con el
- *     encabezado + títulos de columna repetidos arriba.
+ *   - Capítulos comparten hoja cuando caben; solo saltan enteros si no entran
+ *     (break-inside:avoid). Encabezado una vez arriba.
  *   - SIN subtotales (ni de capítulo ni de zona) — banda de zona solo separador.
  *   - Bloque de cierre (formas de pago + cuadro) compacto, no gigante.
  */
@@ -160,8 +160,9 @@ const CSS = `
      solo lateral y la portada calcula su alto contra el área útil (297-28mm). */
   .page { position: relative; width: 210mm; overflow: hidden; }
   .page:first-child { overflow: visible; }
-  /* Cada capítulo en su propia hoja (regla MJ). */
-  .chpage.brk { break-before: page; }
+  /* Un capítulo no se parte a la mitad entre hojas: si no entra entero, salta
+     completo a la siguiente. Pero varios capítulos comparten hoja si caben. */
+  .chpage { break-inside: avoid; }
   .page + .page { page-break-before: always; }
   .pad-cover { padding: 16mm 15mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 297mm; }
   .pad-detail { padding: 0 13mm; display: flex; flex-direction: column; }
@@ -341,12 +342,13 @@ export function renderObraHTML(data: ObraHTMLInput): string {
     </div>`;
   const columnHeader = `<div class="grid hd"><span>Ítem</span><span>Partida</span><span>Descripción</span><span>Un</span><span>Cant</span><span>P. Unit.</span><span>Total</span></div>`;
 
-  // Regla MJ (2026-07-02): cada capítulo empieza en hoja nueva (.chpage con
-  // break-before), con el encabezado y los títulos de columna repetidos arriba.
+  // Regla MJ (2026-07-02): los capítulos COMPARTEN hoja cuando caben; un
+  // capítulo solo salta a la hoja siguiente si no entra entero (break-inside:
+  // avoid) — no se parte a la mitad, pero tampoco se deja hoja casi vacía.
   // SIN subtotales (ni de capítulo ni de zona) — la banda de zona queda solo
-  // como separador.
+  // como separador. El encabezado va una vez arriba (no por capítulo).
   const tableRows = chapters
-    .map((ch, chIdx) => {
+    .map((ch) => {
       const rows = ch.items
         .map((item, idx) => {
           const prev = idx > 0 ? ch.items[idx - 1] : null;
@@ -366,9 +368,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
         })
         .join("");
       return `
-        <div class="chpage${chIdx > 0 ? " brk" : ""}">
-          ${detailHeader}
-          ${columnHeader}
+        <div class="chpage">
           <div class="cap"><b>${ch.index} · ${esc(ch.label)}</b></div>
           ${rows}
         </div>`;
@@ -415,6 +415,8 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   <div class="page">
     <div class="wm">${iso ? `<img src="${iso}" style="width:70mm;opacity:.06;" />` : ""}</div>
     <div class="pad-detail">
+      ${detailHeader}
+      ${columnHeader}
       ${tableRows}
 
       <div class="cierre">

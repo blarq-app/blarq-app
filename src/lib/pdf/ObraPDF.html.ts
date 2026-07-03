@@ -216,7 +216,7 @@ const CSS = `
 
   /* La banda de zona y el título de capítulo no deben quedar solos al pie de
      una página (huérfanos): break-after:avoid los mantiene con su primera fila. */
-  .zone { display: flex; justify-content: space-between; align-items: baseline; background: #EDEDEB; padding: 2pt 10pt; margin-top: 1.5pt; font-size: 4.8pt; letter-spacing: .14em; text-transform: uppercase; color: #6F6A60; font-weight: 700; break-inside: avoid; break-after: avoid; }
+  .zone { display: flex; justify-content: space-between; align-items: baseline; background: #EDEDEB; padding: 2pt 10pt; margin-top: 1.5pt; font-size: 4.8pt; letter-spacing: .14em; text-transform: uppercase; color: #4A4843; font-weight: 700; break-inside: avoid; break-after: avoid; }
   .zone .zamt { font-size: 5.3pt; letter-spacing: 0; text-transform: none; font-weight: 400; color: #6F6A60; font-variant-numeric: tabular-nums; }
 
   .r { align-items: start; padding: 2.5pt 0; border-bottom: 1px solid #eee8dd; font-size: 5.3pt; page-break-inside: avoid; }
@@ -236,6 +236,7 @@ const CSS = `
      Así el número siempre arranca en la misma x (padding-left de .it) y queda
      alineado en columna, con o sin marca. */
   .mk { position: absolute; left: 0; top: 0; color: #34332E; font-weight: 700; }
+  .mk .mkarrow { width: 4.5pt; height: 5.2pt; display: inline-block; vertical-align: -0.4pt; }
   /* Leyenda de símbolos, al PIE del detalle, italica muy sutil. */
   .leyenda { margin-top: 4mm; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9A9183; }
   .leyenda .mk { position: static; font-weight: 700; color: #6F6A60; }
@@ -337,13 +338,21 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   // Marca de cambio vs versión anterior: un símbolo compacto que CUELGA a la
   // izquierda del número, en un slot de ancho fijo, para que los números queden
   // SIEMPRE alineados en columna (tengan marca o no). "*" = partida nueva,
-  // ↑ = subió, ↓ = bajó. La leyenda al pie (italica sutil) explica los símbolos;
-  // solo se muestra si hay alguna marca.
+  // flecha arriba = subió, flecha abajo = bajó. La leyenda al pie explica los
+  // símbolos; solo se muestra si hay alguna marca.
+  //
+  // Las flechas van como SVG (no glyph Unicode ↑↓): en el Chromium headless de
+  // Vercel esas fuentes no traen el glyph y salían como cuadraditos (tofu). El
+  // SVG se dibuja igual en cualquier entorno.
   const hasMarkers = items.some((i) => i.changeMarker);
+  const arrowSvg = (dir: "up" | "down") =>
+    `<svg class="mkarrow" viewBox="0 0 10 12" aria-hidden="true"><path d="${
+      dir === "up" ? "M5 11 L5 2 M2 5 L5 2 L8 5" : "M5 1 L5 10 M2 7 L5 10 L8 7"
+    }" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const renderMarker = (m?: "added" | "up" | "down" | null) => {
-    const sym =
-      m === "up" ? "&#8593;" : m === "down" ? "&#8595;" : m === "added" ? "*" : "";
-    return `<span class="mk">${sym}</span>`;
+    const inner =
+      m === "up" ? arrowSvg("up") : m === "down" ? arrowSvg("down") : m === "added" ? "*" : "";
+    return `<span class="mk">${inner}</span>`;
   };
 
   const detailHeader = `
@@ -472,7 +481,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
       </div>
       ${
         hasMarkers
-          ? `<div class="leyenda">Respecto a la versión anterior: <span class="mk">*</span> partida nueva · <span class="mk">&#8593;</span> subió · <span class="mk">&#8595;</span> bajó.</div>`
+          ? `<div class="leyenda">Respecto a la versión anterior: ${renderMarker("added")} partida nueva · ${renderMarker("up")} subió · ${renderMarker("down")} bajó.</div>`
           : ""
       }
     </div>

@@ -219,7 +219,7 @@ const CSS = `
      · descripción ~50% · un 3.5 · cant 4.4 · p.unit 8 · total 9.1). La
      descripción ancha evita que el texto se apile en muchas líneas. */
   .grid { display: grid; grid-template-columns: 6% 20% 1fr 3.5% 4.4% 8% 9.1%; }
-  .hd { border-bottom: 0.5px solid #34332E; padding: 3.5pt 0; margin-top: 7mm; font-size: 4.3pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
+  .hd { border-bottom: 0.5px solid #9A9183; padding: 3.5pt 0; margin-top: 7mm; font-size: 4.3pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
   .hd span:nth-child(4){ text-align:center; } .hd span:nth-child(5),.hd span:nth-child(6),.hd span:nth-child(7){ text-align:right; }
 
   .cap { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #34332E; padding: 5pt 2pt 3pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }

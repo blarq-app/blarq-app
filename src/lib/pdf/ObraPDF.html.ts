@@ -102,6 +102,18 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+// Resaltado en descripciones: MJ no quiere rojo saturado — choca con el rojo
+// semántico de "excedido/vencido" y rompe el tono editorial. Remapeamos el
+// burdeo del editor (#b23a3a) y cualquier rojo brillante a rojo tierra
+// desaturado (#9C4A3C), que mantiene la atención sin gritar.
+const EMPHASIS_RED = "#9C4A3C";
+function remapEmphasisRed(html: string): string {
+  return html.replace(
+    /color:\s*(#b23a3a|#ff0000|#e11d48|#dc2626|#ef4444|#f03e3e|red)\b/gi,
+    `color:${EMPHASIS_RED}`
+  );
+}
+
 function fmtQty(n: number): string {
   return new Intl.NumberFormat("es-CL", { maximumFractionDigits: 2 }).format(n);
 }
@@ -207,7 +219,7 @@ const CSS = `
      · descripción ~50% · un 3.5 · cant 4.4 · p.unit 8 · total 9.1). La
      descripción ancha evita que el texto se apile en muchas líneas. */
   .grid { display: grid; grid-template-columns: 6% 20% 1fr 3.5% 4.4% 8% 9.1%; }
-  .hd { border-bottom: 1px solid #34332E; padding: 3.5pt 0; margin-top: 5mm; font-size: 4.3pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
+  .hd { border-bottom: 1px solid #34332E; padding: 3.5pt 0; margin-top: 7mm; font-size: 4.3pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
   .hd span:nth-child(4){ text-align:center; } .hd span:nth-child(5),.hd span:nth-child(6),.hd span:nth-child(7){ text-align:right; }
 
   .cap { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1.5px solid #34332E; padding: 5pt 2pt 3pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }
@@ -388,7 +400,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
           <div class="grid r">
             <span class="it">${renderMarker(item.changeMarker)}${ch.index}.${idx + 1}</span>
             <span class="pt">${esc(item.name)}</span>
-            <span class="ds">${sanitizeRichTextHtml(item.descriptionCliente)}</span>
+            <span class="ds">${remapEmphasisRed(sanitizeRichTextHtml(item.descriptionCliente))}</span>
             <span class="un">${esc(item.unit)}</span>
             <span class="ct">${fmtQty(item.quantity)}</span>
             <span class="pu">${fmtNum(item.unitPrice)}</span>

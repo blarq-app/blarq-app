@@ -222,7 +222,7 @@ const CSS = `
   .hd { border-bottom: 0.5px solid #34332E; padding: 3.5pt 0; margin-top: 7mm; font-size: 4.3pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
   .hd span:nth-child(4){ text-align:center; } .hd span:nth-child(5),.hd span:nth-child(6),.hd span:nth-child(7){ text-align:right; }
 
-  .cap { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1.5px solid #34332E; padding: 5pt 2pt 3pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #34332E; padding: 5pt 2pt 3pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }
   /* El primer capítulo se acerca al encabezado de columnas (menos aire que
      entre capítulos, que conservan su separación). */
   .hd + .chpage .cap { margin-top: 1pt; }

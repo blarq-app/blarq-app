@@ -182,9 +182,10 @@ const CSS = `
   .cover-meta .m2 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #b0a596; font-weight: 600; margin-top: 2.4pt; }
   .cover-mid { display: flex; flex-direction: column; align-items: flex-start; gap: 3.7mm; }
   .cover-rule { width: 12mm; height: 1px; background: #c7bfb2; }
-  .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 25pt; line-height: 1.12; letter-spacing: .12em; text-transform: uppercase; color: #34332E; }
+  /* max-width fuerza el quiebre a ~2 líneas como en la referencia
+     ("Remodelación de / cocina y baños"), en vez de una sola línea larga. */
+  .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 25pt; line-height: 1.12; letter-spacing: .12em; text-transform: uppercase; color: #34332E; max-width: 105mm; }
   .cover-sub { font-family: 'Spectral', serif; font-weight: 300; font-style: italic; font-size: 12pt; color: #9A9183; }
-  .cover-note { font-size: 9pt; color: #6F6A60; line-height: 1.5; max-width: 130mm; }
   .cover-foot { display: flex; flex-direction: column; gap: 2.7mm; font-family: 'Nunito Sans', sans-serif; border-top: 1px solid #e2dcd0; padding-top: 4mm; }
   .cover-foot .row { display: flex; justify-content: space-between; align-items: baseline; }
   .cover-foot .lbl { font-size: 5.8pt; letter-spacing: .16em; text-transform: uppercase; color: #9A9183; }
@@ -328,7 +329,6 @@ export function renderObraHTML(data: ObraHTMLInput): string {
     (hasCustomTitle
       ? [project.name, comuna].filter(Boolean).join(" · ")
       : comuna);
-  const coverNote = budget.coverNote?.trim() || "";
 
   const logoHtml = logoUri
     ? `<img class="cover-logo" src="${logoUri}" alt="BLARQ" />`
@@ -422,7 +422,6 @@ export function renderObraHTML(data: ObraHTMLInput): string {
         <div class="cover-rule"></div>
         <div class="cover-title">${esc(coverTitle)}</div>
         <div class="cover-sub">${esc(coverSubtitle)}</div>
-        ${coverNote ? `<div class="cover-note">${esc(coverNote)}</div>` : ""}
       </div>
       <div class="cover-foot">
         <div class="row"><span class="lbl">Mandante</span><span class="val">${esc(project.clientName)}</span></div>

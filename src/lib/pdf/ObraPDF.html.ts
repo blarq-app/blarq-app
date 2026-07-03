@@ -164,29 +164,31 @@ const CSS = `
      completo a la siguiente. Pero varios capítulos comparten hoja si caben. */
   .chpage { break-inside: avoid; }
   .page + .page { page-break-before: always; }
-  .pad-cover { padding: 16mm 15mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 297mm; }
+  .pad-cover { padding: 15mm 13.5mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 297mm; }
   .pad-detail { padding: 0 13mm; display: flex; flex-direction: column; }
 
-  /* ── Portada ─────────────────────────────────────────────── */
-  .wm { position: absolute; right: -6mm; bottom: -8mm; z-index: 0; }
+  /* ── Portada — calibrada 1:1 al diseño de Claude Design (canvas 1240px =
+       210mm → 0.48pt/px, 0.1694mm/px). Logo, meta, textos y marca de agua con
+       los valores exactos del .dc.html de referencia. ─────────────────────── */
+  /* El isotipo es una "A": chevron arriba + travesaño (la "raya") abajo, a ~89%
+     de su alto. Lo subimos (bottom positivo) para que el isotipo COMPLETO quede
+     sobre la hoja y se vea la raya; sangra por la derecha para dar movimiento. */
+  .wm { position: absolute; right: -6mm; bottom: 12mm; z-index: 0; }
   .cover-top, .cover-mid, .cover-foot { position: relative; z-index: 1; }
   .cover-top { display: flex; justify-content: space-between; align-items: flex-start; }
-  .cover-logo { width: 46mm; height: auto; }
+  .cover-logo { width: 31mm; height: auto; opacity: .72; }
   .cover-meta { text-align: right; font-family: 'Nunito Sans', sans-serif; }
-  .cover-meta .m1 { font-size: 8.5pt; letter-spacing: .3em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
-  .cover-meta .m2 { font-size: 8.5pt; letter-spacing: .3em; text-transform: uppercase; color: #b0a596; font-weight: 600; margin-top: 4pt; }
-  .cover-mid { display: flex; flex-direction: column; align-items: flex-start; gap: 6mm; }
-  .cover-rule { width: 20mm; height: 1px; background: #c7bfb2; }
-  .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 34pt; line-height: 1.12; letter-spacing: .1em; text-transform: uppercase; color: #34332E; }
-  .cover-sub { font-family: 'Spectral', serif; font-weight: 300; font-style: italic; font-size: 16pt; color: #9A9183; }
-  .cover-note { font-size: 10pt; color: #6F6A60; line-height: 1.5; max-width: 130mm; }
-  .cover-foot { display: flex; flex-direction: column; gap: 4mm; font-family: 'Nunito Sans', sans-serif; border-top: 1px solid #e2dcd0; padding-top: 6mm; }
+  .cover-meta .m1 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
+  .cover-meta .m2 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #b0a596; font-weight: 600; margin-top: 2.4pt; }
+  .cover-mid { display: flex; flex-direction: column; align-items: flex-start; gap: 3.7mm; }
+  .cover-rule { width: 12mm; height: 1px; background: #c7bfb2; }
+  .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 25pt; line-height: 1.12; letter-spacing: .12em; text-transform: uppercase; color: #34332E; }
+  .cover-sub { font-family: 'Spectral', serif; font-weight: 300; font-style: italic; font-size: 12pt; color: #9A9183; }
+  .cover-note { font-size: 9pt; color: #6F6A60; line-height: 1.5; max-width: 130mm; }
+  .cover-foot { display: flex; flex-direction: column; gap: 2.7mm; font-family: 'Nunito Sans', sans-serif; border-top: 1px solid #e2dcd0; padding-top: 4mm; }
   .cover-foot .row { display: flex; justify-content: space-between; align-items: baseline; }
-  .cover-foot .lbl { font-size: 8pt; letter-spacing: .16em; text-transform: uppercase; color: #9A9183; }
-  .cover-foot .val { font-size: 10.5pt; color: #34332E; }
-  /* Fila de inversión total: separada con hairline y valor en negrita, como la referencia. */
-  .cover-foot .inv { border-top: 1px solid #e2dcd0; padding-top: 4mm; }
-  .cover-foot .inv .val { font-size: 12pt; font-weight: 700; }
+  .cover-foot .lbl { font-size: 5.8pt; letter-spacing: .16em; text-transform: uppercase; color: #9A9183; }
+  .cover-foot .val { font-size: 7.2pt; color: #34332E; }
 
   /* ── Detalle: encabezado ─────────────────────────────────── */
   .dhead-iso { width: 40px; height: auto; opacity: .55; margin-bottom: 4mm; display: block; }
@@ -310,14 +312,22 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   const dateStr = fmtDate(budget.date);
   const versionLarga = `Versión ${budget.version.replace(/^V/i, "")} · ${dateStr}`;
 
-  // Textos de portada: lo que escribió MJ o un default. En obra el título por
-  // defecto es el nombre del proyecto (MJ suele escribir la obra, ej.
-  // "Remodelación de cocina y baños"). El título también alimenta la bajada del
-  // encabezado del detalle.
+  // Textos de portada: lo que escribió MJ o un default. El título grande es una
+  // descripción genérica de la obra (ej. "Remodelación integral cocina") que MJ
+  // escribe en el recuadro "Portada del PDF"; la bajada lleva el nombre del
+  // proyecto (que suele ser el nombre de la calle) y la comuna.
+  //
+  // Si NO hay título propio, el título cae al nombre del proyecto — en ese caso
+  // NO repetimos el nombre en la bajada: dejamos solo la comuna. Así nunca sale
+  // "Paseo del Sena / Paseo del Sena · Las Condes".
+  const hasCustomTitle = !!budget.coverTitle?.trim();
+  const comuna = project.address?.trim() || "";
   const coverTitle = budget.coverTitle?.trim() || project.name;
   const coverSubtitle =
     budget.coverSubtitle?.trim() ||
-    `${project.name}${project.address ? " · " + project.address : ""}`;
+    (hasCustomTitle
+      ? [project.name, comuna].filter(Boolean).join(" · ")
+      : comuna);
   const coverNote = budget.coverNote?.trim() || "";
 
   const logoHtml = logoUri
@@ -399,7 +409,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
 
   <!-- PORTADA -->
   <div class="page">
-    <div class="wm">${iso ? `<img src="${iso}" style="width:95mm;opacity:.12;" />` : ""}</div>
+    <div class="wm">${iso ? `<img src="${iso}" style="width:78mm;opacity:.07;" />` : ""}</div>
     <div class="pad-cover">
       <div class="cover-top">
         ${logoHtml}

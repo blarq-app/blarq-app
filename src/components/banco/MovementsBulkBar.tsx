@@ -202,8 +202,7 @@ export default function MovementsBulkBar({
   async function registrarGasto(
     projectId: string,
     categoryId: string,
-    tipoGasto: "boleta" | "internacional",
-    conciliar: boolean
+    tipoGasto: "boleta" | "internacional"
   ) {
     if (busy) return;
     setBusy(true);
@@ -217,7 +216,6 @@ export default function MovementsBulkBar({
           projectId,
           categoryId,
           tipoGasto,
-          conciliar,
         }),
       });
       const data = await res.json();
@@ -228,8 +226,7 @@ export default function MovementsBulkBar({
       const nombre =
         tipoGasto === "boleta" ? "gasto (boleta)" : "gasto internacional";
       const partes = [
-        `${data.creados} ${nombre}${data.creados !== 1 ? "s" : ""} registrado${data.creados !== 1 ? "s" : ""}` +
-          (conciliar ? "" : " (pendiente)"),
+        `${data.creados} ${nombre}${data.creados !== 1 ? "s" : ""} registrado${data.creados !== 1 ? "s" : ""}`,
       ];
       if (data.omitidos > 0) {
         partes.push(
@@ -496,8 +493,8 @@ function PagoSinFacturaModal({
 // compras con BOLETA (sin crédito de IVA) y GASTOS INTERNACIONALES
 // (suscripciones tipo Claude/Google, sin IVA chileno). Elige tipo +
 // proyecto/empresa + categoría; el proveedor, monto y fecha salen solos del
-// movimiento. Puede quedar conciliado (pegado al movimiento, pagado) o solo
-// guardado (pendiente, para conciliar después).
+// movimiento. El gasto queda conciliado contra el movimiento — la gracia de
+// registrarlo acá es conciliar el cargo que no tiene factura.
 function RegistrarGastoModal({
   movementCount,
   totalNeto,
@@ -516,8 +513,7 @@ function RegistrarGastoModal({
   onConfirm: (
     projectId: string,
     categoryId: string,
-    tipoGasto: "boleta" | "internacional",
-    conciliar: boolean
+    tipoGasto: "boleta" | "internacional"
   ) => void;
 }) {
   const [tipoGasto, setTipoGasto] = useState<"boleta" | "internacional">(
@@ -525,7 +521,6 @@ function RegistrarGastoModal({
   );
   const [projectId, setProjectId] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [conciliar, setConciliar] = useState(true);
 
   return (
     <div
@@ -544,7 +539,8 @@ function RegistrarGastoModal({
             <p className="text-xs text-gray-500 mt-1 tabular-nums">
               {movementCount} movimiento{movementCount !== 1 ? "s" : ""} · neto{" "}
               {formatCLP(totalNeto)}. Para gastos que no llegan como factura
-              del SII. Cuenta el total como costo (sin IVA).
+              del SII. Cuenta el total como costo (sin IVA) y queda conciliado
+              con el movimiento.
             </p>
           </div>
           <button
@@ -631,20 +627,6 @@ function RegistrarGastoModal({
               ))}
             </select>
           </div>
-
-          <label className="flex items-start gap-2 text-xs text-gray-700">
-            <input
-              type="checkbox"
-              checked={conciliar}
-              onChange={(e) => setConciliar(e.target.checked)}
-              className="mt-0.5"
-            />
-            <span>
-              Conciliar con el movimiento (queda pagado y pegado al cargo del
-              banco). Si lo destildás, el gasto se guarda pendiente para
-              conciliar después.
-            </span>
-          </label>
         </div>
 
         <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-2">
@@ -655,9 +637,7 @@ function RegistrarGastoModal({
             Cancelar
           </button>
           <button
-            onClick={() =>
-              onConfirm(projectId, categoryId, tipoGasto, conciliar)
-            }
+            onClick={() => onConfirm(projectId, categoryId, tipoGasto)}
             disabled={busy || !projectId || !categoryId}
             className="text-xs bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
           >

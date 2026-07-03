@@ -122,11 +122,11 @@ async function main() {
     assert(Math.round(erBefore.totales.egreso) === Math.round(erAfter.totales.egreso), "la vista Facturación NO cambia (la boleta queda fuera)");
     assert(Math.round(erBefore.totales.ivaCredito) === Math.round(erAfter.totales.ivaCredito), "el IVA crédito del F29 NO se toca (boleta sin IVA)");
 
-    // ── CASO 2: INTERNACIONAL en empresa, SOLO GUARDADO (sin conciliar) ──
+    // ── CASO 2: INTERNACIONAL en empresa, conciliado ────────────────────
     if (internal) {
       const mInt = movs[1];
       const montoInt = Math.abs(mInt.amount);
-      console.log("\n── CASO 2: Internacional en BLARQ/empresa (solo guardado, sin conciliar) ──");
+      console.log("\n── CASO 2: Internacional en BLARQ/empresa (conciliado) ──");
       const gEmpBefore = await metricsGastado(internal.id);
       const invInt = await prisma.invoice.create({
         data: {
@@ -143,16 +143,25 @@ async function main() {
           netAmount: montoInt,
           iva: 0,
           totalAmount: montoInt,
-          status: "pendiente",
-          paidAt: null,
+          status: "pagada",
+          paidAt: mInt.date,
           origin: "gasto_internacional",
           notes: "Gasto internacional. Registrado desde el movimiento bancario. [TEST]",
         },
       });
       createdInvoiceIds.push(invInt.id);
+      await prisma.invoicePayment.create({
+        data: { bankMovementId: mInt.id, invoiceId: invInt.id, amountApplied: montoInt },
+      });
+      await prisma.bankMovement.update({ where: { id: mInt.id }, data: { status: "conciliado", category: null } });
+      touchedMovIds.push(mInt.id);
       const gEmpAfter = await metricsGastado(internal.id);
       console.log(`  Gastado empresa: ${clp(gEmpBefore)} → ${clp(gEmpAfter)} (Δ ${clp(gEmpAfter - gEmpBefore)})`);
-      assert(Math.round(gEmpAfter - gEmpBefore) === Math.round(montoInt), `el gasto internacional entra al gastado de la empresa aun SIN conciliar (${clp(montoInt)})`);
+      assert(Math.round(gEmpAfter - gEmpBefore) === Math.round(montoInt), `el gasto internacional entra al gastado de la empresa (${clp(montoInt)})`);
+
+      // El movimiento quedó conciliado contra el gasto (deja de estar pendiente).
+      const movAfter = await prisma.bankMovement.findUniqueOrThrow({ where: { id: mInt.id }, select: { status: true, payments: { select: { id: true } } } });
+      assert(movAfter.status === "conciliado" && movAfter.payments.length === 1, "el movimiento queda conciliado contra el gasto");
     }
 
     console.log("\nTODO OK ✅");

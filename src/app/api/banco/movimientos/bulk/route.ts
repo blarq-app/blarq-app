@@ -33,7 +33,7 @@ const BLARQ_RUT = "77270733-9";
 //        Omite movs que ya tienen imputaciones o que no son egresos.
 //
 //   { action: "registrar_gasto", movementIds: [], projectId, categoryId,
-//     tipoGasto: "boleta" | "internacional", conciliar?: boolean }
+//     tipoGasto: "boleta" | "internacional" }
 //      → captura gastos reales que NO llegan como factura del SII: compras
 //        con BOLETA (no dan crédito de IVA) y GASTOS INTERNACIONALES
 //        (suscripciones tipo Claude/Google, sin IVA chileno). Por cada
@@ -42,9 +42,9 @@ const BLARQ_RUT = "77270733-9";
 //        que los pagos a maestros), iva=0 y netAmount = total pagado (no
 //        hay IVA que recuperar, así que el costo es el bruto). Se distingue
 //        del pago a maestro por el origin (gasto_boleta / gasto_internacional)
-//        para poder separarlos después (ej. gastos de empresa del F22). Con
-//        conciliar=true (default) queda pagado y pegado al movimiento; con
-//        conciliar=false se crea pendiente, para conciliar más tarde.
+//        para poder separarlos después (ej. gastos de empresa del F22).
+//        Siempre queda pagado y conciliado contra el movimiento — la gracia
+//        de registrarlo acá es conciliar el cargo que no tiene factura.
 //
 // No toca movimientos "interno".
 export async function POST(request: NextRequest) {
@@ -65,7 +65,6 @@ export async function POST(request: NextRequest) {
       categoryId: string;
       // Solo para "registrar_gasto":
       tipoGasto: "boleta" | "internacional";
-      conciliar: boolean;
     }>;
 
     const action = body.action;
@@ -288,8 +287,6 @@ export async function POST(request: NextRequest) {
     // ── REGISTRAR GASTO (boleta / internacional, sin documento del SII) ──
     if (action === "registrar_gasto") {
       const { projectId, categoryId, tipoGasto } = body;
-      // conciliar por default: el gasto nace pegado al movimiento y pagado.
-      const conciliar = body.conciliar !== false;
       if (!projectId || !categoryId) {
         return NextResponse.json(
           { error: "Falta el proyecto o la categoría" },
@@ -371,25 +368,25 @@ export async function POST(request: NextRequest) {
               netAmount: monto,
               iva: 0,
               totalAmount: monto,
-              status: conciliar ? "pagada" : "pendiente",
-              paidAt: conciliar ? m.date : null,
+              status: "pagada",
+              paidAt: m.date,
               origin,
               notes: `${etiqueta}. Registrado desde el movimiento bancario.`,
             },
           });
-          if (conciliar) {
-            await tx.invoicePayment.create({
-              data: {
-                bankMovementId: m.id,
-                invoiceId: inv.id,
-                amountApplied: monto,
-              },
-            });
-            await tx.bankMovement.update({
-              where: { id: m.id },
-              data: { status: "conciliado", category: null },
-            });
-          }
+          // La gracia de registrarlo desde el banco es conciliar el cargo
+          // que no tiene factura: siempre queda pegado al movimiento.
+          await tx.invoicePayment.create({
+            data: {
+              bankMovementId: m.id,
+              invoiceId: inv.id,
+              amountApplied: monto,
+            },
+          });
+          await tx.bankMovement.update({
+            where: { id: m.id },
+            data: { status: "conciliado", category: null },
+          });
         }
       });
 
@@ -397,7 +394,6 @@ export async function POST(request: NextRequest) {
         ok: true,
         creados: procesables.length,
         omitidos,
-        conciliado: conciliar,
       });
     }
 

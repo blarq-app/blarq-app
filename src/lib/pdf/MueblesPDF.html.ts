@@ -136,26 +136,28 @@ const CSS = `
   .page { position: relative; width: 210mm; overflow: hidden; }
   .page:first-child { overflow: visible; }
   .page + .page { page-break-before: always; }
-  .pad-cover { padding: 16mm 15mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 297mm; }
+  .pad-cover { padding: 15mm 13.5mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 297mm; }
   .pad-detail { padding: 0 13mm; display: flex; flex-direction: column; }
 
-  /* Portada */
-  .wm { position: absolute; right: -6mm; bottom: -8mm; z-index: 0; }
+  /* ── Portada — calibrada 1:1 al diseño de Claude Design, misma escala que Obra
+       (logo 31mm tenue, título 25pt, meta/foot chicos, isotipo completo). ───── */
+  /* El isotipo es una "A" (chevron + travesaño/"raya" a ~89% del alto): con
+     bottom positivo el isotipo COMPLETO queda sobre la hoja; sangra a la derecha. */
+  .wm { position: absolute; right: -6mm; bottom: 12mm; z-index: 0; }
   .cover-top, .cover-mid, .cover-foot { position: relative; z-index: 1; }
   .cover-top { display: flex; justify-content: space-between; align-items: flex-start; }
-  .cover-logo { width: 46mm; height: auto; }
-  .cover-meta { text-align: right; }
-  .cover-meta .m1 { font-size: 8.5pt; letter-spacing: .3em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
-  .cover-meta .m2 { font-size: 8.5pt; letter-spacing: .3em; text-transform: uppercase; color: #b0a596; font-weight: 600; margin-top: 4pt; }
-  .cover-mid { display: flex; flex-direction: column; align-items: flex-start; gap: 6mm; }
-  .cover-rule { width: 20mm; height: 1px; background: #c7bfb2; }
-  .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 34pt; line-height: 1.12; letter-spacing: .1em; text-transform: uppercase; color: #34332E; }
-  .cover-sub { font-family: 'Spectral', serif; font-weight: 300; font-style: italic; font-size: 16pt; color: #9A9183; }
-  .cover-note { font-size: 10pt; color: #6F6A60; line-height: 1.5; max-width: 130mm; }
-  .cover-foot { display: flex; flex-direction: column; gap: 4mm; border-top: 1px solid #e2dcd0; padding-top: 6mm; }
+  .cover-logo { width: 31mm; height: auto; opacity: .72; }
+  .cover-meta { text-align: right; font-family: 'Nunito Sans', sans-serif; }
+  .cover-meta .m1 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
+  .cover-meta .m2 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #b0a596; font-weight: 600; margin-top: 2.4pt; }
+  .cover-mid { display: flex; flex-direction: column; align-items: flex-start; gap: 3.7mm; }
+  .cover-rule { width: 12mm; height: 1px; background: #c7bfb2; }
+  .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 25pt; line-height: 1.12; letter-spacing: .12em; text-transform: uppercase; color: #34332E; max-width: 105mm; }
+  .cover-sub { font-family: 'Spectral', serif; font-weight: 300; font-style: italic; font-size: 12pt; color: #9A9183; }
+  .cover-foot { display: flex; flex-direction: column; gap: 2.7mm; font-family: 'Nunito Sans', sans-serif; border-top: 1px solid #e2dcd0; padding-top: 4mm; }
   .cover-foot .row { display: flex; justify-content: space-between; align-items: baseline; }
-  .cover-foot .lbl { font-size: 8pt; letter-spacing: .16em; text-transform: uppercase; color: #9A9183; }
-  .cover-foot .val { font-size: 10.5pt; color: #34332E; }
+  .cover-foot .lbl { font-size: 5.8pt; letter-spacing: .16em; text-transform: uppercase; color: #9A9183; }
+  .cover-foot .val { font-size: 7.2pt; color: #34332E; }
 
   /* Detalle: encabezado */
   .dhead-iso { width: 40px; opacity: .55; margin-bottom: 7mm; display: block; }
@@ -247,12 +249,11 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
   const coverSubtitle =
     budget.coverSubtitle?.trim() ||
     `${project.name}${project.address ? " · " + project.address : ""}`;
-  const coverNote = budget.coverNote?.trim() || "";
 
   const logoHtml = logo
     ? `<img class="cover-logo" src="${logo}" alt="BLARQ" />`
     : `<div class="cover-logo" style="font-family:'Hanken Grotesk';font-size:24pt;letter-spacing:.15em;">BLARQ</div>`;
-  const wm = iso ? `<img src="${iso}" style="width:95mm;opacity:.12;" />` : "";
+  const wm = iso ? `<img src="${iso}" style="width:78mm;opacity:.07;" />` : "";
   const dhIso = iso ? `<img class="dhead-iso" src="${iso}" alt="" />` : "";
 
   const tableRows = chapters
@@ -315,7 +316,6 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
         <div class="cover-rule"></div>
         <div class="cover-title">${esc(coverTitle)}</div>
         <div class="cover-sub">${esc(coverSubtitle)}</div>
-        ${coverNote ? `<div class="cover-note">${esc(coverNote)}</div>` : ""}
       </div>
       <div class="cover-foot">
         <div class="row"><span class="lbl">Mandante</span><span class="val">${esc(project.clientName)}</span></div>

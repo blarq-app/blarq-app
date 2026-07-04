@@ -214,7 +214,7 @@ const CSS = `
 
   /* Tabla 10 columnas. Foto ancha para imagen grande (correción MJ). */
   .ahd, .ar { display: grid; grid-template-columns: 34mm 14% 7% 7% 1fr 8% 4% 9% 5% 11%; gap: 0 5pt; }
-  .ahd { padding: 5pt 3pt; border-bottom: 2px solid #34332E; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; break-inside: avoid; break-after: avoid; margin-top: 2pt; }
+  .ahd { padding: 5pt 3pt; border-bottom: 0.3px solid #9A9183; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; break-inside: avoid; break-after: avoid; margin-top: 2pt; }
   .ahd .c { text-align: center; } .ahd .r { text-align: right; }
   .ar { align-items: center; padding: 3.5pt 3pt; border-bottom: 1px solid #eee8dd; font-size: 6pt; line-height: 1.3; break-inside: avoid; }
   .ar .foto { width: 34mm; }

@@ -171,7 +171,7 @@ const CSS = `
   .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 6.5pt; letter-spacing: .34em; text-transform: uppercase; color: #9A9183; margin-top: 3pt; }
 
   /* Tabla */
-  .mhd { display: grid; grid-template-columns: 4.5% 1fr 7% 13%; padding: 5pt 0; border-bottom: 1.5px solid #34332E; margin-top: 8mm; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
+  .mhd { display: grid; grid-template-columns: 4.5% 1fr 7% 13%; padding: 5pt 0; border-bottom: 0.3px solid #9A9183; margin-top: 8mm; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
   .mhd .ct { text-align: center; } .mhd .rt { text-align: right; }
 
   .cap { display: flex; justify-content: space-between; align-items: center; background: #EDEDEB; padding: 6pt 10pt; margin-top: 12pt; break-inside: avoid; break-after: avoid; }

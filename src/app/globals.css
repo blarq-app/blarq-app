@@ -7,14 +7,17 @@
   /* Paleta greige BLARQ v2 — siete tonos de neutros cálidos, una temperatura.
      Tinta y Grafito para texto/logo; Piedra estructural; Taupe/Greige/Lino/Bruma
      como neutros de fondo; Banda/Fila para bandas de capítulo, filas de tabla y chips. */
-  --color-tinta: #34332f;
-  --color-grafito: #54534f;
-  --color-piedra: #6f6a6b;
-  --color-taupe: #9a9183;
-  --color-greige: #c7b8b2;
-  --color-lino: #e7e1d7;
-  --color-bruma: #f7f4ef;
-  --color-banda: #ededeb;
+  /* Paleta "Neutro tibio" (2026-07-05): greige enfriado — se le sacó el amarillo
+     que se leía vintage/crema, manteniendo la misma luminosidad de cada tono
+     (contraste y jerarquía intactos). Elegido por MJ sobre 4 variantes. */
+  --color-tinta: #333332;
+  --color-grafito: #535352;
+  --color-piedra: #6c6b6b;
+  --color-taupe: #94928e;
+  --color-greige: #bebab8;
+  --color-lino: #e3e1df;
+  --color-bruma: #f5f4f3;
+  --color-banda: #ededec;
 }
 
 @theme inline {
@@ -29,34 +32,35 @@
 
   /* Paleta greige expuesta como utilidades Tailwind (bg-tinta, text-grafito,
      border-greige, bg-banda, etc.) */
-  --color-tinta: #34332f;
-  --color-grafito: #54534f;
-  --color-piedra: #6f6a6b;
-  --color-taupe: #9a9183;
-  --color-greige: #c7b8b2;
-  --color-lino: #e7e1d7;
-  --color-bruma: #f7f4ef;
-  --color-banda: #ededeb;
+  --color-tinta: #333332;
+  --color-grafito: #535352;
+  --color-piedra: #6c6b6b;
+  --color-taupe: #94928e;
+  --color-greige: #bebab8;
+  --color-lino: #e3e1df;
+  --color-bruma: #f5f4f3;
+  --color-banda: #ededec;
 
   /* ── Escala `gray` re-temperada al greige del Manual v2 ─────────────────────
      Toda la app está escrita sobre `gray-*` de Tailwind (~3.200 usos: fondos,
      bordes, texto secundario). Tailwind por defecto usa un gris FRÍO (azulado).
-     Acá re-mapeamos la escala completa a la MISMA temperatura cálida del manual
-     (greige), de un solo lugar, sin tocar componente por componente. Se preserva
+     Acá re-mapeamos la escala completa a la MISMA temperatura del manual (greige
+     "Neutro tibio": neutro con un susurro de calidez, sin el amarillo que se leía
+     vintage), de un solo lugar, sin tocar componente por componente. Se preserva
      la LUMINOSIDAD de cada peldaño (para no romper contraste/legibilidad); solo
-     cambia el matiz: frío → cálido. Los colores semánticos (red/green/amber) NO
-     se tocan — siguen marcando excedido/pagado/atención. */
-  --color-gray-50:  #f7f5f1;  /* fondo más claro (≈ Bruma) */
-  --color-gray-100: #efede8;  /* fondo suave / hover (≈ Banda) */
-  --color-gray-200: #e6e1d7;  /* bordes y divisores claros (≈ Lino) */
-  --color-gray-300: #d2cabe;  /* bordes (≈ Greige) */
-  --color-gray-400: #a79e90;  /* texto atenuado / placeholder (≈ Taupe) */
-  --color-gray-500: #837c72;  /* texto secundario (Piedra cálida) */
-  --color-gray-600: #605b53;  /* cuerpo secundario (≈ Grafito) */
-  --color-gray-700: #47443e;  /* texto fuerte */
-  --color-gray-800: #35332f;  /* títulos (Tinta) */
-  --color-gray-900: #292620;  /* casi negro cálido */
-  --color-gray-950: #1b1915;
+     cambia el matiz. Los colores semánticos (red/green/amber) NO se tocan —
+     siguen marcando excedido/pagado/atención. */
+  --color-gray-50:  #f6f5f4;  /* fondo más claro (≈ Bruma) */
+  --color-gray-100: #eeedec;  /* fondo suave / hover (≈ Banda) */
+  --color-gray-200: #e3e1de;  /* bordes y divisores claros (≈ Lino) */
+  --color-gray-300: #cdcbc7;  /* bordes (≈ Greige) */
+  --color-gray-400: #a19f9b;  /* texto atenuado / placeholder (≈ Taupe) */
+  --color-gray-500: #7f7d7a;  /* texto secundario (Piedra) */
+  --color-gray-600: #5d5b59;  /* cuerpo secundario (≈ Grafito) */
+  --color-gray-700: #454442;  /* texto fuerte */
+  --color-gray-800: #343332;  /* títulos (Tinta) */
+  --color-gray-900: #272625;  /* casi negro */
+  --color-gray-950: #1a1918;
 
   /* Typography scale (+2pt vs antes) */
   --text-xs: 0.6875rem;    /* 11pt */

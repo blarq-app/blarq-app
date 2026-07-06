@@ -202,13 +202,13 @@ const CSS = `
   .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 14mm; margin-top: 4mm; align-items: start; break-inside: avoid; }
   .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #36322C; font-weight: 700; }
   .pagos { margin-top: 5pt; border-top: 1px solid #DCDAD6; }
-  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 2.5pt 0; border-bottom: 1px solid #E7E6E4; }
+  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 1.4pt 0; border-bottom: 1px solid #E7E6E4; }
   .pagos .row:last-child { border-bottom: none; }
-  .pagos .s { font-size: 9pt; color: #36322C; }
-  .pagos .p { font-size: 9pt; color: #736A5C; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .pagos .s { font-size: 7.5pt; color: #36322C; }
+  .pagos .p { font-size: 7.5pt; color: #736A5C; font-weight: 700; font-variant-numeric: tabular-nums; }
   .totalbox { border-top: 1.5px solid #36322C; padding-top: 5pt; display: flex; flex-direction: column; align-items: flex-end; gap: 3pt; }
   .totalbox .tl { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #36322C; font-weight: 700; }
-  .totalbox .tv { font-variant-numeric: tabular-nums; font-size: 10.5pt; color: #36322C; font-weight: 700; }
+  .totalbox .tv { font-variant-numeric: tabular-nums; font-size: 9pt; color: #36322C; font-weight: 700; }
   .totalbox .tn { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 7.5pt; color: #9B9182; }
 
   /* Observaciones */

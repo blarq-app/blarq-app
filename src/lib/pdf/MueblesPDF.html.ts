@@ -182,21 +182,21 @@ const CSS = `
      junta: no se separa el título de sus specs entre páginas. */
   .partida { break-inside: avoid; }
   .mr { display: grid; grid-template-columns: 4.5% 1fr 7% 13%; align-items: baseline; padding: 6pt 0 2pt; border-top: 1px solid #E1DFDD; }
-  .mit { color: #9B9182; font-variant-numeric: tabular-nums; font-size: 6.5pt; }
+  .mit { color: #776E60; font-variant-numeric: tabular-nums; font-size: 6.5pt; }
   .mpt { color: #36322C; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 6.5pt; }
-  .msub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; color: #9B9182; font-size: 6.5pt; display: block; margin-top: 2pt; }
+  .msub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; color: #776E60; font-size: 6.5pt; display: block; margin-top: 2pt; }
   .mct { text-align: center; color: #625A4F; font-variant-numeric: tabular-nums; font-size: 6.5pt; }
   .mtt { text-align: right; color: #36322C; font-variant-numeric: tabular-nums; font-size: 7pt; font-weight: 700; }
 
   .spec { margin: 4pt 0 7pt 7%; padding: 5pt 0 5pt 12pt; border-left: 2px solid #E1DFDD; }
   .specrow { display: grid; grid-template-columns: 34% 1fr; padding: 1.5pt 0; font-size: 6.5pt; line-height: 1.38; }
-  .speclbl { letter-spacing: .1em; text-transform: uppercase; color: #9B9182; font-weight: 700; }
+  .speclbl { letter-spacing: .1em; text-transform: uppercase; color: #5C5449; font-weight: 700; }
   .specval { color: #625A4F; }
   .hrow { display: flex; justify-content: space-between; align-items: baseline; padding: 2.5pt 0; border-bottom: 1px solid #EBEAE9; font-size: 6.5pt; }
   .hrow:last-child { border-bottom: none; }
   .hname { color: #625A4F; }
   .hmut { color: #AAA194; }
-  .hqty { color: #9B9182; font-variant-numeric: tabular-nums; letter-spacing: .05em; flex-shrink: 0; padding-left: 14pt; }
+  .hqty { color: #776E60; font-variant-numeric: tabular-nums; letter-spacing: .05em; flex-shrink: 0; padding-left: 14pt; }
 
   /* Cierre */
   .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 14mm; margin-top: 12mm; align-items: start; break-inside: avoid; }

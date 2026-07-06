@@ -207,7 +207,8 @@ const CSS = `
   .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 6.5pt; letter-spacing: .34em; text-transform: uppercase; color: #9B9182; margin-top: 3pt; }
 
   /* Banda de subcategoría (piedra) y de ambiente (banda gris) */
-  .band { display: flex; align-items: center; background: #736A5C; padding: 6pt 12pt; margin-top: 10pt; break-inside: avoid; break-after: avoid; }
+  /* Fondo grande oscuro → neutralizado (el anclado warm lo dejaba "café"). */
+  .band { display: flex; align-items: center; background: #6C6B69; padding: 6pt 12pt; margin-top: 10pt; break-inside: avoid; break-after: avoid; }
   .band span { font-size: 7pt; letter-spacing: .22em; text-transform: uppercase; color: #F3F3F3; font-weight: 700; }
   .grp { display: flex; align-items: center; background: #EDECEB; padding: 4pt 12pt; margin-top: 8pt; break-inside: avoid; break-after: avoid; }
   .grp span { font-size: 6pt; letter-spacing: .2em; text-transform: uppercase; color: #736A5C; font-weight: 700; }

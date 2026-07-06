@@ -207,11 +207,11 @@ const CSS = `
   .dhead-iso { width: 40px; height: auto; opacity: .55; margin-bottom: 4mm; display: block; }
   .dhead { display: flex; justify-content: space-between; align-items: flex-start; }
   .dhead .kick { font-size: 5.3pt; letter-spacing: .26em; text-transform: uppercase; color: #9D9385; font-weight: 600; }
-  .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 12.5pt; letter-spacing: .05em; text-transform: uppercase; color: #38342D; margin-top: 3pt; }
+  .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 15.5pt; line-height: 1.08; letter-spacing: .05em; text-transform: uppercase; color: #38342D; margin-top: 3pt; padding-right: 8mm; }
   .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 6.7pt; color: #9D9385; margin-top: 3pt; }
   .dhead .right { text-align: right; }
   .dhead .ver { font-size: 4.8pt; letter-spacing: .28em; text-transform: uppercase; color: #AFA79C; font-weight: 600; }
-  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 12.5pt; letter-spacing: .05em; text-transform: uppercase; color: #38342D; margin-top: 3pt; }
+  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 10pt; letter-spacing: .05em; text-transform: uppercase; color: #776E60; margin-top: 3pt; }
   .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 6.2pt; letter-spacing: .34em; text-transform: uppercase; color: #9D9385; margin-top: 3pt; }
 
   /* ── Tabla de partidas ───────────────────────────────────── */

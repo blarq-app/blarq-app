@@ -15,10 +15,12 @@ Toda la app habla el mismo idioma estético. No hay zonas con look distinto.
   - **Ámbar** = atención, advertencia.
 - **Default es gris neutro, no verde.** Un valor "OK" no se pinta de verde por inercia — solo si "OK" es el dato relevante.
 - No hay **morado**, **rosado**, ni acentos decorativos. El banner SII original morado fue migrado a gris en abril 2026 por esta razón.
+- **Greige anclado al isotipo (Marca v2, 2026-07).** Los grises no son fríos: la escala `gray-*` de Tailwind y los 8 tokens greige (Tinta #333332 · Grafito · Piedra · Taupe · Greige · Lino · Bruma · Banda) están re-temperados al matiz cálido del **isotipo BLARQ** (#6F6960, hue ~36°), preservando la luminosidad de cada tono. La calidez se apaga en los tonos muy claros → los fondos grandes quedan casi neutros (nunca "crema/vintage"). El fondo de página sigue blanco. Recolor reproducible: `scripts/apply-ancla-isotipo.mjs`.
+- **Piso de contraste.** El texto que hay que leer va en Piedra (#6C6B6B, ~5:1) o más oscuro. Taupe (#94928E, ~3:1) y más claros: solo para etiquetas grandes, bordes, bandas o fondos — **nunca** texto legible ni placeholders.
 
 ### Tipografía y números
 
-- Tipografía sans (Geist por default).
+- **Tres roles (Marca v2):** **Nunito Sans** (cuerpo, datos, cifras tabulares) · **Hanken Grotesk ExtraLight** (títulos en mayúsculas espaciadas; usar solo en tamaños grandes ≥18px — más chico se ve desteñido, subir el peso) · **Spectral itálica** (bajadas y citas). Reemplazan a Geist/Montserrat.
 - Jerarquía por **peso y tamaño**, no por color. Un H1 no es azul; es más grande.
 - `tabular-nums` en columnas de números para que los dígitos alineen verticalmente.
 - Negrita reservada para énfasis real, no decorativo.

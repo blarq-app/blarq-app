@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-06 — Marca v2 (Claro): tema de la app + 3 PDF de cotización (PR #261, EN PROD)
+
+- **Sistema visual unificado.** Tipografías del Manual de Marca v2: **Nunito Sans** (cuerpo/cifras), **Hanken Grotesk ExtraLight** (títulos en altas espaciadas), **Spectral itálica** (bajadas). Reemplazan a Geist/Montserrat. Aplicado a `layout.tsx` + `globals.css` y a los 3 renderers de PDF (`ObraPDF`/`MueblesPDF`/`ArtefactosPDF`).
+- **Paleta "anclada al isotipo".** Toda la app usa `gray-*` de Tailwind (~3.200 usos); se re-temperó la escala completa (+ los 8 tokens greige) al **matiz del isotipo BLARQ** (#6F6960, hue ~36°), preservando la luminosidad de cada peldaño (contraste intacto). El beige se apaga en los tonos muy claros → fondos grandes casi neutros, sin caer en "crema/vintage". Evolución: greige cálido → Neutro tibio → anclado al logo. Semánticos (rojo/verde/ámbar + dorado del descuento) intactos. Recolor reproducible: `scripts/apply-ancla-isotipo.mjs`.
+- **PDF de cotización rediseñados** con portada editable (`coverTitle`/`coverSubtitle`/`coverNote` en `BudgetVersion`), portadas calibradas 1:1 al diseño, hairlines, marcas de cambio ↑↓ como **SVG** (las flechas Unicode salían como cuadraditos en el Chromium de Vercel), total consistente a 12pt en los 3, y piso de contraste (texto legible ≥ Piedra, nunca Taupe claro).
+- **Merge delicado resuelto.** Main había avanzado con la **lógica de "zonas por posición" (#231)** sobre los mismos PDF (diseño viejo). Se integró combinando **diseño nuevo de la rama + lógica de prod portada a los renderers** (ObraPDF: `OBRA_CHAPTERS`+`sortOrder`+`annotateZones`; Muebles: numeración derivada por posición). Verificado antes de publicar: 3 PDF renderizan con orden correcto + diseño nuevo, `tsc` limpio, schema válido, build de Vercel verde.
+- **Doc:** ver [principles.md](principles.md) (paleta/tipografía v2) y `scripts/build-manual-marca.mjs` (genera el manual de marca en PDF).
+
 ## 2026-06-22 — Catálogo: costos "para nosotros" desde cotización MK Paseo del Sena
 
 - **Carga de datos en prod (no es cambio de código).** Desde la cotización MK 2333366 "Paseo del Sena" (Veronica Villarrael, proy 159, emitida 22/06/2026) se cargó el `realCostBlarq` (costo BLARQ, **con IVA = neto × 1,19**) de 27 productos del catálogo de artefactos. El total neto de la cotización ($2.572.373) reconcilió exacto contra la suma de los conjuntos.

@@ -408,7 +408,12 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
         it.realCostBlarq && it.realCostBlarq > 0
           ? it.realCostBlarq
           : (it.clientPrice ?? 0) / 1.19;
-      artefactosBudgetBySub[artefactoSubToCat(it.subcategory)] += costoPorItem;
+      // ×quantity: costoPorItem es por unidad. El "real" (facturas) es total,
+      // así que el presupuesto también debe ir por el total de unidades. Sin
+      // esto, sub-categorías con cantidad > 1 (ej. iluminación: varias lámparas)
+      // quedaban subestimadas y mostraban un sobrecosto falso. Mismo criterio
+      // que muebles (mueblesBudgetBySub, arriba).
+      artefactosBudgetBySub[artefactoSubToCat(it.subcategory)] += costoPorItem * it.quantity;
     }
   }
   const budgetBySubcategory = {

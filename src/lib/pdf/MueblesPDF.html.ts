@@ -171,50 +171,50 @@ const CSS = `
   .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 6.5pt; letter-spacing: .34em; text-transform: uppercase; color: #9B9182; margin-top: 3pt; }
 
   /* Tabla */
-  .mhd { display: grid; grid-template-columns: 4.5% 1fr 7% 13%; padding: 4pt 0; border-bottom: 0.3px solid #9B9182; margin-top: 5mm; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9B9182; font-weight: 700; }
+  .mhd { display: grid; grid-template-columns: 4.5% 1fr 7% 13%; padding: 3.5pt 0; border-bottom: 0.3px solid #9B9182; margin-top: 4mm; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9B9182; font-weight: 700; }
   .mhd .ct { text-align: center; } .mhd .rt { text-align: right; }
 
-  .cap { display: flex; justify-content: space-between; align-items: center; background: #EDECEB; padding: 4.5pt 10pt; margin-top: 7pt; break-inside: avoid; break-after: avoid; }
+  .cap { display: flex; justify-content: space-between; align-items: center; background: #EDECEB; padding: 3.5pt 10pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }
   .cap b { font-family: 'Hanken Grotesk', sans-serif; font-size: 7pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: #36322C; }
   .cap span { font-variant-numeric: tabular-nums; font-size: 8pt; color: #736A5C; letter-spacing: .04em; }
 
   /* Cada partida (fila + su bloque de especificaciones/herrajes) se mantiene
      junta: no se separa el título de sus specs entre páginas. */
   .partida { break-inside: avoid; }
-  .mr { display: grid; grid-template-columns: 4.5% 1fr 7% 13%; align-items: baseline; padding: 4pt 0 2pt; border-top: 1px solid #E1DFDD; }
+  .mr { display: grid; grid-template-columns: 4.5% 1fr 7% 13%; align-items: baseline; padding: 3pt 0 1.5pt; border-top: 1px solid #E1DFDD; }
   .mit { color: #776E60; font-variant-numeric: tabular-nums; font-size: 6.5pt; }
   .mpt { color: #36322C; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 6.5pt; }
   .msub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; color: #776E60; font-size: 5.7pt; display: block; margin-top: 2pt; }
   .mct { text-align: center; color: #625A4F; font-variant-numeric: tabular-nums; font-size: 6.5pt; }
   .mtt { text-align: right; color: #36322C; font-variant-numeric: tabular-nums; font-size: 7pt; font-weight: 700; }
 
-  .spec { margin: 2pt 0 4pt 7%; padding: 3pt 0 3pt 12pt; border-left: 2px solid #E1DFDD; }
-  .specrow { display: grid; grid-template-columns: 34% 1fr; padding: 0.8pt 0; font-size: 6.5pt; line-height: 1.28; }
+  .spec { margin: 1pt 0 3pt 7%; padding: 2pt 0 2pt 12pt; border-left: 2px solid #E1DFDD; }
+  .specrow { display: grid; grid-template-columns: 34% 1fr; padding: 0.4pt 0; font-size: 6.5pt; line-height: 1.24; }
   .speclbl { letter-spacing: .1em; text-transform: uppercase; color: #5C5449; font-weight: 700; }
   .specval { color: #625A4F; }
-  .hrow { display: flex; justify-content: space-between; align-items: baseline; padding: 1.6pt 0; border-bottom: 1px solid #EBEAE9; font-size: 6.5pt; }
+  .hrow { display: flex; justify-content: space-between; align-items: baseline; padding: 0.8pt 0; border-bottom: 1px solid #EBEAE9; font-size: 6.5pt; }
   .hrow:last-child { border-bottom: none; }
   .hname { color: #625A4F; }
   .hmut { color: #AAA194; }
   .hqty { color: #776E60; font-variant-numeric: tabular-nums; letter-spacing: .05em; flex-shrink: 0; padding-left: 14pt; }
 
   /* Cierre */
-  .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 14mm; margin-top: 8mm; align-items: start; break-inside: avoid; }
+  .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 14mm; margin-top: 5mm; align-items: start; break-inside: avoid; }
   .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #36322C; font-weight: 700; }
   .pagos { margin-top: 6pt; border-top: 1px solid #DCDAD6; }
-  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 6pt 0; border-bottom: 1px solid #E7E6E4; }
+  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 3.5pt 0; border-bottom: 1px solid #E7E6E4; }
   .pagos .row:last-child { border-bottom: none; }
   .pagos .s { font-size: 10pt; color: #36322C; }
   .pagos .p { font-size: 10pt; color: #736A5C; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .totalbox { border-top: 1.5px solid #36322C; padding-top: 8pt; display: flex; flex-direction: column; align-items: flex-end; gap: 4pt; }
+  .totalbox { border-top: 1.5px solid #36322C; padding-top: 5pt; display: flex; flex-direction: column; align-items: flex-end; gap: 3pt; }
   .totalbox .tl { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #36322C; font-weight: 700; }
-  .totalbox .tv { font-variant-numeric: tabular-nums; font-size: 15pt; color: #36322C; font-weight: 700; }
+  .totalbox .tv { font-variant-numeric: tabular-nums; font-size: 12pt; color: #36322C; font-weight: 700; }
   .totalbox .tn { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 8pt; color: #9B9182; }
 
   /* Observaciones */
-  .obs { margin-top: 7mm; break-inside: avoid; }
-  .obs-list { display: flex; flex-direction: column; gap: 6pt; margin-top: 7pt; }
-  .obs-item { display: flex; gap: 8pt; font-size: 7.5pt; line-height: 1.45; color: #625A4F; }
+  .obs { margin-top: 3mm; break-inside: avoid; }
+  .obs-list { display: flex; flex-direction: column; gap: 2.6pt; margin-top: 4pt; }
+  .obs-item { display: flex; gap: 8pt; font-size: 6.8pt; line-height: 1.28; color: #625A4F; }
   .obs-num { color: #9B9182; font-variant-numeric: tabular-nums; flex-shrink: 0; font-weight: 600; }
   .obs-item b { color: #36322C; font-weight: 600; }
 `;

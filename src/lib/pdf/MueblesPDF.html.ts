@@ -257,13 +257,16 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
   const dhIso = iso ? `<img class="dhead-iso" src="${iso}" alt="" />` : "";
 
   const tableRows = chapters
-    .map((ch) => {
-      // Orden de entrada (sortOrder), como en el diseño: los itemNumber quedan
-      // en secuencia. No re-ordenamos por tipo (eso dejaba 2.3 antes que 2.2).
+    .map((ch, chIdx) => {
+      // Capítulo e ítem DERIVADOS por posición (lógica de prod): no confiamos en
+      // ch.chapterNumber / item.itemNumber guardados (los Excel de origen a veces
+      // tenían saltos o duplicados). Las partidas ya vienen ordenadas por
+      // sortOrder desde la ruta — se muestran en secuencia, sin re-ordenar.
+      const chapterNumber = chIdx + 1;
       const items = ch.items;
       const subtotal = items.reduce((s, i) => s + i.clientPriceIva * i.quantity, 0);
       const rows = items
-        .map((item) => {
+        .map((item, itemIdx) => {
           const specBody = item.herrajes && item.herrajes.length > 0
             ? renderHerrajes(item.herrajes)
             : item.details
@@ -274,7 +277,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
           return `
           <div class="partida">
             <div class="mr">
-              <span class="mit">${esc(item.itemNumber)}</span>
+              <span class="mit">${chapterNumber}.${itemIdx + 1}</span>
               <span><span class="mpt">${esc(item.name)}</span>${item.descriptionGeneral ? `<span class="msub">${esc(item.descriptionGeneral)}</span>` : ""}</span>
               <span class="mct">${fmtQty(item.quantity)}</span>
               <span class="mtt">${fmtMoney(item.clientPriceIva * item.quantity)}</span>
@@ -284,7 +287,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
         })
         .join("");
       return `
-        <div class="cap"><b>${ch.chapterNumber} · ${esc(ch.name)}</b><span>Subtotal&nbsp;&nbsp;${fmtMoney(subtotal)}</span></div>
+        <div class="cap"><b>${chapterNumber} · ${esc(ch.name)}</b><span>Subtotal&nbsp;&nbsp;${fmtMoney(subtotal)}</span></div>
         ${rows}`;
     })
     .join("");

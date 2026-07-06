@@ -70,11 +70,13 @@ export async function GET(
         materialId: string | null;
         qtyNeeded: number;
         totalBudgeted: number;
+        isProvision: boolean;
       };
       const agg = new Map<string, Agg>();
 
       for (const obraItem of full?.obraItems || []) {
-        const comps = obraItem.components.filter((c) => !c.material?.isProvision);
+        // Provisiones incluidas (decisión MJ): se marcan en el nombre.
+        const comps = obraItem.components;
         for (const c of comps) {
           const qty = (c.quantity || 0) * (obraItem.quantity || 0);
           if (qty <= 0) continue;
@@ -96,6 +98,7 @@ export async function GET(
               materialId: c.materialId || null,
               qtyNeeded: qty,
               totalBudgeted: budgeted,
+              isProvision: !!c.material?.isProvision,
             });
           }
         }
@@ -119,7 +122,7 @@ export async function GET(
             ? Math.round(a.totalBudgeted / a.qtyNeeded)
             : null;
         rows.push({
-          name: a.name,
+          name: a.isProvision ? `${a.name} (provisión)` : a.name,
           unit: a.unit,
           qtyNeeded: a.qtyNeeded,
           qtyBought: t?.qtyBought || 0,

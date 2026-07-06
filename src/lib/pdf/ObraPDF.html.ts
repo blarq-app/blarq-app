@@ -20,6 +20,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { sanitizeRichTextHtml } from "@/lib/richText";
+import { OBRA_CHAPTERS } from "@/lib/utils";
+import { annotateZones } from "@/lib/presupuesto/zones";
 
 const PROFESSIONAL = "JOSÉ TOMÁS LARRAÍN";
 
@@ -29,15 +31,6 @@ const DEFAULT_PAYMENT_TERMS = [
   { stage: "Avance", percentage: 25 },
   { stage: "Saldo", percentage: 10 },
 ];
-
-const CHAPTERS: Record<string, { label: string; index: number }> = {
-  demoliciones: { label: "Demoliciones", index: 1 },
-  reparaciones: { label: "Reparaciones", index: 2 },
-  sanitarias: { label: "Instalaciones sanitarias y gasfitería", index: 3 },
-  electricas: { label: "Instalaciones eléctricas", index: 4 },
-  terminaciones: { label: "Terminaciones", index: 5 },
-  limpieza: { label: "Limpieza y aseo", index: 6 },
-};
 
 const OBSERVACIONES = [
   "Mandante dejará libre los accesos y las superficies a intervenir, dispondrá de suministro eléctrico y de agua potable, además de baño para las personas que trabajen en la obra.",
@@ -54,6 +47,7 @@ const OBSERVACIONES = [
 export interface ObraItemInput {
   chapter: string;
   subChapter?: string | null;
+  sortOrder: number;
   itemNumber: string;
   name: string;
   descriptionCliente: string | null;
@@ -297,31 +291,26 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   const iva = Math.round(neto * 0.19);
   const total = neto + iva;
 
-  // Agrupamos por zona (sub-capítulo) respetando el orden de llegada — que en
-  // la app viene por sortOrder (Cocina antes que Baños, como en el diseño). NO
-  // alfabetizamos: eso reordenaba las zonas (Baños antes que Cocina) y rompía
-  // el orden del cuadro.
-  const groupByZone = (chapterItems: ObraItemInput[]): ObraItemInput[] => {
-    const zoneOrder: string[] = [];
-    const buckets = new Map<string, ObraItemInput[]>();
-    for (const it of chapterItems) {
-      const z = it.subChapter ?? "";
-      if (!buckets.has(z)) {
-        buckets.set(z, []);
-        zoneOrder.push(z);
-      }
-      buckets.get(z)!.push(it);
-    }
-    return zoneOrder.flatMap((z) => buckets.get(z)!);
-  };
-
-  const chapters = Object.entries(CHAPTERS)
+  // Capítulos en el MISMO orden y numeración que el editor (OBRA_CHAPTERS, fuente
+  // compartida): se saltan los vacíos y se renumera 1,2,3… sobre los que tienen
+  // partidas (reflow), con el nombre formal (pdfLabel) para el cliente. Las
+  // partidas van por sortOrder (el orden manual de MJ), NO alfabético — así el
+  // PDF queda igual a lo que se ve en pantalla. (Lógica de prod: PR #231.)
+  const chapters = (
+    Object.entries(OBRA_CHAPTERS) as [
+      string,
+      { label: string; pdfLabel: string; index: number }
+    ][]
+  )
     .map(([key, ch]) => ({
       key,
-      ...ch,
-      items: groupByZone(items.filter((i) => i.chapter === key)),
+      label: ch.pdfLabel,
+      items: items
+        .filter((i) => i.chapter === key)
+        .sort((a, b) => a.sortOrder - b.sortOrder),
     }))
-    .filter((ch) => ch.items.length > 0);
+    .filter((ch) => ch.items.length > 0)
+    .map((ch, i) => ({ ...ch, index: i + 1 }));
 
   const terms = paymentTerms.length > 0 ? paymentTerms : DEFAULT_PAYMENT_TERMS;
   const logoUri = assetDataUri("blarq-logo-horizontal-ink.png") || assetDataUri("logo-blarq.png");
@@ -393,13 +382,16 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   // como separador. El encabezado va una vez arriba (no por capítulo).
   const tableRows = chapters
     .map((ch) => {
-      const rows = ch.items
-        .map((item, idx) => {
-          const prev = idx > 0 ? ch.items[idx - 1] : null;
-          const showZone =
-            item.subChapter && (!prev || prev.subChapter !== item.subChapter);
+      // Zona DERIVADA por posición (helper compartido annotateZones): una partida
+      // sin zona propia hereda la de arriba, así el "extractor" recién creado cae
+      // en la zona donde está parado en vez de quedar huérfano. La banda de zona
+      // aparece al inicio de cada zona (isZoneStart). SIN subtotales por zona.
+      const { rows } = annotateZones(ch.items);
+      const body = rows
+        .map((row, idx) => {
+          const item = row.item;
           return `
-          ${showZone ? `<div class="zone">${esc(item.subChapter!)}</div>` : ""}
+          ${row.isZoneStart ? `<div class="zone">${esc(row.zone!)}</div>` : ""}
           <div class="grid r">
             <span class="it">${renderMarker(item.changeMarker)}${ch.index}.${idx + 1}</span>
             <span class="pt">${esc(item.name)}</span>
@@ -414,7 +406,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
       return `
         <div class="chpage">
           <div class="cap"><b>${ch.index} · ${esc(ch.label)}</b></div>
-          ${rows}
+          ${body}
         </div>`;
     })
     .join("");

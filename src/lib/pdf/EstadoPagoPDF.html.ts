@@ -7,22 +7,18 @@
 import fs from "node:fs";
 import path from "node:path";
 import { sanitizeRichTextHtml } from "@/lib/richText";
+import { OBRA_CHAPTERS } from "@/lib/utils";
+import { annotateZones } from "@/lib/presupuesto/zones";
 
 const PROFESSIONAL = "JOSÉ TOMÁS LARRAÍN";
-
-const CHAPTERS: Record<string, { label: string; index: number }> = {
-  demoliciones: { label: "DEMOLICIONES", index: 1 },
-  reparaciones: { label: "REPARACIONES", index: 2 },
-  electricas: { label: "INSTALACIONES ELECTRICAS", index: 3 },
-  sanitarias: { label: "INSTALACIONES SANITARIAS Y GASFITERIA", index: 4 },
-  terminaciones: { label: "TERMINACIONES", index: 5 },
-  limpieza: { label: "LIMPIEZA Y ASEO", index: 6 },
-};
 
 // ─── Types ────────────────────────────────────────────────────────────────
 export interface EPItemInput {
   chapter: string;
   subChapter?: string | null;
+  // Orden manual (el que arma MJ arrastrando en el editor de la cotización).
+  // El EP respeta ESTE orden para que salga igual que la pantalla.
+  sortOrder: number;
   itemNumber: string;
   name: string;
   descriptionMaestro: string | null;
@@ -328,27 +324,25 @@ const CSS = `
 export function renderEPHtml(data: EPHTMLInput): string {
   const { project, ep, items, previousEps, totalLaborBudget, totalAmountThisEp } = data;
 
-  // Agrupar por capítulo según orden definido
-  const grouped: Record<string, EPItemInput[]> = {};
-  for (const it of items) {
-    grouped[it.chapter] = grouped[it.chapter] || [];
-    grouped[it.chapter].push(it);
-  }
-  // Orden dentro del capítulo: por subChapter (zona) y después nombre, igual
-  // que el presupuesto, para que las separadoras COCINA/BAÑO salgan estables.
-  const sortBySub = (a: EPItemInput, b: EPItemInput) => {
-    const as = a.subChapter ?? "";
-    const bs = b.subChapter ?? "";
-    if (as !== bs) return as.localeCompare(bs, "es");
-    return a.name.localeCompare(b.name, "es");
-  };
-  const chapterEntries = Object.entries(CHAPTERS)
+  // Capítulos en el MISMO orden y numeración que el editor (OBRA_CHAPTERS con
+  // reflow saltando vacíos) y con el nombre formal (pdfLabel). Las partidas en
+  // orden de sortOrder (el orden manual de MJ), NO alfabético — para que el EP
+  // salga igual que la cotización en pantalla.
+  const chapterEntries = (
+    Object.entries(OBRA_CHAPTERS) as [
+      string,
+      { label: string; pdfLabel: string; index: number }
+    ][]
+  )
     .map(([key, ch]) => ({
       key,
-      ...ch,
-      items: (grouped[key] || []).slice().sort(sortBySub),
+      label: ch.pdfLabel,
+      items: items
+        .filter((i) => i.chapter === key)
+        .sort((a, b) => a.sortOrder - b.sortOrder),
     }))
-    .filter((c) => c.items.length > 0);
+    .filter((c) => c.items.length > 0)
+    .map((c, i) => ({ ...c, index: i + 1 }));
 
   const totalAccumulatedPrior = previousEps.reduce((s, p) => s + p.totalPaid, 0);
 
@@ -359,25 +353,32 @@ export function renderEPHtml(data: EPHTMLInput): string {
 
   const tableRows = chapterEntries
     .map(
-      (ch) => `
+      (ch) => {
+      // Zona DERIVADA por posición (mismo helper que la cotización): una partida
+      // sin zona propia hereda la de arriba. El encabezado de zona va en la
+      // primera partida de cada zona. (annotateZones pide `total`; el EP no
+      // muestra subtotal por zona, así que pasamos el total de MO solo para
+      // cumplir el tipo.)
+      const { rows } = annotateZones(
+        ch.items.map((i) => ({ ...i, total: i.quantity * i.laborUnitPrice }))
+      );
+      return `
         <tr class="chapter-row">
           <td class="col-item">${ch.index}</td>
           <td class="col-name" colspan="8">${esc(ch.label)}</td>
         </tr>
-        ${ch.items
+        ${rows
           .map(
-            (item, idx) => {
-            const prev = idx > 0 ? ch.items[idx - 1] : null;
-            const showSub =
-              item.subChapter && (!prev || prev.subChapter !== item.subChapter);
+            (row, idx) => {
+            const item = row.item;
             return `
           ${
-            showSub
-              ? `<tr class="sub-chapter-row"><td></td><td colspan="8">${esc(item.subChapter!)}</td></tr>`
+            row.isZoneStart
+              ? `<tr class="sub-chapter-row"><td></td><td colspan="8">${esc(row.zone!)}</td></tr>`
               : ""
           }
           <tr${item.outOfScope ? ' class="out-of-scope"' : ""}>
-            <td class="col-item">${esc(item.itemNumber)}</td>
+            <td class="col-item">${ch.index}.${idx + 1}</td>
             <td class="col-name">
               ${esc(item.name)}
               ${item.outOfScope ? '<span class="badge-oos">Fuera de alcance</span>' : ""}
@@ -398,7 +399,8 @@ export function renderEPHtml(data: EPHTMLInput): string {
           }
           )
           .join("")}
-      `
+      `;
+    }
     )
     .join("");
 

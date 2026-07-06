@@ -112,14 +112,19 @@ export default function RichTextEditor({
   value,
   onChange,
   placeholder,
+  autoFocus = false,
 }: {
   value: string | null;
   onChange: (html: string) => void;
   placeholder?: string;
+  // Si viene en true, el editor toma el foco al montarse (cursor al final).
+  // Útil para la edición inline en la fila: un solo clic abre Y enfoca.
+  autoFocus?: boolean;
 }) {
   const editor = useEditor({
     // Evita el render en SSR (Next 16) — previene mismatch de hidratación.
     immediatelyRender: false,
+    autofocus: autoFocus ? "end" : false,
     extensions: [
       StarterKit,
       TextStyle,

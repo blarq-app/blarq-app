@@ -7,10 +7,12 @@ import fs from "node:fs";
 const num = (s: string) => Number(String(s).replace(/\./g, "").replace(",", "."));
 
 type Row = [string, string, string, string, string, string, string];
+let _so = 0;
 function mk(chapter: string, zone: string | null, rows: Row[]): ObraItemInput[] {
   return rows.map((r) => ({
     chapter,
     subChapter: zone,
+    sortOrder: _so++,
     itemNumber: r[0],
     name: r[1],
     descriptionCliente: r[2] || null,

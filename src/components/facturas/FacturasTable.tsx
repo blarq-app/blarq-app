@@ -192,7 +192,13 @@ export default function FacturasTable({
                     className="inline-block max-w-[140px] truncate align-bottom hover:text-gray-900 hover:underline"
                   >
                     {inv.tipoDoc === 1043 ? (
-                      <span className="text-gray-500 italic">pago s/factura</span>
+                      <span className="text-gray-500 italic">
+                        {inv.origin === "gasto_boleta"
+                          ? "boleta"
+                          : inv.origin === "gasto_internacional"
+                            ? "internacional"
+                            : "pago s/factura"}
+                      </span>
                     ) : (
                       inv.folioNumber || "—"
                     )}

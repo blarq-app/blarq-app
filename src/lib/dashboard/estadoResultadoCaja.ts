@@ -23,12 +23,40 @@
 //   - Devolución neto-cero → se ignora.
 
 import { prisma } from "@/lib/prisma";
-import { esSocio } from "@/lib/banco/socios";
+import { esSocio, nombreSocio } from "@/lib/banco/socios";
 
-// Socios de BLARQ: una transferencia que sale hacia ellos es un RETIRO, no un
-// gasto de operación. La definición de "quién es socio" vive en banco/socios.ts
-// (misma que usa el import de cartolas, para no desincronizarse).
-const esRetiroSocio = esSocio;
+// Socios de BLARQ: un pago hacia/desde ellos NO es gasto de operación. La
+// definición de "quién es socio" vive en banco/socios.ts (misma que usa el
+// import de cartolas, para no desincronizarse).
+const esPagoSocio = esSocio;
+
+// Tipos de pago a/desde socios, según la categoría que MJ le pone al
+// movimiento en el banco. TODOS van al bloque NO operativo (no son costo de
+// operar), pero en filas separadas para el orden contable:
+//   - Retiro (default): sacan utilidad para uso personal.
+//   - Sueldo: lo que se pagan por su trabajo (decisión MJ: no-operativo, fila propia).
+//   - Bono: pago extra (decisión MJ: no-operativo, fila propia).
+//   - Préstamo: la empresa les presta o ellos a la empresa. NI gasto NI retiro:
+//     es una cuenta por cobrar/pagar. Una sola categoría para los dos sentidos;
+//     el signo del movimiento (sale/entra) dice qué es. Alimenta el saldo de
+//     préstamos por socio (ver computeSaldoPrestamosSocios).
+// El reembolso (devolución de un gasto de bolsillo) NO usa categoría: se
+// resuelve conciliando el egreso contra la factura del proveedor (PR #239),
+// y queda como gasto de operación. No pasa por acá.
+const CATEGORIA_PRESTAMO_SOCIO = "prestamo_socio";
+const LABEL_PRESTAMO_SOCIO = "Préstamos de socios";
+function labelPagoSocio(category: string | null): string {
+  switch (category) {
+    case CATEGORIA_PRESTAMO_SOCIO:
+      return LABEL_PRESTAMO_SOCIO;
+    case "sueldo":
+      return "Sueldos socios";
+    case "bono_socio":
+      return "Bonos a socios";
+    default:
+      return "Retiros de socios";
+  }
+}
 
 const ETIQUETA_CATEGORIA: Record<string, string> = {
   sueldo: "Sueldos",
@@ -36,6 +64,8 @@ const ETIQUETA_CATEGORIA: Record<string, string> = {
   comision_bancaria: "Gastos financieros",
   impuestos: "Impuestos (SII)",
   retiro_personal: "Retiros de socios",
+  prestamo_socio: "Préstamos de socios",
+  bono_socio: "Bonos a socios",
   compra_tarjeta: "Compra con tarjeta",
   deposito_efectivo: "Depósito en efectivo",
   reembolso_proveedor: "Reembolso de proveedor",
@@ -56,6 +86,22 @@ export type CajaRow = {
   total: number;
 };
 
+// Préstamos entre un socio y la empresa, ACUMULADO hasta fin del año mostrado.
+// El caso real de BLARQ: los socios le prestaron plata a la empresa (ej. ~$14M
+// hace años) y la empresa se los devuelve de a poco. Por eso separamos:
+//   - prestado: plata que ENTRÓ del socio a la empresa (ingresos / abonos).
+//   - devuelto: plata que la empresa le DEVOLVIÓ al socio (egresos / cargos).
+//   - saldo = prestado − devuelto = lo que la empresa AÚN le debe al socio.
+// Mientras el préstamo original no esté registrado (prestado = 0), solo se
+// puede mostrar lo devuelto a la fecha; el saldo aparece cuando MJ etiqueta ese
+// depósito original como "Préstamo socio".
+export type SaldoPrestamoSocio = {
+  socio: string;
+  prestado: number;
+  devuelto: number;
+  saldo: number;
+};
+
 export type EstadoResultadoCaja = {
   year: number;
   ingresoRows: CajaRow[]; // operativo
@@ -73,7 +119,40 @@ export type EstadoResultadoCaja = {
   resultadoOperacionAnual: number;
   totalNoOperativoAnual: number;
   totalAnual: number;
+  // Saldo acumulado de préstamos por socio, hasta fin del año mostrado.
+  saldoPrestamos: SaldoPrestamoSocio[];
 };
+
+// Préstamos por socio, considerando TODOS los movimientos categoría
+// "prestamo_socio" hasta `hasta` (fin del año mostrado). Cross-year a propósito:
+// un préstamo de hace años sigue vivo hasta que se devuelva entero.
+export async function computeSaldoPrestamosSocios(
+  hasta: Date
+): Promise<SaldoPrestamoSocio[]> {
+  const movs = await prisma.bankMovement.findMany({
+    where: { category: CATEGORIA_PRESTAMO_SOCIO, date: { lt: hasta } },
+    select: { amount: true, counterpartyRut: true, counterpartyName: true },
+  });
+  const porSocio = new Map<string, { prestado: number; devuelto: number }>();
+  for (const mov of movs) {
+    const socio = nombreSocio(mov.counterpartyRut, mov.counterpartyName);
+    const e = porSocio.get(socio) ?? { prestado: 0, devuelto: 0 };
+    // Abono (monto > 0): entró plata del socio a la empresa = préstamo.
+    // Cargo (monto < 0): salió plata al socio = la empresa le devolvió.
+    if (mov.amount > 0) e.prestado += mov.amount;
+    else e.devuelto += -mov.amount;
+    porSocio.set(socio, e);
+  }
+  return Array.from(porSocio.entries())
+    .map(([socio, e]) => ({
+      socio,
+      prestado: Math.round(e.prestado),
+      devuelto: Math.round(e.devuelto),
+      saldo: Math.round(e.prestado - e.devuelto),
+    }))
+    .filter((s) => s.prestado > 1 || s.devuelto > 1)
+    .sort((a, b) => b.prestado + b.devuelto - (a.prestado + a.devuelto));
+}
 
 export async function computeEstadoResultadoCaja(
   year: number
@@ -132,14 +211,17 @@ export async function computeEstadoResultadoCaja(
       continue;
     }
 
-    // Retiro de socio: solo egresos hacia MJ / JT → bloque NO operativo.
-    if (
-      tipo === "egreso" &&
-      esRetiroSocio(mov.counterpartyRut, mov.counterpartyName, mov.description)
-    ) {
-      add("no", "egreso", "Retiros de socios", m, mov.amount);
-      continue;
-    }
+    // ¿Pago hacia/desde un socio (MJ / JT)? Por sí solo NO es gasto de
+    // operación (va al bloque no-operativo). PERO si un egreso a socio está
+    // conciliado a una factura, esa parte es un REEMBOLSO: el socio adelantó de
+    // su bolsillo un gasto del negocio (ej. pagó Easy con su tarjeta para
+    // Portofino) y la empresa se lo devuelve. La parte conciliada es gasto de
+    // operación (con la categoría de la factura); solo el resto NO conciliado
+    // es pago a socio de verdad. Por eso NO cortamos acá: dejamos que el egreso
+    // a socio pase por la lógica de payments de abajo, que ya reparte "aplicado
+    // a facturas" vs "resto no conciliado".
+    const movSocio = esPagoSocio(mov.counterpartyRut, mov.counterpartyName, mov.description);
+    const egresoSocio = tipo === "egreso" && movSocio;
 
     if (mov.payments && mov.payments.length > 0) {
       let aplicado = 0;
@@ -152,7 +234,25 @@ export async function computeEstadoResultadoCaja(
         add("op", tipo, label, m, signo * p.amountApplied);
       }
       const resto = Math.abs(mov.amount) - aplicado;
-      if (resto > 1) add("op", tipo, "No asignado", m, signo * resto);
+      if (resto > 1) {
+        // El resto NO conciliado: si la salida es a un socio → retiro (NO
+        // operativo); si no → "No asignado" del bloque operativo (como siempre).
+        // (El resto de un movimiento conciliado no tiene categoría propia, así
+        // que el pago a socio acá siempre cae como retiro.)
+        if (egresoSocio) add("no", "egreso", "Retiros de socios", m, signo * resto);
+        else add("op", tipo, "No asignado", m, signo * resto);
+      }
+      continue;
+    }
+
+    // Pago a/desde socio SIN factura conciliada → bloque NO operativo, en la
+    // fila que corresponde a su categoría (retiro / sueldo / bono / préstamo).
+    // El préstamo puede ser egreso (la empresa presta) o ingreso (el socio le
+    // presta a la empresa); por eso interceptamos también los ingresos cuando
+    // están marcados como préstamo. El resto de los ingresos de socio (sin
+    // categoría de préstamo) sigue el flujo normal de abajo.
+    if (movSocio && (egresoSocio || mov.category === CATEGORIA_PRESTAMO_SOCIO)) {
+      add("no", tipo, labelPagoSocio(mov.category), m, mov.amount);
       continue;
     }
 
@@ -210,6 +310,8 @@ export async function computeEstadoResultadoCaja(
   }
   const anual = (a: number[]) => a.reduce((s, v) => s + v, 0);
 
+  const saldoPrestamos = await computeSaldoPrestamosSocios(end);
+
   return {
     year,
     ingresoRows,
@@ -226,5 +328,6 @@ export async function computeEstadoResultadoCaja(
     resultadoOperacionAnual: anual(resultadoOperacion),
     totalNoOperativoAnual: anual(totalNoOperativo),
     totalAnual: anual(totalMes),
+    saldoPrestamos,
   };
 }

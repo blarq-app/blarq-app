@@ -1207,3 +1207,102 @@ model ReembolsadorAlias {
   @@index([reembolsadorId])
   @@index([rut])
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Contabilidad — Remuneraciones (sueldos)
+// ─────────────────────────────────────────────────────────────────────────
+
+// Empleado con sueldo (dependiente) de BLARQ. Hoy son solo MJ y JT, ambos
+// socios con contrato y liquidación mensual → Previred obligatorio. Estos
+// parámetros alimentan el motor de liquidaciones (sueldos.ts) que arma el
+// código 048 del F29 y la base de Previred.
+//
+// Antes vivían como constantes en remuneraciones.ts; se movieron a la base
+// para tener una pantalla editable sin tocar código.
+model Empleado {
+  id          String  @id @default(cuid())
+  nombre      String
+  rut         String  @unique // formato con puntos y guion, ej "18.022.887-K"
+
+  // Datos para el archivo de pago de Previred (formato 105 campos). El nombre
+  // de pila se separa en apellidos + nombres como lo pide Previred; `nombre`
+  // arriba es solo para mostrar en pantalla.
+  sexo            String? // "M" o "F"
+  apellidoPaterno String?
+  apellidoMaterno String?
+  nombres         String?
+  isapreCodigo    String? // código Previred de la Isapre (ej "04" Colmena)
+  isapreFun       String? // N° de contrato/FUN de salud (campo 76 Previred)
+
+  // Haberes fijos del contrato
+  sueldoBase   Int
+  colacion     Int @default(0) // no imponible, no tributable
+  movilizacion Int @default(0) // no imponible, no tributable
+
+  // AFP: 10% capitalización (fijo en el motor) + comisión de la AFP
+  afpNombre      String? // informativo, ej "Planvital"
+  afpComisionRate Float  // ej 0.0116 (1,16%)
+
+  // Salud: plan de Isapre expresado en UF (se convierte a pesos con la UF
+  // del mes). El mínimo legal es 7% del imponible; el exceso lo paga el
+  // trabajador de su líquido.
+  isapreNombre String? // informativo, ej "Colmena"
+  isaprePlanUF Float
+
+  // Permite "dar de baja" un empleado sin borrarlo (conserva el histórico
+  // de liquidaciones de los meses en que estuvo activo).
+  activo Boolean @default(true)
+
+  // Ajustes del sueldo imponible mes a mes (cuando el bono varía).
+  sueldosMensuales SueldoMensual[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Ajuste del sueldo imponible de un empleado en un mes concreto. El sueldo de
+// BLARQ es "base + bono" y el bono puede variar de un mes a otro; cuando eso
+// pasa, este registro pisa el `sueldoBase` estándar del empleado SOLO para ese
+// período. Si no hay registro para un mes, se usa el `Empleado.sueldoBase`.
+//
+// `sueldoBase` acá = base + bono imponible del mes (ANTES de la gratificación,
+// igual que el campo del empleado). La gratificación se sigue derivando.
+model SueldoMensual {
+  id         String @id @default(cuid())
+  empleadoId String
+  year       Int
+  month      Int // 1..12
+
+  sueldoBase Int // base + bono imponible de ese mes
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  empleado Empleado @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+
+  @@unique([empleadoId, year, month])
+  @@index([empleadoId])
+}
+
+// Indicadores económicos de un mes (período tributario). UF y UTM se traen
+// automáticamente de internet (mindicador.cl); los dos topes cambian ~una vez
+// al año y se editan a mano (arrastrando el último valor conocido).
+model IndicadorMensual {
+  id    String @id @default(cuid())
+  year  Int
+  month Int // 1..12
+
+  uf  Float // valor UF usado por la liquidación del mes
+  utm Float // valor UTM del mes (pesos)
+
+  // 4,75 ingresos mínimos / 12 — tope de la gratificación legal mensual.
+  gratificacionTopeMensual Int
+  // Tope imponible (en UF) sobre el que se calcula el 7% deducible de la
+  // base del impuesto único. Calibrado contra liquidación real.
+  topeImponibleSaludUF Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([year, month])
+}

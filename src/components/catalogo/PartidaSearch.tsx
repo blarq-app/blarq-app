@@ -1,7 +1,8 @@
 "use client";
 
-import { Fragment, useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { formatCLP } from "@/lib/utils";
 import {
   DndContext,
@@ -21,6 +22,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import MaterialAutocomplete from "./MaterialAutocomplete";
+import RichTextEditor from "@/components/presupuesto/RichTextEditor";
+import { sanitizeRichTextHtml, isRichTextEmpty } from "@/lib/richText";
 
 // Unidades disponibles para una partida (las mismas que usa el editor inline).
 const PARTIDA_UNITS = ["M2", "ML", "UN", "GL", "M3", "KG", "DIA", "HR"];
@@ -155,6 +158,9 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
   const [draft, setDraft] = useState<Partida | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
+  // Qué partida tiene la descripción para cliente abierta para editar INLINE
+  // en la fila (igual que en las cotizaciones). null = ninguna.
+  const [editingDescId, setEditingDescId] = useState<string | null>(null);
 
   // Catálogo de categorías como estado (no prop): al crear una partida con
   // una categoría nueva, la agregamos acá para que aparezca sin recargar.
@@ -162,11 +168,39 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
   const [creating, setCreating] = useState(false);
   const [newForm, setNewForm] = useState({ name: "", category: "", unit: "GL" });
 
+  // Foco desde el presupuesto: al apretar "Editar en catálogo" en el desglose
+  // de una partida, se llega con ?focus=<catalogPartidaId>. Abrimos esa partida
+  // directo en modo edición, hacemos scroll a su fila y la resaltamos un par de
+  // segundos para ubicarla. (Mismo patrón que el catálogo de materiales.)
+  const searchParams = useSearchParams();
+  const focusId = searchParams.get("focus");
+  const handledFocusRef = useRef<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+
   useEffect(() => {
     const timer = setTimeout(fetchPartidas, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, category]);
+
+  useEffect(() => {
+    if (!focusId || handledFocusRef.current === focusId || partidas.length === 0)
+      return;
+    const partida = partidas.find((p) => p.id === focusId);
+    if (!partida) return;
+    handledFocusRef.current = focusId;
+    startEdit(partida);
+    setHighlightId(partida.id);
+  }, [focusId, partidas]);
+
+  // Scroll + apagado del resaltado, una vez que la fila enfocada está montada.
+  useEffect(() => {
+    if (!highlightId) return;
+    const el = document.getElementById(`partida-row-${highlightId}`);
+    el?.scrollIntoView({ block: "center" });
+    const t = setTimeout(() => setHighlightId(null), 2500);
+    return () => clearTimeout(t);
+  }, [highlightId]);
 
   async function fetchPartidas() {
     setLoading(true);
@@ -383,6 +417,29 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
     return { costMaterial, costLabor, costTools, costSubcontract, costLoss, costMargin, unitPrice };
   }
 
+  // Guarda SOLO la descripción para cliente, editada inline en la fila.
+  // Mismo patrón que la cotización (PR #216): el RichTextEditor dispara su
+  // onChange al SALIR del campo (blur), no en cada tecla, así que esto corre
+  // una sola vez al terminar. Actualiza el estado local de inmediato (para que
+  // la fila refleje el cambio sin recargar) y persiste con un PUT parcial que
+  // toca únicamente descriptionCliente (la API ya soporta updates parciales).
+  async function saveDescCliente(id: string, html: string) {
+    const value = isRichTextEmpty(html) ? null : html;
+    setPartidas((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, descriptionCliente: value } : p))
+    );
+    setEditingDescId(null);
+    try {
+      await fetch(`/api/catalogo/partidas/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ descriptionCliente: value }),
+      });
+    } catch {
+      alert("Error al guardar la descripción");
+    }
+  }
+
   async function saveEdit() {
     if (!draft) return;
     setSaving(true);
@@ -395,7 +452,8 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
           name: draft.name,
           category: draft.category,
           unit: draft.unit,
-          descriptionCliente: draft.descriptionCliente?.trim() || null,
+          // La descripción para cliente se edita INLINE en la fila (no acá),
+          // así que NO la mandamos desde el panel para no pisar ese cambio.
           descriptionMaestro: draft.descriptionMaestro?.trim() || null,
           ...costs,
         }),
@@ -717,12 +775,13 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
             </div>
 
             {/* Column headers — matches PDF thead */}
-            <div className="grid grid-cols-[4.5rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem] items-center gap-3 px-4 py-2 border-y-2 border-gray-900 bg-white text-[11px] font-bold text-gray-900 uppercase tracking-wider">
+            <div className="grid grid-cols-[4.5rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem_2.5rem] items-center gap-3 px-4 py-2 border-y-2 border-gray-900 bg-white text-[11px] font-bold text-gray-900 uppercase tracking-wider">
               <div className="text-center">Nº</div>
               <div className="text-left">Partida</div>
               <div className="text-left">Descripción Cliente</div>
               <div className="text-center">Un.</div>
               <div className="text-right">P.U.</div>
+              <div></div>
             </div>
 
             {/* Filas con drag & drop */}
@@ -743,6 +802,8 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
                     rowIndex={idx + 1}
                     isExpanded={expanded === partida.id}
                     isEditing={editing === partida.id}
+                    isFocused={highlightId === partida.id}
+                    isEditingDesc={editingDescId === partida.id}
                     draft={editing === partida.id ? draft : null}
                     saving={saving}
                     savedFlash={savedFlash === partida.id}
@@ -751,6 +812,8 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
                         expanded === partida.id && editing !== partida.id ? null : partida.id
                       )
                     }
+                    onStartEditDesc={() => setEditingDescId(partida.id)}
+                    onSaveDescCliente={(html) => saveDescCliente(partida.id, html)}
                     onStartEdit={() => startEdit(partida)}
                     onCancelEdit={cancelEdit}
                     onSaveEdit={saveEdit}
@@ -794,10 +857,14 @@ function PartidaRow({
   rowIndex,
   isExpanded,
   isEditing,
+  isFocused,
+  isEditingDesc,
   draft,
   saving,
   savedFlash,
   onToggleExpand,
+  onStartEditDesc,
+  onSaveDescCliente,
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
@@ -819,10 +886,14 @@ function PartidaRow({
   rowIndex: number;
   isExpanded: boolean;
   isEditing: boolean;
+  isFocused: boolean;
+  isEditingDesc: boolean;
   draft: Partida | null;
   saving: boolean;
   savedFlash: boolean;
   onToggleExpand: () => void;
+  onStartEditDesc: () => void;
+  onSaveDescCliente: (html: string) => void;
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onSaveEdit: () => void;
@@ -869,11 +940,13 @@ function PartidaRow({
   const d = isEditing && draft ? draft : partida;
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} id={`partida-row-${partida.id}`}>
       <div
-        className={`grid grid-cols-[4.5rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem] items-center gap-3 px-4 py-1.5 border-b border-gray-100 hover:bg-gray-50/60 group ${
+        className={`grid grid-cols-[4.5rem_minmax(0,2fr)_minmax(0,3fr)_3rem_6rem_2.5rem] items-center gap-3 px-4 py-1.5 border-b border-gray-100 hover:bg-gray-50/60 group ${
           isExpanded ? "bg-gray-50/60" : ""
-        } ${savedFlash ? "bg-green-50" : ""}`}
+        } ${savedFlash ? "bg-green-50" : ""} ${
+          isFocused ? "ring-2 ring-inset ring-gray-900" : ""
+        }`}
       >
         <div className="flex items-center gap-1 text-xs text-gray-700 tabular-nums">
           <span
@@ -900,15 +973,42 @@ function PartidaRow({
         >
           {partida.name}
         </button>
-        <button
-          onClick={onToggleExpand}
-          className="text-left text-[11px] text-gray-500 truncate"
-          title={partida.descriptionCliente || ""}
-        >
-          {partida.descriptionCliente || (
-            <span className="text-gray-300">—</span>
-          )}
-        </button>
+        {/* DESCRIPCIÓN PARA CLIENTE (la que va al PDF). Se edita INLINE acá
+            mismo, igual que en las cotizaciones: un clic monta el editor de
+            texto con formato (barra flotante) y al salir guarda y vuelve a la
+            vista. La del MAESTRO vive solo en el panel expandido (▾). */}
+        {isEditingDesc ? (
+          <div className="[&_.ProseMirror]:!text-[11px] [&_.ProseMirror]:!leading-snug [&_.ProseMirror]:!min-h-[18px] [&_.ProseMirror]:!py-0.5 [&_.ProseMirror]:!px-1.5 [&_.ProseMirror_p]:!my-0 [&_.ProseMirror_li]:!my-0">
+            <RichTextEditor
+              value={partida.descriptionCliente}
+              autoFocus
+              placeholder="Descripción para el cliente (PDF)…"
+              onChange={(html) => {
+                // RichTextEditor dispara onChange en blur (al salir): guarda
+                // el texto final y vuelve a la vista de la fila.
+                onSaveDescCliente(html);
+              }}
+            />
+          </div>
+        ) : (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={onStartEditDesc}
+            title="Clic para editar la descripción del cliente acá mismo"
+            className="text-left text-[11px] text-gray-500 truncate cursor-text min-h-[14px] [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-4 [&_ol]:pl-4 [&_li]:my-0.5"
+          >
+            {isRichTextEmpty(partida.descriptionCliente) ? (
+              <span className="text-gray-300">—</span>
+            ) : (
+              <span
+                dangerouslySetInnerHTML={{
+                  __html: sanitizeRichTextHtml(partida.descriptionCliente),
+                }}
+              />
+            )}
+          </div>
+        )}
         <div className="text-center">
           <span className="text-[11px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
             {partida.unit}
@@ -916,6 +1016,34 @@ function PartidaRow({
         </div>
         <div className="text-right text-xs font-medium text-gray-900 tabular-nums">
           {formatCLP(partida.unitPrice)}
+        </div>
+        {/* Duplicar de un toque, sin tener que expandir la partida. Aparece al
+            pasar el mouse por la fila. Ícono de dos cuadraditos (copiar). */}
+        <div className="flex justify-end">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDuplicate();
+            }}
+            className="text-gray-400 hover:text-gray-900 opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Duplicar esta partida en el catálogo"
+            aria-label="Duplicar partida"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -978,38 +1106,23 @@ function ViewPanel({
 
   return (
     <div className="space-y-4">
-      {/* Descripciones */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-            Descripción para cliente
-            <span className="ml-1 text-gray-400 normal-case font-normal italic">
-              — aparece en el PDF que ve el cliente
-            </span>
-          </div>
-          {partida.descriptionCliente ? (
-            <p className="text-xs text-gray-700 leading-snug whitespace-pre-wrap">
-              {partida.descriptionCliente}
-            </p>
-          ) : (
-            <p className="text-xs text-gray-400 italic">Sin descripción</p>
-          )}
+      {/* Descripción para maestro. La del CLIENTE ya no vive acá: se edita
+          inline en la fila (clic sobre la columna de descripción), igual que
+          en las cotizaciones. El desplegable muestra solo la del maestro. */}
+      <div>
+        <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">
+          Descripción para maestro
+          <span className="ml-1 text-gray-400 normal-case font-normal italic">
+            — aparece en el estado de pago
+          </span>
         </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-            Descripción para maestro
-            <span className="ml-1 text-gray-400 normal-case font-normal italic">
-              — aparece en el estado de pago
-            </span>
-          </div>
-          {partida.descriptionMaestro ? (
-            <p className="text-xs text-gray-700 leading-snug whitespace-pre-wrap">
-              {partida.descriptionMaestro}
-            </p>
-          ) : (
-            <p className="text-xs text-gray-400 italic">Sin descripción</p>
-          )}
-        </div>
+        {partida.descriptionMaestro ? (
+          <p className="text-xs text-gray-700 leading-snug whitespace-pre-wrap">
+            {partida.descriptionMaestro}
+          </p>
+        ) : (
+          <p className="text-xs text-gray-400 italic">Sin descripción</p>
+        )}
       </div>
 
       {/* Breakdown */}
@@ -1089,7 +1202,11 @@ function ViewPanel({
                     <td className="py-1 px-2 text-right text-gray-700 tabular-nums">
                       {c.quantity}
                     </td>
-                    <td className="py-1 px-2 text-right text-gray-700 tabular-nums">
+                    <td
+                      className={`py-1 px-2 text-right tabular-nums ${
+                        c.type === "mano_obra" ? "text-red-700" : "text-gray-700"
+                      }`}
+                    >
                       {c.unit === "%" ? (
                         <span className="text-[10px] text-gray-400 italic">
                           {c.type === "perdida"
@@ -1104,7 +1221,14 @@ function ViewPanel({
                         formatCLP(c.unitCost)
                       )}
                     </td>
-                    <td className="py-1 px-2 text-right font-medium text-gray-900 tabular-nums">
+                    {/* Mano de obra en rojo ladrillo apagado (mismo tono que la
+                        Pérdida), a propósito: resalta lo que MJ negocia con el
+                        maestro. */}
+                    <td
+                      className={`py-1 px-2 text-right font-medium tabular-nums ${
+                        c.type === "mano_obra" ? "text-red-700" : "text-gray-900"
+                      }`}
+                    >
                       {formatCLP(effectiveTotal(c, allActive))}
                     </td>
                   </tr>
@@ -1242,38 +1366,22 @@ function EditPanel({
         </div>
       </div>
 
-      {/* Descripciones — dos columnas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
-            Descripción para cliente
-            <span className="ml-1 text-gray-400 normal-case font-normal italic">
-              — aparece en el PDF que ve el cliente
-            </span>
-          </label>
-          <textarea
-            value={draft.descriptionCliente ?? ""}
-            onChange={(e) => onUpdateDraft({ descriptionCliente: e.target.value })}
-            placeholder="Ej: Considera retiro de papel mural, empastar, lijar y dejar superficie apta para pintura."
-            rows={3}
-            className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs leading-snug resize-y focus:ring-1 focus:ring-gray-900 outline-none"
-          />
-        </div>
-        <div>
-          <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
-            Descripción para maestro
-            <span className="ml-1 text-gray-400 normal-case font-normal italic">
-              — aparece en el estado de pago
-            </span>
-          </label>
-          <textarea
-            value={draft.descriptionMaestro ?? ""}
-            onChange={(e) => onUpdateDraft({ descriptionMaestro: e.target.value })}
-            placeholder="Ej: Retirar papel + empastar imperfecciones + lijar fino."
-            rows={3}
-            className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs leading-snug resize-y focus:ring-1 focus:ring-gray-900 outline-none"
-          />
-        </div>
+      {/* Solo la descripción para maestro. La del CLIENTE se edita inline en
+          la fila (no acá), igual que en las cotizaciones. */}
+      <div>
+        <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">
+          Descripción para maestro
+          <span className="ml-1 text-gray-400 normal-case font-normal italic">
+            — aparece en el estado de pago
+          </span>
+        </label>
+        <textarea
+          value={draft.descriptionMaestro ?? ""}
+          onChange={(e) => onUpdateDraft({ descriptionMaestro: e.target.value })}
+          placeholder="Ej: Retirar papel + empastar imperfecciones + lijar fino."
+          rows={3}
+          className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs leading-snug resize-y focus:ring-1 focus:ring-gray-900 outline-none"
+        />
       </div>
 
       {/* Componentes */}
@@ -1379,28 +1487,33 @@ function ComponentsEditTable({
   }
 
   return (
-    <table className="w-full text-[11px]">
-      <thead>
-        <tr className="border-y border-gray-300 text-gray-500 uppercase tracking-wider">
-          <th className="w-6"></th>
-          <th className="text-left py-1 px-1 w-28 font-semibold">Tipo</th>
-          <th className="text-left py-1 px-1 font-semibold">Descripción</th>
-          <th className="text-center py-1 px-1 w-14 font-semibold">Un.</th>
-          <th className="text-right py-1 px-1 w-20 font-semibold">Cant.</th>
-          <th className="text-right py-1 px-1 w-24 font-semibold">Costo</th>
-          <th className="text-right py-1 px-1 w-24 font-semibold">Total</th>
-          <th className="w-6"></th>
-        </tr>
-      </thead>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
+    // El DndContext/SortableContext envuelve TODA la <table>, no va dentro de
+    // ella. dnd-kit inserta un <div> oculto de accesibilidad como hijo directo
+    // de su contenedor; si ese contenedor está entre <thead> y <tbody> el HTML
+    // queda inválido (<div> hijo de <table>) y React tira el warning de
+    // hidratación. Afuera de la tabla el <div> es un hermano legítimo.
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
+      <SortableContext
+        items={regulares.map((c) => c.id)}
+        strategy={verticalListSortingStrategy}
       >
-        <SortableContext
-          items={regulares.map((c) => c.id)}
-          strategy={verticalListSortingStrategy}
-        >
+        <table className="w-full text-[11px]">
+          <thead>
+            <tr className="border-y border-gray-300 text-gray-500 uppercase tracking-wider">
+              <th className="w-6"></th>
+              <th className="text-left py-1 px-1 w-28 font-semibold">Tipo</th>
+              <th className="text-left py-1 px-1 font-semibold">Descripción</th>
+              <th className="text-center py-1 px-1 w-14 font-semibold">Un.</th>
+              <th className="text-right py-1 px-1 w-20 font-semibold">Cant.</th>
+              <th className="text-right py-1 px-1 w-24 font-semibold">Costo</th>
+              <th className="text-right py-1 px-1 w-24 font-semibold">Total</th>
+              <th className="w-6"></th>
+            </tr>
+          </thead>
           <tbody>
             {regulares.map((comp) => (
               <ComponentEditRow
@@ -1440,9 +1553,9 @@ function ComponentsEditTable({
               <td></td>
             </tr>
           </tbody>
-        </SortableContext>
-      </DndContext>
-    </table>
+        </table>
+      </SortableContext>
+    </DndContext>
   );
 }
 
@@ -1603,11 +1716,18 @@ function ComponentEditRow({
             step="1"
             value={Math.round(comp.unitCost)}
             onChange={(e) => onUpdate(comp.id, "unitCost", parseFloat(e.target.value) || 0)}
-            className="w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-right tabular-nums"
+            className={`w-full border border-gray-300 rounded px-1 py-1 text-[11px] text-right tabular-nums ${
+              comp.type === "mano_obra" ? "text-red-700" : ""
+            }`}
           />
         )}
       </td>
-      <td className="py-1 px-1 text-right font-medium text-gray-700 tabular-nums">
+      {/* Mano de obra en rojo ladrillo apagado (mismo tono que la Pérdida). */}
+      <td
+        className={`py-1 px-1 text-right font-medium tabular-nums ${
+          comp.type === "mano_obra" ? "text-red-700" : "text-gray-700"
+        }`}
+      >
         {formatCLP(effectiveTotal(comp, allActive))}
       </td>
       <td className="py-1 px-1 text-center">

@@ -89,15 +89,60 @@ Si un campo tiene un motor de automatización que decide en base a "está vacío
 
 MJ trabaja con **varias sesiones a la vez** (a propósito, es más eficiente). El riesgo es perder trabajo o enredar dos features. Regla base: **una sesión = una rama propia = una carpeta de trabajo propia (worktree)**. Si cada sesión vive en su carpeta, son incapaces de pisarse aunque corran al mismo tiempo. El enredo clásico ocurre cuando dos sesiones editan la **misma** carpeta sobre la **misma** rama.
 
+**El aislamiento se hace AL ABRIR la sesión, NO con un comando adentro** — una sesión no se puede mudar sola de carpeta, trabaja donde se la lanza. Un worktree es una **copia COMPLETA** del proyecto en otra carpeta (todo el código, compartiendo ramas/historial/GitHub) — NO una carpeta vacía ni otro proyecto. Cómo se abre aislada:
+- **App de Claude Code**: cada **"Nueva sesión"** arranca en su propio worktree automáticamente. NO reabrir `blarq-app` para cada sesión paralela.
+- **Terminal**: `claude --worktree <nombre>`.
+
+(Histórico: hasta 2026-06-26 esta sección sugería `git switch -c` como si aislara — NO aísla, solo crea una rama en la MISMA carpeta; por eso dos sesiones en `blarq-app` se enredaban. El aislamiento real es al abrir, no por comando.)
+
 Protocolo obligatorio para cualquier sesión que vaya a tocar código:
 
 1. **Al arrancar**: correr `git status` + `git branch --show-current`. Si hay cambios sin guardar de **otro tema** (no del tuyo), **parar y avisar a MJ** — no tocarlos, no commitearlos, no mezclarlos. Son de otra sesión.
-2. **Rama propia**: trabajar en una rama que arranque de `main` (`git switch -c feat/<tema> main`), nunca encima de la rama de otra sesión. Para paralelo real, pedir/usar un worktree propio (carpeta separada).
+2. **Rama propia**: trabajá en una rama desde `origin/main` (`git fetch origin && git switch -c feat/<tema> origin/main`). OJO: `git switch -c` NO aísla por sí solo (solo crea rama en la misma carpeta). Si estás en la carpeta principal compartida (`blarq-app`) y hay OTRA sesión activa ahí, **NO te cambies de rama** — pará y avisá a MJ (el aislamiento se hace al abrir, ver arriba).
 3. **Commitear solo lo propio**: stagear archivos explícitos (`git add <ruta>`), **nunca `git add -A` ni `git add .`**. Antes de commitear, verificar con `git diff <archivo>` que el archivo compartido (ej. `MovementsTable.tsx`, `CHANGELOG.md`) solo tenga TUS cambios.
 4. **Al cerrar**: dejar todo commiteado en tu rama y decir el nombre. No dejar trabajo sin guardar "para después" en una carpeta compartida.
 5. **Borrar ramas / cerrar worktrees**: blast radius alto → confirmar con MJ (ver §4.7). Borrar solo ramas ya integradas a `main` con `git branch -d` (el `-d` se niega si no están integradas; nunca usar `-D` sin OK).
 
 Mantener temas distintos entre sesiones (ej. artefactos vs facturas) ayuda, pero **no sustituye** el aislamiento por rama/carpeta.
+
+### 4.9 Cuál es la base de datos VIVA — verificá antes de concluir
+
+**La base de datos que usa la app en vivo (`blarq-app.vercel.app`) es `ep-shy-morning`.** Es la
+fuente de verdad de los datos reales (proyectos, facturas, plata). Hay otra base, `ep-solitary-mud`,
+que es una **copia VIEJA / de desarrollo** con datos congelados — NO es la viva.
+
+**El problema que esto causó (y por qué esta sección existe):** sesiones que corren un script
+normal (que hace `import "dotenv/config"`, o sea carga `.env`) terminaron leyendo la base VIEJA y
+sacando conclusiones equivocadas sobre datos reales (ej.: "esta factura está sin asignar" cuando en
+la app en vivo sí estaba asignada). Verificado el 2026-06-23.
+
+Reglas:
+- **Los rótulos de los archivos `.env` NO son confiables — se han swapeado.** A veces `.env` apunta
+  a la viva, a veces a la vieja. **No te guíes por el nombre del archivo; guiate por el HOST.** La
+  viva es siempre `ep-shy-morning`; la vieja es `ep-solitary-mud`.
+- **Antes de sacar cualquier conclusión sobre datos**, verificá que estás en la base viva. Marcador
+  rápido: el proyecto **#64 debe ser "Paseo del Sena"** y la **última factura debe ser de hace días,
+  no semanas**. Si no calza, estás en la base vieja → cambiá de conexión.
+- Herramienta de verificación: `scripts/diag-cual-base-viva.ts <ruta-env>` imprime el host y los
+  marcadores para confirmar cuál es cuál.
+- Tocar la base viva (`ep-shy-morning`) se confirma con MJ (§4.7), incluso para leer si hay duda.
+
+### 4.10 Cómo MJ aprueba un cambio — NO lee código
+
+MJ no es desarrolladora y NO revisa diffs en GitHub: para ella el código es ilegible. Mandarla a
+"revisá el PR" o "aprobá el código en GitHub" NO sirve. Para que MJ pueda aprobar un cambio, hay
+que mostrarle el RESULTADO, no el código:
+
+- **Cambios visuales (UI, PDF, layout, estilos)**: mostrale el resultado renderizado — un
+  screenshot, el PDF real (idealmente generado con SUS datos reales de prod), o un link de
+  preview de Vercel navegable. Un antes/después ayuda.
+- **Cambios de comportamiento (no visuales: un bot, una regla, un cálculo)**: no hay "dibujo" —
+  decile en una línea QUÉ probar para confirmarlo, o probalo vos y mostrale el resultado. Nunca
+  le pidas que lo deduzca del código.
+- **Nunca** "andá a GitHub y revisá el diff" ni "aprobá el PR #N" a secas. Si pedís aprobación,
+  viene SIEMPRE acompañada de la visualización o de la prueba concreta.
+- OJO: el preview de Vercel puede usar otra base que la viva (datos distintos) → para cambios que
+  dependen de datos puntuales, mejor un screenshot/render con los datos reales de prod.
 
 ## 5. Stack y workflow técnico
 

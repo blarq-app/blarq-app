@@ -3,6 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatDate, OBRA_CHAPTERS, ObraChapter } from "@/lib/utils";
+import { annotateZones } from "@/lib/presupuesto/zones";
 import {
   computeEPItem,
   validateQuantityExecuted,
@@ -121,20 +122,29 @@ export default function EditorEP({
       g[i.chapter] = g[i.chapter] || [];
       g[i.chapter].push(i);
     });
-    // Orden dentro del capítulo: por subChapter (zona) y después nombre,
-    // para mostrar las separadoras COCINA/BAÑO igual que el presupuesto.
+    // Orden dentro del capítulo: por sortOrder (el orden manual de MJ en la
+    // cotización), igual que el editor de presupuesto y el PDF — NO alfabético.
     for (const k of Object.keys(g)) {
-      g[k].sort((a, b) => {
-        const as = a.subChapter ?? "";
-        const bs = b.subChapter ?? "";
-        if (as !== bs) return as.localeCompare(bs, "es");
-        return a.name.localeCompare(b.name, "es");
-      });
+      g[k].sort((a, b) => a.sortOrder - b.sortOrder);
     }
     return g;
   }, [items]);
   const chapterKeys = Object.keys(OBRA_CHAPTERS) as ObraChapter[];
   const orderedChapters = chapterKeys.filter((c) => grouped[c]?.length);
+  // Zona efectiva por partida (derivada por posición, mismo helper que la
+  // cotización y el PDF). Map chapter -> filas alineadas con grouped[chapter].
+  const zoneRowsByChapter = useMemo(() => {
+    const m: Record<
+      string,
+      { item: Item; zone: string | null; isZoneStart: boolean }[]
+    > = {};
+    for (const k of Object.keys(grouped)) {
+      m[k] = annotateZones(
+        grouped[k].map((i) => ({ ...i, total: i.laborTotal }))
+      ).rows;
+    }
+    return m;
+  }, [grouped]);
 
   // ── Edición ───────────────────────────────────────────────────────────
   function tryUpdateQty(id: string, newQty: number) {
@@ -384,8 +394,12 @@ export default function EditorEP({
           <div className="text-right">$ acumulado</div>
         </div>
 
-        {orderedChapters.map((chapter) => {
+        {orderedChapters.map((chapter, chIdx) => {
           const chItems = grouped[chapter];
+          // Número de capítulo reflowado (1, 2, 3… saltando vacíos), igual que
+          // la cotización y el PDF.
+          const chapterNumber = chIdx + 1;
+          const zoneRows = zoneRowsByChapter[chapter] ?? [];
           const chSubtotal = chItems.reduce((sum, i) => {
             const c = computeEPItem(snapshotsById[i.id]);
             return sum + c.amountThisEp;
@@ -396,7 +410,7 @@ export default function EditorEP({
               <div className="flex items-center justify-between px-4 py-1.5 bg-[#DBDBDB]">
                 <h3 className="font-bold text-gray-900 text-xs uppercase tracking-wide">
                   <span className="inline-block w-6">
-                    {OBRA_CHAPTERS[chapter].index}
+                    {chapterNumber}
                   </span>
                   {OBRA_CHAPTERS[chapter].label}
                 </h3>
@@ -409,15 +423,16 @@ export default function EditorEP({
                 const c = computeEPItem(snap);
                 const mode = inputMode[i.id] ?? "pct";
                 const err = errorByItem[i.id];
-                // Fila separadora de zona (COCINA / BAÑO) cuando cambia.
-                const prevItem = idx > 0 ? chItems[idx - 1] : null;
-                const showSub =
-                  i.subChapter && (!prevItem || prevItem.subChapter !== i.subChapter);
+                // Zona efectiva (derivada por posición): el encabezado va en la
+                // primera partida de cada zona.
+                const zoneRow = zoneRows[idx];
+                const zone = zoneRow?.zone ?? null;
+                const showSub = zoneRow?.isZoneStart ?? false;
                 return (
                   <Fragment key={i.id}>
                   {showSub && (
                     <div className="px-4 py-1 bg-[#F2F2F2] text-[11px] font-semibold italic uppercase tracking-wide text-gray-600 border-b border-gray-200">
-                      {i.subChapter}
+                      {zone}
                     </div>
                   )}
                   <div
@@ -426,7 +441,7 @@ export default function EditorEP({
                     } ${c.warningExceedsTotal ? "bg-amber-50" : ""}`}
                   >
                     <div className="text-center text-xs text-gray-700 tabular-nums pt-0.5">
-                      {i.itemNumber}
+                      {chapterNumber}.{idx + 1}
                     </div>
                     {/* Partida + descripción */}
                     <div className="min-w-0">

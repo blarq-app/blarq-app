@@ -22,12 +22,38 @@ export type ChangeMarker = "added" | "up" | "down" | null;
 
 export interface DiffItemInput {
   lineageId: string;
-  total: number;
+  // Precio unitario y cantidad: la comparación usa el total RECONSTRUIDO con el
+  // precio redondeado (lo que ve el cliente), no el total crudo guardado. Ver
+  // `clientVisibleTotal`. `total` queda como respaldo por si faltara alguno.
+  unitPrice?: number | null;
+  quantity?: number | null;
+  total?: number | null;
 }
 
 export interface BaselineItem {
   lineageId: string;
-  total: number;
+  unitPrice?: number | null;
+  quantity?: number | null;
+  total?: number | null;
+}
+
+/**
+ * Total "como lo ve el cliente": precio unitario redondeado al peso × cantidad,
+ * redondeado al peso. Un recálculo automático puede ensuciar el precio unitario
+ * con decimales (ej. 8179 → 8179,424) sin que MJ toque la partida; eso movía el
+ * total crudo unos pesos y pintaba una flecha falsa. Comparar sobre el precio
+ * redondeado neutraliza ese ruido y deja solo los cambios que el cliente ve.
+ * Si no hay precio/cantidad utilizables, cae al total crudo redondeado.
+ */
+export function clientVisibleTotal(item: {
+  unitPrice?: number | null;
+  quantity?: number | null;
+  total?: number | null;
+}): number {
+  if (item.unitPrice != null && item.quantity != null) {
+    return Math.round(Math.round(item.unitPrice) * item.quantity);
+  }
+  return Math.round(item.total ?? 0);
 }
 
 export interface ChangeResult {
@@ -61,15 +87,16 @@ export function computeChangeMarkers(
   }
 
   const prevByLineage = new Map<string, number>();
-  for (const b of baselineItems) prevByLineage.set(b.lineageId, b.total);
+  for (const b of baselineItems) prevByLineage.set(b.lineageId, clientVisibleTotal(b));
 
   for (const it of currentItems) {
+    const cur = clientVisibleTotal(it);
     const prev = prevByLineage.get(it.lineageId);
     if (prev === undefined) {
       result.set(it.lineageId, { marker: "added", prevTotal: null });
-    } else if (it.total > prev + TOLERANCE) {
+    } else if (cur > prev + TOLERANCE) {
       result.set(it.lineageId, { marker: "up", prevTotal: prev });
-    } else if (it.total < prev - TOLERANCE) {
+    } else if (cur < prev - TOLERANCE) {
       result.set(it.lineageId, { marker: "down", prevTotal: prev });
     } else {
       result.set(it.lineageId, { marker: null, prevTotal: prev });
@@ -85,7 +112,12 @@ function parseVersionNum(v: string): number {
 }
 
 interface ObraSnapshotShape {
-  obraItems?: { lineageId: string; total: number }[];
+  obraItems?: {
+    lineageId: string;
+    unitPrice?: number | null;
+    quantity?: number | null;
+    total?: number | null;
+  }[];
 }
 
 /**
@@ -137,6 +169,8 @@ export async function getObraBaselineItems(current: {
 
   return snap.obraItems.map((it) => ({
     lineageId: it.lineageId,
+    unitPrice: it.unitPrice,
+    quantity: it.quantity,
     total: it.total,
   }));
 }

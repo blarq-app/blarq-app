@@ -467,9 +467,60 @@ function VistaCaja({ data, year }: { data: EstadoResultadoCaja; year: number }) 
       </table>
       <p className="text-[11px] text-gray-400 mt-3 leading-snug">
         Plata real del banco según la conciliación. El <span className="text-gray-500">resultado de
-        operación</span> dice si el negocio gana; abajo, separados, los retiros de los socios y el
-        pago de IVA (plata que sale pero no es costo de operar). &quot;No asignado&quot; = movimientos
-        que todavía no catalogaste.
+        operación</span> dice si el negocio gana; abajo, separados, los pagos a los socios (retiros,
+        sueldos, bonos, préstamos) y el pago de IVA (plata que sale pero no es costo de operar).
+        &quot;No asignado&quot; = movimientos que todavía no catalogaste.
+      </p>
+
+      {data.saldoPrestamos.length > 0 && (
+        <SaldoPrestamos saldos={data.saldoPrestamos} />
+      )}
+    </div>
+  );
+}
+
+// Préstamos entre los socios y la empresa. No es gasto ni retiro: es plata que
+// se devuelve. El caso real: los socios le prestaron a la empresa y la empresa
+// se los devuelve de a poco. Mientras el préstamo original no esté registrado
+// (prestado = 0) solo mostramos lo devuelto a la fecha; cuando se etiqueta el
+// depósito original, aparece el saldo pendiente.
+function SaldoPrestamos({ saldos }: { saldos: EstadoResultadoCaja["saldoPrestamos"] }) {
+  const faltaOriginal = saldos.some((s) => s.prestado === 0);
+  return (
+    <div className="mt-4 border-t border-gray-100 pt-4">
+      <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-2">
+        Préstamos de socios a la empresa
+      </p>
+      <div className="max-w-md space-y-1.5">
+        {saldos.map((s) => {
+          const tienePrestado = s.prestado > 0;
+          // Con el préstamo original registrado: saldo > 0 → la empresa aún le
+          // debe; saldo < 0 → el socio le debe a la empresa. Sin él, solo se
+          // muestra lo que la empresa ya devolvió.
+          const empresaDebe = s.saldo >= 0;
+          return (
+            <div key={s.socio} className="flex items-baseline justify-between text-sm">
+              <span className="text-gray-700">{s.socio}</span>
+              <span className="flex items-baseline gap-2">
+                <span className="text-[11px] text-gray-400">
+                  {tienePrestado
+                    ? empresaDebe
+                      ? "le debe la empresa"
+                      : "le debe a la empresa"
+                    : "la empresa le devolvió"}
+                </span>
+                <span className="tabular-nums font-medium text-gray-900">
+                  {formatCLP(tienePrestado ? Math.abs(s.saldo) : s.devuelto)}
+                </span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-gray-400 mt-2 leading-snug">
+        {faltaOriginal
+          ? "Lo que la empresa ya les devolvió. Para ver el saldo pendiente, etiquetá el préstamo original de socios (el depósito que entró a la empresa) como “Préstamo socio”."
+          : "Saldo pendiente = lo prestado por el socio menos lo que la empresa ya le devolvió."}
       </p>
     </div>
   );

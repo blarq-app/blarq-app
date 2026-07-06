@@ -25,6 +25,7 @@ type CatalogMaterial = {
   category: string;
   unit: string;
   netPrice: number;
+  referenceLink?: string | null;
 };
 
 interface Component {
@@ -300,6 +301,21 @@ export default function ObraItemComponentsEditor({
     }
   }
 
+  // SWAP: reemplazar el material de una línea por otro del catálogo, sin
+  // borrar la línea ni perder su lugar. Trae el precio nuevo, la unidad y el
+  // link del material elegido, y lo deja enlazado por materialId. Cambia el
+  // precio de la línea a propósito (es el sentido del swap) — el costo/total
+  // se ven actualizar al re-cargar.
+  async function swapMaterial(compId: string, m: CatalogMaterial) {
+    await patchCompFields(compId, {
+      description: m.name,
+      unit: m.unit || "UN",
+      unitCost: m.netPrice ?? 0,
+      materialId: m.id,
+      referenceLink: m.referenceLink ?? null,
+    });
+  }
+
   // Subir esta línea al catálogo de la partida ("solo lo que toqué").
   async function pushToCatalog(compId: string) {
     setSaving(compId);
@@ -405,6 +421,11 @@ export default function ObraItemComponentsEditor({
             // debajo de ese material, con sangría y "↳" para que se lea como
             // dependiente de la línea de arriba.
             const isNestedPerdida = c.type === "perdida" && !!c.appliedToComponentId;
+            // Mano de obra: su VALOR (costo y total) va en el mismo rojo ladrillo
+            // apagado que la Pérdida (text-rose-700, el token de COMP_TYPES) para
+            // que lo que MJ negocia con el maestro resalte. A propósito comparte
+            // tono con Pérdida.
+            const isMO = c.type === "mano_obra";
             return (
               <tr
                 key={c.id}
@@ -443,7 +464,21 @@ export default function ObraItemComponentsEditor({
                       caía en un renglón nuevo e inflaba las filas con
                       referencia (vista densa). */}
                   <div className="flex items-center gap-1">
-                  {canEdit ? (
+                  {canEdit && c.type === "material" ? (
+                    // Material: el nombre es un autocomplete contra el catálogo
+                    // (igual que el buscador "Agregar material" de abajo).
+                    // Elegir un resultado SWAPEA la línea por ese material
+                    // (trae precio + link). Si MJ deja texto libre, se guarda
+                    // como descripción suelta al salir del campo.
+                    <div className="flex-1 min-w-0">
+                      <MaterialNameCell
+                        key={c.description}
+                        comp={c}
+                        onSwap={swapMaterial}
+                        onRename={(v) => patchComp(c.id, "description", v)}
+                      />
+                    </div>
+                  ) : canEdit ? (
                     <input
                       type="text"
                       defaultValue={c.description}
@@ -583,15 +618,17 @@ export default function ObraItemComponentsEditor({
                     <MoneyInput
                       value={c.unitCost}
                       onChange={(v) => patchComp(c.id, "unitCost", v)}
-                      className="w-full bg-transparent text-right tabular-nums text-gray-900"
+                      className={`w-full bg-transparent text-right tabular-nums ${
+                        isMO ? "text-rose-700" : "text-gray-900"
+                      }`}
                     />
                   ) : (
-                    <span className="text-gray-700 tabular-nums">
+                    <span className={`tabular-nums ${isMO ? "text-rose-700" : "text-gray-700"}`}>
                       {formatCLP(c.unitCost)}
                     </span>
                   )}
                 </td>
-                <td className={`py-1 px-2 text-right font-medium text-gray-900 tabular-nums ${dense ? "text-[9px]" : ""}`}>
+                <td className={`py-1 px-2 text-right font-medium tabular-nums ${isMO ? "text-rose-700" : "text-gray-900"} ${dense ? "text-[9px]" : ""}`}>
                   {formatCLP(c.totalCost)}
                 </td>
                 <td className="py-1 px-1 text-right whitespace-nowrap">
@@ -674,5 +711,42 @@ export default function ObraItemComponentsEditor({
         </div>
       )}
     </div>
+  );
+}
+
+// Celda del nombre de un material en el desglose: autocomplete contra el
+// catálogo con estado de texto propio. Elegir un resultado del menú SWAPEA la
+// línea entera (precio + link); salir del campo con texto que no coincide con
+// ningún material guarda ese texto como descripción libre.
+// Se monta con key={comp.description}: cuando el material cambia por fuera
+// (swap o refetch), la celda se vuelve a montar con el texto nuevo. Mientras
+// MJ escribe, comp.description no cambia, así que NO se remonta y no se pierde
+// lo tipeado. Así evitamos sincronizar prop→estado con un useEffect.
+function MaterialNameCell({
+  comp,
+  onSwap,
+  onRename,
+}: {
+  comp: Component;
+  onSwap: (compId: string, m: CatalogMaterial) => void;
+  onRename: (value: string) => void;
+}) {
+  const [text, setText] = useState(comp.description);
+
+  return (
+    <MaterialAutocomplete
+      value={text}
+      onChange={setText}
+      onSelect={(m) => {
+        setText(m.name);
+        onSwap(comp.id, m);
+      }}
+      onBlur={(v) => {
+        if (v !== comp.description) onRename(v);
+      }}
+      placeholder="Buscar material en el catálogo…"
+      // Sin borde, para no romper el look tipo planilla de la tabla densa.
+      inputClassName="w-full min-w-0 bg-transparent text-gray-900"
+    />
   );
 }

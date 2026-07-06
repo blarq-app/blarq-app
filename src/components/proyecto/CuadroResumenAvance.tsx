@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useRef, useState } from "react";
+import { toPng } from "html-to-image";
 import { formatCLP } from "@/lib/utils";
 import type { CuadroResumenData, ConceptoKey } from "@/lib/projects/cuadroResumen";
 
@@ -24,6 +25,7 @@ export default function CuadroResumenAvance({
   data,
   transferido,
   projectId,
+  projectName,
   objetivosGuardados,
 }: {
   data: CuadroResumenData;
@@ -31,6 +33,8 @@ export default function CuadroResumenAvance({
   // que MJ todavía no marcó obra/muebles en /banco).
   transferido: { obra: number; muebles: number; sinConcepto: number };
   projectId: string;
+  // Nombre de la obra — encabezado de la imagen que se le manda al cliente.
+  projectName: string;
   // Objetivos % guardados (borrador del avance), o null si nunca se guardó.
   objetivosGuardados: Record<string, number> | null;
 }) {
@@ -109,6 +113,39 @@ export default function CuadroResumenAvance({
     return { porConcepto, totalAPedir, totalSaldoNuevo, generadoTotal, aTransferir, transferidoDeMas };
   }, [conceptos, avance, transferido, transferidoTotal]);
 
+  // ── Descargar como imagen (versión limpia para el cliente) ───────────────
+  // No fotografiamos el formulario (cajitas rojas, inputs). Renderizamos una
+  // copia PROLIJA del cuadro fuera de pantalla — con los % como texto plano y
+  // la fila AVANCE en una banda negra — y esa copia es la que se exporta a PNG.
+  // Estos hooks van ANTES del early return de abajo (regla de hooks de React).
+  const exportRef = useRef<HTMLDivElement>(null);
+  const [descargando, setDescargando] = useState(false);
+  async function descargarImagen() {
+    if (!exportRef.current) return;
+    setDescargando(true);
+    try {
+      const dataUrl = await toPng(exportRef.current, {
+        pixelRatio: 2, // nitidez para pantalla retina / impresión
+        backgroundColor: "#ffffff",
+        cacheBust: true,
+      });
+      const a = document.createElement("a");
+      const slug = projectName
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "");
+      a.href = dataUrl;
+      a.download = `cuadro-resumen-${slug || "obra"}.png`;
+      a.click();
+    } catch {
+      // Si algo falla (fuente externa, etc) no rompemos la página.
+    } finally {
+      setDescargando(false);
+    }
+  }
+
   if (conceptos.length === 0 && pagos.length === 0) return null;
 
   const cellMonto = (v: number) =>
@@ -125,17 +162,37 @@ export default function CuadroResumenAvance({
 
   const sueldoConceptos = conceptos.filter((c) => c.generaSueldo);
 
+  // Fecha de hoy para el pie de la imagen (dd-mm-yyyy). Solo cliente, al pintar.
+  const hoy = new Date();
+  const hoyStr = `${String(hoy.getDate()).padStart(2, "0")}-${String(
+    hoy.getMonth() + 1
+  ).padStart(2, "0")}-${hoy.getFullYear()}`;
+
   return (
     <div className="space-y-4 mb-8">
       {/* ── Cuadro Resumen + AVANCE editable (esto va al cliente) ─────────── */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Cuadro Resumen</h2>
-        <p className="text-xs text-gray-500 mb-4">
-          Acordado por concepto, lo ya cobrado, y el avance que pedís ahora.
-          Completá el % AL QUE QUERÉS LLEGAR por concepto (100% = cobrar todo el
-          saldo) y te calcula cuánto pedir. Las columnas son las del
-          presupuesto entregado al cliente.
-        </p>
+        <div className="flex items-start justify-between mb-4 gap-3">
+          {/* El rótulo de unidad evita la confusión A1/A9: este cuadro va
+              c/IVA (réplica del Excel que va al cliente), mientras las cards
+              de arriba están en neto. Sin esta nota, "Total pagos" (c/IVA,
+              conciliado) parece contradecir la card "Cobrado" (neto, facturado). */}
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-gray-900">Cuadro Resumen</h2>
+            <p className="text-[11px] text-gray-400 mt-0.5">Valores con IVA incluido</p>
+          </div>
+          <button
+            type="button"
+            onClick={descargarImagen}
+            disabled={descargando}
+            className="inline-flex items-center gap-1.5 shrink-0 rounded border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+            </svg>
+            {descargando ? "Generando…" : "Descargar imagen"}
+          </button>
+        </div>
         {/* Mismo formato que antes (Fecha/Monto/Factura por concepto), pero con
             letra y padding chicos para que entre completo. */}
         <div className="overflow-x-auto">
@@ -193,6 +250,14 @@ export default function CuadroResumenAvance({
                   <td className="py-1 pl-1 border-l border-gray-200"></td>
                 </tr>
               ))}
+
+              {/* Aire entre el detalle de transferencias y el bloque de
+                  totales de abajo (pedido de MJ): una fila vacía que da
+                  espacio en blanco para separar visualmente el detalle de
+                  los subtotales (Total pagos / Avance / Saldo pendiente). */}
+              <tr aria-hidden="true">
+                <td colSpan={2 + conceptos.length * 3} className="h-4"></td>
+              </tr>
 
               {/* TOTAL PAGOS */}
               <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold text-gray-900">
@@ -316,6 +381,136 @@ export default function CuadroResumenAvance({
             Te adelantaste {formatCLP(transferidoTotal - calc.generadoTotal)}.
           </p>
         )}
+      </div>
+
+      {/* ── Versión PROLIJA para exportar a imagen (fuera de pantalla) ──────
+          Es lo que se le manda al cliente: los % van como TEXTO PLANO (no
+          cajitas editables), la fila AVANCE en una banda negra editorial, sin
+          inputs ni cursores. No mostramos "Me paso a Sueldos" (es interno).
+          Se renderiza siempre pero posicionado fuera de la vista; el botón
+          captura este nodo con html-to-image. */}
+      <div
+        aria-hidden
+        style={{ position: "fixed", left: "-10000px", top: 0, pointerEvents: "none" }}
+      >
+        <div ref={exportRef} data-export-cuadro className="bg-white p-8 inline-block" style={{ fontFamily: "var(--font-sans, ui-sans-serif, system-ui, sans-serif)" }}>
+          {/* Encabezado */}
+          <div className="flex items-end justify-between mb-5 gap-8">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.2em] text-gray-400 mb-1">Cuadro Resumen</p>
+              <h1 className="text-2xl font-semibold text-gray-900 leading-tight">{projectName}</h1>
+            </div>
+            <div className="text-right text-[11px] text-gray-400 leading-snug">
+              <p className="font-medium text-gray-600">BLARQ</p>
+              <p>{hoyStr}</p>
+            </div>
+          </div>
+
+          <table className="text-xs border-collapse tabular-nums" style={{ minWidth: "760px" }}>
+            <thead>
+              <tr className="text-gray-600">
+                <th className="pb-1 pr-2 text-left"></th>
+                {conceptos.map((c) => (
+                  <th key={c.key} colSpan={3} className="pb-1 px-2 text-center border-l border-gray-200 font-semibold uppercase tracking-wide text-[10px]">
+                    {c.label}
+                  </th>
+                ))}
+                <th className="pb-1 pl-2 text-right border-l border-gray-200 font-semibold uppercase tracking-wide text-[10px]">Total</th>
+              </tr>
+              <tr className="text-gray-400 border-b border-gray-300 text-[9px] uppercase tracking-wide">
+                <th></th>
+                {conceptos.map((c) => (
+                  <Fragment key={c.key}>
+                    <th className="pb-1 px-2 border-l border-gray-100 text-left font-medium">Fecha</th>
+                    <th className="pb-1 px-2 text-right font-medium">Monto</th>
+                    <th className="pb-1 px-2 text-right font-medium">Fact.</th>
+                  </Fragment>
+                ))}
+                <th className="pb-1 pl-2 border-l border-gray-200"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {/* Acordado */}
+              <tr className="bg-gray-50 border-b border-gray-200 font-semibold text-gray-900">
+                <td className="py-1.5 pr-2 text-left">{versionLabel}</td>
+                {conceptos.map((c) => (
+                  <Fragment key={c.key}>
+                    <td className="py-1.5 px-2 border-l border-gray-200 text-left text-gray-500 font-normal whitespace-nowrap">{c.fecha}</td>
+                    <td className="py-1.5 px-2 text-right whitespace-nowrap">{cellMonto(c.acordado)}</td>
+                    <td className="py-1.5 px-2"></td>
+                  </Fragment>
+                ))}
+                <td className="py-1.5 pl-2 border-l border-gray-200 text-right whitespace-nowrap">{formatCLP(totalAcordado)}</td>
+              </tr>
+
+              {/* Cobros */}
+              {pagos.map((r, i) => (
+                <tr key={i} className="border-b border-gray-50 text-gray-700">
+                  <td className="py-1.5 pr-2"></td>
+                  {conceptos.map((c) => {
+                    const cell = r.porConcepto[c.key];
+                    return (
+                      <Fragment key={c.key}>
+                        <td className="py-1.5 px-2 border-l border-gray-100 text-left text-gray-500 whitespace-nowrap">{cell.monto ? fmtDate(r.date) : ""}</td>
+                        <td className="py-1.5 px-2 text-right whitespace-nowrap">{cellMonto(cell.monto)}</td>
+                        <td className="py-1.5 px-2 text-right text-gray-500">{cell.monto && cell.folio ? cell.folio : ""}</td>
+                      </Fragment>
+                    );
+                  })}
+                  <td className="py-1.5 pl-2 border-l border-gray-200"></td>
+                </tr>
+              ))}
+
+              {/* TOTAL PAGOS */}
+              <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold text-gray-900">
+                <td className="py-1.5 pr-2 text-left uppercase tracking-wide text-[10px]">Total pagos</td>
+                {conceptos.map((c) => (
+                  <Fragment key={c.key}>
+                    <td className="py-1.5 px-2 border-l border-gray-200 text-left text-gray-500 font-normal">{(c.avancePct * 100).toFixed(0)}%</td>
+                    <td colSpan={2} className="py-1.5 px-2 text-right whitespace-nowrap">{cellMonto(c.pagado)}</td>
+                  </Fragment>
+                ))}
+                <td className="py-1.5 pl-2 border-l border-gray-200 text-right whitespace-nowrap">{formatCLP(totalPagado)}</td>
+              </tr>
+
+              {/* AVANCE (a cobrar) — banda negra editorial, % como texto plano */}
+              <tr className="bg-gray-900 text-white font-medium">
+                <td className="py-2 pr-2 pl-1 text-left uppercase tracking-wide text-[10px]">Avance a cobrar</td>
+                {conceptos.map((c) => {
+                  const cc = calc.porConcepto.get(c.key)!;
+                  return (
+                    <Fragment key={c.key}>
+                      <td className="py-2 px-2 border-l border-gray-700 text-left text-gray-300">{avance[c.key] ?? 0}%</td>
+                      <td colSpan={2} className="py-2 px-2 text-right whitespace-nowrap">
+                        {cc.aPedir > 0 ? formatCLP(cc.aPedir) : <span className="text-gray-500">—</span>}
+                      </td>
+                    </Fragment>
+                  );
+                })}
+                <td className="py-2 pl-2 pr-1 border-l border-gray-700 text-right whitespace-nowrap font-semibold">{formatCLP(calc.totalAPedir)}</td>
+              </tr>
+
+              {/* SALDO PENDIENTE */}
+              <tr className="border-t border-gray-200 text-gray-900 font-medium">
+                <td className="py-1.5 pr-2 text-left uppercase tracking-wide text-[10px]">Saldo pendiente</td>
+                {conceptos.map((c) => {
+                  const cc = calc.porConcepto.get(c.key)!;
+                  return (
+                    <td key={c.key} colSpan={3} className="py-1.5 px-2 border-l border-gray-200 text-right whitespace-nowrap">{cellMonto(cc.saldoNuevo)}</td>
+                  );
+                })}
+                <td className="py-1.5 pl-2 border-l border-gray-200 text-right whitespace-nowrap">{formatCLP(calc.totalSaldoNuevo)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p className="text-[11px] text-gray-500 mt-4">
+            Avance total cobrado: {(avanceTotal * 100).toFixed(0)}% del acordado.
+            {calc.totalAPedir > 0 && (
+              <> En este avance se cobra <span className="font-medium tabular-nums">{formatCLP(calc.totalAPedir)}</span>; el saldo queda en {formatCLP(calc.totalSaldoNuevo)}.</>
+            )}
+          </p>
+        </div>
       </div>
     </div>
   );

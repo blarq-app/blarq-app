@@ -16,9 +16,11 @@ import { useRouter } from "next/navigation";
 // (eso lo cubre el botón "↔ Interna").
 const OPCIONES: { value: string; label: string }[] = [
   { value: "sueldo", label: "Sueldo" },
+  { value: "retiro_personal", label: "Retiro socio" },
+  { value: "bono_socio", label: "Bono socio" },
+  { value: "prestamo_socio", label: "Préstamo socio" },
   { value: "previred", label: "Previred" },
   { value: "comision_bancaria", label: "Comisión banco" },
-  { value: "retiro_personal", label: "Retiro personal" },
   { value: "deposito_efectivo", label: "Depósito efectivo" },
   { value: "impuestos", label: "Impuestos" },
   { value: "otro_sin_factura", label: "Otro" },

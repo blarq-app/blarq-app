@@ -86,23 +86,15 @@ export default function PartidaExpandedPanel(p: Props) {
   const showLumpRow = compCount === 0;
   return (
     <div className="px-4 py-1.5 space-y-1">
-      {/* Descripciones cliente / maestro, lado a lado y compactas. */}
-      <div className="grid md:grid-cols-2 gap-2">
-        <DescBlock
-          label="Descripción para el cliente"
-          hint="— PDF presupuesto"
-          value={item.descriptionCliente}
-          placeholder="Descripción para el cliente…"
-          onChange={(html) => p.onUpdate("descriptionCliente", html)}
-        />
-        <DescBlock
-          label="Descripción para el maestro"
-          hint="— estado de pago"
-          value={item.descriptionMaestro}
-          placeholder="Alcance para el maestro…"
-          onChange={(html) => p.onUpdate("descriptionMaestro", html)}
-        />
-      </div>
+      {/* Solo la descripción para el MAESTRO (la que el cliente NO ve, va al
+          estado de pago). La del cliente se edita inline arriba, en la fila. */}
+      <DescBlock
+        label="Descripción para el maestro"
+        hint="— estado de pago · el cliente no la ve"
+        value={item.descriptionMaestro}
+        placeholder="Alcance para el maestro…"
+        onChange={(html) => p.onUpdate("descriptionMaestro", html)}
+      />
 
       {/* Fila de costos por unidad (6 rubros + suma). SOLO cuando la partida
           no tiene desglose: ahí es donde se cargan los costos a mano. Si hay
@@ -184,6 +176,18 @@ function CatalogButtons(p: Props) {
   if (!p.item.catalogPartidaId) return null;
   return (
     <div className="flex justify-end gap-2">
+      {/* Abrir ESTA partida en el Catálogo de Partidas, en pestaña nueva, para
+          editar la receta MAESTRA (la que se usa en próximos proyectos), NO la
+          copia de este presupuesto. La etiqueta lo deja claro. */}
+      <a
+        href={`/catalogo/partidas?focus=${p.item.catalogPartidaId}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-xs text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-2 py-0.5 rounded-lg transition-colors whitespace-nowrap"
+        title="Abre la partida en el Catálogo (pestaña nueva). Editás la receta maestra para los próximos proyectos, no esta cotización."
+      >
+        Editar en catálogo ↗
+      </a>
       <button
         onClick={p.onUpdateCatalogDescription}
         className="text-xs text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-2 py-0.5 rounded-lg transition-colors whitespace-nowrap"

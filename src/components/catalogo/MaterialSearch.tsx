@@ -48,6 +48,13 @@ export default function MaterialSearch({
   });
   const [saving, setSaving] = useState(false);
 
+  // Alta desde link: trae nombre + precio del producto al pegar el link.
+  // - extracting: hay una lectura en curso ("Buscando…").
+  // - extractNote: aviso discreto del resultado (sin datos / error). Si la
+  //   lectura va bien no mostramos nada: los campos quedan rellenos y listos.
+  const [extracting, setExtracting] = useState(false);
+  const [extractNote, setExtractNote] = useState<string | null>(null);
+
   // Edit material state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editMat, setEditMat] = useState({
@@ -60,6 +67,27 @@ export default function MaterialSearch({
   // New category state
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
+
+  // Alta de material "desde arriba" (sin elegir categoría primero): MJ pega el
+  // link, la app trae nombre + precio Y adivina la categoría. La categoría
+  // queda elegida pero editable: confirma antes de guardar.
+  // - showAddTop: panel abierto.
+  // - topMat: borrador del material (incluye category, a diferencia del alta
+  //   por categoría que ya sabe el rubro).
+  // - topBusy: lectura del link en curso ("Buscando…").
+  // - topCategorizing: la IA está adivinando el rubro ("Categorizando…").
+  // - topNote: aviso discreto (no se pudo leer, completá a mano).
+  const [showAddTop, setShowAddTop] = useState(false);
+  const [topMat, setTopMat] = useState({
+    name: "",
+    unit: "UN",
+    netPrice: 0,
+    referenceLink: "",
+    category: "",
+  });
+  const [topBusy, setTopBusy] = useState(false);
+  const [topCategorizing, setTopCategorizing] = useState(false);
+  const [topNote, setTopNote] = useState<string | null>(null);
 
   // Offers drawer
   const [offersMaterial, setOffersMaterial] = useState<Material | null>(null);
@@ -166,11 +194,162 @@ export default function MaterialSearch({
       const created = await res.json();
       setMaterials([...materials, created]);
       setNewMat({ name: "", unit: "UN", netPrice: 0, referenceLink: "" });
+      setExtractNote(null);
       setAddingCategory(null);
     } catch {
       alert("Error al crear material");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Alta "desde arriba": lee el link → nombre + precio, y después adivina la
+  // categoría con IA. Todo queda editable; si algo no se pudo leer, lo completa
+  // MJ. La categoría adivinada siempre es un rubro existente (nunca inventa).
+  async function extractAndCategorizeTop() {
+    const link = topMat.referenceLink.trim();
+    if (!link) {
+      setTopNote("Pegá un link primero.");
+      return;
+    }
+    setTopBusy(true);
+    setTopNote(null);
+    let extractedName = "";
+    try {
+      const res = await fetch(
+        `/api/catalogo/materiales/extract?url=${encodeURIComponent(link)}`
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setTopNote(data.error || "No se pudo leer, completá a mano.");
+        return;
+      }
+      extractedName = data.name ? String(data.name).toUpperCase() : "";
+      setTopMat((prev) => ({
+        ...prev,
+        name: !prev.name.trim() && extractedName ? extractedName : prev.name,
+        netPrice:
+          !prev.netPrice && data.netPrice ? data.netPrice : prev.netPrice,
+      }));
+      if (!data.name && data.netPrice === null) {
+        setTopNote("No se pudo leer, completá a mano.");
+      } else if (!data.name) {
+        setTopNote("Traje el precio; el nombre completalo a mano.");
+      } else if (data.netPrice === null) {
+        setTopNote("Traje el nombre; el precio completalo a mano.");
+      }
+    } catch {
+      setTopNote("No se pudo leer, completá a mano.");
+      return;
+    } finally {
+      setTopBusy(false);
+    }
+    // Adivinar categoría con lo que se haya conseguido de nombre (o lo que MJ
+    // ya tenía escrito). Si no hay nombre, no hay con qué adivinar.
+    const nameForCat = (extractedName || topMat.name).trim();
+    if (!nameForCat) return;
+    setTopCategorizing(true);
+    try {
+      const res = await fetch("/api/catalogo/materiales/categorizar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nameForCat }),
+      });
+      const data = await res.json();
+      // Solo completamos si está vacío: respetamos lo que MJ ya haya elegido.
+      if (res.ok && data.category) {
+        setTopMat((prev) => ({
+          ...prev,
+          category: prev.category || data.category,
+        }));
+      }
+    } catch {
+      /* sin sugerencia: MJ elige el rubro a mano */
+    } finally {
+      setTopCategorizing(false);
+    }
+  }
+
+  // Guarda el material del alta "desde arriba" en la categoría elegida.
+  async function handleAddMaterialTop() {
+    if (!topMat.name.trim() || !topMat.category.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/catalogo/materiales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: topMat.name,
+          unit: topMat.unit,
+          netPrice: topMat.netPrice,
+          referenceLink: topMat.referenceLink,
+          category: topMat.category,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || "Error al crear material");
+        return;
+      }
+      const created = await res.json();
+      setMaterials([...materials, created]);
+      closeAddTop();
+    } catch {
+      alert("Error al crear material");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function closeAddTop() {
+    setShowAddTop(false);
+    setTopMat({ name: "", unit: "UN", netPrice: 0, referenceLink: "", category: "" });
+    setTopNote(null);
+  }
+
+  // Lee el producto desde el link pegado y rellena nombre + precio del form
+  // de alta. No pisa lo que MJ ya escribió: solo completa lo que esté vacío,
+  // y todo queda editable para que valide antes de guardar. Si no se pudo
+  // leer, deja un aviso discreto y MJ completa a mano (nunca inventa precio).
+  async function extractFromLink() {
+    const link = newMat.referenceLink.trim();
+    if (!link) {
+      setExtractNote("Pegá un link primero.");
+      return;
+    }
+    setExtracting(true);
+    setExtractNote(null);
+    try {
+      const res = await fetch(
+        `/api/catalogo/materiales/extract?url=${encodeURIComponent(link)}`
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setExtractNote(data.error || "No se pudo leer, completá a mano.");
+        return;
+      }
+      setNewMat((prev) => ({
+        ...prev,
+        // Nombre en MAYÚSCULA para igualar la convención del catálogo. Queda
+        // editable: si MJ ya había escrito algo, no lo pisamos.
+        name:
+          !prev.name.trim() && data.name
+            ? String(data.name).toUpperCase()
+            : prev.name,
+        netPrice: !prev.netPrice && data.netPrice ? data.netPrice : prev.netPrice,
+      }));
+      // Si vino precio pero no nombre (o viceversa), avisamos qué falta.
+      if (!data.name && data.netPrice === null) {
+        setExtractNote("No se pudo leer, completá a mano.");
+      } else if (!data.name) {
+        setExtractNote("Traje el precio; el nombre completalo a mano.");
+      } else if (data.netPrice === null) {
+        setExtractNote("Traje el nombre; el precio completalo a mano.");
+      }
+    } catch {
+      setExtractNote("No se pudo leer, completá a mano.");
+    } finally {
+      setExtracting(false);
     }
   }
 
@@ -341,11 +520,154 @@ export default function MaterialSearch({
         </button>
         <button
           onClick={() => setShowNewCategory(true)}
-          className="px-4 py-3 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors whitespace-nowrap"
+          className="px-4 py-3 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
         >
           + Categoria
         </button>
+        <button
+          onClick={() => {
+            setShowAddTop(true);
+            setShowNewCategory(false);
+          }}
+          className="px-4 py-3 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors whitespace-nowrap"
+          title="Pegá el link del producto: trae nombre, precio y categoría"
+        >
+          + Material
+        </button>
       </div>
+
+      {/* Alta de material desde arriba: pegás el link, trae nombre + precio y
+          adivina la categoría. Todo editable; confirmás antes de guardar. */}
+      {showAddTop && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+          <h4 className="text-sm font-medium text-gray-900">
+            Agregar material
+          </h4>
+
+          {/* Fila 1: link + traer del link */}
+          <div className="flex gap-2 items-end">
+            <div className="flex-1">
+              <label className="block text-xs text-gray-600 mb-1">
+                Link del producto
+              </label>
+              <input
+                type="url"
+                value={topMat.referenceLink}
+                onChange={(e) => {
+                  setTopMat({ ...topMat, referenceLink: e.target.value });
+                  setTopNote(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    extractAndCategorizeTop();
+                  }
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
+                placeholder="https://mk.cl/... · https://sodimac.cl/... (opcional)"
+                autoFocus
+              />
+            </div>
+            <button
+              onClick={extractAndCategorizeTop}
+              disabled={topBusy || topCategorizing || !topMat.referenceLink.trim()}
+              className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 disabled:opacity-50 whitespace-nowrap"
+              title="Leer nombre, precio y categoría desde el link"
+            >
+              {topBusy
+                ? "Buscando…"
+                : topCategorizing
+                  ? "Categorizando…"
+                  : "Traer del link"}
+            </button>
+          </div>
+
+          {topNote && <p className="text-xs text-gray-500">{topNote}</p>}
+
+          {/* Fila 2: nombre + categoría + unidad + precio + acciones */}
+          <div className="grid grid-cols-12 gap-2 items-end">
+            <div className="col-span-4">
+              <label className="block text-xs text-gray-600 mb-1">Nombre</label>
+              <input
+                type="text"
+                value={topMat.name}
+                onChange={(e) => setTopMat({ ...topMat, name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
+                placeholder="Nombre del material"
+              />
+            </div>
+            <div className="col-span-3">
+              <label className="block text-xs text-gray-600 mb-1">
+                Categoría{" "}
+                {topCategorizing && (
+                  <span className="text-gray-400 font-normal">adivinando…</span>
+                )}
+              </label>
+              <select
+                value={topMat.category}
+                onChange={(e) =>
+                  setTopMat({ ...topMat, category: e.target.value })
+                }
+                className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
+              >
+                <option value="">Elegí…</option>
+                {allCategories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-span-1">
+              <label className="block text-xs text-gray-600 mb-1">Unidad</label>
+              <select
+                value={topMat.unit}
+                onChange={(e) => setTopMat({ ...topMat, unit: e.target.value })}
+                className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
+              >
+                {UNITS.map((u) => (
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-600 mb-1">
+                Precio Neto
+              </label>
+              <input
+                type="number"
+                step="1"
+                value={topMat.netPrice || ""}
+                onChange={(e) =>
+                  setTopMat({
+                    ...topMat,
+                    netPrice: parseFloat(e.target.value) || 0,
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-right tabular-nums focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
+                placeholder="$0"
+              />
+            </div>
+            <div className="col-span-2 flex gap-2">
+              <button
+                onClick={handleAddMaterialTop}
+                disabled={saving || !topMat.name.trim() || !topMat.category.trim()}
+                className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+              >
+                {saving ? "..." : "Agregar"}
+              </button>
+              <button
+                onClick={closeAddTop}
+                className="text-gray-500 px-3 py-2 rounded-lg text-sm hover:bg-gray-200"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* New category form */}
       {showNewCategory && (
@@ -413,6 +735,7 @@ export default function MaterialSearch({
                   netPrice: 0,
                   referenceLink: "",
                 });
+                setExtractNote(null);
               }}
               className="text-sm text-gray-600 hover:text-gray-900 font-medium"
             >
@@ -665,11 +988,53 @@ export default function MaterialSearch({
             </table>
           )}
 
-          {/* Add material form */}
+          {/* Add material form. Pensado "link primero": MJ pega el link del
+              producto (Sodimac / Easy / mK), aprieta "Traer del link" y se
+              rellenan nombre y precio. Todo queda editable; si no se pudo leer
+              completa a mano. */}
           {addingCategory === group.category && (
-            <div className="p-4 border-t border-gray-100 bg-blue-50">
+            <div className="p-4 border-t border-gray-100 bg-blue-50 space-y-3">
+              {/* Fila 1: link + traer del link */}
+              <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-600 mb-1">
+                    Link del producto
+                  </label>
+                  <input
+                    type="url"
+                    value={newMat.referenceLink}
+                    onChange={(e) => {
+                      setNewMat({ ...newMat, referenceLink: e.target.value });
+                      setExtractNote(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        extractFromLink();
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
+                    placeholder="https://mk.cl/... · https://sodimac.cl/... (opcional)"
+                    autoFocus
+                  />
+                </div>
+                <button
+                  onClick={extractFromLink}
+                  disabled={extracting || !newMat.referenceLink.trim()}
+                  className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 disabled:opacity-50 whitespace-nowrap"
+                  title="Leer nombre y precio desde el link"
+                >
+                  {extracting ? "Buscando…" : "Traer del link"}
+                </button>
+              </div>
+
+              {extractNote && (
+                <p className="text-xs text-gray-500">{extractNote}</p>
+              )}
+
+              {/* Fila 2: nombre + unidad + precio + acciones */}
               <div className="grid grid-cols-12 gap-2 items-end">
-                <div className="col-span-4">
+                <div className="col-span-5">
                   <label className="block text-xs text-gray-600 mb-1">
                     Nombre
                   </label>
@@ -681,10 +1046,9 @@ export default function MaterialSearch({
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
                     placeholder="Nombre del material"
-                    autoFocus
                   />
                 </div>
-                <div className="col-span-1">
+                <div className="col-span-2">
                   <label className="block text-xs text-gray-600 mb-1">
                     Unidad
                   </label>
@@ -716,25 +1080,11 @@ export default function MaterialSearch({
                         netPrice: parseFloat(e.target.value) || 0,
                       })
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-right tabular-nums focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
                     placeholder="$0"
                   />
                 </div>
-                <div className="col-span-3">
-                  <label className="block text-xs text-gray-600 mb-1">
-                    Link referencia
-                  </label>
-                  <input
-                    type="url"
-                    value={newMat.referenceLink}
-                    onChange={(e) =>
-                      setNewMat({ ...newMat, referenceLink: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
-                    placeholder="https://sodimac.cl/..."
-                  />
-                </div>
-                <div className="col-span-2 flex gap-2">
+                <div className="col-span-3 flex gap-2">
                   <button
                     onClick={() => handleAddMaterial(group.category)}
                     disabled={saving || !newMat.name.trim()}
@@ -743,7 +1093,10 @@ export default function MaterialSearch({
                     {saving ? "..." : "Agregar"}
                   </button>
                   <button
-                    onClick={() => setAddingCategory(null)}
+                    onClick={() => {
+                      setAddingCategory(null);
+                      setExtractNote(null);
+                    }}
                     className="text-gray-500 px-3 py-2 rounded-lg text-sm hover:bg-gray-200"
                   >
                     Cancelar

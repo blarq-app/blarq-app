@@ -3,11 +3,13 @@
 import { useState, useEffect, useRef, Fragment, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { OBRA_CHAPTERS, ObraChapter, formatCLP } from "@/lib/utils";
+import { annotateZones } from "@/lib/presupuesto/zones";
 import MoneyInput from "@/components/ui/MoneyInput";
 import BudgetAuditBanner from "@/components/presupuesto/BudgetAuditBanner";
 import ObraItemComponentsEditor from "@/components/presupuesto/ObraItemComponentsEditor";
 import CostoDirectoDetalle from "@/components/presupuesto/CostoDirectoDetalle";
 import PartidaExpandedPanel from "@/components/presupuesto/PartidaExpandedPanel";
+import RichTextEditor from "@/components/presupuesto/RichTextEditor";
 import { sanitizeRichTextHtml, isRichTextEmpty } from "@/lib/richText";
 import {
   DndContext,
@@ -211,7 +213,12 @@ export default function ObraEditor({
   const changeMarkers = useMemo<Map<string, ChangeResult>>(
     () =>
       computeChangeMarkers(
-        items.map((it) => ({ lineageId: it.lineageId, total: it.total })),
+        items.map((it) => ({
+          lineageId: it.lineageId,
+          unitPrice: it.unitPrice,
+          quantity: it.quantity,
+          total: it.total,
+        })),
         baselineItems
       ),
     [items, baselineItems]
@@ -244,6 +251,11 @@ export default function ObraEditor({
   const [enabledEmptyChapters, setEnabledEmptyChapters] = useState<Set<string>>(new Set());
   const [showChapterPicker, setShowChapterPicker] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+  // Qué partida tiene la descripción del cliente abierta para editar INLINE en
+  // la fila (sin abrir el panel). Solo una a la vez: el editor de texto con
+  // formato es pesado, así que se monta on-demand al hacer clic y se desmonta
+  // al salir (onChange de RichTextEditor dispara en blur → guarda y cierra).
+  const [editingDescId, setEditingDescId] = useState<string | null>(null);
   // Provision price overrides: componentId → precio c/IVA ingresado por usuario
   const [provisionPrices, setProvisionPrices] = useState<Record<string, number>>({});
   // Edición inline de zona (subChapter) — por fila individual o por grupo
@@ -377,21 +389,21 @@ export default function ObraEditor({
       if (aSub !== bSub) return aSub.localeCompare(bSub, "es");
       return a.name.localeCompare(b.name, "es");
     });
-    // Subtotales por zona (subChapter) dentro de este capítulo. Se muestran
-    // como fila al cierre de cada grupo. La key "" agrupa los items sin zona.
-    const subChapterSubtotals = new Map<string, number>();
-    for (const it of chapterItems) {
-      const k = it.subChapter ?? "";
-      subChapterSubtotals.set(k, (subChapterSubtotals.get(k) ?? 0) + it.total);
-    }
-    const distinctZones = new Set(chapterItems.map((i) => i.subChapter ?? ""));
-    const showZoneSubtotals = distinctZones.size > 1;
+    // Zona DERIVADA por posición (helper compartido con el PDF): una partida
+    // sin zona propia hereda la de arriba. Así la pantalla y el PDF agrupan
+    // IGUAL y los subtotales de zona incluyen las partidas heredadas (ej: el
+    // extractor recién creado sin zona, que cae al fondo de BAÑOS, ahora suma
+    // en BAÑOS en vez de quedar en un grupo invisible). `zoneRows` va alineado
+    // 1:1 con `items` (mismo orden) para leer la zona efectiva en el render.
+    const { rows: zoneRows, zoneSubtotals, showZoneSubtotals } =
+      annotateZones(sortedItems);
     return {
       key,
       ...chapter,
       items: sortedItems,
+      zoneRows,
       subtotal: chapterItems.reduce((sum, item) => sum + item.total, 0),
-      subChapterSubtotals,
+      subChapterSubtotals: zoneSubtotals,
       showZoneSubtotals,
     };
   });
@@ -412,6 +424,9 @@ export default function ObraEditor({
   // Orden de arrastre: solo en versiones editables (borrador/enviado). En
   // aprobado/rechazado la lista queda fija.
   const canReorder = ["borrador", "enviado"].includes(initialBudget.status);
+  // Mismo gate que el detalle de costos: las descripciones se editan solo en
+  // versiones no congeladas (borrador/enviado). En aprobado/rechazado son vista.
+  const canEditDetail = ["borrador", "enviado"].includes(initialBudget.status);
   // Lista plana de ids EN EL ORDEN VISIBLE (capítulo por capítulo, y dentro de
   // cada uno el orden ya calculado arriba). dnd-kit ordena contra esta lista,
   // así que tiene que reflejar exactamente lo que se ve en pantalla.
@@ -444,9 +459,17 @@ export default function ObraEditor({
     const newIndex = orderedIds.indexOf(overId);
     if (oldIndex < 0 || newIndex < 0) return;
 
-    // El capítulo de destino = el de la partida sobre la que se soltó.
+    // El capítulo Y la zona de destino = los de la partida sobre la que se
+    // soltó. La zona (subChapter) importa para que ARRASTRAR una partida
+    // debajo del título de una zona (ej. BAÑOS) la deje guardada en esa zona,
+    // sin tener que usar aparte el botón de zona. Antes el arrastre solo
+    // movía la posición: la partida se veía bajo BAÑOS en el editor pero su
+    // zona guardada quedaba vieja (o vacía), y el PDF —que agrupa por la zona
+    // guardada— la mostraba huérfana arriba del capítulo. null = sin zona
+    // (caer en un área sin zona, ej. el capítulo Limpieza, la deja sin zona).
     const overItem = items.find((i) => i.id === overId);
     const targetChapter = overItem?.chapter;
+    const targetSubChapter = overItem ? overItem.subChapter ?? null : null;
 
     const newOrder = arrayMove(orderedIds, oldIndex, newIndex);
     const sortMap = new Map(newOrder.map((id, idx) => [id, idx]));
@@ -455,8 +478,15 @@ export default function ObraEditor({
     const updated = items.map((it) => {
       const so = sortMap.get(it.id);
       const base = so !== undefined ? { ...it, sortOrder: so } : it;
-      if (it.id === activeId && targetChapter && targetChapter !== it.chapter) {
-        return { ...base, chapter: targetChapter };
+      // Solo la partida arrastrada hereda capítulo y zona del destino.
+      if (it.id === activeId) {
+        return {
+          ...base,
+          ...(targetChapter && targetChapter !== it.chapter
+            ? { chapter: targetChapter }
+            : {}),
+          subChapter: targetSubChapter,
+        };
       }
       return base;
     });
@@ -466,7 +496,12 @@ export default function ObraEditor({
     try {
       const payload = newOrder.map((id) => {
         const it = updated.find((u) => u.id === id)!;
-        return { id, sortOrder: it.sortOrder, chapter: it.chapter };
+        return {
+          id,
+          sortOrder: it.sortOrder,
+          chapter: it.chapter,
+          subChapter: it.subChapter ?? null,
+        };
       });
       const res = await fetch(
         `/api/presupuestos/${initialBudget.id}/partidas/reorder`,
@@ -1104,11 +1139,13 @@ export default function ObraEditor({
                 </colgroup>
                 <tbody className="divide-y divide-gray-50">
                   {chapter.items.map((item, itemIdx) => {
-                    const prevItem = itemIdx > 0 ? chapter.items[itemIdx - 1] : null;
                     const chg = changeMarkers.get(item.lineageId);
-                    const showSubHeader =
-                      item.subChapter &&
-                      (!prevItem || prevItem.subChapter !== item.subChapter);
+                    // Zona EFECTIVA (derivada por posición, alineada 1:1 con
+                    // items): la bandita gris se muestra en la primera partida
+                    // de cada zona, no en cada cambio del campo crudo.
+                    const zoneRow = chapter.zoneRows[itemIdx];
+                    const zone = zoneRow?.zone ?? null;
+                    const showSubHeader = zoneRow?.isZoneStart ?? false;
                     return (
                     <Fragment key={item.id}>
                     {showSubHeader && (
@@ -1119,7 +1156,7 @@ export default function ObraEditor({
                         >
                           {editingZoneGroup &&
                           editingZoneGroup.chapter === chapter.key &&
-                          editingZoneGroup.name === item.subChapter ? (
+                          editingZoneGroup.name === zone ? (
                             <input
                               autoFocus
                               value={zoneDraft}
@@ -1127,7 +1164,7 @@ export default function ObraEditor({
                               onBlur={() => {
                                 handleRenameZoneGroup(
                                   chapter.key,
-                                  item.subChapter!,
+                                  zone!,
                                   zoneDraft
                                 );
                                 setEditingZoneGroup(null);
@@ -1145,16 +1182,16 @@ export default function ObraEditor({
                             <button
                               type="button"
                               onClick={() => {
-                                setZoneDraft(item.subChapter ?? "");
+                                setZoneDraft(zone ?? "");
                                 setEditingZoneGroup({
                                   chapter: chapter.key,
-                                  name: item.subChapter!,
+                                  name: zone!,
                                 });
                               }}
                               className="hover:text-gray-900"
                               title="Renombrar zona (afecta todas las partidas de este grupo)"
                             >
-                              {item.subChapter}
+                              {zone}
                             </button>
                           )}
                         </td>
@@ -1165,9 +1202,7 @@ export default function ObraEditor({
                         <td className="px-3 py-0.5 text-right text-[10px] font-semibold text-gray-600 uppercase tracking-wider tabular-nums whitespace-nowrap">
                           {chapter.showZoneSubtotals
                             ? formatCLP(
-                                chapter.subChapterSubtotals.get(
-                                  item.subChapter ?? ""
-                                ) ?? 0
+                                chapter.subChapterSubtotals.get(zone ?? "") ?? 0
                               )
                             : ""}
                         </td>
@@ -1235,14 +1270,12 @@ export default function ObraEditor({
                           {expandedItems[item.id] ? "▾" : "▸"}
                         </button>
                         {/* Marca de cambio vs. la última versión enviada al
-                            cliente: flecha (subió/bajó) o "nuevo". El número
-                            queda fijo en su lugar (alineado entre filas) y la
-                            marca cuelga hacia la DERECHA con posición absoluta —
-                            así NUEVO no corre el número NI tapa la manija de
-                            arrastre / el botón de desglose, que están a la
-                            izquierda (antes, colgando a la izquierda, la pastilla
-                            "Nuevo" se dibujaba encima del ⋮⋮ y no se podía
-                            arrastrar la fila). Tooltip antes → ahora. */}
+                            cliente. Las flechas (subió/bajó) cuelgan a la DERECHA
+                            del número con posición absoluta — son chiquitas (un
+                            carácter) y no estorban. La pastilla "NUEVO", que es
+                            ancha, se dibuja al INICIO del nombre (celda de al
+                            lado) con su propio espacio, para que no tape el texto
+                            de la partida ni la manija de arrastre. */}
                         <span className="relative inline-block">
                           {chg?.marker === "up" && (
                             <span
@@ -1266,14 +1299,6 @@ export default function ObraEditor({
                               }
                             >
                               ↓
-                            </span>
-                          )}
-                          {chg?.marker === "added" && (
-                            <span
-                              className="absolute left-full top-1/2 -translate-y-1/2 ml-1 inline-block whitespace-nowrap rounded-full border border-gray-900 px-1 text-[8px] font-semibold uppercase leading-none tracking-wide text-gray-900"
-                              title="Partida nueva — no estaba en la versión enviada al cliente"
-                            >
-                              Nuevo
                             </span>
                           )}
                           {chapter.index}.{itemIdx + 1}
@@ -1340,53 +1365,94 @@ export default function ObraEditor({
                             cada tecla dispare setItems + el re-render de toda la
                             tabla. El onChange solo ajusta el alto del textarea
                             (visual); el guardado ocurre en onBlur. Cambia CUÁNDO
-                            se guarda, no QUÉ se guarda. */}
-                        <textarea
-                          ref={(el) => {
-                            if (el) {
-                              el.style.height = "auto";
-                              el.style.height = `${el.scrollHeight}px`;
-                            }
-                          }}
-                          defaultValue={item.name}
-                          onChange={(e) => {
-                            e.currentTarget.style.height = "auto";
-                            e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
-                          }}
-                          onBlur={(e) => {
-                            if (e.target.value !== item.name) {
-                              handleUpdateItem(item.id, "name", e.target.value);
-                            }
-                          }}
-                          rows={1}
-                          className="text-force-11 w-full resize-none bg-transparent border-0 p-0 text-gray-900 focus:ring-0 outline-none uppercase leading-snug overflow-hidden"
-                          style={{ minHeight: "16px" }}
-                        />
+                            se guarda, no QUÉ se guarda.
+
+                            La pastilla "NUEVO" va acá adelante, en un flex, con
+                            su propio espacio (shrink-0): el nombre queda a su
+                            derecha y nunca arranca debajo de ella. */}
+                        <div className="flex items-start gap-1.5">
+                          {chg?.marker === "added" && (
+                            <span
+                              className="mt-0.5 shrink-0 inline-block whitespace-nowrap rounded-full border border-gray-900 px-1 text-[8px] font-semibold uppercase leading-none tracking-wide text-gray-900"
+                              title="Partida nueva — no estaba en la versión enviada al cliente"
+                            >
+                              Nuevo
+                            </span>
+                          )}
+                          <textarea
+                            ref={(el) => {
+                              if (el) {
+                                el.style.height = "auto";
+                                el.style.height = `${el.scrollHeight}px`;
+                              }
+                            }}
+                            defaultValue={item.name}
+                            onChange={(e) => {
+                              e.currentTarget.style.height = "auto";
+                              e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                            }}
+                            onBlur={(e) => {
+                              if (e.target.value !== item.name) {
+                                handleUpdateItem(item.id, "name", e.target.value);
+                              }
+                            }}
+                            rows={1}
+                            className="text-force-11 w-full resize-none bg-transparent border-0 p-0 text-gray-900 focus:ring-0 outline-none uppercase leading-snug overflow-hidden"
+                            style={{ minHeight: "16px" }}
+                          />
+                        </div>
                       </td>
                       <td className="px-3 py-0.5 align-top">
-                        {/* DESCRIPCION CLIENTE — vista con formato (negrita,
-                            cursiva, listas, color). La edición está en el panel
-                            expandido (abajo); acá un clic lo abre, porque una
-                            barra de formato no entra en esta celda compacta. */}
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={() =>
-                            setExpandedItems((prev) => ({ ...prev, [item.id]: true }))
-                          }
-                          title="Clic para editar la descripción (se abre el detalle)"
-                          className="text-force-10 w-full text-gray-600 leading-snug cursor-text min-h-[14px] [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-4 [&_ol]:pl-4 [&_li]:my-0.5"
-                        >
-                          {isRichTextEmpty(item.descriptionCliente) ? (
-                            <span className="text-gray-300">Descripción para el cliente (PDF)…</span>
-                          ) : (
-                            <span
-                              dangerouslySetInnerHTML={{
-                                __html: sanitizeRichTextHtml(item.descriptionCliente),
+                        {/* DESCRIPCION CLIENTE (la que va al PDF). Se edita INLINE
+                            acá mismo: un clic monta el editor de texto con formato
+                            (la barra de formato es flotante, ya no ocupa lugar) y
+                            al salir guarda y vuelve a la vista. La del MAESTRO vive
+                            solo en el panel expandido. En versiones congeladas
+                            (aprobado/rechazado) es solo vista; el clic abre el
+                            panel para consultarla. */}
+                        {canEditDetail && editingDescId === item.id ? (
+                          <div className="[&_.ProseMirror]:!text-[10px] [&_.ProseMirror]:!leading-snug [&_.ProseMirror]:!min-h-[18px] [&_.ProseMirror]:!py-0.5 [&_.ProseMirror]:!px-1.5 [&_.ProseMirror_p]:!my-0 [&_.ProseMirror_li]:!my-0">
+                            <RichTextEditor
+                              value={item.descriptionCliente}
+                              autoFocus
+                              placeholder="Descripción para el cliente (PDF)…"
+                              onChange={(html) => {
+                                // RichTextEditor dispara onChange en blur (al salir).
+                                // Guardamos solo si cambió y cerramos la edición inline.
+                                if (html !== (item.descriptionCliente ?? "")) {
+                                  handleUpdateItem(item.id, "descriptionCliente", html);
+                                }
+                                setEditingDescId(null);
                               }}
                             />
-                          )}
-                        </div>
+                          </div>
+                        ) : (
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => {
+                              if (canEditDetail) setEditingDescId(item.id);
+                              else
+                                setExpandedItems((prev) => ({ ...prev, [item.id]: true }));
+                            }}
+                            title={
+                              canEditDetail
+                                ? "Clic para editar la descripción del cliente acá mismo"
+                                : "Clic para ver el detalle"
+                            }
+                            className="text-force-10 w-full text-gray-600 leading-snug cursor-text min-h-[14px] [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-4 [&_ol]:pl-4 [&_li]:my-0.5"
+                          >
+                            {isRichTextEmpty(item.descriptionCliente) ? (
+                              <span className="text-gray-300">Descripción para el cliente (PDF)…</span>
+                            ) : (
+                              <span
+                                dangerouslySetInnerHTML={{
+                                  __html: sanitizeRichTextHtml(item.descriptionCliente),
+                                }}
+                              />
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-2 py-0.5 align-top text-center">
                         {/* Unidad NO editable — viene de la PartidaCatalog

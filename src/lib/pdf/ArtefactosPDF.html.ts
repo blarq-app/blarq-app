@@ -253,7 +253,7 @@ const CSS = `
   .resumen .rv { font-size: 9pt; color: #625A4F; font-variant-numeric: tabular-nums; }
   .resumen .grand { display: flex; justify-content: space-between; align-items: baseline; padding: 8pt 0 0; margin-top: 2pt; border-top: 2px solid #36322C; }
   .resumen .grand .gl { font-size: 8.5pt; color: #36322C; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-  .resumen .grand .gv { font-size: 10.5pt; color: #36322C; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .resumen .grand .gv { font-size: 9pt; color: #36322C; font-weight: 700; font-variant-numeric: tabular-nums; }
   .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 8pt; color: #9B9182; margin-top: 4pt; }
 
   .obs { margin-top: 12mm; break-inside: avoid; }

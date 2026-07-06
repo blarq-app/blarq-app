@@ -208,19 +208,19 @@ const CSS = `
 
   /* Banda de subcategoría (piedra) y de ambiente (banda gris) */
   /* Fondo grande oscuro → neutralizado (el anclado warm lo dejaba "café"). */
-  .band { display: flex; align-items: center; background: #6C6B69; padding: 6pt 12pt; margin-top: 10pt; break-inside: avoid; break-after: avoid; }
+  .band { display: flex; align-items: center; background: #6C6B69; padding: 4.5pt 12pt; margin-top: 6pt; break-inside: avoid; break-after: avoid; }
   .band span { font-size: 7pt; letter-spacing: .22em; text-transform: uppercase; color: #F3F3F3; font-weight: 700; }
-  .grp { display: flex; align-items: center; background: #EDECEB; padding: 4pt 12pt; margin-top: 8pt; break-inside: avoid; break-after: avoid; }
+  .grp { display: flex; align-items: center; background: #EDECEB; padding: 3pt 12pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }
   .grp span { font-size: 6pt; letter-spacing: .2em; text-transform: uppercase; color: #736A5C; font-weight: 700; }
 
-  /* Tabla 10 columnas. Foto ancha para imagen grande (correción MJ). */
-  .ahd, .ar { display: grid; grid-template-columns: 34mm 14% 7% 7% 1fr 8% 4% 9% 5% 11%; gap: 0 5pt; }
-  .ahd { padding: 5pt 3pt; border-bottom: 0.3px solid #9B9182; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9B9182; font-weight: 700; break-inside: avoid; break-after: avoid; margin-top: 2pt; }
+  /* Tabla 10 columnas. Foto compacta para que el listado entre en menos hojas. */
+  .ahd, .ar { display: grid; grid-template-columns: 20mm 15% 7% 7% 1fr 8% 4% 9% 5% 11%; gap: 0 5pt; }
+  .ahd { padding: 4pt 3pt; border-bottom: 0.3px solid #9B9182; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9B9182; font-weight: 700; break-inside: avoid; break-after: avoid; margin-top: 2pt; }
   .ahd .c { text-align: center; } .ahd .r { text-align: right; }
-  .ar { align-items: center; padding: 3.5pt 3pt; border-bottom: 1px solid #E7E6E4; font-size: 6pt; line-height: 1.3; break-inside: avoid; }
-  .ar .foto { width: 34mm; }
-  .ar .foto img { max-width: 32mm; max-height: 32mm; object-fit: contain; display: block; }
-  .ar .foto .ph { width: 32mm; height: 32mm; background: #F3F3F3; border: 1px solid #E1DFDD; }
+  .ar { align-items: center; padding: 2pt 3pt; border-bottom: 1px solid #E7E6E4; font-size: 6pt; line-height: 1.28; break-inside: avoid; }
+  .ar .foto { width: 20mm; }
+  .ar .foto img { max-width: 18mm; max-height: 18mm; object-fit: contain; display: block; }
+  .ar .foto .ph { width: 18mm; height: 18mm; background: #F3F3F3; border: 1px solid #E1DFDD; }
   /* Texto oscuro (Grafito) — corrección MJ: que no "desaparezca". */
   .a-it { color: #36322C; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; font-size: 6pt; }
   .a-ln { color: #36322C; text-transform: uppercase; letter-spacing: .04em; font-size: 6.5pt; }
@@ -235,7 +235,7 @@ const CSS = `
 
   /* Total por ambiente — más visible (corrección MJ): banda bruma + valor
      Tinta bold, no la itálica tenue original. */
-  .gtot { display: flex; justify-content: space-between; align-items: baseline; padding: 6pt 12pt; margin-top: 3pt; background: #EDECEB; break-inside: avoid; }
+  .gtot { display: flex; justify-content: space-between; align-items: baseline; padding: 4pt 12pt; margin-top: 2pt; background: #EDECEB; break-inside: avoid; }
   .gtot .lbl { font-size: 7.5pt; letter-spacing: .1em; text-transform: uppercase; color: #736A5C; font-weight: 700; }
   .gtot .val { font-variant-numeric: tabular-nums; font-size: 11pt; color: #36322C; font-weight: 700; }
 

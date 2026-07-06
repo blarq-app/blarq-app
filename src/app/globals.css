@@ -2,22 +2,25 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #34332f; /* Tinta — texto principal (Manual de Marca v2 Claro) */
+  --foreground: #37332C; /* Tinta — texto principal (Manual de Marca v2 Claro) */
 
-  /* Paleta greige BLARQ v2 — siete tonos de neutros cálidos, una temperatura.
-     Tinta y Grafito para texto/logo; Piedra estructural; Taupe/Greige/Lino/Bruma
-     como neutros de fondo; Banda/Fila para bandas de capítulo, filas de tabla y chips. */
-  /* Paleta "Neutro tibio" (2026-07-05): greige enfriado — se le sacó el amarillo
-     que se leía vintage/crema, manteniendo la misma luminosidad de cada tono
-     (contraste y jerarquía intactos). Elegido por MJ sobre 4 variantes. */
-  --color-tinta: #333332;
-  --color-grafito: #535352;
-  --color-piedra: #6c6b6b;
-  --color-taupe: #94928e;
-  --color-greige: #bebab8;
-  --color-lino: #e3e1df;
-  --color-bruma: #f5f4f3;
-  --color-banda: #ededec;
+  /* Paleta greige BLARQ v2 — neutros de una sola temperatura. Tinta/Grafito para
+     texto/logo; Piedra estructural; Taupe/Greige/Lino/Bruma neutros de fondo;
+     Banda/Fila para bandas, filas y chips. */
+  /* Paleta "Anclada al isotipo" (2026-07-05): cada gris se recoloró al MISMO
+     matiz cálido del isotipo BLARQ (#6F6960, hue ~36°) preservando su luminosidad
+     → la paleta "sale" del color de la piedra del logo. El beige se apaga en los
+     tonos muy claros (fondos grandes quedan casi neutros, sin caer en crema).
+     Evolución: greige cálido original → Neutro tibio (enfriado) → Anclado al logo.
+     Elegido por MJ. Recolor reproducible con scripts/apply-ancla-isotipo.mjs. */
+  --color-tinta: #38342D;
+  --color-grafito: #5C5449;
+  --color-piedra: #776E60;
+  --color-taupe: #9D9385;
+  --color-greige: #C2BCB4;
+  --color-lino: #E3E1DF;
+  --color-bruma: #F4F4F4;
+  --color-banda: #EDEDEC;
 }
 
 @theme inline {
@@ -32,35 +35,34 @@
 
   /* Paleta greige expuesta como utilidades Tailwind (bg-tinta, text-grafito,
      border-greige, bg-banda, etc.) */
-  --color-tinta: #333332;
-  --color-grafito: #535352;
-  --color-piedra: #6c6b6b;
-  --color-taupe: #94928e;
-  --color-greige: #bebab8;
-  --color-lino: #e3e1df;
-  --color-bruma: #f5f4f3;
-  --color-banda: #ededec;
+  --color-tinta: #38342D;
+  --color-grafito: #5C5449;
+  --color-piedra: #776E60;
+  --color-taupe: #9D9385;
+  --color-greige: #C2BCB4;
+  --color-lino: #E3E1DF;
+  --color-bruma: #F4F4F4;
+  --color-banda: #EDEDEC;
 
   /* ── Escala `gray` re-temperada al greige del Manual v2 ─────────────────────
      Toda la app está escrita sobre `gray-*` de Tailwind (~3.200 usos: fondos,
      bordes, texto secundario). Tailwind por defecto usa un gris FRÍO (azulado).
-     Acá re-mapeamos la escala completa a la MISMA temperatura del manual (greige
-     "Neutro tibio": neutro con un susurro de calidez, sin el amarillo que se leía
-     vintage), de un solo lugar, sin tocar componente por componente. Se preserva
-     la LUMINOSIDAD de cada peldaño (para no romper contraste/legibilidad); solo
-     cambia el matiz. Los colores semánticos (red/green/amber) NO se tocan —
-     siguen marcando excedido/pagado/atención. */
-  --color-gray-50:  #f6f5f4;  /* fondo más claro (≈ Bruma) */
-  --color-gray-100: #eeedec;  /* fondo suave / hover (≈ Banda) */
-  --color-gray-200: #e3e1de;  /* bordes y divisores claros (≈ Lino) */
-  --color-gray-300: #cdcbc7;  /* bordes (≈ Greige) */
-  --color-gray-400: #a19f9b;  /* texto atenuado / placeholder (≈ Taupe) */
-  --color-gray-500: #7f7d7a;  /* texto secundario (Piedra) */
-  --color-gray-600: #5d5b59;  /* cuerpo secundario (≈ Grafito) */
-  --color-gray-700: #454442;  /* texto fuerte */
-  --color-gray-800: #343332;  /* títulos (Tinta) */
-  --color-gray-900: #272625;  /* casi negro */
-  --color-gray-950: #1a1918;
+     Acá re-mapeamos la escala completa al mismo matiz del isotipo (ver arriba),
+     de un solo lugar, sin tocar componente por componente. Se preserva la
+     LUMINOSIDAD de cada peldaño (para no romper contraste/legibilidad); solo
+     cambia el matiz, y el beige se apaga en los peldaños claros. Los colores
+     semánticos (red/green/amber) NO se tocan — siguen marcando excedido/pagado/atención. */
+  --color-gray-50:  #F5F5F5;  /* fondo más claro (≈ Bruma) */
+  --color-gray-100: #EEEDEC;  /* fondo suave / hover (≈ Banda) */
+  --color-gray-200: #E2E1DF;  /* bordes y divisores claros (≈ Lino) */
+  --color-gray-300: #CFCBC5;  /* bordes (≈ Greige) */
+  --color-gray-400: #A9A093;  /* texto atenuado / placeholder (≈ Taupe) */
+  --color-gray-500: #8A7F6F;  /* texto secundario (Piedra) */
+  --color-gray-600: #655D51;  /* cuerpo secundario (≈ Grafito) */
+  --color-gray-700: #4B453C;  /* texto fuerte */
+  --color-gray-800: #39342D;  /* títulos (Tinta) */
+  --color-gray-900: #2A2722;  /* casi negro */
+  --color-gray-950: #1C1A16;
 
   /* Typography scale (+2pt vs antes) */
   --text-xs: 0.6875rem;    /* 11pt */
@@ -118,7 +120,7 @@ h1 + p {
   font-weight: 400;
 }
 
-/* Bandas en tablas: el encabezado de cada tabla lleva la Banda/Fila #EDEDEB,
+/* Bandas en tablas: el encabezado de cada tabla lleva la Banda/Fila #EDECEB,
    el tono funcional del manual para bandas de capítulo y filas. Los componentes
    que ya pintan su propio thead lo siguen sobreescribiendo. */
 table thead th {

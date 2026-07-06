@@ -164,7 +164,7 @@ const CSS = `
   html, body {
     margin: 0; padding: 0;
     font-family: 'Nunito Sans', sans-serif;
-    color: #34332E;
+    color: #36322C;
     -webkit-font-smoothing: antialiased;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
@@ -185,80 +185,80 @@ const CSS = `
   .cover-top { display: flex; justify-content: space-between; align-items: flex-start; }
   .cover-logo { width: 31mm; height: auto; opacity: .72; }
   .cover-meta { text-align: right; font-family: 'Nunito Sans', sans-serif; }
-  .cover-meta .m1 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
-  .cover-meta .m2 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #b0a596; font-weight: 600; margin-top: 2.4pt; }
+  .cover-meta .m1 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #9B9182; font-weight: 600; }
+  .cover-meta .m2 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #ADA599; font-weight: 600; margin-top: 2.4pt; }
   .cover-mid { display: flex; flex-direction: column; align-items: flex-start; gap: 3.7mm; }
-  .cover-rule { width: 12mm; height: 1px; background: #c7bfb2; }
-  .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 25pt; line-height: 1.12; letter-spacing: .12em; text-transform: uppercase; color: #34332E; max-width: 105mm; }
-  .cover-sub { font-family: 'Spectral', serif; font-weight: 300; font-style: italic; font-size: 12pt; color: #9A9183; }
-  .cover-foot { display: flex; flex-direction: column; gap: 2.7mm; font-family: 'Nunito Sans', sans-serif; border-top: 1px solid #e2dcd0; padding-top: 4mm; }
+  .cover-rule { width: 12mm; height: 1px; background: #C4BEB5; }
+  .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 25pt; line-height: 1.12; letter-spacing: .12em; text-transform: uppercase; color: #36322C; max-width: 105mm; }
+  .cover-sub { font-family: 'Spectral', serif; font-weight: 300; font-style: italic; font-size: 12pt; color: #9B9182; }
+  .cover-foot { display: flex; flex-direction: column; gap: 2.7mm; font-family: 'Nunito Sans', sans-serif; border-top: 1px solid #DCDAD6; padding-top: 4mm; }
   .cover-foot .row { display: flex; justify-content: space-between; align-items: baseline; }
-  .cover-foot .lbl { font-size: 5.8pt; letter-spacing: .16em; text-transform: uppercase; color: #9A9183; }
-  .cover-foot .val { font-size: 7.2pt; color: #34332E; }
+  .cover-foot .lbl { font-size: 5.8pt; letter-spacing: .16em; text-transform: uppercase; color: #9B9182; }
+  .cover-foot .val { font-size: 7.2pt; color: #36322C; }
 
   .dhead-iso { width: 40px; opacity: .55; margin-bottom: 7mm; display: block; }
   .dhead { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2mm; }
-  .dhead .kick { font-size: 5.5pt; letter-spacing: .26em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
-  .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 13pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
-  .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 7pt; color: #9A9183; margin-top: 3pt; }
+  .dhead .kick { font-size: 5.5pt; letter-spacing: .26em; text-transform: uppercase; color: #9B9182; font-weight: 600; }
+  .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 13pt; letter-spacing: .05em; text-transform: uppercase; color: #36322C; margin-top: 3pt; }
+  .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 7pt; color: #9B9182; margin-top: 3pt; }
   .dhead .right { text-align: right; }
-  .dhead .ver { font-size: 5pt; letter-spacing: .28em; text-transform: uppercase; color: #b0a596; font-weight: 600; }
-  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 13pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
-  .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 6.5pt; letter-spacing: .34em; text-transform: uppercase; color: #9A9183; margin-top: 3pt; }
+  .dhead .ver { font-size: 5pt; letter-spacing: .28em; text-transform: uppercase; color: #ADA599; font-weight: 600; }
+  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 13pt; letter-spacing: .05em; text-transform: uppercase; color: #36322C; margin-top: 3pt; }
+  .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 6.5pt; letter-spacing: .34em; text-transform: uppercase; color: #9B9182; margin-top: 3pt; }
 
   /* Banda de subcategoría (piedra) y de ambiente (banda gris) */
-  .band { display: flex; align-items: center; background: #6F6A60; padding: 6pt 12pt; margin-top: 10pt; break-inside: avoid; break-after: avoid; }
-  .band span { font-size: 7pt; letter-spacing: .22em; text-transform: uppercase; color: #F7F4EF; font-weight: 700; }
-  .grp { display: flex; align-items: center; background: #EDEDEB; padding: 4pt 12pt; margin-top: 8pt; break-inside: avoid; break-after: avoid; }
-  .grp span { font-size: 6pt; letter-spacing: .2em; text-transform: uppercase; color: #6F6A60; font-weight: 700; }
+  .band { display: flex; align-items: center; background: #736A5C; padding: 6pt 12pt; margin-top: 10pt; break-inside: avoid; break-after: avoid; }
+  .band span { font-size: 7pt; letter-spacing: .22em; text-transform: uppercase; color: #F3F3F3; font-weight: 700; }
+  .grp { display: flex; align-items: center; background: #EDECEB; padding: 4pt 12pt; margin-top: 8pt; break-inside: avoid; break-after: avoid; }
+  .grp span { font-size: 6pt; letter-spacing: .2em; text-transform: uppercase; color: #736A5C; font-weight: 700; }
 
   /* Tabla 10 columnas. Foto ancha para imagen grande (correción MJ). */
   .ahd, .ar { display: grid; grid-template-columns: 34mm 14% 7% 7% 1fr 8% 4% 9% 5% 11%; gap: 0 5pt; }
-  .ahd { padding: 5pt 3pt; border-bottom: 0.3px solid #9A9183; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; break-inside: avoid; break-after: avoid; margin-top: 2pt; }
+  .ahd { padding: 5pt 3pt; border-bottom: 0.3px solid #9B9182; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9B9182; font-weight: 700; break-inside: avoid; break-after: avoid; margin-top: 2pt; }
   .ahd .c { text-align: center; } .ahd .r { text-align: right; }
-  .ar { align-items: center; padding: 3.5pt 3pt; border-bottom: 1px solid #eee8dd; font-size: 6pt; line-height: 1.3; break-inside: avoid; }
+  .ar { align-items: center; padding: 3.5pt 3pt; border-bottom: 1px solid #E7E6E4; font-size: 6pt; line-height: 1.3; break-inside: avoid; }
   .ar .foto { width: 34mm; }
   .ar .foto img { max-width: 32mm; max-height: 32mm; object-fit: contain; display: block; }
-  .ar .foto .ph { width: 32mm; height: 32mm; background: #F7F4EF; border: 1px solid #e7e1d7; }
+  .ar .foto .ph { width: 32mm; height: 32mm; background: #F3F3F3; border: 1px solid #E1DFDD; }
   /* Texto oscuro (Grafito) — corrección MJ: que no "desaparezca". */
-  .a-it { color: #34332E; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; font-size: 6pt; }
-  .a-ln { color: #34332E; text-transform: uppercase; letter-spacing: .04em; font-size: 6.5pt; }
-  .a-co { color: #34332E; font-size: 6.5pt; }
-  .a-de { color: #34332E; font-size: 6.5pt; }
-  .a-ma { color: #34332E; font-size: 6.5pt; }
-  .a-ct { text-align: center; color: #34332E; font-variant-numeric: tabular-nums; }
-  .a-pl { text-align: right; color: #34332E; font-variant-numeric: tabular-nums; }
-  .a-dc { text-align: right; color: #9A9183; font-variant-numeric: tabular-nums; }
+  .a-it { color: #36322C; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; font-size: 6pt; }
+  .a-ln { color: #36322C; text-transform: uppercase; letter-spacing: .04em; font-size: 6.5pt; }
+  .a-co { color: #36322C; font-size: 6.5pt; }
+  .a-de { color: #36322C; font-size: 6.5pt; }
+  .a-ma { color: #36322C; font-size: 6.5pt; }
+  .a-ct { text-align: center; color: #36322C; font-variant-numeric: tabular-nums; }
+  .a-pl { text-align: right; color: #36322C; font-variant-numeric: tabular-nums; }
+  .a-dc { text-align: right; color: #9B9182; font-variant-numeric: tabular-nums; }
   .a-dc.on { color: #8a7f54; font-weight: 700; }
-  .a-tt { text-align: right; color: #34332E; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .a-tt { text-align: right; color: #36322C; font-weight: 700; font-variant-numeric: tabular-nums; }
 
   /* Total por ambiente — más visible (corrección MJ): banda bruma + valor
      Tinta bold, no la itálica tenue original. */
-  .gtot { display: flex; justify-content: space-between; align-items: baseline; padding: 6pt 12pt; margin-top: 3pt; background: #EDEDEB; break-inside: avoid; }
-  .gtot .lbl { font-size: 7.5pt; letter-spacing: .1em; text-transform: uppercase; color: #6F6A60; font-weight: 700; }
-  .gtot .val { font-variant-numeric: tabular-nums; font-size: 11pt; color: #34332E; font-weight: 700; }
+  .gtot { display: flex; justify-content: space-between; align-items: baseline; padding: 6pt 12pt; margin-top: 3pt; background: #EDECEB; break-inside: avoid; }
+  .gtot .lbl { font-size: 7.5pt; letter-spacing: .1em; text-transform: uppercase; color: #736A5C; font-weight: 700; }
+  .gtot .val { font-variant-numeric: tabular-nums; font-size: 11pt; color: #36322C; font-weight: 700; }
 
   /* Cierre: forma de pago + resumen por subcategoría + total */
   .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 14mm; margin-top: 10mm; align-items: start; break-inside: avoid; }
-  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #34332E; font-weight: 700; }
-  .pagos { margin-top: 6pt; border-top: 1px solid #e2dcd0; }
-  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 6pt 0; border-bottom: 1px solid #eee8dd; }
+  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #36322C; font-weight: 700; }
+  .pagos { margin-top: 6pt; border-top: 1px solid #DCDAD6; }
+  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 6pt 0; border-bottom: 1px solid #E7E6E4; }
   .pagos .row:last-child { border-bottom: none; }
-  .pagos .s { font-size: 10pt; color: #34332E; }
-  .pagos .p { font-size: 10pt; color: #6F6A60; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .resumen { border-top: 2px solid #34332E; padding-top: 8pt; }
-  .resumen .row { display: flex; justify-content: space-between; align-items: baseline; padding: 4pt 0; border-bottom: 1px solid #e2dcd0; }
-  .resumen .rl { font-size: 9pt; color: #5f5b52; }
-  .resumen .rv { font-size: 9pt; color: #5f5b52; font-variant-numeric: tabular-nums; }
-  .resumen .grand { display: flex; justify-content: space-between; align-items: baseline; padding: 8pt 0 0; margin-top: 2pt; border-top: 2px solid #34332E; }
-  .resumen .grand .gl { font-size: 10pt; color: #34332E; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-  .resumen .grand .gv { font-size: 14pt; color: #34332E; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 8pt; color: #9A9183; margin-top: 4pt; }
+  .pagos .s { font-size: 10pt; color: #36322C; }
+  .pagos .p { font-size: 10pt; color: #736A5C; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .resumen { border-top: 2px solid #36322C; padding-top: 8pt; }
+  .resumen .row { display: flex; justify-content: space-between; align-items: baseline; padding: 4pt 0; border-bottom: 1px solid #DCDAD6; }
+  .resumen .rl { font-size: 9pt; color: #625A4F; }
+  .resumen .rv { font-size: 9pt; color: #625A4F; font-variant-numeric: tabular-nums; }
+  .resumen .grand { display: flex; justify-content: space-between; align-items: baseline; padding: 8pt 0 0; margin-top: 2pt; border-top: 2px solid #36322C; }
+  .resumen .grand .gl { font-size: 10pt; color: #36322C; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .resumen .grand .gv { font-size: 14pt; color: #36322C; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 8pt; color: #9B9182; margin-top: 4pt; }
 
   .obs { margin-top: 12mm; break-inside: avoid; }
   .obs-list { display: flex; flex-direction: column; gap: 5pt; margin-top: 7pt; }
-  .obs-item { display: flex; gap: 8pt; font-size: 7.5pt; line-height: 1.45; color: #5f5b52; }
-  .obs-num { color: #9A9183; font-variant-numeric: tabular-nums; flex-shrink: 0; font-weight: 600; }
+  .obs-item { display: flex; gap: 8pt; font-size: 7.5pt; line-height: 1.45; color: #625A4F; }
+  .obs-num { color: #9B9182; font-variant-numeric: tabular-nums; flex-shrink: 0; font-weight: 600; }
 `;
 
 // ─── HTML render ────────────────────────────────────────────────────────────

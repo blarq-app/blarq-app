@@ -148,9 +148,9 @@ function assetDataUri(file: string): string {
 
 // ─── CSS — paleta y tipografía del Manual v2 (Claro) ────────────────────────
 // Colores exactos de la fuente de diseño:
-//   Tinta #34332E · Grafito/valores #5f5b52 · Taupe/labels #9A9183
-//   Piedra banda #6F6A60 · descripción #7a7468 · versión clara #b0a596
-//   Banda/fila #EDEDEB · bordes #eee8dd (fila) #e2dcd0 (sección) #c7bfb2 (hairline)
+//   Tinta #38342D · Grafito/valores #645C51 · Taupe/labels #9D9385
+//   Piedra banda #756C5E · descripción #7D7365 · versión clara #AFA79C
+//   Banda/fila #EDEDEC · bordes #E9E8E6 (fila) #DEDCD9 (sección) #C6C0B8 (hairline)
 const CSS = `
   /* Márgenes por CSS (el route usa preferCSSPageSize): detalle con 14mm
      arriba/abajo (0 a los lados; el aire lateral lo pone el padding) y la
@@ -162,7 +162,7 @@ const CSS = `
   html, body {
     margin: 0; padding: 0;
     font-family: 'Nunito Sans', sans-serif;
-    color: #34332E;
+    color: #38342D;
     -webkit-font-smoothing: antialiased;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
@@ -190,59 +190,59 @@ const CSS = `
   .cover-top { display: flex; justify-content: space-between; align-items: flex-start; }
   .cover-logo { width: 31mm; height: auto; opacity: .72; }
   .cover-meta { text-align: right; font-family: 'Nunito Sans', sans-serif; }
-  .cover-meta .m1 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
-  .cover-meta .m2 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #b0a596; font-weight: 600; margin-top: 2.4pt; }
+  .cover-meta .m1 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #9D9385; font-weight: 600; }
+  .cover-meta .m2 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #AFA79C; font-weight: 600; margin-top: 2.4pt; }
   .cover-mid { display: flex; flex-direction: column; align-items: flex-start; gap: 3.7mm; }
-  .cover-rule { width: 12mm; height: 1px; background: #c7bfb2; }
+  .cover-rule { width: 12mm; height: 1px; background: #C6C0B8; }
   /* max-width fuerza el quiebre a ~2 líneas como en la referencia
      ("Remodelación de / cocina y baños"), en vez de una sola línea larga. */
-  .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 25pt; line-height: 1.12; letter-spacing: .12em; text-transform: uppercase; color: #34332E; max-width: 105mm; }
-  .cover-sub { font-family: 'Spectral', serif; font-weight: 300; font-style: italic; font-size: 12pt; color: #9A9183; }
-  .cover-foot { display: flex; flex-direction: column; gap: 2.7mm; font-family: 'Nunito Sans', sans-serif; border-top: 1px solid #e2dcd0; padding-top: 4mm; }
+  .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 25pt; line-height: 1.12; letter-spacing: .12em; text-transform: uppercase; color: #38342D; max-width: 105mm; }
+  .cover-sub { font-family: 'Spectral', serif; font-weight: 300; font-style: italic; font-size: 12pt; color: #9D9385; }
+  .cover-foot { display: flex; flex-direction: column; gap: 2.7mm; font-family: 'Nunito Sans', sans-serif; border-top: 1px solid #DEDCD9; padding-top: 4mm; }
   .cover-foot .row { display: flex; justify-content: space-between; align-items: baseline; }
-  .cover-foot .lbl { font-size: 5.8pt; letter-spacing: .16em; text-transform: uppercase; color: #9A9183; }
-  .cover-foot .val { font-size: 7.2pt; color: #34332E; }
+  .cover-foot .lbl { font-size: 5.8pt; letter-spacing: .16em; text-transform: uppercase; color: #9D9385; }
+  .cover-foot .val { font-size: 7.2pt; color: #38342D; }
 
   /* ── Detalle: encabezado ─────────────────────────────────── */
   .dhead-iso { width: 40px; height: auto; opacity: .55; margin-bottom: 4mm; display: block; }
   .dhead { display: flex; justify-content: space-between; align-items: flex-start; }
-  .dhead .kick { font-size: 5.3pt; letter-spacing: .26em; text-transform: uppercase; color: #9A9183; font-weight: 600; }
-  .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 12.5pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
-  .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 6.7pt; color: #9A9183; margin-top: 3pt; }
+  .dhead .kick { font-size: 5.3pt; letter-spacing: .26em; text-transform: uppercase; color: #9D9385; font-weight: 600; }
+  .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 12.5pt; letter-spacing: .05em; text-transform: uppercase; color: #38342D; margin-top: 3pt; }
+  .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 6.7pt; color: #9D9385; margin-top: 3pt; }
   .dhead .right { text-align: right; }
-  .dhead .ver { font-size: 4.8pt; letter-spacing: .28em; text-transform: uppercase; color: #b0a596; font-weight: 600; }
-  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 12.5pt; letter-spacing: .05em; text-transform: uppercase; color: #34332E; margin-top: 3pt; }
-  .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 6.2pt; letter-spacing: .34em; text-transform: uppercase; color: #9A9183; margin-top: 3pt; }
+  .dhead .ver { font-size: 4.8pt; letter-spacing: .28em; text-transform: uppercase; color: #AFA79C; font-weight: 600; }
+  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 12.5pt; letter-spacing: .05em; text-transform: uppercase; color: #38342D; margin-top: 3pt; }
+  .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 6.2pt; letter-spacing: .34em; text-transform: uppercase; color: #9D9385; margin-top: 3pt; }
 
   /* ── Tabla de partidas ───────────────────────────────────── */
   /* Proporciones de columnas idénticas a la referencia (item 3.9 · partida 20
      · descripción ~50% · un 3.5 · cant 4.4 · p.unit 8 · total 9.1). La
      descripción ancha evita que el texto se apile en muchas líneas. */
   .grid { display: grid; grid-template-columns: 6% 20% 1fr 3.5% 4.4% 8% 9.1%; }
-  .hd { border-bottom: 0.3px solid #9A9183; padding: 3.5pt 0; margin-top: 7mm; font-size: 4.3pt; letter-spacing: .1em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
+  .hd { border-bottom: 0.3px solid #9D9385; padding: 3.5pt 0; margin-top: 7mm; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #776E60; font-weight: 700; }
   .hd span:nth-child(4){ text-align:center; } .hd span:nth-child(5),.hd span:nth-child(6),.hd span:nth-child(7){ text-align:right; }
 
-  .cap { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #34332E; padding: 5pt 2pt 3pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #38342D; padding: 5pt 2pt 3pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }
   /* El primer capítulo se acerca al encabezado de columnas (menos aire que
      entre capítulos, que conservan su separación). */
   .hd + .chpage .cap { margin-top: 1pt; }
-  .cap b { font-family: 'Hanken Grotesk', sans-serif; font-size: 5.75pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: #34332E; }
-  .cap span { font-size: 5.3pt; color: #9A9183; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+  .cap b { font-family: 'Hanken Grotesk', sans-serif; font-size: 5.75pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: #38342D; }
+  .cap span { font-size: 5.3pt; color: #9D9385; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
 
   /* La banda de zona y el título de capítulo no deben quedar solos al pie de
      una página (huérfanos): break-after:avoid los mantiene con su primera fila. */
-  .zone { display: flex; justify-content: space-between; align-items: baseline; background: #EDEDEB; padding: 2pt 10pt; margin-top: 1.5pt; font-size: 4.8pt; letter-spacing: .14em; text-transform: uppercase; color: #4A4843; font-weight: 700; break-inside: avoid; break-after: avoid; }
-  .zone .zamt { font-size: 5.3pt; letter-spacing: 0; text-transform: none; font-weight: 400; color: #6F6A60; font-variant-numeric: tabular-nums; }
+  .zone { display: flex; justify-content: space-between; align-items: baseline; background: #EDEDEC; padding: 2pt 10pt; margin-top: 1.5pt; font-size: 4.8pt; letter-spacing: .14em; text-transform: uppercase; color: #504A40; font-weight: 700; break-inside: avoid; break-after: avoid; }
+  .zone .zamt { font-size: 5.3pt; letter-spacing: 0; text-transform: none; font-weight: 400; color: #756C5E; font-variant-numeric: tabular-nums; }
 
-  .r { align-items: start; padding: 2.5pt 0; border-bottom: 1px solid #eee8dd; font-size: 5.3pt; page-break-inside: avoid; }
+  .r { align-items: start; padding: 2.5pt 0; border-bottom: 1px solid #E9E8E6; font-size: 5.3pt; page-break-inside: avoid; }
   .r span { line-height: 1.32; }
-  .it { position: relative; padding-left: 9pt; color: #9A9183; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .pt { color: #34332E; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; padding-right: 8pt; }
-  .ds { color: #7a7468; padding-right: 10pt; }
-  .un { text-align: center; color: #9A9183; }
-  .ct { text-align: right; color: #5f5b52; font-variant-numeric: tabular-nums; }
-  .pu { text-align: right; color: #5f5b52; font-variant-numeric: tabular-nums; }
-  .tt { text-align: right; color: #34332E; font-variant-numeric: tabular-nums; }
+  .it { position: relative; padding-left: 9pt; color: #776E60; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pt { color: #38342D; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; padding-right: 8pt; }
+  .ds { color: #645C51; padding-right: 10pt; }
+  .un { text-align: center; color: #9D9385; }
+  .ct { text-align: right; color: #645C51; font-variant-numeric: tabular-nums; }
+  .pu { text-align: right; color: #645C51; font-variant-numeric: tabular-nums; }
+  .tt { text-align: right; color: #38342D; font-variant-numeric: tabular-nums; }
   .ds p { margin: 0; } .ds ul { margin: 0; padding-left: 12px; } .ds ol { margin: 0; padding-left: 14px; }
   .ds strong { font-weight: 700; } .ds em { font-style: italic; }
 
@@ -250,38 +250,38 @@ const CSS = `
   /* Marca de cambio: símbolo absoluto en un gutter a la IZQUIERDA del número.
      Así el número siempre arranca en la misma x (padding-left de .it) y queda
      alineado en columna, con o sin marca. */
-  .mk { position: absolute; left: 0; top: 0; color: #34332E; font-weight: 700; }
+  .mk { position: absolute; left: 0; top: 0; color: #38342D; font-weight: 700; }
   .mk .mkarrow { width: 4.5pt; height: 5.2pt; display: inline-block; vertical-align: -0.4pt; }
   /* Leyenda de símbolos, al PIE del detalle, italica muy sutil. */
-  .leyenda { margin-top: 4mm; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9A9183; }
-  .leyenda .mk { position: static; font-weight: 700; color: #6F6A60; }
+  .leyenda { margin-top: 4mm; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9D9385; }
+  .leyenda .mk { position: static; font-weight: 700; color: #756C5E; }
 
   /* ── Cierre: formas de pago + cuadro ─────────────────────── */
   .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 8mm; align-items: start; page-break-inside: avoid; }
   /* "Formas de pago" / "Observaciones": tinta oscura, más grande y subrayado. */
-  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #34332E; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
-  .pagos { margin-top: 6pt; border-top: 1px solid #e2dcd0; }
-  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 2.5pt 0; border-bottom: 1px solid #eee8dd; }
+  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #38342D; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+  .pagos { margin-top: 6pt; border-top: 1px solid #DEDCD9; }
+  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 2.5pt 0; border-bottom: 1px solid #E9E8E6; }
   .pagos .row:last-child { border-bottom: none; }
-  .pagos .s { font-size: 7pt; color: #34332E; }
-  .pagos .p { font-size: 7pt; color: #6F6A60; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .cuadro { border-top: 1.5px solid #34332E; }
-  .cuadro .row { display: grid; grid-template-columns: 1fr 30px 92px; align-items: baseline; padding: 2pt 0; border-bottom: 1px solid #e2dcd0; }
-  .cuadro .cl { font-size: 7pt; color: #5f5b52; }
-  .cuadro .cl.strong { color: #34332E; font-weight: 600; }
-  .cuadro .cp { text-align: right; font-size: 6pt; color: #9A9183; font-variant-numeric: tabular-nums; }
-  .cuadro .cv { text-align: right; font-size: 7pt; color: #5f5b52; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .cuadro .cv.strong { color: #34332E; font-weight: 600; }
-  .cuadro .row.grand { grid-template-columns: 1fr 110px; border-top: 1.5px solid #34332E; border-bottom: none; padding-top: 6pt; margin-top: 2pt; }
-  .cuadro .row.grand .cl { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #34332E; }
-  .cuadro .row.grand .cv { font-size: 10.5pt; font-weight: 700; color: #34332E; }
-  .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9A9183; margin-top: 3pt; }
+  .pagos .s { font-size: 7pt; color: #38342D; }
+  .pagos .p { font-size: 7pt; color: #756C5E; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .cuadro { border-top: 1.5px solid #38342D; }
+  .cuadro .row { display: grid; grid-template-columns: 1fr 30px 92px; align-items: baseline; padding: 2pt 0; border-bottom: 1px solid #DEDCD9; }
+  .cuadro .cl { font-size: 7pt; color: #645C51; }
+  .cuadro .cl.strong { color: #38342D; font-weight: 600; }
+  .cuadro .cp { text-align: right; font-size: 6pt; color: #9D9385; font-variant-numeric: tabular-nums; }
+  .cuadro .cv { text-align: right; font-size: 7pt; color: #645C51; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cuadro .cv.strong { color: #38342D; font-weight: 600; }
+  .cuadro .row.grand { grid-template-columns: 1fr 110px; border-top: 1.5px solid #38342D; border-bottom: none; padding-top: 6pt; margin-top: 2pt; }
+  .cuadro .row.grand .cl { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #38342D; }
+  .cuadro .row.grand .cv { font-size: 10.5pt; font-weight: 700; color: #38342D; }
+  .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9D9385; margin-top: 3pt; }
 
   /* ── Observaciones ───────────────────────────────────────── */
   .obs { margin-top: 5mm; page-break-inside: avoid; }
   .obs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5pt 14mm; margin-top: 7pt; }
-  .obs-item { display: flex; gap: 8pt; font-size: 6pt; line-height: 1.3; color: #5f5b52; }
-  .obs-num { color: #9A9183; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .obs-item { display: flex; gap: 8pt; font-size: 6pt; line-height: 1.3; color: #645C51; }
+  .obs-num { color: #9D9385; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 `;
 
 // ─── Renderer ─────────────────────────────────────────────────────────────

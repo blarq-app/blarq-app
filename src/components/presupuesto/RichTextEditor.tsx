@@ -27,7 +27,7 @@ import { plainTextToHtml, isRichTextEmpty } from "@/lib/richText";
 const COLORS: { name: string; value: string | null }[] = [
   { name: "Negro (normal)", value: null },
   { name: "Gris", value: "#6b7280" },
-  { name: "Burdeo", value: "#b23a3a" },
+  { name: "Teja", value: "#9C4A3C" },
   { name: "Tierra", value: "#c2703a" },
   { name: "Oliva", value: "#6f8c2f" },
   { name: "Petróleo", value: "#2f8f86" },

@@ -81,6 +81,9 @@ export async function GET(
           date: budget.date,
           ggPercentage: budget.ggPercentage,
           utilityPercentage: budget.utilityPercentage,
+          coverTitle: budget.coverTitle,
+          coverSubtitle: budget.coverSubtitle,
+          coverNote: budget.coverNote,
         },
         items: budget.obraItems.map((it) => ({
           ...it,
@@ -120,6 +123,9 @@ export async function GET(
           version: budget.version,
           date: budget.date,
           observations: budget.observations,
+          coverTitle: budget.coverTitle,
+          coverSubtitle: budget.coverSubtitle,
+          coverNote: budget.coverNote,
         },
         chapters: budget.muebleChapters.map((ch) => ({
           chapterNumber: ch.chapterNumber,
@@ -156,6 +162,9 @@ export async function GET(
           version: budget.version,
           date: budget.date,
           observations: budget.observations,
+          coverTitle: budget.coverTitle,
+          coverSubtitle: budget.coverSubtitle,
+          coverNote: budget.coverNote,
         },
         items: budget.artefactoItems,
         paymentTerms: budget.paymentTerms.map((t) => ({
@@ -163,7 +172,7 @@ export async function GET(
           percentage: t.percentage,
         })),
       });
-      footer = buildArtefactosFooter(budget.version, budget.date);
+      footer = buildArtefactosFooter();
       filename = `BLARQ_Artefactos_${baseName}_${budget.version}.pdf`;
     }
 
@@ -173,14 +182,31 @@ export async function GET(
       budget.type === "obra" ||
       budget.type === "muebles" ||
       budget.type === "artefactos";
+    // Obra usa el diseño de marca v2 (Manual Claro). Márgenes verticales 14mm
+    // en TODAS las páginas (para que la tabla, que fluye entre páginas, no se
+    // corte contra el borde) y laterales 0 — el aire lateral lo pone el padding
+    // de la plantilla. La portada calcula su alto contra estos 14mm+14mm.
+    // Muebles/artefactos siguen con el formato previo hasta migrar.
+    // El PDF mueblista (herrajes por sector, sin precios) sigue con el formato
+    // previo; el de muebles al cliente ya usa la marca v2 como obra.
+    const isBrandObra =
+      budget.type === "obra" ||
+      budget.type === "artefactos" ||
+      (budget.type === "muebles" && tipo !== "mueblista");
     const pdfBuffer = await renderPDF(html, {
       format: "A4",
       displayHeaderFooter: !useNewFormat,
       headerTemplate: useNewFormat ? undefined : "<div></div>",
       footerTemplate: useNewFormat ? undefined : footer,
-      margin: useNewFormat
-        ? { top: "10mm", bottom: "10mm", left: "12mm", right: "12mm" }
-        : { top: "14mm", bottom: "16mm", left: "15mm", right: "15mm" },
+      // Marca v2: los márgenes los controla el CSS @page (portada full-bleed +
+      // detalle con 14mm). El resto usa la opción margin clásica.
+      ...(isBrandObra
+        ? { preferCSSPageSize: true }
+        : {
+            margin: useNewFormat
+              ? { top: "10mm", bottom: "10mm", left: "12mm", right: "12mm" }
+              : { top: "14mm", bottom: "16mm", left: "15mm", right: "15mm" },
+          }),
     });
 
     const body = new Uint8Array(pdfBuffer.byteLength);

@@ -9,6 +9,11 @@ export interface RenderPDFOptions {
   printBackground?: boolean;
   // Scale factor for the PDF render. Defaults to 1.0. Allowed: 0.1 – 2.
   scale?: number;
+  // Si es true, los márgenes y tamaño de página los controla el CSS (@page,
+  // @page :first) en vez de la opción `margin`. Se usa para que la portada
+  // pueda sangrar a borde (margin:0) mientras las páginas de detalle mantienen
+  // su margen — imposible con una sola opción `margin` de Puppeteer.
+  preferCSSPageSize?: boolean;
 }
 
 // En Vercel (serverless) el bundle de chromium completo no entra ni
@@ -79,12 +84,18 @@ export async function renderPDF(
     const buffer = await page.pdf({
       format: opts.format ?? "A4",
       printBackground: opts.printBackground ?? true,
-      margin: opts.margin ?? {
-        top: "14mm",
-        bottom: "16mm",
-        left: "15mm",
-        right: "15mm",
-      },
+      // Con preferCSSPageSize el margen/tamaño lo maneja el CSS @page (permite
+      // portada full-bleed + detalle con margen). Si no, se usa la opción margin.
+      ...(opts.preferCSSPageSize
+        ? { preferCSSPageSize: true }
+        : {
+            margin: opts.margin ?? {
+              top: "14mm",
+              bottom: "16mm",
+              left: "15mm",
+              right: "15mm",
+            },
+          }),
       displayHeaderFooter: opts.displayHeaderFooter ?? false,
       headerTemplate: opts.headerTemplate ?? "<div></div>",
       footerTemplate: opts.footerTemplate ?? "<div></div>",

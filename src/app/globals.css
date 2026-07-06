@@ -2,13 +2,67 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #37332C; /* Tinta — texto principal (Manual de Marca v2 Claro) */
+
+  /* Paleta greige BLARQ v2 — neutros de una sola temperatura. Tinta/Grafito para
+     texto/logo; Piedra estructural; Taupe/Greige/Lino/Bruma neutros de fondo;
+     Banda/Fila para bandas, filas y chips. */
+  /* Paleta "Anclada al isotipo" (2026-07-05): cada gris se recoloró al MISMO
+     matiz cálido del isotipo BLARQ (#6F6960, hue ~36°) preservando su luminosidad
+     → la paleta "sale" del color de la piedra del logo. El beige se apaga en los
+     tonos muy claros (fondos grandes quedan casi neutros, sin caer en crema).
+     Evolución: greige cálido original → Neutro tibio (enfriado) → Anclado al logo.
+     Elegido por MJ. Recolor reproducible con scripts/apply-ancla-isotipo.mjs. */
+  --color-tinta: #38342D;
+  --color-grafito: #5C5449;
+  --color-piedra: #776E60;
+  --color-taupe: #9D9385;
+  --color-greige: #C2BCB4;
+  --color-lino: #E3E1DF;
+  --color-bruma: #F4F4F4;
+  --color-banda: #EDEDEC;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-montserrat), "Montserrat", sans-serif;
+
+  /* Tipografía del Manual de Marca v2: cuerpo Nunito Sans, títulos Hanken Grotesk,
+     bajadas/citas Spectral. font-sans es la base que hereda todo el body. */
+  --font-sans: var(--font-nunito-sans), "Nunito Sans", sans-serif;
+  --font-display: var(--font-hanken), "Hanken Grotesk", sans-serif;
+  --font-serif: var(--font-spectral), "Spectral", serif;
+
+  /* Paleta greige expuesta como utilidades Tailwind (bg-tinta, text-grafito,
+     border-greige, bg-banda, etc.) */
+  --color-tinta: #38342D;
+  --color-grafito: #5C5449;
+  --color-piedra: #776E60;
+  --color-taupe: #9D9385;
+  --color-greige: #C2BCB4;
+  --color-lino: #E3E1DF;
+  --color-bruma: #F4F4F4;
+  --color-banda: #EDEDEC;
+
+  /* ── Escala `gray` re-temperada al greige del Manual v2 ─────────────────────
+     Toda la app está escrita sobre `gray-*` de Tailwind (~3.200 usos: fondos,
+     bordes, texto secundario). Tailwind por defecto usa un gris FRÍO (azulado).
+     Acá re-mapeamos la escala completa al mismo matiz del isotipo (ver arriba),
+     de un solo lugar, sin tocar componente por componente. Se preserva la
+     LUMINOSIDAD de cada peldaño (para no romper contraste/legibilidad); solo
+     cambia el matiz, y el beige se apaga en los peldaños claros. Los colores
+     semánticos (red/green/amber) NO se tocan — siguen marcando excedido/pagado/atención. */
+  --color-gray-50:  #F5F5F5;  /* fondo más claro (≈ Bruma) */
+  --color-gray-100: #EEEDEC;  /* fondo suave / hover (≈ Banda) */
+  --color-gray-200: #E2E1DF;  /* bordes y divisores claros (≈ Lino) */
+  --color-gray-300: #CFCBC5;  /* bordes (≈ Greige) */
+  --color-gray-400: #A9A093;  /* texto atenuado / placeholder (≈ Taupe) */
+  --color-gray-500: #8A7F6F;  /* texto secundario (Piedra) */
+  --color-gray-600: #655D51;  /* cuerpo secundario (≈ Grafito) */
+  --color-gray-700: #4B453C;  /* texto fuerte */
+  --color-gray-800: #39342D;  /* títulos (Tinta) */
+  --color-gray-900: #2A2722;  /* casi negro */
+  --color-gray-950: #1C1A16;
 
   /* Typography scale (+2pt vs antes) */
   --text-xs: 0.6875rem;    /* 11pt */
@@ -23,9 +77,54 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-montserrat), "Montserrat", sans-serif;
+  font-family: var(--font-nunito-sans), "Nunito Sans", sans-serif;
   font-size: 0.75rem; /* 12pt base */
   line-height: 1.5;
+}
+
+/* Títulos en Hanken Grotesk (gramática de marca). Los subtítulos (h2-h4) van
+   en Hanken liviana; los títulos de página (h1) en "altas finas". */
+h1, h2, h3, h4 {
+  font-family: var(--font-hanken), "Hanken Grotesk", sans-serif;
+  font-weight: 300;
+  letter-spacing: 0.01em;
+}
+
+/* Título de página: Hanken Grotesk Extra Light, mayúsculas espaciadas, color Tinta.
+   El !important vence a las clases utilitarias (font-bold, text-gray-900) que traen
+   los componentes inline, sin tener que editar página por página. */
+h1 {
+  font-weight: 200 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--color-tinta) !important;
+}
+
+/* Bajada de página: el párrafo que sigue al título va en Spectral itálica
+   (serif contemporáneo), igual que las bajadas y citas del manual. */
+h1 + p {
+  font-family: var(--font-spectral), "Spectral", serif;
+  font-style: italic;
+}
+
+/* Utilidades equivalentes para usar a mano donde haga falta. */
+.titulo-marca {
+  font-family: var(--font-hanken), "Hanken Grotesk", sans-serif;
+  font-weight: 200;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+.bajada-marca {
+  font-family: var(--font-spectral), "Spectral", serif;
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* Bandas en tablas: el encabezado de cada tabla lleva la Banda/Fila #EDECEB,
+   el tono funcional del manual para bandas de capítulo y filas. Los componentes
+   que ya pintan su propio thead lo siguen sobreescribiendo. */
+table thead th {
+  background: var(--color-banda);
 }
 
 /* Override Tailwind text sizes globally */

@@ -1,9 +1,20 @@
 /**
- * HTML+CSS renderer for the Obra budget PDF.
- * Consumed by renderPDF() (Puppeteer). Meant to render as an exact
- * visual match to the Excel reference PDF.
+ * HTML+CSS renderer del PDF de Obra.
+ * Consumido por renderPDF() (Puppeteer). Se renderiza a A4 SIN márgenes
+ * (el route pasa margin:0 para obra) — el aire lo pone el padding interno.
  *
- * Iteration 5 — full Montserrat, specs pulled directly from Excel XML.
+ * Línea editorial: Manual de Marca BLARQ v2 (Claro). Fuente de verdad del
+ * diseño: "Presupuesto Obra Imprimible" de Claude Design. Tres roles
+ * tipográficos: Hanken Grotesk (títulos, altas finas), Spectral (bajadas
+ * itálicas) y Nunito Sans (cuerpo, datos y cifras tabulares). Paleta greige.
+ *
+ * Reglas de MJ (2026-07-02, sobre el PDF Final):
+ *   - Portada CON "Inversión total · IVA incl." + full-bleed (isotipo sangra).
+ *   - Tipografía a la escala exacta de la referencia (filas 11px→5.3pt, etc.).
+ *   - Capítulos comparten hoja cuando caben; solo saltan enteros si no entran
+ *     (break-inside:avoid). Encabezado una vez arriba.
+ *   - SIN subtotales (ni de capítulo ni de zona) — banda de zona solo separador.
+ *   - Bloque de cierre (formas de pago + cuadro) compacto, no gigante.
  */
 
 import fs from "node:fs";
@@ -22,13 +33,13 @@ const DEFAULT_PAYMENT_TERMS = [
 ];
 
 const OBSERVACIONES = [
-  "Mandante dejara libre los accesos y las superficies a intervenir, dispondra de suministro electrico y de agua potable, ademas de baño para las personas que trabajen en la obra.",
-  "Todo aumento de obra se recargara al costo directo según los precios unitarios más un recargo del mismo porcentaje en GG expresado en la oferta.",
-  "No se consideran Permisos Municipales ni de administacion del Condominio dentro de este presupuesto.",
-  "Esta cotizacion tiene una validez de 10 dias corridos.",
-  "Los pagos se haran con el valor de la UF del dia, y solo se aceptaran pagos por transferencia bancaria o con tarjeta por medio de link de pago, en cuyo caso se agregara la comision de Transbank.",
-  "Los valores expresados en la cotizacion podrian variar luego de visitar la propiedad.",
-  "Al aprobar la cotizacion se autoriza a la empresa Blarq a publicar contenido en Redes Sociales y pagina web. Fotos, videos del avance y estado de la obra y a la instalacion de publicidad hacia el exterior de la obra (terrazas, balcones, porton).",
+  "Mandante dejará libre los accesos y las superficies a intervenir, dispondrá de suministro eléctrico y de agua potable, además de baño para las personas que trabajen en la obra.",
+  "Todo aumento de obra se recargará al costo directo según los precios unitarios más un recargo del mismo porcentaje en GG expresado en la oferta.",
+  "No se consideran Permisos Municipales ni de administración del Condominio dentro de este presupuesto.",
+  "Esta cotización tiene una validez de 10 días corridos.",
+  "Los pagos se harán con el valor de la UF del día, y solo se aceptarán pagos por transferencia bancaria o con tarjeta por medio de link de pago, en cuyo caso se agregará la comisión de Transbank.",
+  "Los valores expresados en la cotización podrían variar luego de visitar la propiedad.",
+  "Al aprobar la cotización se autoriza a la empresa BLARQ a publicar contenido en Redes Sociales y página web: fotos y videos del avance y estado de la obra, y a la instalación de publicidad hacia el exterior de la obra (terrazas, balcones, portón).",
   "Una vez aprobado el presupuesto, se solicita pago de anticipo al menos 2 semanas antes del comienzo de la obra.",
 ];
 
@@ -36,9 +47,6 @@ const OBSERVACIONES = [
 export interface ObraItemInput {
   chapter: string;
   subChapter?: string | null;
-  // Orden manual (el que arma MJ arrastrando en el editor). El PDF respeta ESTE
-  // orden — antes ordenaba alfabéticamente por zona y salía distinto a la
-  // pantalla.
   sortOrder: number;
   itemNumber: string;
   name: string;
@@ -47,10 +55,6 @@ export interface ObraItemInput {
   quantity: number;
   unitPrice: number;
   total: number;
-  // Marca de cambio respecto a la última versión enviada al cliente.
-  // "added" = NUEVO · "up" = subió el total · "down" = bajó · null/undefined =
-  // sin cambio (no se muestra nada). Se calcula al vuelo en el route, no se
-  // guarda. Ver src/lib/presupuesto/versionDiff.ts.
   changeMarker?: "added" | "up" | "down" | null;
 }
 
@@ -73,6 +77,11 @@ export interface ObraHTMLInput {
     date: string | Date;
     ggPercentage: number | null;
     utilityPercentage: number | null;
+    // Textos de portada editables (null → default). coverTitle también alimenta
+    // la bajada del encabezado del detalle.
+    coverTitle?: string | null;
+    coverSubtitle?: string | null;
+    coverNote?: string | null;
   };
   items: ObraItemInput[];
   paymentTerms: PaymentTermInput[];
@@ -87,335 +96,186 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function fmtCLP(n: number): string {
-  return "$" + Math.round(n).toLocaleString("es-CL");
+// Resaltado en descripciones: MJ no quiere rojo saturado — choca con el rojo
+// semántico de "excedido/vencido" y rompe el tono editorial. Remapeamos el
+// burdeo del editor (#b23a3a) y cualquier rojo brillante a rojo tierra
+// desaturado (#9C4A3C), que mantiene la atención sin gritar.
+const EMPHASIS_RED = "#9C4A3C";
+function remapEmphasisRed(html: string): string {
+  return html.replace(
+    /color:\s*(#b23a3a|#ff0000|#e11d48|#dc2626|#ef4444|#f03e3e|red)\b/gi,
+    `color:${EMPHASIS_RED}`
+  );
 }
 
 function fmtQty(n: number): string {
-  // Chilean comma decimals: 15,4
   return new Intl.NumberFormat("es-CL", { maximumFractionDigits: 2 }).format(n);
+}
+
+function fmtNum(n: number): string {
+  return Math.round(n).toLocaleString("es-CL");
+}
+
+function fmtMoney(n: number): string {
+  return "$ " + Math.round(n).toLocaleString("es-CL");
 }
 
 function fmtDate(d: string | Date): string {
   const date = typeof d === "string" ? new Date(d) : d;
   const day = String(date.getUTCDate()).padStart(2, "0");
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const year = String(date.getUTCFullYear()).slice(-2);
-  return `${day}-${month}-${year}`;
+  const year = String(date.getUTCFullYear());
+  return `${day}·${month}·${year}`;
 }
 
-function getLogoDataUri(): string {
-  const logoPath = path.join(
-    process.cwd(),
-    "public",
-    "assets",
-    "logo-blarq.png"
-  );
+// Lee un asset de public/assets como data URI (logo, isotipo de marca).
+function assetDataUri(file: string): string {
   try {
-    const bytes = fs.readFileSync(logoPath);
+    const bytes = fs.readFileSync(
+      path.join(process.cwd(), "public", "assets", file)
+    );
     return `data:image/png;base64,${bytes.toString("base64")}`;
   } catch {
     return "";
   }
 }
 
-// ─── CSS ──────────────────────────────────────────────────────────────────
-// El layout y proporciones replican el cuadro Excel master que MJ usaba
-// para sus cotizaciones. Cambios clave vs versiones anteriores:
-//   - Header en 2 columnas: lado izq (logo + Mandante/Proyecto/Direccion),
-//     lado der (Version big + Pro a cargo + Celular/Fecha/Valor UF).
-//   - Tabla con bordes en TODAS las celdas (estilo Excel), no solo bottom.
-//   - Headers de tabla con bg gris #DBDBDB.
-//   - Totales en 4 columnas: LABEL | % | $ | VALUE — el $ separado del nro.
-//   - Forma de Pago + Observaciones más compactas estilo Excel.
+// ─── CSS — paleta y tipografía del Manual v2 (Claro) ────────────────────────
+// Colores exactos de la fuente de diseño:
+//   Tinta #38342D · Grafito/valores #645C51 · Taupe/labels #9D9385
+//   Piedra banda #756C5E · descripción #7D7365 · versión clara #AFA79C
+//   Banda/fila #EDEDEC · bordes #E9E8E6 (fila) #DEDCD9 (sección) #C6C0B8 (hairline)
 const CSS = `
-  @page { size: A4; margin: 10mm 12mm; }
-
+  /* Márgenes por CSS (el route usa preferCSSPageSize): detalle con 14mm
+     arriba/abajo (0 a los lados; el aire lateral lo pone el padding) y la
+     PORTADA full-bleed (margin:0) para que la marca de agua "A" sangre hasta
+     el borde inferior de la hoja. */
+  @page { size: A4; margin: 14mm 0; }
+  @page :first { margin: 0; }
   * { box-sizing: border-box; }
-
   html, body {
-    margin: 0;
-    padding: 0;
-    font-family: 'Montserrat', sans-serif;
-    font-size: 7pt;
-    font-weight: 400;
-    color: #1A1A1A;
+    margin: 0; padding: 0;
+    font-family: 'Nunito Sans', sans-serif;
+    color: #38342D;
     -webkit-font-smoothing: antialiased;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
 
-  /* ── Header — match IGUALAR reference ───────────────────────── */
-  /* Layout en 2 bloques:
-     1) Franja superior: logo (izq) + título "V1 COTIZACION / OBRA /
-        Profesional a cargo / JTL" (der).
-     2) Grilla 2×3 abajo con campos pareados:
-        Mandante | Celular
-        Proyecto | Fecha
-        Direccion | Valor UF
-  */
-  .header-strip {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    column-gap: 30px;
-    margin-bottom: 4pt;
-    align-items: start;
-  }
-  .header-strip .strip-left  { text-align: left; }
-  .header-strip .strip-right { text-align: right; }
+  /* Los márgenes verticales (14mm) los pone el renderer en TODAS las páginas
+     (route: margin top/bottom 14mm, left/right 0). Por eso acá el padding es
+     solo lateral y la portada calcula su alto contra el área útil (297-28mm). */
+  .page { position: relative; width: 210mm; overflow: hidden; }
+  .page:first-child { overflow: visible; }
+  /* Un capítulo no se parte a la mitad entre hojas: si no entra entero, salta
+     completo a la siguiente. Pero varios capítulos comparten hoja si caben. */
+  .chpage { break-inside: avoid; }
+  .page + .page { page-break-before: always; }
+  .pad-cover { padding: 15mm 13.5mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 297mm; }
+  .pad-detail { padding: 0 13mm; display: flex; flex-direction: column; }
 
-  .header-fields {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 6pt;
-  }
-  .header-fields .col-left,
-  .header-fields .col-right {
-    display: flex;
-    flex-direction: column;
-    gap: 2pt;
-  }
-  .header-fields .col-right { text-align: left; }
+  /* ── Portada — calibrada 1:1 al diseño de Claude Design (canvas 1240px =
+       210mm → 0.48pt/px, 0.1694mm/px). Logo, meta, textos y marca de agua con
+       los valores exactos del .dc.html de referencia. ─────────────────────── */
+  /* El isotipo es una "A": chevron arriba + travesaño (la "raya") abajo, a ~89%
+     de su alto. Lo subimos (bottom positivo) para que el isotipo COMPLETO quede
+     sobre la hoja y se vea la raya; sangra por la derecha para dar movimiento. */
+  .wm { position: absolute; right: -6mm; bottom: 12mm; z-index: 0; }
+  .cover-top, .cover-mid, .cover-foot { position: relative; z-index: 1; }
+  .cover-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .cover-logo { width: 31mm; height: auto; opacity: .72; }
+  .cover-meta { text-align: right; font-family: 'Nunito Sans', sans-serif; }
+  .cover-meta .m1 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #9D9385; font-weight: 600; }
+  .cover-meta .m2 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #AFA79C; font-weight: 600; margin-top: 2.4pt; }
+  .cover-mid { display: flex; flex-direction: column; align-items: flex-start; gap: 3.7mm; }
+  .cover-rule { width: 12mm; height: 1px; background: #C6C0B8; }
+  /* max-width fuerza el quiebre a ~2 líneas como en la referencia
+     ("Remodelación de / cocina y baños"), en vez de una sola línea larga. */
+  .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 25pt; line-height: 1.12; letter-spacing: .12em; text-transform: uppercase; color: #38342D; max-width: 105mm; }
+  .cover-sub { font-family: 'Spectral', serif; font-weight: 300; font-style: italic; font-size: 12pt; color: #9D9385; }
+  .cover-foot { display: flex; flex-direction: column; gap: 2.7mm; font-family: 'Nunito Sans', sans-serif; border-top: 1px solid #DEDCD9; padding-top: 4mm; }
+  .cover-foot .row { display: flex; justify-content: space-between; align-items: baseline; }
+  .cover-foot .lbl { font-size: 5.8pt; letter-spacing: .16em; text-transform: uppercase; color: #9D9385; }
+  .cover-foot .val { font-size: 7.2pt; color: #38342D; }
 
-  .logo {
-    display: block;
-    height: 45px;
-    width: auto;
-    margin-bottom: 2pt;
-  }
+  /* ── Detalle: encabezado ─────────────────────────────────── */
+  .dhead-iso { width: 40px; height: auto; opacity: .55; margin-bottom: 4mm; display: block; }
+  .dhead { display: flex; justify-content: space-between; align-items: flex-start; }
+  .dhead .kick { font-size: 5.3pt; letter-spacing: .26em; text-transform: uppercase; color: #9D9385; font-weight: 600; }
+  .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 15.5pt; line-height: 1.08; letter-spacing: .05em; text-transform: uppercase; color: #38342D; margin-top: 3pt; padding-right: 8mm; }
+  .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 6.7pt; color: #9D9385; margin-top: 3pt; }
+  .dhead .right { text-align: right; }
+  .dhead .ver { font-size: 4.8pt; letter-spacing: .28em; text-transform: uppercase; color: #AFA79C; font-weight: 600; }
+  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 10pt; letter-spacing: .05em; text-transform: uppercase; color: #776E60; margin-top: 3pt; }
+  .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 6.2pt; letter-spacing: .34em; text-transform: uppercase; color: #9D9385; margin-top: 3pt; }
 
-  .doc-title {
-    font-family: 'Montserrat', sans-serif;
-    font-size: 18pt;
-    font-weight: 400;
-    color: #808080;
-    line-height: 1;
-    margin: 0;
-    letter-spacing: 0.02em;
-  }
-  .doc-subtitle {
-    font-size: 9pt;
-    font-weight: 400;
-    color: #808080;
-    letter-spacing: 0.06em;
-    margin: 0 0 4pt 0;
-    text-transform: uppercase;
-  }
+  /* ── Tabla de partidas ───────────────────────────────────── */
+  /* Proporciones de columnas idénticas a la referencia (item 3.9 · partida 20
+     · descripción ~50% · un 3.5 · cant 4.4 · p.unit 8 · total 9.1). La
+     descripción ancha evita que el texto se apile en muchas líneas. */
+  .grid { display: grid; grid-template-columns: 6% 20% 1fr 3.5% 4.4% 8% 9.1%; }
+  .hd { border-bottom: 0.3px solid #9D9385; padding: 3.5pt 0; margin-top: 7mm; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #776E60; font-weight: 700; }
+  .hd span:nth-child(4){ text-align:center; } .hd span:nth-child(5),.hd span:nth-child(6),.hd span:nth-child(7){ text-align:right; }
 
-  .field { margin-bottom: 1pt; }
-  .field .label {
-    font-size: 6pt;
-    font-weight: 400;
-    color: #808080;
-    letter-spacing: 0;
-    margin-bottom: 0;
-    line-height: 1.1;
-  }
-  .field .value {
-    font-size: 8pt;
-    font-weight: 500;
-    color: #1A1A1A;
-    line-height: 1.1;
-    text-transform: uppercase;
-  }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #38342D; padding: 5pt 2pt 3pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }
+  /* El primer capítulo se acerca al encabezado de columnas (menos aire que
+     entre capítulos, que conservan su separación). */
+  .hd + .chpage .cap { margin-top: 1pt; }
+  .cap b { font-family: 'Hanken Grotesk', sans-serif; font-size: 5.75pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: #38342D; }
+  .cap span { font-size: 5.3pt; color: #9D9385; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
 
-  /* ── Table — spec definitivo MJ ─────────────────────────────── */
-  table.partidas {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-    font-family: 'Montserrat', sans-serif;
-    font-size: 6.5pt;
-    margin-top: 0;
-  }
-  /* Cuerpo: SIN bordes verticales, líneas internas muy sutiles. */
-  .partidas th, .partidas td {
-    border: none;
-    border-bottom: 0.15pt solid #E5E5E5;
-    padding: 2pt 5pt;
-    vertical-align: top;
-    word-wrap: break-word;
-    line-height: 1.2;
-    font-weight: 400;
-    font-size: 6.5pt;
-    color: #1A1A1A;
-  }
-  /* Header de tabla (ITEM | PARTIDA | …) — sin fill, solo líneas */
-  .partidas thead th {
-    background: transparent;
-    color: #1A1A1A;
-    font-weight: 500;
-    text-transform: uppercase;
-    text-align: center;
-    font-size: 7pt;
-    padding: 2pt 5pt;
-    white-space: nowrap;
-    vertical-align: middle;
-    border-top: 0.5pt solid #1A1A1A;
-    border-bottom: 0.5pt solid #1A1A1A;
-  }
-  /* Filas de capítulo (1 DEMOLICIONES, …) — gris sutil */
-  .partidas tr.chapter-row td {
-    background: #E5E5E5;
-    font-weight: 600;
-    text-transform: uppercase;
-    border-bottom: 0.15pt solid #E5E5E5;
-    font-size: 7pt;
-    vertical-align: middle;
-    padding: 2pt 5pt;
-    color: #1A1A1A;
-  }
-  .partidas tr.chapter-row td.chapter-idx { text-align: center; }
-  /* Filas de sub-chapter (COCINA, BAÑO PRINCIPAL, …) — separador suave
-     dentro de un capítulo. Más sutil que la fila de capítulo. El
-     subtotal de la zona va en la última celda alineado a la derecha,
-     con el mismo peso/tamaño que el nombre de la zona para que se lean
-     como un solo titular: "COCINA ........ $ 972.188". */
-  .partidas tr.sub-chapter-row td {
-    background: #F5F5F5;
-    font-weight: 500;
-    text-transform: uppercase;
-    border-bottom: 0.15pt solid #E5E5E5;
-    font-size: 6pt;
-    vertical-align: middle;
-    padding: 1.5pt 5pt 1.5pt 15pt;
-    color: #555;
-    letter-spacing: 0.04em;
-  }
-  .partidas tr.sub-chapter-row td.col-total {
-    text-align: right;
-    padding: 1.5pt 5pt;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
+  /* La banda de zona y el título de capítulo no deben quedar solos al pie de
+     una página (huérfanos): break-after:avoid los mantiene con su primera fila. */
+  .zone { display: flex; justify-content: space-between; align-items: baseline; background: #EDEDEC; padding: 2pt 10pt; margin-top: 1.5pt; font-size: 4.8pt; letter-spacing: .14em; text-transform: uppercase; color: #504A40; font-weight: 700; break-inside: avoid; break-after: avoid; }
+  .zone .zamt { font-size: 5.3pt; letter-spacing: 0; text-transform: none; font-weight: 400; color: #756C5E; font-variant-numeric: tabular-nums; }
 
-  /* Anchos de columna (suman 100%). TOTAL en peso regular per spec.
-     La col-chg (marca de cambio) es una columna estrecha a la IZQUIERDA del
-     número de ítem; se le saca el ancho a partida + descripción. */
-  .col-chg    { width: 5%;  text-align: right; white-space: nowrap; vertical-align: middle; padding-right: 2pt; }
-  .col-item   { width: 4%;  text-align: center; white-space: nowrap; }
-  .col-name   { width: 26%; text-align: left; }
-  .col-desc   { width: 34%; text-align: left; }
-  /* Descripción con formato (negrita/cursiva/listas/color del editor). */
-  .col-desc p  { margin: 0; }
-  .col-desc ul { margin: 0; padding-left: 14px; list-style: disc; }
-  .col-desc ol { margin: 0; padding-left: 16px; list-style: decimal; }
-  .col-desc li { margin: 0; }
-  .col-desc strong { font-weight: 700; }
-  .col-desc em { font-style: italic; }
-  .col-unit   { width: 6%;  text-align: center; white-space: nowrap; }
-  .col-qty    { width: 7%;  text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .col-pu     { width: 8%;  text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .col-total  { width: 10%; text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .r { align-items: start; padding: 2.5pt 0; border-bottom: 1px solid #E9E8E6; font-size: 5.3pt; page-break-inside: avoid; }
+  .r span { line-height: 1.32; }
+  .it { position: relative; padding-left: 9pt; color: #776E60; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pt { color: #38342D; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; padding-right: 8pt; }
+  .ds { color: #645C51; padding-right: 10pt; }
+  .un { text-align: center; color: #9D9385; }
+  .ct { text-align: right; color: #645C51; font-variant-numeric: tabular-nums; }
+  .pu { text-align: right; color: #645C51; font-variant-numeric: tabular-nums; }
+  .tt { text-align: right; color: #38342D; font-variant-numeric: tabular-nums; }
+  .ds p { margin: 0; } .ds ul { margin: 0; padding-left: 12px; } .ds ol { margin: 0; padding-left: 14px; }
+  .ds strong { font-weight: 700; } .ds em { font-style: italic; }
 
-  /* ── Marca de cambio entre versiones — monocromática ──────────
-     Flecha negra para subió/bajó; pastilla con borde para "NUEVO".
-     Sin color semántico: rojo/verde están reservados a otros usos. */
-  .chg-arrow {
-    font-weight: 700;
-    color: #1A1A1A;
-    font-size: 8pt;
-    line-height: 1;
-  }
-  .chg-new {
-    /* Pastilla "NUEVO" en gris suave (no negro): es una marca discreta, no
-       compite con el contenido. Estética BLARQ — gris liviano, sin saturar. */
-    display: inline-block;
-    border: 0.4pt solid #B8B8B8;
-    border-radius: 999px;
-    padding: 0.3pt 2.5pt;
-    font-size: 4.5pt;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #8A8A8A;
-    white-space: nowrap;
-  }
+  /* marca de cambio entre versiones */
+  /* Marca de cambio: símbolo absoluto en un gutter a la IZQUIERDA del número.
+     Así el número siempre arranca en la misma x (padding-left de .it) y queda
+     alineado en columna, con o sin marca. */
+  .mk { position: absolute; left: 0; top: 0; color: #38342D; font-weight: 700; }
+  .mk .mkarrow { width: 4.5pt; height: 5.2pt; display: inline-block; vertical-align: -0.4pt; }
+  /* Leyenda de símbolos, al PIE del detalle, italica muy sutil. */
+  .leyenda { margin-top: 4mm; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9D9385; }
+  .leyenda .mk { position: static; font-weight: 700; color: #756C5E; }
 
-  /* ── Totals — apilado vertical, 55% ancho derecha (spec MJ) ──── */
-  .totals-wrap {
-    width: 100%;
-    margin-top: 6pt;
-    display: flex;
-    justify-content: flex-end;
-  }
-  table.totals {
-    border-collapse: collapse;
-    font-family: 'Montserrat', sans-serif;
-    font-size: 7pt;
-    width: 55%;
-    margin-left: auto;
-    border: none;
-    border-top: 0.5pt solid #1A1A1A;
-    border-bottom: 0.5pt solid #1A1A1A;
-  }
-  .totals td {
-    padding: 2.5pt 6pt;
-    border-bottom: 0.3pt solid #BFBFBF;
-    background: transparent;
-    color: #1A1A1A;
-    font-weight: 400;
-    font-variant-numeric: tabular-nums;
-  }
-  .totals tr:last-child td { border-bottom: none; }
+  /* ── Cierre: formas de pago + cuadro ─────────────────────── */
+  .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 8mm; align-items: start; page-break-inside: avoid; }
+  /* "Formas de pago" / "Observaciones": tinta oscura, más grande y subrayado. */
+  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #38342D; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+  .pagos { margin-top: 6pt; border-top: 1px solid #DEDCD9; }
+  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 2.5pt 0; border-bottom: 1px solid #E9E8E6; }
+  .pagos .row:last-child { border-bottom: none; }
+  .pagos .s { font-size: 7pt; color: #38342D; }
+  .pagos .p { font-size: 7pt; color: #756C5E; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .cuadro { border-top: 1.5px solid #38342D; }
+  .cuadro .row { display: grid; grid-template-columns: 1fr 30px 92px; align-items: baseline; padding: 2pt 0; border-bottom: 1px solid #DEDCD9; }
+  .cuadro .cl { font-size: 7pt; color: #645C51; }
+  .cuadro .cl.strong { color: #38342D; font-weight: 600; }
+  .cuadro .cp { text-align: right; font-size: 6pt; color: #9D9385; font-variant-numeric: tabular-nums; }
+  .cuadro .cv { text-align: right; font-size: 7pt; color: #645C51; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cuadro .cv.strong { color: #38342D; font-weight: 600; }
+  .cuadro .row.grand { grid-template-columns: 1fr 110px; border-top: 1.5px solid #38342D; border-bottom: none; padding-top: 6pt; margin-top: 2pt; }
+  .cuadro .row.grand .cl { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #38342D; }
+  .cuadro .row.grand .cv { font-size: 12pt; font-weight: 700; color: #38342D; }
+  .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9D9385; margin-top: 3pt; }
 
-  .totals .t-label { text-align: left; text-transform: uppercase; white-space: nowrap; padding-left: 2pt; }
-  .totals .t-pct   { text-align: center; width: 12%; }
-  .totals .t-cur   { text-align: center; width: 6%; }
-  .totals .t-val   { text-align: right; white-space: nowrap; }
-
-  .totals tr.total td {
-    font-weight: 700;
-    font-size: 7.5pt;
-    border-top: 0.5pt solid #1A1A1A;
-  }
-
-  /* ── Section titles — subrayado fino sin negrita */
-  .section-title {
-    font-size: 7pt;
-    font-weight: 400;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: #1A1A1A;
-    margin: 0 0 2pt 0;
-    padding: 0;
-    border-bottom: 0.5pt solid #1A1A1A;
-    padding-bottom: 1px;
-    display: inline-block;
-  }
-  .section-title-italic {
-    font-size: 7pt;
-    font-weight: 400;
-    font-style: italic;
-    color: #1A1A1A;
-    margin: 0 0 2pt 0;
-    padding-bottom: 1px;
-    border-bottom: 0.5pt solid #1A1A1A;
-    display: inline-block;
-  }
-
-  /* ── Payment terms ─────────────────────────────────────────── */
-  .payment-wrap { margin-top: 8pt; }
-  table.payment { border-collapse: collapse; font-size: 6.5pt; }
-  .payment td { padding: 0.5pt 0; border: none; line-height: 1.2; }
-  .payment .p-stage { padding-right: 24px; font-weight: 400; }
-  .payment .p-pct { text-align: right; font-variant-numeric: tabular-nums; min-width: 30px; }
-
-  /* ── Observaciones — lista numerada ─────────────────────────── */
-  .obs-wrap  { margin-top: 8pt; }
-  .obs-item {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 0;
-    font-size: 6.5pt;
-    line-height: 1.25;
-  }
-  .obs-num { flex: 0 0 12px; font-weight: 400; color: #1A1A1A; }
-  .obs-text { flex: 1; color: #1A1A1A; }
-
-  /* Avoid splitting rows ONLY in totals (más legible si queda junto). */
-  .totals tr { page-break-inside: avoid; }
+  /* ── Observaciones ───────────────────────────────────────── */
+  .obs { margin-top: 5mm; page-break-inside: avoid; }
+  .obs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5pt 14mm; margin-top: 7pt; }
+  .obs-item { display: flex; gap: 8pt; font-size: 6pt; line-height: 1.3; color: #645C51; }
+  .obs-num { color: #9D9385; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 `;
 
 // ─── Renderer ─────────────────────────────────────────────────────────────
@@ -424,7 +284,6 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   const ggPct = budget.ggPercentage ?? 0;
   const utilPct = budget.utilityPercentage ?? 0;
 
-  // Integer math with Math.round at each total line (spec §6).
   const costoDirecto = Math.round(items.reduce((s, i) => s + i.total, 0));
   const gg = Math.round(costoDirecto * (ggPct / 100));
   const utilidad = Math.round(costoDirecto * (utilPct / 100));
@@ -432,15 +291,11 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   const iva = Math.round(neto * 0.19);
   const total = neto + iva;
 
-  // Capítulos en el MISMO orden que el editor (OBRA_CHAPTERS), con la misma
-  // numeración: se saltan los capítulos vacíos y se renumera 1, 2, 3… sobre los
-  // que tienen partidas (reflow), igual que ObraEditor.tsx. El nombre usa
-  // pdfLabel (formal, mayúsculas) para el cliente. Antes el PDF tenía su propia
-  // lista con otro orden y números fijos — por eso salía "3 INSTALACIONES
-  // ELECTRICAS" mientras la pantalla mostraba "4 ELÉCTRICAS".
-  //
-  // Las partidas van en orden de sortOrder (el orden manual de MJ), NO
-  // alfabético: así el PDF queda igual a lo que se ve en el editor.
+  // Capítulos en el MISMO orden y numeración que el editor (OBRA_CHAPTERS, fuente
+  // compartida): se saltan los vacíos y se renumera 1,2,3… sobre los que tienen
+  // partidas (reflow), con el nombre formal (pdfLabel) para el cliente. Las
+  // partidas van por sortOrder (el orden manual de MJ), NO alfabético — así el
+  // PDF queda igual a lo que se ve en pantalla. (Lógica de prod: PR #231.)
   const chapters = (
     Object.entries(OBRA_CHAPTERS) as [
       string,
@@ -458,79 +313,101 @@ export function renderObraHTML(data: ObraHTMLInput): string {
     .map((ch, i) => ({ ...ch, index: i + 1 }));
 
   const terms = paymentTerms.length > 0 ? paymentTerms : DEFAULT_PAYMENT_TERMS;
-  const logoUri = getLogoDataUri();
+  const logoUri = assetDataUri("blarq-logo-horizontal-ink.png") || assetDataUri("logo-blarq.png");
+  const iso = assetDataUri("blarq-isotipo-piedra.png");
   const dateStr = fmtDate(budget.date);
+  const versionLarga = `Versión ${budget.version.replace(/^V/i, "")} · ${dateStr}`;
+
+  // Textos de portada: lo que escribió MJ o un default. El título grande es una
+  // descripción genérica de la obra (ej. "Remodelación integral cocina") que MJ
+  // escribe en el recuadro "Portada del PDF"; la bajada lleva el nombre del
+  // proyecto (que suele ser el nombre de la calle) y la comuna.
+  //
+  // Si NO hay título propio, el título cae al nombre del proyecto — en ese caso
+  // NO repetimos el nombre en la bajada: dejamos solo la comuna. Así nunca sale
+  // "Paseo del Sena / Paseo del Sena · Las Condes".
+  const hasCustomTitle = !!budget.coverTitle?.trim();
+  const comuna = project.address?.trim() || "";
+  const coverTitle = budget.coverTitle?.trim() || project.name;
+  const coverSubtitle =
+    budget.coverSubtitle?.trim() ||
+    (hasCustomTitle
+      ? [project.name, comuna].filter(Boolean).join(" · ")
+      : comuna);
 
   const logoHtml = logoUri
-    ? `<img class="logo" src="${logoUri}" alt="BLARQ" />`
-    : `<div class="logo" style="line-height:60px;font-size:28pt;font-weight:700;letter-spacing:0.15em;">BLARQ</div>`;
+    ? `<img class="cover-logo" src="${logoUri}" alt="BLARQ" />`
+    : `<div class="cover-logo" style="font-family:'Hanken Grotesk';font-size:24pt;letter-spacing:.15em;">BLARQ</div>`;
 
-  // Formato CLP en tabla: P.U. va sin $ (solo número), TOTAL va con
-  // "$ XXX.XXX" con espacio — para que matchee al cuadro Excel master.
-  const fmtNum = (n: number) => Math.round(n).toLocaleString("es-CL");
-  const fmtMoney = (n: number) => "$ " + Math.round(n).toLocaleString("es-CL");
-
-  // Marca de cambio a la izquierda del número de ítem. Flecha (subió/bajó)
-  // o pastilla "NUEVO"; vacío si no cambió o no hay versión base.
+  // Marca de cambio vs versión anterior: un símbolo compacto que CUELGA a la
+  // izquierda del número, en un slot de ancho fijo, para que los números queden
+  // SIEMPRE alineados en columna (tengan marca o no). "*" = partida nueva,
+  // flecha arriba = subió, flecha abajo = bajó. La leyenda al pie explica los
+  // símbolos; solo se muestra si hay alguna marca.
+  //
+  // Las flechas van como SVG (no glyph Unicode ↑↓): en el Chromium headless de
+  // Vercel esas fuentes no traen el glyph y salían como cuadraditos (tofu). El
+  // SVG se dibuja igual en cualquier entorno.
+  const hasMarkers = items.some((i) => i.changeMarker);
+  const arrowSvg = (dir: "up" | "down") =>
+    `<svg class="mkarrow" viewBox="0 0 10 12" aria-hidden="true"><path d="${
+      dir === "up" ? "M5 11 L5 2 M2 5 L5 2 L8 5" : "M5 1 L5 10 M2 7 L5 10 L8 7"
+    }" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const renderMarker = (m?: "added" | "up" | "down" | null) => {
-    if (m === "up") return `<span class="chg-arrow">&#8593;</span>`;
-    if (m === "down") return `<span class="chg-arrow">&#8595;</span>`;
-    if (m === "added") return `<span class="chg-new">Nuevo</span>`;
-    return "";
+    const inner =
+      m === "up" ? arrowSvg("up") : m === "down" ? arrowSvg("down") : m === "added" ? "*" : "";
+    return `<span class="mk">${inner}</span>`;
   };
 
+  const detailHeader = `
+    ${iso ? `<img class="dhead-iso" src="${iso}" alt="" />` : ""}
+    <div class="dhead">
+      <div>
+        <div class="kick">Cotización de obra · detalle</div>
+        <div class="proj">${esc(project.name)}</div>
+        <div class="psub">${esc(project.clientName)} · ${esc(coverTitle)}</div>
+      </div>
+      <div class="right">
+        <div class="ver">${esc(versionLarga)}</div>
+        <div class="doc">${esc(budget.version)} Cotización</div>
+        <div class="docsub">Obra</div>
+      </div>
+    </div>`;
+  const columnHeader = `<div class="grid hd"><span>Ítem</span><span>Partida</span><span>Descripción</span><span>Un</span><span>Cant</span><span>P. Unit.</span><span>Total</span></div>`;
+
+  // Regla MJ (2026-07-02): los capítulos COMPARTEN hoja cuando caben; un
+  // capítulo solo salta a la hoja siguiente si no entra entero (break-inside:
+  // avoid) — no se parte a la mitad, pero tampoco se deja hoja casi vacía.
+  // SIN subtotales (ni de capítulo ni de zona) — la banda de zona queda solo
+  // como separador. El encabezado va una vez arriba (no por capítulo).
   const tableRows = chapters
     .map((ch) => {
-      // Zona DERIVADA por posición — misma regla que el editor (helper
-      // compartido annotateZones). Una partida sin zona propia hereda la zona
-      // de la de arriba, así que el "extractor" recién creado (sin zona) cae en
-      // la zona donde está parado en vez de quedar huérfano arriba del capítulo.
-      // Los subtotales por zona solo se muestran si hay 2+ zonas distintas.
-      const { rows, zoneSubtotals, showZoneSubtotals } = annotateZones(ch.items);
+      // Zona DERIVADA por posición (helper compartido annotateZones): una partida
+      // sin zona propia hereda la de arriba, así el "extractor" recién creado cae
+      // en la zona donde está parado en vez de quedar huérfano. La banda de zona
+      // aparece al inicio de cada zona (isZoneStart). SIN subtotales por zona.
+      const { rows } = annotateZones(ch.items);
+      const body = rows
+        .map((row, idx) => {
+          const item = row.item;
+          return `
+          ${row.isZoneStart ? `<div class="zone">${esc(row.zone!)}</div>` : ""}
+          <div class="grid r">
+            <span class="it">${renderMarker(item.changeMarker)}${ch.index}.${idx + 1}</span>
+            <span class="pt">${esc(item.name)}</span>
+            <span class="ds">${remapEmphasisRed(sanitizeRichTextHtml(item.descriptionCliente))}</span>
+            <span class="un">${esc(item.unit)}</span>
+            <span class="ct">${fmtQty(item.quantity)}</span>
+            <span class="pu">${fmtNum(item.unitPrice)}</span>
+            <span class="tt">${fmtMoney(item.total)}</span>
+          </div>`;
+        })
+        .join("");
       return `
-        <tr class="chapter-row">
-          <td class="col-chg"></td>
-          <td class="col-item">${ch.index}</td>
-          <td class="col-name">${esc(ch.label)}</td>
-          <td class="col-desc"></td>
-          <td class="col-unit"></td>
-          <td class="col-qty"></td>
-          <td class="col-pu"></td>
-          <td class="col-total"></td>
-        </tr>
-        ${rows
-          .map((row, idx) => {
-            const item = row.item;
-            // Renumeramos correlativo dentro del capítulo (ch.index.idx+1),
-            // ignorando el item.itemNumber crudo de la BD — los Excel de
-            // origen a veces tenían duplicados o saltos (1.3, 1.3, 1.5…).
-            // En la primera partida de cada zona anteponemos la fila separadora
-            // con el nombre de la zona Y su subtotal alineado a la derecha.
-            const subValue = showZoneSubtotals
-              ? fmtMoney(zoneSubtotals.get(row.zone ?? "") ?? 0)
-              : "";
-            return `
-          ${
-            row.isZoneStart
-              ? `<tr class="sub-chapter-row">
-                  <td colspan="7">${esc(row.zone!)}</td>
-                  <td class="col-total">${subValue}</td>
-                </tr>`
-              : ""
-          }
-          <tr>
-            <td class="col-chg">${renderMarker(item.changeMarker)}</td>
-            <td class="col-item">${ch.index}.${idx + 1}</td>
-            <td class="col-name">${esc(item.name)}</td>
-            <td class="col-desc">${sanitizeRichTextHtml(item.descriptionCliente)}</td>
-            <td class="col-unit">${esc(item.unit)}</td>
-            <td class="col-qty">${fmtQty(item.quantity)}</td>
-            <td class="col-pu">${fmtNum(item.unitPrice)}</td>
-            <td class="col-total">${fmtMoney(item.total)}</td>
-          </tr>`;
-          })
-          .join("")}
-      `;
+        <div class="chpage">
+          <div class="cap"><b>${ch.index} · ${esc(ch.label)}</b></div>
+          ${body}
+        </div>`;
     })
     .join("");
 
@@ -538,156 +415,85 @@ export function renderObraHTML(data: ObraHTMLInput): string {
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>${esc(budget.version)} COTIZACION OBRA — ${esc(project.name)}</title>
+  <title>${esc(budget.version)} Cotización Obra — ${esc(project.name)}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@200;300;400;500;600;700&family=Nunito+Sans:wght@300;400;600;700&family=Spectral:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
   <style>${CSS}</style>
 </head>
 <body>
 
-  <!-- HEADER — match IGUALAR reference -->
-  <!-- 1) Franja: logo (izq) + título + Pro a cargo (der) -->
-  <div class="header-strip">
-    <div class="strip-left">
-      ${logoHtml}
-    </div>
-    <div class="strip-right">
-      <div class="field"><div class="label">Version:</div></div>
-      <h1 class="doc-title">${esc(budget.version)} COTIZACION</h1>
-      <div class="doc-subtitle">OBRA</div>
-      <div class="field">
-        <div class="label">Profesional a cargo:</div>
-        <div class="value">${esc(PROFESSIONAL)}</div>
+  <!-- PORTADA -->
+  <div class="page">
+    <div class="wm">${iso ? `<img src="${iso}" style="width:78mm;opacity:.07;" />` : ""}</div>
+    <div class="pad-cover">
+      <div class="cover-top">
+        ${logoHtml}
+        <div class="cover-meta">
+          <div class="m1">Cotización · Obra</div>
+          <div class="m2">${esc(versionLarga)}</div>
+        </div>
+      </div>
+      <div class="cover-mid">
+        <div class="cover-rule"></div>
+        <div class="cover-title">${esc(coverTitle)}</div>
+        <div class="cover-sub">${esc(coverSubtitle)}</div>
+      </div>
+      <div class="cover-foot">
+        <div class="row"><span class="lbl">Mandante</span><span class="val">${esc(project.clientName)}</span></div>
+        <div class="row"><span class="lbl">Profesional a cargo</span><span class="val">${esc(PROFESSIONAL)}</span></div>
       </div>
     </div>
   </div>
 
-  <!-- 2) Header fields: izquierda (Mandante/Proyecto/Direccion)
-       pegada al borde izq; derecha (Celular/Fecha/Valor UF)
-       pegada al borde derecho. -->
-  <div class="header-fields">
-    <div class="col-left">
-      <div class="field">
-        <div class="label">Mandante:</div>
-        <div class="value">${esc(project.clientName)}</div>
-      </div>
-      <div class="field">
-        <div class="label">Proyecto:</div>
-        <div class="value">${esc(project.name)}</div>
-      </div>
-      <div class="field">
-        <div class="label">Direccion:</div>
-        <div class="value">${esc(project.address || "—")}</div>
-      </div>
-    </div>
-    <div class="col-right">
-      <div class="field">
-        <div class="label">Celular:</div>
-        <div class="value">${esc(project.clientPhone || "—")}</div>
-      </div>
-      <div class="field">
-        <div class="label">Fecha:</div>
-        <div class="value">${dateStr}</div>
-      </div>
-      <div class="field">
-        <div class="label">Valor UF:</div>
-        <div class="value">${project.ufReference != null ? "$ " + Math.round(project.ufReference).toLocaleString("es-CL") : "—"}</div>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- TABLE -->
-  <table class="partidas">
-    <thead>
-      <tr>
-        <th class="col-chg"></th>
-        <th class="col-item">ITEM</th>
-        <th class="col-name">PARTIDA</th>
-        <th class="col-desc">DESCRIPCION</th>
-        <th class="col-unit">UNIDAD</th>
-        <th class="col-qty">CANTIDAD</th>
-        <th class="col-pu">P.U</th>
-        <th class="col-total">TOTAL</th>
-      </tr>
-    </thead>
-    <tbody>
+  <!-- DETALLE -->
+  <div class="page">
+    <div class="wm">${iso ? `<img src="${iso}" style="width:70mm;opacity:.06;" />` : ""}</div>
+    <div class="pad-detail">
+      ${detailHeader}
+      ${columnHeader}
       ${tableRows}
-    </tbody>
-  </table>
 
-  <!-- TOTALS — alineado a la derecha al 55% -->
-  <div class="totals-wrap">
-    <table class="totals">
-      <tr>
-        <td class="t-label">COSTO DIRECTO</td>
-        <td class="t-pct"></td>
-        <td class="t-cur">$</td>
-        <td class="t-val">${Math.round(costoDirecto).toLocaleString("es-CL")}</td>
-      </tr>
-      <tr>
-        <td class="t-label">GASTOS GENERALES</td>
-        <td class="t-pct">${ggPct}%</td>
-        <td class="t-cur">$</td>
-        <td class="t-val">${Math.round(gg).toLocaleString("es-CL")}</td>
-      </tr>
-      <tr>
-        <td class="t-label">UTILIDADES</td>
-        <td class="t-pct">${utilPct}%</td>
-        <td class="t-cur">$</td>
-        <td class="t-val">${Math.round(utilidad).toLocaleString("es-CL")}</td>
-      </tr>
-      <tr>
-        <td class="t-label">COSTO NETO</td>
-        <td class="t-pct"></td>
-        <td class="t-cur">$</td>
-        <td class="t-val">${Math.round(neto).toLocaleString("es-CL")}</td>
-      </tr>
-      <tr>
-        <td class="t-label">IVA</td>
-        <td class="t-pct">19%</td>
-        <td class="t-cur">$</td>
-        <td class="t-val">${Math.round(iva).toLocaleString("es-CL")}</td>
-      </tr>
-      <tr class="total">
-        <td class="t-label">COSTO TOTAL</td>
-        <td class="t-pct"></td>
-        <td class="t-cur">$</td>
-        <td class="t-val">${Math.round(total).toLocaleString("es-CL")}</td>
-      </tr>
-    </table>
-  </div>
+      <div class="cierre">
+        <div>
+          <div class="blk-title">Formas de pago</div>
+          <div class="pagos">
+            ${terms
+              .map(
+                (t) => `<div class="row"><span class="s">${esc(t.stage)}</span><span class="p">${t.percentage}%</span></div>`
+              )
+              .join("")}
+          </div>
+        </div>
+        <div>
+          <div class="cuadro">
+            <div class="row"><span class="cl">Costo directo</span><span class="cp"></span><span class="cv">${fmtMoney(costoDirecto)}</span></div>
+            <div class="row"><span class="cl">Gastos generales</span><span class="cp">${ggPct}%</span><span class="cv">${fmtMoney(gg)}</span></div>
+            <div class="row"><span class="cl">Utilidades</span><span class="cp">${utilPct}%</span><span class="cv">${fmtMoney(utilidad)}</span></div>
+            <div class="row"><span class="cl strong">Costo neto</span><span class="cp"></span><span class="cv strong">${fmtMoney(neto)}</span></div>
+            <div class="row"><span class="cl">IVA</span><span class="cp">19%</span><span class="cv">${fmtMoney(iva)}</span></div>
+            <div class="row grand"><span class="cl">Costo total</span><span class="cv">${fmtMoney(total)}</span></div>
+          </div>
+          <div class="iva-note">Valor IVA incluido</div>
+        </div>
+      </div>
 
-  <!-- FORMAS DE PAGO -->
-  <div class="payment-wrap">
-    <div class="section-title-italic">Formas de Pago</div>
-    <table class="payment">
-      ${terms
-        .map(
-          (t) => `
-        <tr>
-          <td class="p-stage">${esc(t.stage)}</td>
-          <td class="p-pct">${t.percentage}%</td>
-        </tr>`
-        )
-        .join("")}
-    </table>
-  </div>
-
-  <!-- OBSERVACIONES GENERALES -->
-  <div class="obs-wrap">
-    <div class="section-title">OBSERVACIONES GENERALES:</div>
-    ${OBSERVACIONES.map(
-      (obs, i) => `
-      <div class="obs-item">
-        <div class="obs-num">${i + 1}.</div>
-        <div class="obs-text">${esc(obs)}</div>
-      </div>`
-    ).join("")}
+      <div class="obs">
+        <div class="blk-title">Observaciones generales</div>
+        <div class="obs-grid">
+          ${OBSERVACIONES.map(
+            (o, i) => `<div class="obs-item"><span class="obs-num">${i + 1}</span><span>${esc(o)}</span></div>`
+          ).join("")}
+        </div>
+      </div>
+      ${
+        hasMarkers
+          ? `<div class="leyenda">Respecto a la versión anterior: ${renderMarker("added")} partida nueva · ${renderMarker("up")} subió · ${renderMarker("down")} bajó.</div>`
+          : ""
+      }
+    </div>
   </div>
 
 </body>
 </html>`;
 }
-

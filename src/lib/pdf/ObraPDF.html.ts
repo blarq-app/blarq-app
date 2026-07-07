@@ -267,9 +267,11 @@ const CSS = `
   .cuadro .cp { text-align: right; font-size: 6pt; color: #9D9385; font-variant-numeric: tabular-nums; }
   .cuadro .cv { text-align: right; font-size: 7pt; color: #645C51; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .cuadro .cv.strong { color: #38342D; font-weight: 600; }
-  .cuadro .row.grand { grid-template-columns: 1fr 110px; border-top: 1.5px solid #38342D; border-bottom: none; padding-top: 6pt; margin-top: 2pt; }
+  /* Costo total: mismo trato que el total de ambiente de Artefactos — fila en
+     negrita con línea negra ABAJO (no arriba), sin número gigante. */
+  .cuadro .row.grand { grid-template-columns: 1fr 110px; border-top: none; border-bottom: 1px solid #38342D; padding-top: 5pt; padding-bottom: 3pt; margin-top: 2pt; }
   .cuadro .row.grand .cl { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #38342D; }
-  .cuadro .row.grand .cv { font-size: 9pt; font-weight: 700; color: #38342D; }
+  .cuadro .row.grand .cv { font-size: 8.5pt; font-weight: 700; color: #38342D; }
   .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9D9385; margin-top: 3pt; }
 
   /* ── Observaciones ───────────────────────────────────────── */

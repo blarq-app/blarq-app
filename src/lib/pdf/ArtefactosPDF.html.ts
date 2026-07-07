@@ -240,8 +240,8 @@ const CSS = `
      Toda la fila en negrita, con una línea negra abajo subrayando; el monto
      resalta por eso, no por un número grande. */
   .gtot { display: flex; justify-content: space-between; align-items: baseline; padding: 5pt 3pt 3pt; margin-top: 5pt; border-bottom: 1px solid #36322C; break-inside: avoid; }
-  .gtot .lbl { font-size: 7.5pt; letter-spacing: .1em; text-transform: uppercase; color: #36322C; font-weight: 700; }
-  .gtot .val { font-variant-numeric: tabular-nums; font-size: 8.5pt; color: #36322C; font-weight: 700; }
+  .gtot .lbl { font-size: 7pt; letter-spacing: .1em; text-transform: uppercase; color: #36322C; font-weight: 700; }
+  .gtot .val { font-variant-numeric: tabular-nums; font-size: 7pt; color: #36322C; font-weight: 700; }
 
   /* Cierre: forma de pago + resumen por subcategoría + total */
   .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 14mm; margin-top: 10mm; align-items: start; break-inside: avoid; }
@@ -251,13 +251,15 @@ const CSS = `
   .pagos .row:last-child { border-bottom: none; }
   .pagos .s { font-size: 10pt; color: #36322C; }
   .pagos .p { font-size: 10pt; color: #736A5C; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .resumen { border-top: 2px solid #36322C; padding-top: 8pt; }
+  .resumen { border-top: 1px solid #C2BCB4; padding-top: 6pt; }
   .resumen .row { display: flex; justify-content: space-between; align-items: baseline; padding: 4pt 0; border-bottom: 1px solid #DCDAD6; }
   .resumen .rl { font-size: 9pt; color: #625A4F; }
   .resumen .rv { font-size: 9pt; color: #625A4F; font-variant-numeric: tabular-nums; }
-  .resumen .grand { display: flex; justify-content: space-between; align-items: baseline; padding: 8pt 0 0; margin-top: 2pt; border-top: 2px solid #36322C; }
-  .resumen .grand .gl { font-size: 8.5pt; color: #36322C; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-  .resumen .grand .gv { font-size: 9pt; color: #36322C; font-weight: 700; font-variant-numeric: tabular-nums; }
+  /* Total final: mismo trato que el total de ambiente (.gtot) — fila en negrita
+     con línea negra ABAJO, sin número gigante ni doble línea arriba. */
+  .resumen .grand { display: flex; justify-content: space-between; align-items: baseline; padding: 5pt 0 3pt; margin-top: 2pt; border-bottom: 1px solid #36322C; }
+  .resumen .grand .gl { font-size: 8.5pt; color: #36322C; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+  .resumen .grand .gv { font-size: 8.5pt; color: #36322C; font-weight: 700; font-variant-numeric: tabular-nums; }
   .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 8pt; color: #9B9182; margin-top: 4pt; }
 
   .obs { margin-top: 5mm; break-inside: avoid; }

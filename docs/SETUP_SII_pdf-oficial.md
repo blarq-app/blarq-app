@@ -136,7 +136,7 @@ Si hay que regenerar el password de la BD prod (Neon → Reset password), actual
 |---|---|---|
 | Verificar que el sync diario corrió | Recomendado: 1×/día | `tail -50 ~/Library/Logs/blarq-sii-sync-pdfs.log` |
 | Backup de BD prod (incluye PDFs cacheados) | Mensual | `DATABASE_URL="<prod>" npm run db:backup` |
-| Renovar cert digital | Antes de cada vencimiento | Trámite manual MJ. Cert actual vence 2026-08-01. Tras renovar: actualizar `SII_CERT_PATH` local + `SII_CERT_BASE64` en Vercel. |
+| Renovar cert digital | Antes de cada vencimiento | Trámite manual MJ. Cert actual vence 2029-02-02 (renovado 2026-06-26). Tras renovar: actualizar `SII_CERT_PATH` local + `SII_CERT_BASE64` en Vercel. |
 
 ## NO hacer
 

@@ -77,5 +77,6 @@ placeholders que el server no valida). El SII podría cambiarlos y romper el
 sync. Eso es lo que SimpleFactura amortiguaba a cambio del pago. Para leer
 facturas el riesgo es asumible; si se rompe, se ajusta el cliente.
 
-El certificado vence **2026-08-01** — afecta a esta integración y al sync de
-PDFs por igual. Renovar antes (trámite manual de MJ).
+El certificado vence **2029-02-02** (renovado 2026-06-26; titular MJ, RUT
+18023983-9) — afecta a esta integración y al sync de PDFs por igual. Renovar
+antes (trámite manual de MJ).

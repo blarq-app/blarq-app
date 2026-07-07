@@ -204,9 +204,10 @@ const CSS = `
   .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 15.5pt; line-height: 1.08; letter-spacing: .05em; text-transform: uppercase; color: #38342D; margin-top: 3pt; padding-right: 8mm; }
   .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 6.7pt; color: #9D9385; margin-top: 3pt; }
   .dhead .right { text-align: right; }
-  .dhead .ver { font-size: 4.8pt; letter-spacing: .28em; text-transform: uppercase; color: #AFA79C; font-weight: 600; }
-  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 10pt; letter-spacing: .05em; text-transform: uppercase; color: #776E60; margin-top: 3pt; }
-  .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 6.2pt; letter-spacing: .34em; text-transform: uppercase; color: #9D9385; margin-top: 3pt; }
+  .dhead .ver { font-size: 5.3pt; letter-spacing: .28em; text-transform: uppercase; color: #AFA79C; font-weight: 600; }
+  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 13.5pt; line-height: 1.08; letter-spacing: .05em; text-transform: uppercase; color: #776E60; margin-top: 3pt; }
+  /* "OBRA" en recuadro fino, alineado a la derecha, para que se note. */
+  .dhead .docsub { display: inline-block; font-family: 'Hanken Grotesk', sans-serif; font-weight: 500; font-size: 6.4pt; letter-spacing: .28em; text-transform: uppercase; color: #6C6B6B; margin-top: 5pt; border: 0.5px solid #B2ACA0; padding: 2.5pt 6pt 2.5pt 9pt; }
 
   /* ── Tabla de partidas ───────────────────────────────────── */
   /* Proporciones de columnas idénticas a la referencia (item 3.9 · partida 20
@@ -274,8 +275,8 @@ const CSS = `
   /* ── Observaciones ───────────────────────────────────────── */
   .obs { margin-top: 3mm; page-break-inside: avoid; }
   .obs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5pt 14mm; margin-top: 5pt; }
-  .obs-item { display: flex; gap: 8pt; font-size: 5.6pt; line-height: 1.18; color: #948E85; }
-  .obs-num { color: #B2ACA0; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .obs-item { display: flex; gap: 8pt; font-size: 5.3pt; line-height: 1.16; color: #A29C92; }
+  .obs-num { color: #BEB8AD; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 `;
 
 // ─── Renderer ─────────────────────────────────────────────────────────────

@@ -202,9 +202,10 @@ const CSS = `
   .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 15.5pt; line-height: 1.08; letter-spacing: .05em; text-transform: uppercase; color: #36322C; margin-top: 3pt; padding-right: 8mm; }
   .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 7pt; color: #9B9182; margin-top: 3pt; }
   .dhead .right { text-align: right; }
-  .dhead .ver { font-size: 5pt; letter-spacing: .28em; text-transform: uppercase; color: #ADA599; font-weight: 600; }
-  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 10pt; letter-spacing: .05em; text-transform: uppercase; color: #776E60; margin-top: 3pt; }
-  .dhead .docsub { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 6.5pt; letter-spacing: .34em; text-transform: uppercase; color: #9B9182; margin-top: 3pt; }
+  .dhead .ver { font-size: 5.3pt; letter-spacing: .28em; text-transform: uppercase; color: #ADA599; font-weight: 600; }
+  .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 13.5pt; line-height: 1.08; letter-spacing: .05em; text-transform: uppercase; color: #776E60; margin-top: 3pt; }
+  /* Etiqueta del tipo (ARTEFACTOS) en recuadro fino, para que se note. */
+  .dhead .docsub { display: inline-block; font-family: 'Hanken Grotesk', sans-serif; font-weight: 500; font-size: 6.4pt; letter-spacing: .28em; text-transform: uppercase; color: #6C6B6B; margin-top: 5pt; border: 0.5px solid #B2ACA0; padding: 2.5pt 6pt 2.5pt 9pt; }
 
   /* Banda de subcategoría (piedra) y de ambiente (banda gris) */
   /* Fondo grande oscuro → neutralizado (el anclado warm lo dejaba "café"). */
@@ -258,8 +259,8 @@ const CSS = `
 
   .obs { margin-top: 5mm; break-inside: avoid; }
   .obs-list { display: flex; flex-direction: column; gap: 2pt; margin-top: 4pt; }
-  .obs-item { display: flex; gap: 8pt; font-size: 6.2pt; line-height: 1.2; color: #948E85; }
-  .obs-num { color: #B2ACA0; font-variant-numeric: tabular-nums; flex-shrink: 0; font-weight: 600; }
+  .obs-item { display: flex; gap: 8pt; font-size: 5.8pt; line-height: 1.18; color: #A29C92; }
+  .obs-num { color: #BEB8AD; font-variant-numeric: tabular-nums; flex-shrink: 0; font-weight: 600; }
 `;
 
 // ─── HTML render ────────────────────────────────────────────────────────────

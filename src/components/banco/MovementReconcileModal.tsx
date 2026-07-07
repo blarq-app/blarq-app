@@ -60,6 +60,13 @@ export default function MovementReconcileModal({
   const [q, setQ] = useState("");
   const [filterSameClient, setFilterSameClient] = useState(true);
   const [onlyWithBalance, setOnlyWithBalance] = useState(true);
+  // Reembolsador: acota las candidatas a los proveedores REGISTRADOS del
+  // reembolsador (SODIMAC, Sherwin Williams, etc.). Arranca prendido porque
+  // es lo más común, pero es una SUGERENCIA, no un cepo: MJ lo apaga para
+  // conciliar contra CUALQUIER factura con saldo cuando la compra fue de un
+  // proveedor que él no tiene registrado. Antes esto filtraba duro y obligaba
+  // a ir a /configuracion/reembolsadores a agregar el proveedor primero.
+  const [filterReembolsadorOnly, setFilterReembolsadorOnly] = useState(true);
   // Filtro nuevo: monto exacto con tolerancia ±$10 (cubre redondeos IVA).
   // String para que el input vacío sea "no filtrar".
   const [montoExacto, setMontoExacto] = useState<string>("");
@@ -158,6 +165,9 @@ export default function MovementReconcileModal({
         return desc.includes(r.glosa.toLowerCase());
       });
       setFilterSameClient(!!movement.counterpartyRut && !isReembolso);
+      // Al abrir un reembolso, arrancamos acotando a sus proveedores (útil),
+      // pero MJ lo puede soltar con el toggle.
+      setFilterReembolsadorOnly(true);
       setFilterProjectId("");
       setMontoExacto("");
       setError(null);
@@ -188,6 +198,13 @@ export default function MovementReconcileModal({
       })
       .catch(() => {});
   }, [open, reembolsadores.length]);
+
+  // Cuántos proveedores registrados tiene el reembolsador detectado. Si es
+  // 0 no hay nada que acotar, así que el toggle "Solo proveedores de …" no
+  // se muestra (el filtro no cambiaría nada).
+  const reembolsadorAliasCount =
+    (detectedReembolsador?.aliases?.length ?? 0) ||
+    (detectedReembolsador?.rutAlias ? 1 : 0);
 
   const sumApplied = drafts.reduce((s, d) => s + d.amountApplied, 0);
   const remaining = Math.max(0, absAmount - sumApplied);
@@ -338,12 +355,18 @@ export default function MovementReconcileModal({
       // la lista al endpoint para que busque facturas de cualquiera de esos
       // RUTs (caso "Cristobal" → Paula Johanna O Sodimac). Si no hay aliases
       // y "Mismo proveedor" está marcado, usamos el RUT contraparte normal.
-      const aliasRuts = (detectedReembolsador?.aliases ?? [])
-        .map((a) => a.rut)
-        .filter((r) => r && r.trim().length > 0);
+      // Solo acotamos a los proveedores del reembolsador si el toggle está
+      // prendido. Apagado → aliasRuts queda vacío y la búsqueda cae al
+      // camino normal (todas las facturas con saldo), para que MJ concilie
+      // contra un proveedor no registrado sin salir del modal.
+      const aliasRuts = filterReembolsadorOnly
+        ? (detectedReembolsador?.aliases ?? [])
+            .map((a) => a.rut)
+            .filter((r) => r && r.trim().length > 0)
+        : [];
       // Fallback: si el backend nuevo aun no devolvio `aliases` (cache o
       // build viejo), caemos al rutAlias legacy.
-      if (aliasRuts.length === 0 && detectedReembolsador?.rutAlias) {
+      if (filterReembolsadorOnly && aliasRuts.length === 0 && detectedReembolsador?.rutAlias) {
         aliasRuts.push(detectedReembolsador.rutAlias);
       }
       if (aliasRuts.length > 0) {
@@ -398,7 +421,7 @@ export default function MovementReconcileModal({
     } finally {
       setLoading(false);
     }
-  }, [open, q, targetType, filterSameClient, onlyWithBalance, filterProjectId, absAmount, movement.counterpartyRut, movement.date, drafts, montoExacto, detectedReembolsador]);
+  }, [open, q, targetType, filterSameClient, onlyWithBalance, filterProjectId, absAmount, movement.counterpartyRut, movement.date, drafts, montoExacto, detectedReembolsador, filterReembolsadorOnly]);
 
   // Buscar al abrir, y cuando cambian filtros (debounced en q).
   useEffect(() => {
@@ -407,7 +430,7 @@ export default function MovementReconcileModal({
       search();
     }, 200);
     return () => clearTimeout(t);
-  }, [open, q, filterSameClient, onlyWithBalance, filterProjectId, montoExacto, search]);
+  }, [open, q, filterSameClient, onlyWithBalance, filterProjectId, montoExacto, filterReembolsadorOnly, search]);
 
   // Ventana ±15 días para marcar visualmente facturas "cerca" del movimiento.
   const movTimeRef = new Date(movement.date).getTime();
@@ -586,13 +609,34 @@ export default function MovementReconcileModal({
                     <span className="font-medium">
                       {detectedReembolsador.nombre}
                     </span>
-                    . Se están buscando facturas de{" "}
-                    <span className="font-medium">
-                      {list
-                        .map((a) => a.businessName ?? a.rut)
-                        .join(" o ")}
-                    </span>
-                    {list.length === 1 ? ` (RUT ${list[0].rut})` : ""}.
+                    .{" "}
+                    {filterReembolsadorOnly ? (
+                      <>
+                        Se están mostrando primero las facturas de{" "}
+                        <span className="font-medium">
+                          {list
+                            .map((a) => a.businessName ?? a.rut)
+                            .join(" o ")}
+                        </span>
+                        {list.length === 1 ? ` (RUT ${list[0].rut})` : ""}. ¿La
+                        compra fue de otro proveedor? Destildá &quot;Solo
+                        proveedores de {detectedReembolsador.nombre}&quot; y
+                        buscá cualquier factura con saldo.
+                      </>
+                    ) : (
+                      <>
+                        Mostrando <span className="font-medium">todas</span> las
+                        facturas con saldo. Volvé a tildar &quot;Solo
+                        proveedores de {detectedReembolsador.nombre}&quot; para
+                        acotar a{" "}
+                        <span className="font-medium">
+                          {list
+                            .map((a) => a.businessName ?? a.rut)
+                            .join(" o ")}
+                        </span>
+                        .
+                      </>
+                    )}
                   </>
                 ) : (
                   <>
@@ -726,6 +770,16 @@ export default function MovementReconcileModal({
                   />
                   Solo con saldo
                 </label>
+                {detectedReembolsador && reembolsadorAliasCount > 0 && (
+                  <label className="text-xs text-gray-700 flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={filterReembolsadorOnly}
+                      onChange={(e) => setFilterReembolsadorOnly(e.target.checked)}
+                    />
+                    Solo proveedores de {detectedReembolsador.nombre}
+                  </label>
+                )}
                 <select
                   value={filterProjectId}
                   onChange={(e) => setFilterProjectId(e.target.value)}

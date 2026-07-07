@@ -15,6 +15,10 @@ type SearchParams = {
   dateFrom?: string;
   dateTo?: string;
   q?: string;
+  // Filtro por ID exacto de una factura. Lo usa el link de la imputación
+  // conciliada en /banco/movimientos: al apretar "F-3322" muestra SOLO esa
+  // factura, no las que contienen "3322" en el folio.
+  invoiceId?: string;
   // Monto exacto en CLP. Búsqueda con tolerancia ±$10 para cubrir
   // redondeos de IVA típicos (factura emitida $100.000 vs neto+iva
   // que da $99.999 por floor).
@@ -35,6 +39,9 @@ export default async function FacturasPage({
   const sp = await searchParams;
 
   const where: Record<string, unknown> = {};
+  // Filtro por id exacto (link de la imputación conciliada). Gana sobre el
+  // resto: si viene invoiceId, se muestra esa única factura.
+  if (sp.invoiceId) where.id = sp.invoiceId;
   if (sp.type) where.type = sp.type;
   if (sp.status) where.status = sp.status;
   if (sp.origin) where.origin = sp.origin;
@@ -57,8 +64,16 @@ export default async function FacturasPage({
     // mode "insensitive" para que la búsqueda matchee independiente de
     // mayúsculas/minúsculas. Es necesario en Postgres (en SQLite el LIKE
     // era case-insensitive por default; tras el cutover a Neon se rompió).
+    //
+    // Si q es un folio PURO (solo dígitos), el folio se matchea EXACTO: así
+    // buscar "3322" no arrastra "11332256" (que lo contiene). Los otros
+    // campos (nombre, RUT, notas) siguen por "contiene". Si q tiene letras,
+    // el folio vuelve a "contiene" (búsqueda parcial de texto normal).
+    const qFolioNumerico = /^\d+$/.test(sp.q.trim());
     where.OR = [
-      { folioNumber: { contains: sp.q, mode: "insensitive" } },
+      qFolioNumerico
+        ? { folioNumber: sp.q.trim() }
+        : { folioNumber: { contains: sp.q, mode: "insensitive" } },
       { businessName: { contains: sp.q, mode: "insensitive" } },
       { rutIssuer: { contains: sp.q, mode: "insensitive" } },
       { notes: { contains: sp.q, mode: "insensitive" } },

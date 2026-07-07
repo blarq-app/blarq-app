@@ -226,16 +226,15 @@ export default function MovementsTable({
                             {m.payments.slice(0, 2).map((p) => (
                               <Link
                                 key={p.id}
-                                // Va a la lista de facturas filtrada por el
-                                // folio (no al formulario de edición): MJ
-                                // prefiere ver la factura en la lista, con su
-                                // estado y el botón de PDF. Si no hay folio,
-                                // cae al detalle por id.
-                                href={
-                                  p.invoice.folioNumber
-                                    ? `/facturas?q=${encodeURIComponent(p.invoice.folioNumber)}`
-                                    : `/facturas/${p.invoice.id}`
-                                }
+                                // Va a la lista de facturas filtrada por el ID
+                                // EXACTO de la factura imputada (no al formulario
+                                // de edición): MJ prefiere ver la factura en la
+                                // lista, con su estado y el botón de PDF. Se usa
+                                // el invoiceId —no el folio— porque el folio por
+                                // texto matchea por "contiene": buscar "3322"
+                                // también traía "11332256". Con el id exacto
+                                // aparece solo la factura correcta.
+                                href={`/facturas?invoiceId=${p.invoice.id}`}
                                 className="block text-gray-700 hover:text-gray-900 hover:underline truncate"
                               >
                                 F-{p.invoice.folioNumber} (

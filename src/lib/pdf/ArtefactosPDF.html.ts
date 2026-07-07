@@ -259,8 +259,8 @@ const CSS = `
 
   .obs { margin-top: 5mm; break-inside: avoid; }
   .obs-list { display: flex; flex-direction: column; gap: 2pt; margin-top: 4pt; }
-  .obs-item { display: flex; gap: 8pt; font-size: 5.8pt; line-height: 1.18; color: #A29C92; }
-  .obs-num { color: #BEB8AD; font-variant-numeric: tabular-nums; flex-shrink: 0; font-weight: 600; }
+  .obs-item { display: flex; gap: 8pt; font-size: 6.3pt; line-height: 1.22; color: #6C6B6B; }
+  .obs-num { color: #948E85; font-variant-numeric: tabular-nums; flex-shrink: 0; font-weight: 600; }
 `;
 
 // ─── HTML render ────────────────────────────────────────────────────────────

@@ -275,8 +275,8 @@ const CSS = `
   /* ── Observaciones ───────────────────────────────────────── */
   .obs { margin-top: 3mm; page-break-inside: avoid; }
   .obs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5pt 14mm; margin-top: 5pt; }
-  .obs-item { display: flex; gap: 8pt; font-size: 5.3pt; line-height: 1.16; color: #A29C92; }
-  .obs-num { color: #BEB8AD; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .obs-item { display: flex; gap: 8pt; font-size: 6pt; line-height: 1.22; color: #6C6B6B; }
+  .obs-num { color: #948E85; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 `;
 
 // ─── Renderer ─────────────────────────────────────────────────────────────

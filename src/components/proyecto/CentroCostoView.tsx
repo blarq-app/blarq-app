@@ -39,6 +39,12 @@ const SECTION_BY_TOP: Record<string, string> = {
 const UNCATEGORIZED_SECTION = "Sin categoría";
 
 const SECTION_ORDER = [
+  // Costos de personal y estructura que NO vienen de factura, sino del banco
+  // (sueldos, Previred, comisión, impuestos). Solo se inyectan en el proyecto
+  // BLARQ — ver extraGastos. Van primero porque son el grueso del costo del
+  // estudio.
+  "Sueldos",
+  "Previred",
   "Gastos generales",
   "Vehículos",
   "Equipamiento",
@@ -46,12 +52,26 @@ const SECTION_ORDER = [
   "Mano de obra",
   "Subcontratos",
   "Gastos financieros",
+  "Impuestos",
   "Otros",
   UNCATEGORIZED_SECTION,
 ];
 
+// Un gasto normalizado, venga de una factura o de un movimiento bancario
+// (sueldo / Previred / comisión / impuesto). Unificar las dos fuentes en un
+// solo tipo permite que el Estado de Resultados, la vista mensual y la
+// tendencia los traten igual.
+export type GastoExtra = {
+  section: string; // sección del EERR ya resuelta
+  sub: string; // sub-línea (ej. "Socios", "Empleados")
+  amount: number; // monto positivo (costo)
+  date: Date;
+  proveedor: string;
+};
+
 export default function CentroCostoView({
   project,
+  extraGastos = [],
   searchParams,
 }: {
   project: {
@@ -60,6 +80,10 @@ export default function CentroCostoView({
     clientName: string;
     invoices: Invoice[];
   };
+  // Gastos que NO son factura (sueldos, Previred, comisión banco, impuestos),
+  // traídos del banco. Hoy se inyectan solo para el proyecto BLARQ (estructura
+  // del estudio). Default vacío para el resto de los centros de costo internos.
+  extraGastos?: GastoExtra[];
   searchParams: {
     period?: string;
     from?: string;
@@ -82,11 +106,48 @@ export default function CentroCostoView({
     return d >= start && d <= end;
   }
 
+  // ── Lista UNIFICADA de gastos: facturas + extraGastos del banco ──────
+  // Resolvemos sección/sub una sola vez para cada gasto, venga de donde venga,
+  // y de ahí en adelante el EERR, la vista mensual y la tendencia los tratan
+  // igual. Una factura sin categoría cae en "Sin categoría".
+  type Gasto = {
+    section: string;
+    sub: string;
+    amount: number;
+    date: Date;
+    proveedor: string;
+  };
+  function facturaToGasto(inv: Invoice): Gasto {
+    const cat = inv.category;
+    const top = cat?.parent?.name ?? cat?.name ?? null;
+    const subRaw = cat?.parent ? cat.name : null;
+    const section = top
+      ? (SECTION_BY_TOP[top] ?? "Otros")
+      : UNCATEGORIZED_SECTION;
+    const sub = subRaw ?? top ?? UNCATEGORIZED_SECTION;
+    return {
+      section,
+      sub,
+      amount: inv.netAmount,
+      date: new Date(inv.issueDate),
+      proveedor: (inv.businessName || inv.rutIssuer || "(sin emisor)").trim(),
+    };
+  }
+  const gastos: Gasto[] = [
+    ...facturas.map(facturaToGasto),
+    ...extraGastos.map((g) => ({ ...g, date: new Date(g.date) })),
+  ];
+
+  const gastosCurrent = gastos.filter((g) =>
+    inRange(g.date, range.current.start, range.current.end)
+  );
+  const gastosPrevious = gastos.filter((g) =>
+    inRange(g.date, range.previous.start, range.previous.end)
+  );
+  // Para "Top proveedores" usamos solo facturas (los sueldos/impuestos del
+  // banco no son proveedores).
   const facturasCurrent = facturas.filter((i) =>
     inRange(new Date(i.issueDate), range.current.start, range.current.end)
-  );
-  const facturasPrevious = facturas.filter((i) =>
-    inRange(new Date(i.issueDate), range.previous.start, range.previous.end)
   );
 
   // ── EERR: agrupar por sección y luego por sub ───────────────────────
@@ -98,31 +159,18 @@ export default function CentroCostoView({
     sectionsMap.set(sectionName, { name: sectionName, subs: new Map() });
   }
 
-  function addToSection(inv: Invoice, periodKey: "current" | "previous") {
-    const cat = inv.category;
-    const top = cat?.parent?.name ?? cat?.name ?? null;
-    const sub = cat?.parent ? cat.name : null;
-
-    const sectionName = top
-      ? (SECTION_BY_TOP[top] ?? "Otros")
-      : UNCATEGORIZED_SECTION;
-    const section = sectionsMap.get(sectionName)!;
-
-    // Si la categoría tiene parent → la sub se llama como cat.name.
-    // Si no tiene parent → la "sub" es el mismo nombre del top.
-    // Si no hay categoría → cae en "Sin categoría" sin desglose.
-    const subKey = sub ?? top ?? UNCATEGORIZED_SECTION;
-
-    let s = section.subs.get(subKey);
+  function addToSection(g: Gasto, periodKey: "current" | "previous") {
+    const section = sectionsMap.get(g.section) ?? sectionsMap.get("Otros")!;
+    let s = section.subs.get(g.sub);
     if (!s) {
-      s = { name: subKey, current: 0, previous: 0 };
-      section.subs.set(subKey, s);
+      s = { name: g.sub, current: 0, previous: 0 };
+      section.subs.set(g.sub, s);
     }
-    s[periodKey] += inv.netAmount;
+    s[periodKey] += g.amount;
   }
 
-  for (const inv of facturasCurrent) addToSection(inv, "current");
-  for (const inv of facturasPrevious) addToSection(inv, "previous");
+  for (const g of gastosCurrent) addToSection(g, "current");
+  for (const g of gastosPrevious) addToSection(g, "previous");
 
   // Filtrar secciones vacías
   const sections = SECTION_ORDER.map((name) => sectionsMap.get(name)!).filter(
@@ -132,8 +180,8 @@ export default function CentroCostoView({
       )
   );
 
-  const totalCurrent = facturasCurrent.reduce((s, i) => s + i.netAmount, 0);
-  const totalPrevious = facturasPrevious.reduce((s, i) => s + i.netAmount, 0);
+  const totalCurrent = gastosCurrent.reduce((s, g) => s + g.amount, 0);
+  const totalPrevious = gastosPrevious.reduce((s, g) => s + g.amount, 0);
   const totalVar = pctVar(totalCurrent, totalPrevious);
 
   // ── Vista multi-mes (semester / year / custom) ──────────────────────
@@ -164,25 +212,19 @@ export default function CentroCostoView({
         total: 0,
       });
     }
-    for (const inv of facturasCurrent) {
-      const cat = inv.category;
-      const top = cat?.parent?.name ?? cat?.name ?? null;
-      const subRaw = cat?.parent ? cat.name : null;
-      const sectionName = top
-        ? (SECTION_BY_TOP[top] ?? "Otros")
-        : UNCATEGORIZED_SECTION;
-      const subKey = subRaw ?? top ?? UNCATEGORIZED_SECTION;
-      const section = sectionsMonthlyMap.get(sectionName)!;
-      let s = section.subs.get(subKey);
+    for (const g of gastosCurrent) {
+      const section =
+        sectionsMonthlyMap.get(g.section) ?? sectionsMonthlyMap.get("Otros")!;
+      let s = section.subs.get(g.sub);
       if (!s) {
-        s = { name: subKey, byMonth: {}, total: 0 };
-        section.subs.set(subKey, s);
+        s = { name: g.sub, byMonth: {}, total: 0 };
+        section.subs.set(g.sub, s);
       }
-      const d = new Date(inv.issueDate);
+      const d = g.date;
       const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      s.byMonth[mk] = (s.byMonth[mk] ?? 0) + inv.netAmount;
-      s.total += inv.netAmount;
-      section.total += inv.netAmount;
+      s.byMonth[mk] = (s.byMonth[mk] ?? 0) + g.amount;
+      s.total += g.amount;
+      section.total += g.amount;
     }
   }
   const sectionsMonthly = isMonthlyView
@@ -194,10 +236,10 @@ export default function CentroCostoView({
   const totalsByMonth: Record<string, number> = {};
   if (isMonthlyView) {
     for (const mk of monthKeys) totalsByMonth[mk] = 0;
-    for (const inv of facturasCurrent) {
-      const d = new Date(inv.issueDate);
+    for (const g of gastosCurrent) {
+      const d = g.date;
       const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      totalsByMonth[mk] = (totalsByMonth[mk] ?? 0) + inv.netAmount;
+      totalsByMonth[mk] = (totalsByMonth[mk] ?? 0) + g.amount;
     }
   }
 
@@ -209,11 +251,11 @@ export default function CentroCostoView({
 
   // ── Tendencia mensual (últimos 12 meses) ────────────────────────────
   const byMonth = new Map<string, { total: number; count: number }>();
-  for (const inv of facturas) {
-    const d = new Date(inv.issueDate);
+  for (const g of gastos) {
+    const d = g.date;
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const cur = byMonth.get(key) ?? { total: 0, count: 0 };
-    cur.total += inv.netAmount;
+    cur.total += g.amount;
     cur.count++;
     byMonth.set(key, cur);
   }
@@ -282,7 +324,7 @@ export default function CentroCostoView({
         <Stat
           label="Total del período"
           value={formatCLP(totalCurrent)}
-          sub={`${facturasCurrent.length} facturas`}
+          sub={`${gastosCurrent.length} gastos`}
         />
         {!isMonthlyView && (
           <>
@@ -467,7 +509,7 @@ export default function CentroCostoView({
         </h2>
         <p className="text-xs text-gray-400 mb-4">Últimos 12 meses con data</p>
         {monthsToShow.length === 0 ? (
-          <p className="text-sm text-gray-500">No hay facturas cargadas.</p>
+          <p className="text-sm text-gray-500">No hay gastos cargados.</p>
         ) : (
           <div className="space-y-2">
             {monthsToShow.map(([key, v]) => (
@@ -489,7 +531,7 @@ export default function CentroCostoView({
                   {formatCLP(v.total)}
                 </span>
                 <span className="text-xs text-gray-400 w-16 text-right">
-                  {v.count} fra{v.count !== 1 ? "s" : ""}
+                  {v.count} gasto{v.count !== 1 ? "s" : ""}
                 </span>
               </div>
             ))}

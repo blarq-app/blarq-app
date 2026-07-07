@@ -3,8 +3,58 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { formatCLP, OBRA_CHAPTERS, ObraChapter } from "@/lib/utils";
 import Link from "next/link";
-import CentroCostoView from "@/components/proyecto/CentroCostoView";
+import CentroCostoView, { type GastoExtra } from "@/components/proyecto/CentroCostoView";
+import { esSocio } from "@/lib/banco/socios";
 import { computeProjectMetrics } from "@/lib/projects/metrics";
+
+// Gastos de estructura de BLARQ que NO son factura, traídos del banco. Son
+// movimientos categorizados a mano (sueldo / previred / comisión / impuestos).
+// Se mapean a la misma forma que un gasto del Estado de Resultados para que el
+// Resumen del proyecto BLARQ los muestre junto a las facturas. Solo egresos
+// (amount < 0). Sueldo se sub-divide en Socios vs Empleados (MJ/JT vs el resto)
+// con la misma definición de "socio" que usa el banco.
+async function getGastosBancoBlarq(): Promise<GastoExtra[]> {
+  const movs = await prisma.bankMovement.findMany({
+    where: {
+      category: { in: ["sueldo", "previred", "comision_bancaria", "impuestos"] },
+      amount: { lt: 0 },
+    },
+    select: {
+      amount: true,
+      date: true,
+      category: true,
+      counterpartyRut: true,
+      counterpartyName: true,
+      description: true,
+    },
+  });
+  return movs.map((m) => {
+    let section = "Otros";
+    let sub = "Otros";
+    if (m.category === "sueldo") {
+      section = "Sueldos";
+      sub = esSocio(m.counterpartyRut, m.counterpartyName, m.description)
+        ? "Socios"
+        : "Empleados";
+    } else if (m.category === "previred") {
+      section = "Previred";
+      sub = "Previred";
+    } else if (m.category === "comision_bancaria") {
+      section = "Gastos financieros";
+      sub = "Comisión banco";
+    } else if (m.category === "impuestos") {
+      section = "Impuestos";
+      sub = "Impuestos";
+    }
+    return {
+      section,
+      sub,
+      amount: -m.amount, // monto positivo (costo)
+      date: m.date,
+      proveedor: m.counterpartyName ?? "—",
+    };
+  });
+}
 import { computeCuadroResumen, type CuadroResumenInput } from "@/lib/projects/cuadroResumen";
 import ProjectAlerts from "@/components/proyecto/ProjectAlerts";
 import CuadroResumenAvance from "@/components/proyecto/CuadroResumenAvance";
@@ -70,7 +120,18 @@ export default async function ResultadosPage({
   // una vista distinta — las métricas de proyecto-cliente (Total acordado,
   // Cobrado, Utilidad, Presupuesto vs Real) no aplican.
   if (project.isInternal) {
-    return <CentroCostoView project={project} searchParams={sp} />;
+    // Solo el proyecto BLARQ (estructura del estudio) suma los gastos que NO
+    // son factura: vienen del banco como movimientos categorizados. Así el
+    // Resumen muestra TODO lo que cuesta operar BLARQ —sueldos (empleados y
+    // socios), Previred, comisión banco, impuestos— y no solo las facturas.
+    // Los retiros y préstamos de socios quedan FUERA (no son costo de operar,
+    // son reparto/cuenta corriente). El resto de los centros internos (CASA)
+    // no recibe estos gastos globales.
+    const esBlarq = project.name.trim().toUpperCase() === "BLARQ";
+    const extraGastos = esBlarq ? await getGastosBancoBlarq() : [];
+    return (
+      <CentroCostoView project={project} extraGastos={extraGastos} searchParams={sp} />
+    );
   }
 
   // ── Lo ya transferido a la cuenta Sueldos por esta obra ────────────────

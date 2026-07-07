@@ -254,7 +254,7 @@ const CSS = `
   /* ── Cierre: formas de pago + cuadro ─────────────────────── */
   .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 6mm; align-items: start; page-break-inside: avoid; }
   /* "Formas de pago" / "Observaciones": tinta oscura, más grande y subrayado. */
-  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #38342D; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 7pt; letter-spacing: .2em; text-transform: uppercase; color: #38342D; font-weight: 400; border-bottom: 0.6px solid #C2BCB4; padding-bottom: 2.5pt; }
   .pagos { margin-top: 6pt; border-top: 1px solid #DEDCD9; }
   .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 2.5pt 0; border-bottom: 1px solid #E9E8E6; }
   .pagos .row:last-child { border-bottom: none; }

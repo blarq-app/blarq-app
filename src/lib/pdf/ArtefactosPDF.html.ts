@@ -242,7 +242,7 @@ const CSS = `
 
   /* Cierre: forma de pago + resumen por subcategoría + total */
   .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 14mm; margin-top: 10mm; align-items: start; break-inside: avoid; }
-  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #36322C; font-weight: 700; }
+  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 7pt; letter-spacing: .2em; text-transform: uppercase; color: #36322C; font-weight: 400; border-bottom: 0.6px solid #C2BCB4; padding-bottom: 2.5pt; }
   .pagos { margin-top: 6pt; border-top: 1px solid #DCDAD6; }
   .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 6pt 0; border-bottom: 1px solid #E7E6E4; }
   .pagos .row:last-child { border-bottom: none; }

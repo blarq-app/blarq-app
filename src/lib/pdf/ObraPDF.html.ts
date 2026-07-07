@@ -251,7 +251,7 @@ const CSS = `
   .leyenda .mk { position: static; font-weight: 700; color: #756C5E; }
 
   /* ── Cierre: formas de pago + cuadro ─────────────────────── */
-  .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 8mm; align-items: start; page-break-inside: avoid; }
+  .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 6mm; align-items: start; page-break-inside: avoid; }
   /* "Formas de pago" / "Observaciones": tinta oscura, más grande y subrayado. */
   .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #38342D; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
   .pagos { margin-top: 6pt; border-top: 1px solid #DEDCD9; }
@@ -272,10 +272,10 @@ const CSS = `
   .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9D9385; margin-top: 3pt; }
 
   /* ── Observaciones ───────────────────────────────────────── */
-  .obs { margin-top: 5mm; page-break-inside: avoid; }
-  .obs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5pt 14mm; margin-top: 7pt; }
-  .obs-item { display: flex; gap: 8pt; font-size: 6pt; line-height: 1.3; color: #645C51; }
-  .obs-num { color: #9D9385; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .obs { margin-top: 3mm; page-break-inside: avoid; }
+  .obs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5pt 14mm; margin-top: 5pt; }
+  .obs-item { display: flex; gap: 8pt; font-size: 5.6pt; line-height: 1.18; color: #948E85; }
+  .obs-num { color: #B2ACA0; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 `;
 
 // ─── Renderer ─────────────────────────────────────────────────────────────

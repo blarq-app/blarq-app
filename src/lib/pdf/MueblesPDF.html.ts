@@ -214,8 +214,8 @@ const CSS = `
   /* Observaciones */
   .obs { margin-top: 2.5mm; break-inside: avoid; }
   .obs-list { display: flex; flex-direction: column; gap: 1.8pt; margin-top: 3pt; }
-  .obs-item { display: flex; gap: 8pt; font-size: 6.1pt; line-height: 1.2; color: #8A857C; }
-  .obs-num { color: #A9A39A; font-variant-numeric: tabular-nums; flex-shrink: 0; font-weight: 600; }
+  .obs-item { display: flex; gap: 8pt; font-size: 6.1pt; line-height: 1.2; color: #948E85; }
+  .obs-num { color: #B2ACA0; font-variant-numeric: tabular-nums; flex-shrink: 0; font-weight: 600; }
   .obs-item b { color: #6C6B6B; font-weight: 600; }
 `;
 

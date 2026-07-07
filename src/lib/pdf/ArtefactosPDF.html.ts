@@ -256,10 +256,10 @@ const CSS = `
   .resumen .grand .gv { font-size: 9pt; color: #36322C; font-weight: 700; font-variant-numeric: tabular-nums; }
   .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 8pt; color: #9B9182; margin-top: 4pt; }
 
-  .obs { margin-top: 12mm; break-inside: avoid; }
-  .obs-list { display: flex; flex-direction: column; gap: 5pt; margin-top: 7pt; }
-  .obs-item { display: flex; gap: 8pt; font-size: 7.5pt; line-height: 1.45; color: #625A4F; }
-  .obs-num { color: #9B9182; font-variant-numeric: tabular-nums; flex-shrink: 0; font-weight: 600; }
+  .obs { margin-top: 5mm; break-inside: avoid; }
+  .obs-list { display: flex; flex-direction: column; gap: 2pt; margin-top: 4pt; }
+  .obs-item { display: flex; gap: 8pt; font-size: 6.2pt; line-height: 1.2; color: #948E85; }
+  .obs-num { color: #B2ACA0; font-variant-numeric: tabular-nums; flex-shrink: 0; font-weight: 600; }
 `;
 
 // ─── HTML render ────────────────────────────────────────────────────────────

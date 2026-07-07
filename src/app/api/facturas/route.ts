@@ -40,8 +40,13 @@ export async function GET(request: NextRequest) {
     };
   }
   if (q) {
+    // Folio puro (solo dígitos) → match EXACTO, para que "3322" no traiga
+    // "11332256". Con letras vuelve a "contiene" (texto parcial normal).
+    const qFolioNumerico = /^\d+$/.test(q.trim());
     where.OR = [
-      { folioNumber: { contains: q, mode: "insensitive" } },
+      qFolioNumerico
+        ? { folioNumber: q.trim() }
+        : { folioNumber: { contains: q, mode: "insensitive" } },
       { businessName: { contains: q, mode: "insensitive" } },
       { rutIssuer: { contains: q, mode: "insensitive" } },
       { notes: { contains: q, mode: "insensitive" } },

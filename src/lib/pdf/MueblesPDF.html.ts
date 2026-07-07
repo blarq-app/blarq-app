@@ -207,10 +207,13 @@ const CSS = `
   .pagos .row:last-child { border-bottom: none; }
   .pagos .s { font-size: 7.5pt; color: #36322C; }
   .pagos .p { font-size: 7.5pt; color: #736A5C; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .totalbox { border-top: 1.5px solid #36322C; padding-top: 5pt; display: flex; flex-direction: column; align-items: flex-end; gap: 3pt; }
+  /* Costo total: mismo trato que el total de ambiente de Artefactos — fila en
+     negrita con línea negra ABAJO (no arriba), sin número gigante. */
+  .totalbox { display: flex; flex-direction: column; }
+  .totalbox .totrow { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #36322C; padding: 5pt 0 3pt; }
   .totalbox .tl { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #36322C; font-weight: 700; }
-  .totalbox .tv { font-variant-numeric: tabular-nums; font-size: 9pt; color: #36322C; font-weight: 700; }
-  .totalbox .tn { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 7.5pt; color: #9B9182; }
+  .totalbox .tv { font-variant-numeric: tabular-nums; font-size: 8.5pt; color: #36322C; font-weight: 700; }
+  .totalbox .tn { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 7.5pt; color: #9B9182; text-align: right; margin-top: 3pt; }
 
   /* Observaciones */
   .obs { margin-top: 2.5mm; break-inside: avoid; }
@@ -360,8 +363,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
           </div>
         </div>
         <div class="totalbox">
-          <div class="tl">Costo total muebles</div>
-          <div class="tv">${fmtMoney(total)}</div>
+          <div class="totrow"><span class="tl">Costo total muebles</span><span class="tv">${fmtMoney(total)}</span></div>
           <div class="tn">Valor IVA incluido</div>
         </div>
       </div>

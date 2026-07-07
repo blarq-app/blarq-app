@@ -27,6 +27,10 @@ export async function GET(
         costSubcontract: true,
         costLoss: true,
         costMargin: true,
+        // Devolvemos también el desglose para que el editor recalcule la marca
+        // de "descuadrado" tras editar (compara el total guardado contra la suma
+        // del desglose). Sin esto, compararía contra un desglose viejo.
+        components: { orderBy: { sortOrder: "asc" } },
       },
     });
     if (!item) {

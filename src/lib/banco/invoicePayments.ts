@@ -57,6 +57,36 @@ export async function recomputeInvoiceStatus(invoiceId: string) {
   });
 }
 
+/**
+ * Limpieza después de desasignar imputaciones de un movimiento. Para cada
+ * factura afectada:
+ *   - Si es un "pago sin factura" sintético (origin "sin_respaldo") y quedó
+ *     SIN ninguna imputación, se BORRA. Ese Invoice solo existe para colgar
+ *     el pago del movimiento; sin pago y sin movimiento sería un huérfano
+ *     que igual suma como gasto fantasma en el proyecto.
+ *   - Cualquier otra factura solo recalcula su status (puede volver a
+ *     pendiente/parcial).
+ *
+ * Es la ÚNICA fuente de verdad de esta limpieza: la usan tanto la acción
+ * masiva "Desasignar" (bulk) como el PATCH individual ("Editar" un mov).
+ * Antes vivía duplicada solo en el bulk y el PATCH no la hacía → los
+ * huérfanos se creaban al desconciliar por "Editar".
+ */
+export async function cleanupInvoicesAfterUnassign(affectedInvoiceIds: string[]) {
+  for (const invId of affectedInvoiceIds) {
+    const inv = await prisma.invoice.findUnique({
+      where: { id: invId },
+      include: { payments: { select: { id: true } } },
+    });
+    if (!inv) continue;
+    if (inv.origin === "sin_respaldo" && inv.payments.length === 0) {
+      await prisma.invoice.delete({ where: { id: invId } });
+    } else {
+      await recomputeInvoiceStatus(invId);
+    }
+  }
+}
+
 // Rango de "avance de cobro" de un status, para comparaciones monótonas.
 const STATUS_RANK: Record<string, number> = { pendiente: 0, parcial: 1, pagada: 2 };
 

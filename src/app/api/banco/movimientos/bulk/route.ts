@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import { recomputeInvoiceStatus } from "@/lib/banco/invoicePayments";
+import { recomputeInvoiceStatus, cleanupInvoicesAfterUnassign } from "@/lib/banco/invoicePayments";
 import { requireSession } from "@/lib/apiAuth";
 
 // RUT de BLARQ — receptor de las facturas/pagos recibidos.
@@ -167,21 +167,11 @@ export async function POST(request: NextRequest) {
         }),
       ]);
 
-      // Para cada factura afectada: si era un "pago sin respaldo" y quedó
-      // sin imputaciones, se borra (es un registro auto-creado, huérfano
-      // sin el movimiento). El resto solo recalcula status.
-      for (const invId of affectedInvoiceIds) {
-        const inv = await prisma.invoice.findUnique({
-          where: { id: invId },
-          include: { payments: { select: { id: true } } },
-        });
-        if (!inv) continue;
-        if (inv.origin === "sin_respaldo" && inv.payments.length === 0) {
-          await prisma.invoice.delete({ where: { id: invId } });
-        } else {
-          await recomputeInvoiceStatus(invId);
-        }
-      }
+      // Para cada factura afectada: si era un "pago sin respaldo" y quedó sin
+      // imputaciones, se borra (registro auto-creado, huérfano sin el
+      // movimiento); el resto solo recalcula status. Lógica compartida con el
+      // PATCH individual ("Editar") — ver cleanupInvoicesAfterUnassign.
+      await cleanupInvoicesAfterUnassign(affectedInvoiceIds);
 
       return NextResponse.json({ ok: true, desasignados: ids.length });
     }

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import { recomputeInvoiceStatus } from "@/lib/banco/invoicePayments";
+import { cleanupInvoicesAfterUnassign } from "@/lib/banco/invoicePayments";
 import { upsertRuleFromMovement } from "@/lib/banco/categorizationRules";
 import { requireSession } from "@/lib/apiAuth";
 
@@ -189,12 +189,12 @@ export async function PATCH(
         ),
       ]);
 
-      // Recalcular status de TODAS las facturas afectadas (las que perdieron
-      // imputación pueden volver a pendiente, las nuevas pueden pasar a
-      // parcial o pagada).
-      for (const invId of affectedInvoiceIds) {
-        await recomputeInvoiceStatus(invId);
-      }
+      // Recalcular status de las facturas afectadas y, si alguna era un "pago
+      // sin factura" sintético que quedó sin imputaciones, borrarla. La lógica
+      // vive en cleanupInvoicesAfterUnassign — compartida con la acción masiva
+      // "Desasignar" para que "Editar" y "Desasignar" limpien igual (antes
+      // "Editar" no borraba el sin_respaldo → huérfano/gasto fantasma).
+      await cleanupInvoicesAfterUnassign(affectedInvoiceIds);
     }
 
     // Status del movimiento + otros campos.

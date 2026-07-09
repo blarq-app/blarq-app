@@ -18,6 +18,7 @@
 //   - Sueldo lo generan OBRA (su GG) y MUEBLES (utilidad neta). Artefactos NO.
 
 import { conceptoDeFactura } from "@/lib/invoices/conceptoCobro";
+import { selectVigentes } from "@/lib/projects/selectVersion";
 
 // ── Tipos de entrada (estructuralmente compatibles con el include del resumen) ──
 type ObraItemLite = { total: number };
@@ -36,6 +37,7 @@ type BudgetVersionLite = {
   version: string;
   status: string;
   type: string;
+  createdAt: Date;
   updatedAt: Date;
   ggPercentage: number | null;
   utilityPercentage: number | null;
@@ -101,9 +103,6 @@ export type CuadroResumenData = {
   versionLabel: string; // "V5" / "V6" / "Acordado" (si hay 2+ aprobadas por tipo)
 };
 
-function allApproved(arr: BudgetVersionLite[]): BudgetVersionLite[] {
-  return arr.filter((b) => b.status === "aprobado");
-}
 function lastUpdated(arr: BudgetVersionLite[]): BudgetVersionLite | undefined {
   if (arr.length === 0) return undefined;
   return [...arr].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
@@ -117,27 +116,31 @@ function fmtDate(d: Date): string {
 
 export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenData {
   const { invoices, budgets } = input;
-  const obrasAprobadas = allApproved(budgets.filter((b) => b.type === "obra"));
-  const mueblesAprobados = allApproved(budgets.filter((b) => b.type === "muebles"));
-  const artefactosAprobados = allApproved(budgets.filter((b) => b.type === "artefactos"));
-  const lastObra = lastUpdated(obrasAprobadas);
-  const lastMuebles = lastUpdated(mueblesAprobados);
-  const lastArtefactos = lastUpdated(artefactosAprobados);
+  // Selección de versión vigente — criterio único (selectVersion.ts): obra
+  // suma anexos; el resto toma su versión vigente. Antes acá se usaba solo
+  // "aprobado" sin fallback, así que un presupuesto solo-enviado daba $0 en el
+  // cuadro aunque el Resumen sí lo mostraba (se contradecían).
+  const obrasVigentes = selectVigentes(budgets.filter((b) => b.type === "obra"));
+  const mueblesVigentes = selectVigentes(budgets.filter((b) => b.type === "muebles"));
+  const artefactosVigentes = selectVigentes(budgets.filter((b) => b.type === "artefactos"));
+  const lastObra = lastUpdated(obrasVigentes);
+  const lastMuebles = lastUpdated(mueblesVigentes);
+  const lastArtefactos = lastUpdated(artefactosVigentes);
 
   // ── Acordado por concepto ───────────────────────────────────────────────
-  const obraAcordado = obrasAprobadas.reduce((s, b) => {
+  const obraAcordado = obrasVigentes.reduce((s, b) => {
     const cd = (b.obraItems ?? []).reduce((ss, it) => ss + it.total, 0);
     const gg = (b.ggPercentage ?? 0) / 100;
     const util = (b.utilityPercentage ?? 0) / 100;
     return s + cd * (1 + gg + util) * 1.19;
   }, 0);
   // Utilidad OBRA al 100% = GG total (lo que se traspasa a sueldos).
-  const obraUtilidad100 = obrasAprobadas.reduce((s, b) => {
+  const obraUtilidad100 = obrasVigentes.reduce((s, b) => {
     const cd = (b.obraItems ?? []).reduce((ss, it) => ss + it.total, 0);
     return s + cd * ((b.ggPercentage ?? 0) / 100);
   }, 0);
 
-  const mueblesItems = mueblesAprobados.flatMap((b) => (b.muebleChapters ?? []).flatMap((c) => c.items));
+  const mueblesItems = mueblesVigentes.flatMap((b) => (b.muebleChapters ?? []).flatMap((c) => c.items));
   const mueblesAcordado = mueblesItems.reduce((s, it) => s + it.clientPriceIva * it.quantity, 0);
   const mueblesUtilidad100 = mueblesItems.reduce(
     (s, it) => s + (it.clientPriceNet - it.costDistributor) * it.quantity,
@@ -145,7 +148,7 @@ export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenDa
   );
 
   const sumaSub = (sub: string) =>
-    artefactosAprobados.reduce(
+    artefactosVigentes.reduce(
       (s, b) =>
         s +
         (b.artefactoItems ?? [])
@@ -243,9 +246,9 @@ export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenDa
   const avanceTotal = totalAcordado > 0 ? totalPagado / totalAcordado : 0;
 
   const maxPerType = Math.max(
-    obrasAprobadas.length,
-    mueblesAprobados.length,
-    artefactosAprobados.length
+    obrasVigentes.length,
+    mueblesVigentes.length,
+    artefactosVigentes.length
   );
   const versionLabel =
     maxPerType <= 1

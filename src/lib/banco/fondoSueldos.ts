@@ -15,6 +15,7 @@
 
 import type { Prisma } from "@prisma/client";
 import { conceptoDeFactura } from "@/lib/invoices/conceptoCobro";
+import { selectVigente, selectVigentes } from "@/lib/projects/selectVersion";
 
 const projectFondoInclude = {
   invoices: {
@@ -68,24 +69,26 @@ export type FondoSueldosCalculo = {
   fondoGenerado: number;
 };
 
-function bestVersion<T extends { status: string; createdAt: Date }>(arr: T[]) {
-  const aprobado = arr
-    .filter((b) => b.status === "aprobado")
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-  return aprobado ?? arr.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-}
-
 export function computeFondoSueldos(p: ProjectWithFondo): FondoSueldosCalculo {
-  const obra = bestVersion(p.budgetVersions.filter((b) => b.type === "obra"));
-  const muebles = bestVersion(p.budgetVersions.filter((b) => b.type === "muebles"));
-  const artefactos = bestVersion(p.budgetVersions.filter((b) => b.type === "artefactos"));
+  // Criterio único de selección (selectVersion.ts): obra SUMA anexos (igual
+  // que metrics.ts — antes acá se tomaba una sola versión, así que el fondo y
+  // el Resumen se contradecían y en Aguirre el fondo usaba solo el anexo chico).
+  const obras = selectVigentes(p.budgetVersions.filter((b) => b.type === "obra"));
+  const obra = selectVigente(p.budgetVersions.filter((b) => b.type === "obra"));
+  const muebles = selectVigente(p.budgetVersions.filter((b) => b.type === "muebles"));
+  const artefactos = selectVigente(p.budgetVersions.filter((b) => b.type === "artefactos"));
 
   // ── Obra ────────────────────────────────────────────────────────────
-  const obraCD = obra ? obra.obraItems.reduce((s, i) => s + i.total, 0) : 0;
-  const ggPct = (obra?.ggPercentage ?? 0) / 100;
-  const utilPct = (obra?.utilityPercentage ?? 0) / 100;
-  const obraGGTotal = obraCD * ggPct;
-  const obraTotalAcordado = obraCD * (1 + ggPct) * (1 + utilPct) * 1.19;
+  // Cada obra (principal + anexos) con sus propios % de GG/utilidad, sumadas.
+  let obraGGTotal = 0;
+  let obraTotalAcordado = 0;
+  for (const o of obras) {
+    const cd = o.obraItems.reduce((s, i) => s + i.total, 0);
+    const ggPct = (o.ggPercentage ?? 0) / 100;
+    const utilPct = (o.utilityPercentage ?? 0) / 100;
+    obraGGTotal += cd * ggPct;
+    obraTotalAcordado += cd * (1 + ggPct) * (1 + utilPct) * 1.19;
+  }
 
   // ── Muebles ─────────────────────────────────────────────────────────
   const muebleItems = muebles ? muebles.muebleChapters.flatMap((c) => c.items) : [];

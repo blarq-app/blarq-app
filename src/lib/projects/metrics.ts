@@ -5,6 +5,7 @@
 
 import type { Prisma } from "@prisma/client";
 import { formatCLP } from "@/lib/utils";
+import { selectVigente, selectVigentes } from "@/lib/projects/selectVersion";
 
 // Forma del proyecto que necesitamos: con sus relaciones financieras.
 // Definida como tipo Prisma para que cualquier llamador haga el include
@@ -124,41 +125,21 @@ const CATEGORY_TO_BREAKDOWN: Record<
   Pérdidas: "costLoss",
 };
 
-// Selecciona la mejor versión para cada tipo: aprobada más reciente, o la
-// última creada si no hay aprobada. Usado para muebles y artefactos donde
-// se espera UNA versión vigente. Para obra usamos `allApproved` que suma
-// múltiples obras (caso anexos como BAÑO VISITAS — ver business-model.md).
-function bestVersion<T extends { status: string; createdAt: Date }>(arr: T[]) {
-  const aprobado = arr
-    .filter((b) => b.status === "aprobado")
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-  return (
-    aprobado ??
-    arr.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
-  );
-}
-
-// Para obra: TODAS las versiones aprobadas (un proyecto puede tener una
-// obra principal V7 + un anexo V4-BANO-VISITAS, ambos aprobados, que suman
-// al Total Acordado). Si no hay aprobadas, fallback a la más reciente.
-function allApproved<T extends { status: string; createdAt: Date }>(arr: T[]): T[] {
-  const aprobadas = arr.filter((b) => b.status === "aprobado");
-  if (aprobadas.length > 0) return aprobadas;
-  const fallback = arr.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-  return fallback ? [fallback] : [];
-}
-
 export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetrics {
-  const obras = allApproved(
+  // Selección de versión vigente — criterio único en selectVersion.ts (obra
+  // suma anexos vía selectVigentes; muebles/artefactos toman una sola).
+  const obras = selectVigentes(
     project.budgetVersions.filter((b) => b.type === "obra")
   );
-  // Mantener `obra` como referencia primaria (la primera de las aprobadas)
+  // Mantener `obra` como referencia primaria (la más reciente de las vigentes)
   // para campos que esperan una sola versión, ej: versionLabels en UI.
-  const obra = obras[0];
-  const muebles = bestVersion(
+  const obra = selectVigente(
+    project.budgetVersions.filter((b) => b.type === "obra")
+  );
+  const muebles = selectVigente(
     project.budgetVersions.filter((b) => b.type === "muebles")
   );
-  const artefactos = bestVersion(
+  const artefactos = selectVigente(
     project.budgetVersions.filter((b) => b.type === "artefactos")
   );
 

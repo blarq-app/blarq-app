@@ -11,6 +11,7 @@ import UndoNetZeroButton from "./UndoNetZeroButton";
 import MovementsBulkBar from "./MovementsBulkBar";
 import InternalTransferProjectSelect from "./InternalTransferProjectSelect";
 import InternalTransferConceptoSelect from "./InternalTransferConceptoSelect";
+import SalaryPeriodSelect from "./SalaryPeriodSelect";
 
 type Payment = {
   id: string;
@@ -38,6 +39,8 @@ export type MovementRow = {
   projectId: string | null;
   // Concepto del traspaso (obra | muebles) — solo transferencias internas.
   internalConcepto: string | null;
+  // A qué mes corresponde el pago (sueldo/previred), "YYYY-MM" o null (=auto).
+  salaryPeriod: string | null;
   payments: Payment[];
 };
 
@@ -265,6 +268,19 @@ export default function MovementsTable({
                             {m.status === "sin_asignar" && (
                               <span className="ml-1 text-[9px] uppercase tracking-wide bg-amber-100 text-amber-800 px-1 py-0.5 rounded align-middle whitespace-nowrap">
                                 a confirmar
+                              </span>
+                            )}
+                            {/* A qué mes corresponde el sueldo/previred, para
+                                que el Estado de Resultados de BLARQ lo agrupe en
+                                el mes correcto (no el de la transferencia). */}
+                            {(m.category === "sueldo" || m.category === "previred") && (
+                              <span className="mt-1 block">
+                                <SalaryPeriodSelect
+                                  movimientoId={m.id}
+                                  category={m.category}
+                                  date={m.date}
+                                  salaryPeriod={m.salaryPeriod}
+                                />
                               </span>
                             )}
                           </span>

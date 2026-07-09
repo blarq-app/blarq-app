@@ -1,0 +1,92 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  toYearMonth,
+  shiftYearMonth,
+  defaultSalaryPeriod,
+} from "@/lib/banco/salaryPeriod";
+
+// Selector "a qué mes corresponde" para un sueldo/previred. El pago cae en el
+// banco cuando MJ transfiere, pero en el Estado de Resultados debe imputarse al
+// mes que corresponde. Value vacío = "Auto": usa el default por fecha (que se
+// muestra en la etiqueta) y el movimiento queda con salaryPeriod=null. Elegir un
+// mes concreto lo fija (override). Ofrecemos el mes del pago y los 3 anteriores,
+// que cubre los pagos hechos con atraso.
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+function label(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  return `${MESES[m - 1]} ${String(y).slice(2)}`;
+}
+
+export default function SalaryPeriodSelect({
+  movimientoId,
+  category,
+  date,
+  salaryPeriod,
+}: {
+  movimientoId: string;
+  category: string | null;
+  date: string; // ISO
+  salaryPeriod: string | null;
+}) {
+  const router = useRouter();
+  const [value, setValue] = useState(salaryPeriod ?? "");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setValue(salaryPeriod ?? "");
+  }, [salaryPeriod]);
+
+  const d = new Date(date);
+  const def = defaultSalaryPeriod(category, d);
+  // Opciones: mes del pago y los 3 anteriores (más nuevo arriba).
+  const payYm = toYearMonth(d);
+  const opciones = [0, -1, -2, -3].map((k) => shiftYearMonth(payYm, k));
+
+  async function onChange(next: string) {
+    if (busy) return;
+    const prev = value;
+    setValue(next);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/banco/movimientos/${movimientoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ salaryPeriod: next || null }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error ?? "No se pudo marcar el mes");
+        setValue(prev);
+        return;
+      }
+      router.refresh();
+    } catch {
+      alert("Error de red");
+      setValue(prev);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={busy}
+      title="A qué mes corresponde este pago (para el Estado de Resultados)"
+      className={`text-[11px] border rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 ${
+        value ? "border-gray-300 text-gray-700" : "border-gray-200 text-gray-400"
+      }`}
+    >
+      <option value="">Auto ({label(def)})</option>
+      {opciones.map((ym) => (
+        <option key={ym} value={ym}>
+          {label(ym)}
+        </option>
+      ))}
+    </select>
+  );
+}

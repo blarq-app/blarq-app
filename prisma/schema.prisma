@@ -1088,6 +1088,14 @@ model BankMovement {
   // Valores típicos: sueldo | previred | comision_bancaria | retiro_personal
   // | deposito_efectivo | otro_sin_factura | null.
   category        String?
+  // Para sueldos y Previred: a qué MES corresponde el pago, formato "YYYY-MM".
+  // El pago cae en el banco cuando MJ transfiere —a veces el mes siguiente (el
+  // sueldo de junio pagado el 1-jul, la planilla Previred de mayo pagada en
+  // junio)— pero en el Estado de Resultados de BLARQ el gasto debe imputarse al
+  // mes que corresponde, no al de la transferencia. null = usar el default por
+  // fecha/categoría (ver src/lib/banco/salaryPeriod.ts). MJ solo marca la
+  // excepción rara. Solo aplica a category sueldo/previred.
+  salaryPeriod    String?
   // Transferencia entre dos cuentas BLARQ (cta operativa ↔ cta sueldos).
   // Cuando se detecta, ambos lados se linkean entre sí. NO cuenta como
   // gasto ni ingreso real — es solo movimiento de fondos interno.

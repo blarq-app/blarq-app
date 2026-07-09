@@ -26,14 +26,20 @@ type Invoice = {
 // Cualquier categoría no listada cae en "Otros".
 // Las facturas con categoryId=null caen en "Sin categoría" (sección visual
 // distinguida en itálica gris) — coincide con el render del listado.
+// El Estado de Resultados usa los MISMOS nombres de categoría que MJ marca en
+// las facturas (Herramientas, Materiales, Auto, Subcontrato) — no renombres.
+// El mapa solo sirve para reconocer qué categorías top van al EERR (las que no
+// están caen en "Otros"). Antes renombraba (Herramientas→Equipamiento,
+// Materiales→Insumos, etc.) y confundía: en el desplegable decía una cosa y en
+// el cuadro otra. Decisión de MJ 2026-07-09: que coincida con lo que marca.
 const SECTION_BY_TOP: Record<string, string> = {
   "Gastos generales": "Gastos generales",
-  "Auto": "Vehículos",
-  "Herramientas": "Equipamiento",
-  "Materiales": "Insumos",
+  "Auto": "Auto",
+  "Herramientas": "Herramientas",
+  "Materiales": "Materiales",
   "Gastos financieros": "Gastos financieros",
   "Mano de obra": "Mano de obra",
-  "Subcontrato": "Subcontratos",
+  "Subcontrato": "Subcontrato",
 };
 
 const UNCATEGORIZED_SECTION = "Sin categoría";
@@ -47,11 +53,11 @@ const SECTION_ORDER = [
   "Sueldos",
   "Previred",
   "Gastos generales",
-  "Vehículos",
-  "Equipamiento",
-  "Insumos",
+  "Auto",
+  "Herramientas",
+  "Materiales",
   "Mano de obra",
-  "Subcontratos",
+  "Subcontrato",
   "Gastos financieros",
   "Impuestos",
   "Otros",

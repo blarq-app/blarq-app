@@ -6,6 +6,7 @@ import Link from "next/link";
 import CentroCostoView, { type GastoExtra } from "@/components/proyecto/CentroCostoView";
 import { esSocio } from "@/lib/banco/socios";
 import { computeProjectMetrics } from "@/lib/projects/metrics";
+import { effectiveSalaryPeriod, yearMonthToDate } from "@/lib/banco/salaryPeriod";
 
 // Gastos de estructura de BLARQ que NO son factura, traídos del banco. Son
 // movimientos categorizados a mano (sueldo / previred / comisión).
@@ -30,6 +31,7 @@ async function getGastosBancoBlarq(): Promise<GastoExtra[]> {
       amount: true,
       date: true,
       category: true,
+      salaryPeriod: true,
       counterpartyRut: true,
       counterpartyName: true,
       description: true,
@@ -38,14 +40,22 @@ async function getGastosBancoBlarq(): Promise<GastoExtra[]> {
   return movs.map((m) => {
     let section = "Otros";
     let sub = "Otros";
+    // Los sueldos y Previred se imputan al MES QUE CORRESPONDE, no al de la
+    // transferencia (el sueldo de junio pagado el 1-jul cuenta en junio). El
+    // mes lo fija MJ (salaryPeriod) o, si no lo marcó, un default por fecha.
+    // Reubicamos la fecha del gasto al 1° de ese mes para que el EERR mensual
+    // lo agrupe en la columna correcta. La comisión banco queda en su fecha.
+    let date = m.date;
     if (m.category === "sueldo") {
       section = "Sueldos";
       sub = esSocio(m.counterpartyRut, m.counterpartyName, m.description)
         ? "Socios"
         : "Empleados";
+      date = yearMonthToDate(effectiveSalaryPeriod(m));
     } else if (m.category === "previred") {
       section = "Previred";
       sub = "Previred";
+      date = yearMonthToDate(effectiveSalaryPeriod(m));
     } else if (m.category === "comision_bancaria") {
       section = "Gastos financieros";
       sub = "Comisión banco";
@@ -54,7 +64,7 @@ async function getGastosBancoBlarq(): Promise<GastoExtra[]> {
       section,
       sub,
       amount: -m.amount, // monto positivo (costo)
-      date: m.date,
+      date,
       proveedor: m.counterpartyName ?? "—",
     };
   });

@@ -54,6 +54,9 @@ export async function PATCH(
       // Concepto del traspaso de utilidad (transferencia interna): "obra" |
       // "muebles" | null. Se setea en los dos lados del par.
       internalConcepto: string | null;
+      // A qué mes corresponde un sueldo/previred, formato "YYYY-MM" (o null para
+      // volver al default por fecha). Ver src/lib/banco/salaryPeriod.ts.
+      salaryPeriod: string | null;
       notes: string;
     }>;
 
@@ -122,6 +125,26 @@ export async function PATCH(
         data: { internalConcepto: body.internalConcepto },
       });
       return NextResponse.json({ ok: true, etiquetados: r.count });
+    }
+
+    // Marcar a qué MES corresponde un sueldo/previred (formato "YYYY-MM", o
+    // null para volver al default por fecha). Solo aplica a esas categorías —
+    // el resto no tiene "mes que corresponde". No toca el par ni el status.
+    if (body.salaryPeriod !== undefined) {
+      if (mov.category !== "sueldo" && mov.category !== "previred") {
+        return NextResponse.json(
+          { error: "Solo se puede marcar el mes en sueldos y Previred" },
+          { status: 400 }
+        );
+      }
+      if (body.salaryPeriod !== null && !/^\d{4}-\d{2}$/.test(body.salaryPeriod)) {
+        return NextResponse.json({ error: "Mes inválido (se espera YYYY-MM)" }, { status: 400 });
+      }
+      await prisma.bankMovement.update({
+        where: { id: mov.id },
+        data: { salaryPeriod: body.salaryPeriod },
+      });
+      return NextResponse.json({ ok: true });
     }
 
     // Deshacer una devolución neto cero: suelta TODO el grupo (un lavado es

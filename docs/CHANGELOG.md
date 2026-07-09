@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-09 — BLARQ: sueldos y Previred se imputan al mes que corresponde
+
+- **Qué.** En el Estado de Resultados de BLARQ, sueldos y Previred se agrupan por el **mes que corresponde**, no por la fecha de la transferencia. Antes, el sueldo de junio pagado el 1-jul caía en julio y la planilla Previred de mayo pagada en junio dejaba mayo vacío y junio doble.
+- **Cómo.** Campo nuevo `BankMovement.salaryPeriod` ("YYYY-MM", nullable). Si MJ no lo marca (null) se usa un default por fecha/categoría: Previred → mes anterior; sueldo → pago del 1 al 10 = mes anterior, si no ese mes (ver `src/lib/banco/salaryPeriod.ts`). En `/banco/movimientos` cada sueldo/Previred tiene un selector "Auto (mes)" para marcar la excepción. `getGastosBancoBlarq` reubica el gasto al 1° del mes que corresponde.
+- **Alcance.** Vista + un campo aditivo en la base (no borra nada). NO toca `metrics.ts` ni la utilidad de proyectos-cliente. Migración a prod: `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` (idempotente) aplicada a ep-shy-morning antes del deploy.
+- **Nota.** El mes en curso se ve incompleto (su sueldo se paga el mes siguiente) — es correcto en devengado. Los totales del semestre pueden moverse en el borde porque cada mes muestra lo suyo sin dobles.
+
 ## 2026-07-09 — BLARQ: el pago del F29 (IVA) sale del Estado de Resultados
 
 - **Qué.** El "Estado de Resultados" del centro de costo interno BLARQ ya NO cuenta los pagos del F29 al SII (`bankMovement.category="impuestos"`) como gasto. Antes se inyectaban al Resumen (feature #251) y el total de gastos del semestre se veía inflado en **$9.429.919** (de $53,5M a $44,1M).

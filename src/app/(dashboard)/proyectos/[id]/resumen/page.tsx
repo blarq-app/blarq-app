@@ -6,6 +6,7 @@ import Link from "next/link";
 import CentroCostoView, { type GastoExtra } from "@/components/proyecto/CentroCostoView";
 import { esSocio } from "@/lib/banco/socios";
 import { computeProjectMetrics } from "@/lib/projects/metrics";
+import { selectVigente } from "@/lib/projects/selectVersion";
 
 // Gastos de estructura de BLARQ que NO son factura, traídos del banco. Son
 // movimientos categorizados a mano (sueldo / previred / comisión / impuestos).
@@ -195,15 +196,10 @@ export default async function ResultadosPage({
 
   // ── Versions (lookups locales — no son cálculo, solo navegación al
   // nodo del árbol para acceder a obraItems / muebleChapters / etc).
-  function bestVersion<T extends { status: string; createdAt: Date }>(arr: T[]) {
-    const aprobado = arr
-      .filter((b) => b.status === "aprobado")
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-    return aprobado ?? arr.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-  }
-  const lastObra = bestVersion(project.budgetVersions.filter((b) => b.type === "obra"));
-  const lastMuebles = bestVersion(project.budgetVersions.filter((b) => b.type === "muebles"));
-  const lastArtefactos = bestVersion(project.budgetVersions.filter((b) => b.type === "artefactos"));
+  // Criterio único de selección: selectVigente (ver selectVersion.ts).
+  const lastObra = selectVigente(project.budgetVersions.filter((b) => b.type === "obra"));
+  const lastMuebles = selectVigente(project.budgetVersions.filter((b) => b.type === "muebles"));
+  const lastArtefactos = selectVigente(project.budgetVersions.filter((b) => b.type === "artefactos"));
 
   // Aliases para mantener compatibilidad con el resto del archivo
   const obraItems = lastObra?.obraItems ?? [];

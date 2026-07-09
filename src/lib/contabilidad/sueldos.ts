@@ -104,6 +104,59 @@ export type Liquidacion = {
   liquido: number;
 };
 
+// ─── Gross-up: del líquido al imponible (liquidación al revés) ────────────
+//
+// Dado un LÍQUIDO objetivo (lo que MJ quiere pagar), encuentra el sueldo base
+// que, tras los descuentos de computeLiquidacion, da justo ese líquido.
+//
+// El impuesto único es progresivo, así que no hay fórmula cerrada: se hace por
+// búsqueda binaria sobre el sueldo base. El líquido crece de forma monótona con
+// el base (el descuento marginal —AFP + cesantía + impuesto— nunca llega al
+// 100%; la salud es un plan fijo en UF que no escala con el sueldo), así que la
+// bisección converge. Trabaja en pesos enteros (el base se guarda entero) y
+// devuelve el base cuyo líquido queda más cerca del objetivo (tolerancia ~$1
+// por los redondeos internos de cada descuento).
+//
+// `emp.sueldoBase` se IGNORA — es el valor que estamos despejando.
+export function grossUpFromLiquido(
+  emp: EmpleadoParams,
+  ind: IndicadoresMes,
+  targetLiquido: number
+): { sueldoBase: number; liquidacion: Liquidacion } {
+  const liqOf = (base: number) =>
+    computeLiquidacion({ ...emp, sueldoBase: base }, ind).liquido;
+
+  // Cota superior amplia; se duplica si por algún parámetro extremo no bastara.
+  let lo = 0;
+  let hi = Math.max(targetLiquido, 0) * 4 + 5_000_000;
+  while (liqOf(hi) < targetLiquido && hi < 1e12) hi *= 2;
+
+  // Base entera más chica cuyo líquido alcanza (>=) el objetivo.
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (liqOf(mid) >= targetLiquido) hi = mid;
+    else lo = mid + 1;
+  }
+
+  // Por los redondeos, el vecino de abajo puede quedar aún más cerca: comparamos
+  // lo-1, lo y lo+1 y nos quedamos con el de menor diferencia al objetivo.
+  let best = lo;
+  let bestDiff = Infinity;
+  for (const b of [lo - 1, lo, lo + 1]) {
+    if (b < 0) continue;
+    const d = Math.abs(liqOf(b) - targetLiquido);
+    if (d < bestDiff) {
+      bestDiff = d;
+      best = b;
+    }
+  }
+
+  return {
+    sueldoBase: best,
+    liquidacion: computeLiquidacion({ ...emp, sueldoBase: best }, ind),
+  };
+}
+
 export function computeLiquidacion(
   emp: EmpleadoParams,
   ind: IndicadoresMes

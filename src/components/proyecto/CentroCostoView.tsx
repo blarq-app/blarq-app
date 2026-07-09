@@ -40,9 +40,10 @@ const UNCATEGORIZED_SECTION = "Sin categoría";
 
 const SECTION_ORDER = [
   // Costos de personal y estructura que NO vienen de factura, sino del banco
-  // (sueldos, Previred, comisión, impuestos). Solo se inyectan en el proyecto
-  // BLARQ — ver extraGastos. Van primero porque son el grueso del costo del
-  // estudio.
+  // (sueldos, Previred, comisión). Solo se inyectan en el proyecto BLARQ — ver
+  // extraGastos. Van primero porque son el grueso del costo del estudio. El F29
+  // al SII NO entra acá (es pasa-manos, no gasto de operación) — ver
+  // getGastosBancoBlarq en resumen/page.tsx.
   "Sueldos",
   "Previred",
   "Gastos generales",
@@ -58,9 +59,9 @@ const SECTION_ORDER = [
 ];
 
 // Un gasto normalizado, venga de una factura o de un movimiento bancario
-// (sueldo / Previred / comisión / impuesto). Unificar las dos fuentes en un
-// solo tipo permite que el Estado de Resultados, la vista mensual y la
-// tendencia los traten igual.
+// (sueldo / Previred / comisión). Unificar las dos fuentes en un solo tipo
+// permite que el Estado de Resultados, la vista mensual y la tendencia los
+// traten igual.
 export type GastoExtra = {
   section: string; // sección del EERR ya resuelta
   sub: string; // sub-línea (ej. "Socios", "Empleados")

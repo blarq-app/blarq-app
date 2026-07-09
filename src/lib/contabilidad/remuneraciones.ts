@@ -15,6 +15,7 @@
 import { prisma } from "@/lib/prisma";
 import {
   computeLiquidacion,
+  grossUpFromLiquido,
   type EmpleadoParams,
   type IndicadoresMes,
   type Liquidacion,
@@ -167,6 +168,35 @@ export async function getPlanillaPreviredMes(
     sueldoBase: sueldoDelMes(data, emp, year, month),
   }));
   return computePlanillaPrevired(empleados, ind);
+}
+
+// Gross-up para un empleado en un mes: dado el LÍQUIDO que se quiere pagar,
+// devuelve el sueldo imponible (base+bono) que hay que guardar para que la
+// liquidación dé ese líquido, más el líquido efectivo resultante (para
+// mostrar la ida-y-vuelta). Devuelve null si no hay indicadores del mes.
+export async function grossUpSueldoMes(
+  empleadoId: string,
+  year: number,
+  month: number,
+  liquidoObjetivo: number
+): Promise<{ imponible: number; liquidoResultante: number } | null> {
+  const [empleado, indicador] = await Promise.all([
+    prisma.empleado.findUnique({ where: { id: empleadoId } }),
+    prisma.indicadorMensual.findUnique({
+      where: { year_month: { year, month } },
+    }),
+  ]);
+  if (!empleado || !indicador) return null;
+
+  const ind: IndicadoresMes = {
+    uf: indicador.uf,
+    utm: indicador.utm,
+    gratificacionTopeMensual: indicador.gratificacionTopeMensual,
+    topeImponibleSaludUF: indicador.topeImponibleSaludUF,
+  };
+  const emp = toEmpleadoConId(empleado);
+  const { sueldoBase, liquidacion } = grossUpFromLiquido(emp, ind, liquidoObjetivo);
+  return { imponible: sueldoBase, liquidoResultante: liquidacion.liquido };
 }
 
 // Sueldo del mes por empleado, para la pantalla (efectivo + estándar + si está

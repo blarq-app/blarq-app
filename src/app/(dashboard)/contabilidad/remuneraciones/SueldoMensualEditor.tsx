@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP } from "@/lib/utils";
 
@@ -35,7 +35,8 @@ export default function SueldoMensualEditor({
         </h2>
         <p className="text-xs text-gray-500 mt-0.5">
           Base + bono de cada empleado. Por default toma el sueldo estándar;
-          editalo si este mes cambió.
+          editalo si este mes cambió. Con el toggle podés ingresar el líquido
+          a pagar y el imponible se calcula solo.
         </p>
       </div>
       <div className="divide-y divide-gray-100">
@@ -62,17 +63,78 @@ function Fila({
   month: number;
 }) {
   const router = useRouter();
+  // Modo de ingreso: "imponible" = MJ escribe el base+bono (como siempre);
+  // "liquido" = MJ escribe lo que paga y el imponible se despeja hacia atrás.
+  const [modo, setModo] = useState<"imponible" | "liquido">("imponible");
   const [valor, setValor] = useState(sueldo.efectivo);
   const [busy, setBusy] = useState(false);
+
+  // Estado del modo líquido: el líquido objetivo que MJ tipea y el resultado
+  // del gross-up (imponible a guardar + líquido efectivo que se logra).
+  const [liquido, setLiquido] = useState<number>(0);
+  const [calc, setCalc] = useState<
+    { imponible: number; liquidoResultante: number } | null
+  >(null);
+  const [calcBusy, setCalcBusy] = useState(false);
+  const [calcError, setCalcError] = useState<string | null>(null);
 
   const cambiado = valor !== sueldo.efectivo;
   const esEstandar = valor === sueldo.estandar;
 
+  // En modo líquido, cada vez que cambia el líquido objetivo pedimos el
+  // gross-up al servidor (debounce corto). No guarda nada — es solo la vista
+  // previa del imponible que se va a registrar.
+  useEffect(() => {
+    if (modo !== "liquido") return;
+    if (!liquido || liquido <= 0) {
+      setCalc(null);
+      setCalcError(null);
+      return;
+    }
+    setCalcBusy(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/contabilidad/sueldo-mensual/grossup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            empleadoId: sueldo.empleadoId,
+            year,
+            month,
+            liquido,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setCalc(null);
+          setCalcError(data.error ?? "No se pudo calcular");
+        } else {
+          setCalc(data);
+          setCalcError(null);
+        }
+      } catch {
+        setCalc(null);
+        setCalcError("Error de red");
+      } finally {
+        setCalcBusy(false);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [modo, liquido, sueldo.empleadoId, year, month]);
+
+  // Imponible a guardar según el modo activo.
+  const imponibleAGuardar = modo === "liquido" ? calc?.imponible ?? null : valor;
+  const guardarDisabled =
+    busy ||
+    (modo === "imponible" && !cambiado) ||
+    (modo === "liquido" && (calcBusy || imponibleAGuardar == null));
+
   async function guardar() {
+    if (imponibleAGuardar == null) return;
     setBusy(true);
     try {
-      // Si lo dejan igual al estándar, borramos el ajuste (vuelve al estándar).
-      if (esEstandar) {
+      // Si el imponible resultante es igual al estándar, borramos el ajuste.
+      if (imponibleAGuardar === sueldo.estandar) {
         await fetch(
           `/api/contabilidad/sueldo-mensual?empleadoId=${sueldo.empleadoId}&year=${year}&month=${month}`,
           { method: "DELETE" }
@@ -85,7 +147,7 @@ function Fila({
             empleadoId: sueldo.empleadoId,
             year,
             month,
-            sueldoBase: valor,
+            sueldoBase: imponibleAGuardar,
           }),
         });
       }
@@ -110,7 +172,7 @@ function Fila({
   }
 
   return (
-    <div className="px-5 py-3 flex items-center justify-between gap-4">
+    <div className="px-5 py-3 flex items-start justify-between gap-4">
       <div className="min-w-0">
         <div className="flex items-baseline gap-2">
           <span className="font-medium text-gray-900">{sueldo.nombre}</span>
@@ -124,29 +186,79 @@ function Fila({
           Estándar {formatCLP(sueldo.estandar)}
         </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <input
-          type="number"
-          value={valor}
-          onChange={(e) => setValor(Number(e.target.value))}
-          className="w-36 text-sm tabular-nums text-right border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-gray-900"
-        />
-        {sueldo.ajustado && esEstandar ? (
-          <button
-            onClick={volverEstandar}
-            disabled={busy}
-            className="text-sm text-gray-500 hover:text-gray-900 disabled:opacity-50"
-          >
-            Quitar ajuste
-          </button>
-        ) : (
-          <button
-            onClick={guardar}
-            disabled={busy || !cambiado}
-            className="px-3 py-1.5 rounded bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 disabled:opacity-40"
-          >
-            {busy ? "…" : "Guardar"}
-          </button>
+      <div className="flex flex-col items-end gap-1.5 shrink-0">
+        {/* Toggle Imponible / Líquido */}
+        <div className="flex rounded border border-gray-300 overflow-hidden text-xs">
+          {(["imponible", "liquido"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setModo(m)}
+              className={
+                "px-2.5 py-1 " +
+                (modo === m
+                  ? "bg-gray-900 text-white"
+                  : "bg-white text-gray-600 hover:bg-gray-50")
+              }
+            >
+              {m === "imponible" ? "Imponible" : "Líquido"}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {modo === "imponible" ? (
+            <input
+              type="number"
+              value={valor}
+              onChange={(e) => setValor(Number(e.target.value))}
+              className="w-36 text-sm tabular-nums text-right border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-gray-900"
+            />
+          ) : (
+            <input
+              type="number"
+              value={liquido || ""}
+              placeholder="líquido a pagar"
+              onChange={(e) => setLiquido(Number(e.target.value))}
+              className="w-36 text-sm tabular-nums text-right border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-gray-900"
+            />
+          )}
+          {sueldo.ajustado && modo === "imponible" && esEstandar ? (
+            <button
+              onClick={volverEstandar}
+              disabled={busy}
+              className="text-sm text-gray-500 hover:text-gray-900 disabled:opacity-50"
+            >
+              Quitar ajuste
+            </button>
+          ) : (
+            <button
+              onClick={guardar}
+              disabled={guardarDisabled}
+              className="px-3 py-1.5 rounded bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 disabled:opacity-40"
+            >
+              {busy ? "…" : "Guardar"}
+            </button>
+          )}
+        </div>
+
+        {/* En modo líquido: vista previa de la ida-y-vuelta. */}
+        {modo === "liquido" && (
+          <div className="text-xs tabular-nums text-right min-h-[1rem]">
+            {calcBusy ? (
+              <span className="text-gray-400">calculando…</span>
+            ) : calcError ? (
+              <span className="text-rose-600">{calcError}</span>
+            ) : calc ? (
+              <span className="text-gray-600">
+                Se guarda imponible{" "}
+                <span className="font-medium text-gray-900">
+                  {formatCLP(calc.imponible)}
+                </span>{" "}
+                · líquido {formatCLP(calc.liquidoResultante)}
+              </span>
+            ) : null}
+          </div>
         )}
       </div>
     </div>

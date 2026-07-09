@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-09 — BLARQ: el pago del F29 (IVA) sale del Estado de Resultados
+
+- **Qué.** El "Estado de Resultados" del centro de costo interno BLARQ ya NO cuenta los pagos del F29 al SII (`bankMovement.category="impuestos"`) como gasto. Antes se inyectaban al Resumen (feature #251) y el total de gastos del semestre se veía inflado en **$9.429.919** (de $53,5M a $44,1M).
+- **Por qué.** El F29 es mayormente **IVA** —un pasa-manos, no un gasto de operar— más PPM (adelanto de renta) y retenciones (plata de terceros). Además la pantalla se declara "montos en neto (sin IVA)": meter el IVA del F29 en una lista en netos era inconsistente. Misma lógica que los retiros/préstamos de socios, que ya quedaban fuera.
+- **Alcance.** Solo la vista (`resumen/page.tsx` → `getGastosBancoBlarq` deja de inyectar `impuestos`; comentarios en `CentroCostoView.tsx`). NO toca `metrics.ts`, ni datos, ni la utilidad de proyectos-cliente. Reversible.
+- **Nota de infra.** El diagnóstico previo se enredó porque los scripts `diag-*` con `import "dotenv/config"` leen la base VIEJA congelada (ep-solitary-mud) por hoisting de imports, no la viva. Usar el patrón de `diag-cual-base-viva.ts` (datasource directo + imprime HOST). La base viva sigue siendo ep-shy-morning.
+
 ## 2026-07-06 — Marca v2 (Claro): tema de la app + 3 PDF de cotización (PR #261, EN PROD)
 
 - **Sistema visual unificado.** Tipografías del Manual de Marca v2: **Nunito Sans** (cuerpo/cifras), **Hanken Grotesk ExtraLight** (títulos en altas espaciadas), **Spectral itálica** (bajadas). Reemplazan a Geist/Montserrat. Aplicado a `layout.tsx` + `globals.css` y a los 3 renderers de PDF (`ObraPDF`/`MueblesPDF`/`ArtefactosPDF`).

@@ -8,15 +8,22 @@ import { esSocio } from "@/lib/banco/socios";
 import { computeProjectMetrics } from "@/lib/projects/metrics";
 
 // Gastos de estructura de BLARQ que NO son factura, traídos del banco. Son
-// movimientos categorizados a mano (sueldo / previred / comisión / impuestos).
+// movimientos categorizados a mano (sueldo / previred / comisión).
 // Se mapean a la misma forma que un gasto del Estado de Resultados para que el
 // Resumen del proyecto BLARQ los muestre junto a las facturas. Solo egresos
 // (amount < 0). Sueldo se sub-divide en Socios vs Empleados (MJ/JT vs el resto)
 // con la misma definición de "socio" que usa el banco.
+//
+// Los pagos del F29 al SII (category="impuestos") quedan FUERA a propósito: NO
+// son un gasto de operar BLARQ. El F29 es mayormente IVA —un pasa-manos: lo
+// cobrás al cliente, descontás el de compras, y la diferencia se la das al
+// SII— más PPM (adelanto de renta) y retenciones (plata de terceros). Meterlos
+// como gasto inflaba los costos y subestimaba la utilidad del estudio. Misma
+// lógica que los retiros/préstamos de socios, que tampoco entran acá.
 async function getGastosBancoBlarq(): Promise<GastoExtra[]> {
   const movs = await prisma.bankMovement.findMany({
     where: {
-      category: { in: ["sueldo", "previred", "comision_bancaria", "impuestos"] },
+      category: { in: ["sueldo", "previred", "comision_bancaria"] },
       amount: { lt: 0 },
     },
     select: {
@@ -42,9 +49,6 @@ async function getGastosBancoBlarq(): Promise<GastoExtra[]> {
     } else if (m.category === "comision_bancaria") {
       section = "Gastos financieros";
       sub = "Comisión banco";
-    } else if (m.category === "impuestos") {
-      section = "Impuestos";
-      sub = "Impuestos";
     }
     return {
       section,

@@ -28,7 +28,25 @@ type SearchParams = {
   tipo?: string; // ingreso | egreso | interno
   socios?: string; // "1" = solo transferencias a socios (MJ/JT), para revisión
   limit?: string; // "100" | "200" | "500" | "all"
+  // Filtro por tipo de imputación (categoría sin factura), desde el encabezado
+  // de la columna Imputación. Solo se ofrece en la cuenta Sueldos.
+  imputacion?: string;
 };
+
+// Categorías de imputación (sin factura), ordenadas para el editor inline y el
+// filtro de columna. Subconjunto de CATEGORY_LABEL con las que MJ usa en la
+// sección Sueldos.
+const IMPUTACION_CATEGORY_OPTIONS: { value: string; label: string }[] = [
+  { value: "sueldo", label: "Sueldo" },
+  { value: "prestamo_socio", label: "Préstamo socio" },
+  { value: "retiro_personal", label: "Retiro socio" },
+  { value: "bono_socio", label: "Bono socio" },
+  { value: "previred", label: "Previred" },
+  { value: "comision_bancaria", label: "Comisión banco" },
+  { value: "impuestos", label: "Impuestos" },
+  { value: "deposito_efectivo", label: "Depósito efectivo" },
+  { value: "otro_sin_factura", label: "Otro" },
+];
 
 // Labels alineados con los de facturas — "pendiente / parcial / conciliado".
 // El campo `status` en BD sigue siendo `sin_asignar` por compat, pero en UI
@@ -150,6 +168,12 @@ export default async function MovimientosPage({
         })),
       ],
     });
+  }
+  // Filtro por tipo de imputación (categoría), desde el encabezado de la
+  // columna Imputación (solo se ofrece en la cuenta Sueldos). Va en andFilters
+  // para que también acote las tarjetas de totales, como el resto.
+  if (sp.imputacion) {
+    andFilters.push({ category: sp.imputacion });
   }
   if (andFilters.length > 0) where.AND = andFilters;
 
@@ -393,6 +417,13 @@ export default async function MovimientosPage({
   }));
   const matchHintsObj = Object.fromEntries(matchHints);
 
+  // El filtro de imputación en la columna es contextual: solo aparece cuando la
+  // cuenta seleccionada es la de Sueldos (role "salary_fund"). En "Todas las
+  // cuentas" u "Operativa" no se muestra.
+  const salaryAccount = accounts.find((a) => a.role === "salary_fund");
+  const showImputacionFilter =
+    !!salaryAccount && sp.accountId === salaryAccount.id;
+
   return (
     <div>
       <div className="flex items-end justify-between mb-6">
@@ -524,6 +555,9 @@ export default async function MovimientosPage({
         blarqRutDigits={BLARQ_RUT_DIGITS}
         projects={projects}
         categories={categoryOptions}
+        imputacionCategories={IMPUTACION_CATEGORY_OPTIONS}
+        showImputacionFilter={showImputacionFilter}
+        imputacionFilterValue={sp.imputacion ?? ""}
       />
     </div>
   );

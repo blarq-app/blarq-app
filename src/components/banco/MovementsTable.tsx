@@ -12,6 +12,8 @@ import MovementsBulkBar from "./MovementsBulkBar";
 import InternalTransferProjectSelect from "./InternalTransferProjectSelect";
 import InternalTransferConceptoSelect from "./InternalTransferConceptoSelect";
 import SalaryPeriodSelect from "./SalaryPeriodSelect";
+import CategoryInlineSelect from "./CategoryInlineSelect";
+import ImputacionColumnFilter from "./ImputacionColumnFilter";
 
 type Payment = {
   id: string;
@@ -58,6 +60,9 @@ export default function MovementsTable({
   blarqRutDigits,
   projects,
   categories,
+  imputacionCategories,
+  showImputacionFilter,
+  imputacionFilterValue,
 }: {
   movements: MovementRow[];
   matchHints: Record<string, MatchHint>;
@@ -66,6 +71,11 @@ export default function MovementsTable({
   blarqRutDigits: string;
   projects: { id: string; name: string; numeroProyecto: number | null }[];
   categories: { id: string; label: string }[];
+  // Categorías de imputación (para el editor inline y el filtro de columna).
+  imputacionCategories: { value: string; label: string }[];
+  // El filtro de la columna Imputación solo aparece en la cuenta "Sueldos".
+  showImputacionFilter: boolean;
+  imputacionFilterValue: string;
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -136,7 +146,15 @@ export default function MovementsTable({
                   <th className="text-left px-4 py-2 w-24">Cuenta</th>
                   <th className="text-left px-4 py-2">Descripción</th>
                   <th className="text-right px-4 py-2">Monto</th>
-                  <th className="text-left px-4 py-2 w-72">Imputación</th>
+                  <th className="text-left px-4 py-2 w-72 align-top">
+                    Imputación
+                    {showImputacionFilter && (
+                      <ImputacionColumnFilter
+                        value={imputacionFilterValue}
+                        options={imputacionCategories}
+                      />
+                    )}
+                  </th>
                   <th className="text-left px-4 py-2 w-32">Estado</th>
                   <th className="px-4 py-2 w-44 text-right">Acción</th>
                 </tr>
@@ -260,15 +278,30 @@ export default function MovementsTable({
                           </div>
                         ) : m.category ? (
                           <span className="text-gray-600">
-                            {categoryLabels[m.category] ?? m.category}
-                            {/* Sugerencia sin confirmar: un movimiento con
-                                categoría pero todavía "sin_asignar" es una
-                                propuesta del import (ej. sueldo a socio) que MJ
-                                aún no ratificó — no cuenta como archivado. */}
-                            {m.status === "sin_asignar" && (
-                              <span className="ml-1 text-[9px] uppercase tracking-wide bg-amber-100 text-amber-800 px-1 py-0.5 rounded align-middle whitespace-nowrap">
-                                a confirmar
-                              </span>
+                            {/* Sin factura: la categoría se puede corregir en
+                                un paso desde acá (ej. "Sueldo" → "Préstamo
+                                socio"). En sin_asignar ("a confirmar") se deja
+                                el texto — ahí se ratifica con el menú de la
+                                columna Acción. */}
+                            {m.status === "sin_factura" ? (
+                              <CategoryInlineSelect
+                                movimientoId={m.id}
+                                category={m.category}
+                                options={imputacionCategories}
+                              />
+                            ) : (
+                              <>
+                                {categoryLabels[m.category] ?? m.category}
+                                {/* Sugerencia sin confirmar: un movimiento con
+                                    categoría pero todavía "sin_asignar" es una
+                                    propuesta del import (ej. sueldo a socio) que
+                                    MJ aún no ratificó — no cuenta como archivado. */}
+                                {m.status === "sin_asignar" && (
+                                  <span className="ml-1 text-[9px] uppercase tracking-wide bg-amber-100 text-amber-800 px-1 py-0.5 rounded align-middle whitespace-nowrap">
+                                    a confirmar
+                                  </span>
+                                )}
+                              </>
                             )}
                             {/* A qué mes corresponde el sueldo/previred, para
                                 que el Estado de Resultados de BLARQ lo agrupe en

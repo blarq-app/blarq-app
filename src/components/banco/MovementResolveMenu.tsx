@@ -294,26 +294,34 @@ export default function MovementResolveMenu({
         ],
       });
 
-      const sinFactura: ItemDef[] = [];
+      // Dos encabezados a propósito: separar "costo de una obra" de "gasto
+      // propio" refuerza la distinción contable (un sueldo NO es costo de obra).
       if (pending && egreso) {
-        sinFactura.push({
-          label: "Gasto de obra sin factura…",
-          icon: "tools",
-          onClick: () => {
-            setGastoOpen(true);
-            closeMenu();
-          },
+        sections.push({
+          title: "Costo de una obra, sin factura",
+          items: [
+            {
+              label: "Gasto de obra sin factura…",
+              icon: "tools",
+              onClick: () => {
+                setGastoOpen(true);
+                closeMenu();
+              },
+            },
+          ],
         });
       }
       if (pending) {
-        sinFactura.push({
-          label: "Sueldo, retiro, previred…",
-          icon: "user",
-          onClick: () => setSubview("sueldo"),
+        sections.push({
+          title: "Gasto propio de BLARQ",
+          items: [
+            {
+              label: "Sueldo, retiro, previred…",
+              icon: "user",
+              onClick: () => setSubview("sueldo"),
+            },
+          ],
         });
-      }
-      if (sinFactura.length) {
-        sections.push({ title: "Sin factura", items: sinFactura });
       }
 
       if (pending && isBlarq) {
@@ -360,7 +368,7 @@ export default function MovementResolveMenu({
 
     if (egresosSinPago > 0) {
       sections.push({
-        title: "Sin factura",
+        title: "Costo de una obra, sin factura",
         items: [
           {
             label: "Gasto de obra sin factura…",

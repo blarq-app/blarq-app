@@ -3,12 +3,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { formatCLP } from "@/lib/utils";
-import MovementActionButton from "./MovementActionButton";
-import MatchHintButton from "./MatchHintButton";
-import MarkInternalButton from "./MarkInternalButton";
-import MarkSinFacturaButton from "./MarkSinFacturaButton";
-import UndoNetZeroButton from "./UndoNetZeroButton";
-import MovementsBulkBar from "./MovementsBulkBar";
+import MovementResolveMenu, { type MenuMovement } from "./MovementResolveMenu";
+import MovementsSelectionBar from "./MovementsSelectionBar";
 import InternalTransferProjectSelect from "./InternalTransferProjectSelect";
 import InternalTransferConceptoSelect from "./InternalTransferConceptoSelect";
 import SalaryPeriodSelect from "./SalaryPeriodSelect";
@@ -46,15 +42,37 @@ export type MovementRow = {
   payments: Payment[];
 };
 
-type MatchHint = { invoiceId: string; folio: string | null; remaining: number };
+// Convierte una fila del listado al shape que consume el menú "Resolver".
+function toMenuMovement(m: MovementRow): MenuMovement {
+  return {
+    id: m.id,
+    amount: m.amount,
+    status: m.status,
+    hasPayments: m.payments.length > 0,
+    counterpartyRut: m.counterpartyRut,
+    counterpartyName: m.counterpartyName,
+    description: m.description,
+    date: m.date,
+    bankAccountAlias: m.bankAccountAlias,
+    payments: m.payments.map((p) => ({
+      id: p.id,
+      invoiceId: p.invoiceId,
+      amountApplied: p.amountApplied,
+      invoice: {
+        folioNumber: p.invoice.folioNumber,
+        businessName: p.invoice.businessName,
+        totalAmount: p.invoice.totalAmount,
+      },
+    })),
+  };
+}
 
 // Tabla client de /banco/movimientos. Maneja el estado de selección
-// múltiple (checkbox por fila + "seleccionar todo") y monta la barra
-// flotante de acciones masivas. El resto de la fila es idéntico a lo
-// que antes renderizaba el server component.
+// múltiple (checkbox por fila + "seleccionar todo") y monta el menú de
+// acciones ("Resolver ▾") tanto por fila como para la selección. El resto
+// de la fila es idéntico a lo que antes renderizaba el server component.
 export default function MovementsTable({
   movements,
-  matchHints,
   statusLabels,
   categoryLabels,
   blarqRutDigits,
@@ -65,7 +83,6 @@ export default function MovementsTable({
   imputacionFilterValue,
 }: {
   movements: MovementRow[];
-  matchHints: Record<string, MatchHint>;
   statusLabels: Record<string, { label: string; tone: string }>;
   categoryLabels: Record<string, string>;
   blarqRutDigits: string;
@@ -104,19 +121,12 @@ export default function MovementsTable({
 
   const clear = () => setSelectedIds(new Set());
 
-  // Datos que la barra necesita: monto, si tiene imputaciones, y el
-  // RUT de la contraparte (para que el modal de "Asignar a factura"
-  // priorice facturas del mismo cliente/proveedor).
+  // Movimientos seleccionados, en el shape que el menú "Resolver" necesita.
   const selected = useMemo(
     () =>
       movements
         .filter((m) => selectedIds.has(m.id))
-        .map((m) => ({
-          id: m.id,
-          amount: m.amount,
-          hasPayments: m.payments.length > 0,
-          counterpartyRut: m.counterpartyRut,
-        })),
+        .map(toMenuMovement),
     [movements, selectedIds]
   );
 
@@ -177,7 +187,6 @@ export default function MovementsTable({
                   const overImputed = sumApplied - Math.abs(m.amount) > 10;
                   const isInternal = m.status === "interno";
                   const isSelected = selectedIds.has(m.id);
-                  const hint = matchHints[m.id];
                   return (
                     <tr
                       key={m.id}
@@ -331,53 +340,14 @@ export default function MovementsTable({
                         </span>
                       </td>
                       <td className="px-4 py-2">
-                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                          {hint && (
-                            <MatchHintButton
-                              movimientoId={m.id}
-                              invoiceId={hint.invoiceId}
-                              folio={hint.folio}
-                            />
-                          )}
-                          {(m.status === "sin_asignar" ||
-                            m.status === "parcial") &&
-                            (m.counterpartyRut ?? "")
-                              .replace(/\D/g, "")
-                              .includes(blarqRutDigits) && (
-                              <MarkInternalButton movimientoId={m.id} />
-                            )}
-                          {(m.status === "sin_asignar" ||
-                            m.status === "parcial") && (
-                            <MarkSinFacturaButton movimientoId={m.id} />
-                          )}
-                          {m.status === "neto_cero" && (
-                            <UndoNetZeroButton movimientoId={m.id} />
-                          )}
-                          <MovementActionButton
-                            movimientoId={m.id}
-                            amount={m.amount}
-                            description={m.description}
-                            counterpartyName={m.counterpartyName}
-                            counterpartyRut={m.counterpartyRut}
-                            date={m.date}
-                            bankAccountAlias={m.bankAccountAlias}
-                            existingPayments={m.payments.map((p) => ({
-                              id: p.id,
-                              invoiceId: p.invoiceId,
-                              amountApplied: p.amountApplied,
-                              invoice: {
-                                folioNumber: p.invoice.folioNumber,
-                                businessName: p.invoice.businessName,
-                                totalAmount: p.invoice.totalAmount,
-                              },
-                            }))}
-                            status={m.status}
-                            variant={
-                              m.status === "sin_asignar" ||
-                              m.status === "parcial"
-                                ? "primary"
-                                : "ghost"
-                            }
+                        <div className="flex items-center justify-end">
+                          <MovementResolveMenu
+                            movements={[toMenuMovement(m)]}
+                            mode="row"
+                            projects={projects}
+                            categories={categories}
+                            imputacionCategories={imputacionCategories}
+                            blarqRutDigits={blarqRutDigits}
                           />
                         </div>
                       </td>
@@ -390,11 +360,13 @@ export default function MovementsTable({
         )}
       </div>
 
-      <MovementsBulkBar
-        selected={selected}
+      <MovementsSelectionBar
+        movements={selected}
         onClear={clear}
         projects={projects}
         categories={categories}
+        imputacionCategories={imputacionCategories}
+        blarqRutDigits={blarqRutDigits}
       />
     </>
   );

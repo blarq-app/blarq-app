@@ -314,6 +314,14 @@ export async function POST(request: NextRequest) {
               clientPrice: item.clientPrice,
               realCostBlarq: item.realCostBlarq,
               referenceLink: item.referenceLink,
+              // La foto (imageUrl), el vínculo al catálogo (catalogId) y la
+              // marca de "despegada del catálogo" (priceOverridden) también se
+              // copian. Sin imageUrl la cotización duplicada quedaba sin fotos
+              // (bug reportado). Sin catalogId/priceOverridden se perdía el
+              // vínculo al catálogo y el estado de precio editado a mano.
+              imageUrl: item.imageUrl,
+              catalogId: item.catalogId,
+              priceOverridden: item.priceOverridden,
               sortOrder: item.sortOrder,
             },
           });

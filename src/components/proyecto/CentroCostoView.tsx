@@ -34,6 +34,7 @@ type Invoice = {
 // el cuadro otra. Decisión de MJ 2026-07-09: que coincida con lo que marca.
 const SECTION_BY_TOP: Record<string, string> = {
   "Gastos generales": "Gastos generales",
+  "Gastos extras": "Gastos extras",
   "Auto": "Auto",
   "Herramientas": "Herramientas",
   "Materiales": "Materiales",
@@ -53,6 +54,7 @@ const SECTION_ORDER = [
   "Sueldos",
   "Previred",
   "Gastos generales",
+  "Gastos extras",
   "Auto",
   "Herramientas",
   "Materiales",

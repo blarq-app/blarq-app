@@ -7,6 +7,7 @@ import {
 } from "@/lib/pdf/ListaCompraPDF.html";
 import { renderPDF } from "@/lib/pdf/renderPDF";
 import { requireSession } from "@/lib/apiAuth";
+import { aggregateShoppingItems } from "@/lib/listaCompra/perdidaCantidad";
 
 export async function GET(
   request: NextRequest,
@@ -49,60 +50,22 @@ export async function GET(
     if (selectedBudget) {
       // Lee snapshot del proyecto (ObraItemComponent), no catálogo.
       // Regla MJ 2026-05-05.
+      // Trae TODOS los componentes: la merma necesita ver las líneas de
+      // pérdida para inflar la cantidad. Ver src/lib/listaCompra/perdidaCantidad.ts.
       const full = await prisma.budgetVersion.findUnique({
         where: { id: selectedBudget.id },
         include: {
           obraItems: {
             include: {
-              components: {
-                where: { type: "material" },
-                include: { material: true },
-              },
+              components: { include: { material: true } },
             },
           },
         },
       });
 
-      type Agg = {
-        key: string;
-        name: string;
-        unit: string;
-        materialId: string | null;
-        qtyNeeded: number;
-        totalBudgeted: number;
-        isProvision: boolean;
-      };
-      const agg = new Map<string, Agg>();
-
-      for (const obraItem of full?.obraItems || []) {
-        // Provisiones incluidas (decisión MJ): se marcan en el nombre.
-        const comps = obraItem.components;
-        for (const c of comps) {
-          const qty = (c.quantity || 0) * (obraItem.quantity || 0);
-          if (qty <= 0) continue;
-          const budgeted = (c.unitCost || 0) * qty;
-          const name = c.material?.name || c.description;
-          const unit = c.material?.unit || c.unit;
-          const key = c.materialId
-            ? `mat:${c.materialId}`
-            : `name:${name.trim().toLowerCase()}|${unit.trim().toLowerCase()}`;
-          const prev = agg.get(key);
-          if (prev) {
-            prev.qtyNeeded += qty;
-            prev.totalBudgeted += budgeted;
-          } else {
-            agg.set(key, {
-              key,
-              name,
-              unit,
-              materialId: c.materialId || null,
-              qtyNeeded: qty,
-              totalBudgeted: budgeted,
-              isProvision: !!c.material?.isProvision,
-            });
-          }
-        }
-      }
+      // La cantidad incluye la pérdida (merma) del material al que esté
+      // enganchada. Provisiones incluidas (decisión MJ): se marcan en el nombre.
+      const agg = aggregateShoppingItems(full?.obraItems || [], true);
 
       const tracking = await prisma.shoppingItem.findMany({
         where: { projectId: id },

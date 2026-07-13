@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
+import {
+  aggregateShoppingItems,
+  countItemsWithoutMaterial,
+} from "@/lib/listaCompra/perdidaCantidad";
 
 // Recalcula qtyNeeded agregando componentes de tipo "material" de cada partida
 // del presupuesto de obra más reciente (aprobado si existe).
@@ -41,50 +45,17 @@ export async function POST(
     // Lee componentes del SNAPSHOT del proyecto (ObraItemComponent), NO
     // del catálogo (PartidaComponent). Regla MJ 2026-05-05: el ppto
     // aprobado es inmutable ante cambios al catálogo.
+    // Trae TODOS los componentes: la merma necesita ver las líneas de pérdida
+    // para inflar la cantidad. Ver src/lib/listaCompra/perdidaCantidad.ts.
     const obraItemsWithComps = await prisma.obraItem.findMany({
       where: { budgetVersionId: budget.id },
       include: {
-        components: {
-          where: { type: "material" },
-          include: { material: true },
-        },
+        components: { include: { material: true } },
       },
     });
 
-    // Agregar: key = materialId || normalized(name+unit)
-    type Agg = {
-      key: string;
-      name: string;
-      unit: string;
-      materialId: string | null;
-      qtyNeeded: number;
-    };
-    const agg = new Map<string, Agg>();
-
-    for (const obraItem of obraItemsWithComps) {
-      const comps = obraItem.components;
-      for (const c of comps) {
-        const qty = (c.quantity || 0) * (obraItem.quantity || 0);
-        if (qty <= 0) continue;
-        const name = c.material?.name || c.description;
-        const unit = c.material?.unit || c.unit;
-        const key = c.materialId
-          ? `mat:${c.materialId}`
-          : `name:${name.trim().toLowerCase()}|${unit.trim().toLowerCase()}`;
-        const prev = agg.get(key);
-        if (prev) {
-          prev.qtyNeeded += qty;
-        } else {
-          agg.set(key, {
-            key,
-            name,
-            unit,
-            materialId: c.materialId || null,
-            qtyNeeded: qty,
-          });
-        }
-      }
-    }
+    // La cantidad incluye la pérdida (merma) del material al que esté enganchada.
+    const agg = aggregateShoppingItems(obraItemsWithComps, true);
 
     // Existing items (no manuales)
     const existing = await prisma.shoppingItem.findMany({
@@ -145,11 +116,12 @@ export async function POST(
       zeroed++;
     }
 
-    // Items sin componentes (no se snapshotean = creados manual sin
+    // Items sin materiales detallados (no se snapshotean = creados manual sin
     // catálogo origen, o partidas viejas sin migrar).
-    const itemsWithoutCatalog = obraItemsWithComps.filter(
-      (i) => i.components.length === 0
-    ).length;
+    const itemsWithoutCatalog = countItemsWithoutMaterial(
+      obraItemsWithComps,
+      false
+    );
 
     return NextResponse.json({
       added,

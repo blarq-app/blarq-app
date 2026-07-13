@@ -4,6 +4,10 @@ import Link from "next/link";
 import ListaCompraClient, {
   ComputedRow,
 } from "@/components/listaCompra/ListaCompraClient";
+import {
+  aggregateShoppingItems,
+  countItemsWithoutMaterial,
+} from "@/lib/listaCompra/perdidaCantidad";
 
 export default async function ListaCompraPage({
   params,
@@ -42,15 +46,15 @@ export default async function ListaCompraPage({
     // Lee componentes desde ObraItemComponent (snapshot por proyecto),
     // NO desde PartidaComponent (catálogo). Regla MJ 2026-05-05: una
     // cotización aprobada es inmutable ante cambios al catálogo.
+    // Trae TODOS los componentes (no solo material): la lógica de merma
+    // necesita ver las líneas de pérdida para inflar la cantidad del material
+    // al que apuntan. Ver src/lib/listaCompra/perdidaCantidad.ts.
     const full = await prisma.budgetVersion.findUnique({
       where: { id: selectedBudget.id },
       include: {
         obraItems: {
           include: {
-            components: {
-              where: { type: "material" },
-              include: { material: true },
-            },
+            components: { include: { material: true } },
           },
         },
       },
@@ -60,58 +64,16 @@ export default async function ListaCompraPage({
     // sin detallar (no aparecen en la lista). Las de pura mano de obra
     // (demoliciones, instalaciones) tienen costMaterial 0 y NO deben alertar:
     // no les falta nada, simplemente no compran materiales.
-    itemsWithoutCatalog =
-      full?.obraItems.filter(
-        (i) => i.components.length === 0 && (i.costMaterial ?? 0) > 0
-      ).length || 0;
+    itemsWithoutCatalog = countItemsWithoutMaterial(
+      full?.obraItems || [],
+      true
+    );
 
-    type Agg = {
-      key: string;
-      name: string;
-      unit: string;
-      materialId: string | null;
-      qtyNeeded: number;
-      totalBudgeted: number;
-      partidas: Set<string>;
-      referenceLink: string | null;
-      isProvision: boolean;
-    };
-    const agg = new Map<string, Agg>();
-
-    for (const obraItem of full?.obraItems || []) {
-      // Las provisiones (porcelanato, palmeta) SÍ se muestran en la lista —
-      // MJ las considera material a ver/comprar. Se marcan con isProvision para
-      // distinguirlas de la ferretería normal (etiqueta "provisión" en la UI).
-      const comps = obraItem.components;
-      for (const c of comps) {
-        const qty = (c.quantity || 0) * (obraItem.quantity || 0);
-        if (qty <= 0) continue;
-        const budgeted = (c.unitCost || 0) * qty;
-        const name = c.material?.name || c.description;
-        const unit = c.material?.unit || c.unit;
-        const key = c.materialId
-          ? `mat:${c.materialId}`
-          : `name:${name.trim().toLowerCase()}|${unit.trim().toLowerCase()}`;
-        const prev = agg.get(key);
-        if (prev) {
-          prev.qtyNeeded += qty;
-          prev.totalBudgeted += budgeted;
-          prev.partidas.add(obraItem.name);
-        } else {
-          agg.set(key, {
-            key,
-            name,
-            unit,
-            materialId: c.materialId || null,
-            qtyNeeded: qty,
-            totalBudgeted: budgeted,
-            partidas: new Set([obraItem.name]),
-            referenceLink: c.material?.referenceLink || null,
-            isProvision: !!c.material?.isProvision,
-          });
-        }
-      }
-    }
+    // La cantidad incluye la pérdida (merma) del material al que esté enganchada.
+    // Las provisiones (porcelanato, palmeta) SÍ se muestran en la lista —
+    // MJ las considera material a ver/comprar. Se marcan con isProvision para
+    // distinguirlas de la ferretería normal (etiqueta "provisión" en la UI).
+    const agg = aggregateShoppingItems(full?.obraItems || [], true);
 
     // Traer tracking guardado (qtyBought/notas)
     const tracking = await prisma.shoppingItem.findMany({

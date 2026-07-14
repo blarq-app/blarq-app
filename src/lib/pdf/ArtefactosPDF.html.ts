@@ -246,11 +246,13 @@ const CSS = `
   /* Cierre: forma de pago + resumen por subcategoría + total */
   .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 14mm; margin-top: 10mm; align-items: start; break-inside: avoid; }
   .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 7pt; letter-spacing: .2em; text-transform: uppercase; color: #36322C; font-weight: 400; border-bottom: 0.6px solid #C2BCB4; padding-bottom: 2.5pt; }
-  .pagos { margin-top: 6pt; border-top: 1px solid #DCDAD6; }
-  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 6pt 0; border-bottom: 1px solid #E7E6E4; }
+  /* Formas de pago: formato ÚNICO en los 3 PDF (corrección MJ) — 5,6pt. */
+  .pagos { margin-top: 5pt; border-top: 1px solid #DCDAD6; }
+  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 2pt 0; border-bottom: 1px solid #E7E6E4; }
   .pagos .row:last-child { border-bottom: none; }
-  .pagos .s { font-size: 10pt; color: #36322C; }
-  .pagos .p { font-size: 10pt; color: #736A5C; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .pagos .s { font-size: 5.6pt; color: #36322C; }
+  .pagos .p { font-size: 5.6pt; color: #736A5C; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .formas .blk-title { font-size: 5.6pt; padding-bottom: 2pt; }
   .resumen { border-top: 1px solid #C2BCB4; padding-top: 6pt; }
   .resumen .row { display: flex; justify-content: space-between; align-items: baseline; padding: 4pt 0; border-bottom: 1px solid #DCDAD6; }
   .resumen .rl { font-size: 9pt; color: #625A4F; }
@@ -260,7 +262,7 @@ const CSS = `
   .resumen .grand { display: flex; justify-content: space-between; align-items: baseline; padding: 5pt 0 3pt; margin-top: 2pt; border-bottom: 1px solid #36322C; }
   .resumen .grand .gl { font-size: 8.5pt; color: #36322C; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
   .resumen .grand .gv { font-size: 8.5pt; color: #36322C; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 8pt; color: #9B9182; margin-top: 4pt; }
+  .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 7.5pt; color: #78716A; margin-top: 3pt; }
 
   .obs { margin-top: 5mm; break-inside: avoid; }
   .obs-list { display: flex; flex-direction: column; gap: 2pt; margin-top: 4pt; }
@@ -421,8 +423,8 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
       ${sections}
 
       <div class="cierre">
-        <div>
-          <div class="blk-title">Forma de pago</div>
+        <div class="formas">
+          <div class="blk-title">Formas de pago</div>
           <div class="pagos">
             ${terms
               .map(
@@ -445,7 +447,7 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
       </div>
 
       <div class="obs">
-        <div class="blk-title">Observaciones</div>
+        <div class="blk-title">Observaciones generales</div>
         <div class="obs-list">
           ${OBSERVACIONES.map(
             (o, i) => `<div class="obs-item"><span class="obs-num">${i + 1}</span><span>${esc(o)}</span></div>`

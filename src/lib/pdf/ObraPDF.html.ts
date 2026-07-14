@@ -142,9 +142,9 @@ function assetDataUri(file: string): string {
 
 // ─── CSS — paleta y tipografía del Manual v2 (Claro) ────────────────────────
 // Colores exactos de la fuente de diseño:
-//   Tinta #38342D · Grafito/valores #645C51 · Taupe/labels #9D9385
-//   Piedra banda #756C5E · descripción #7D7365 · versión clara #AFA79C
-//   Banda/fila #EDEDEC · bordes #E9E8E6 (fila) #DEDCD9 (sección) #C6C0B8 (hairline)
+//   Tinta #36322C · Grafito/valores #625A4F · Taupe/labels #9B9182
+//   Piedra banda #736A5C · descripción #7D7365 · versión clara #ADA599
+//   Banda/fila #EDECEB · bordes #E7E6E4 (fila) #DCDAD6 (sección) #C4BEB5 (hairline)
 const CSS = `
   /* Márgenes por CSS (el route usa preferCSSPageSize): detalle con 14mm
      arriba/abajo (0 a los lados; el aire lateral lo pone el padding) y la
@@ -156,7 +156,7 @@ const CSS = `
   html, body {
     margin: 0; padding: 0;
     font-family: 'Nunito Sans', sans-serif;
-    color: #38342D;
+    color: #36322C;
     -webkit-font-smoothing: antialiased;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
@@ -184,27 +184,27 @@ const CSS = `
   .cover-top { display: flex; justify-content: space-between; align-items: flex-start; }
   .cover-logo { width: 31mm; height: auto; opacity: .72; }
   .cover-meta { text-align: right; font-family: 'Nunito Sans', sans-serif; }
-  .cover-meta .m1 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #9D9385; font-weight: 600; }
-  .cover-meta .m2 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #AFA79C; font-weight: 600; margin-top: 2.4pt; }
+  .cover-meta .m1 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #9B9182; font-weight: 600; }
+  .cover-meta .m2 { font-size: 6.2pt; letter-spacing: .3em; text-transform: uppercase; color: #ADA599; font-weight: 600; margin-top: 2.4pt; }
   .cover-mid { display: flex; flex-direction: column; align-items: flex-start; gap: 3.7mm; }
-  .cover-rule { width: 12mm; height: 1px; background: #C6C0B8; }
+  .cover-rule { width: 12mm; height: 1px; background: #C4BEB5; }
   /* max-width fuerza el quiebre a ~2 líneas como en la referencia
      ("Remodelación de / cocina y baños"), en vez de una sola línea larga. */
-  .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 25pt; line-height: 1.12; letter-spacing: .12em; text-transform: uppercase; color: #38342D; max-width: 105mm; }
-  .cover-sub { font-family: 'Spectral', serif; font-weight: 300; font-style: italic; font-size: 12pt; color: #9D9385; }
-  .cover-foot { display: flex; flex-direction: column; gap: 2.7mm; font-family: 'Nunito Sans', sans-serif; border-top: 1px solid #DEDCD9; padding-top: 4mm; }
+  .cover-title { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 25pt; line-height: 1.12; letter-spacing: .12em; text-transform: uppercase; color: #36322C; max-width: 105mm; }
+  .cover-sub { font-family: 'Spectral', serif; font-weight: 300; font-style: italic; font-size: 12pt; color: #9B9182; }
+  .cover-foot { display: flex; flex-direction: column; gap: 2.7mm; font-family: 'Nunito Sans', sans-serif; border-top: 1px solid #DCDAD6; padding-top: 4mm; }
   .cover-foot .row { display: flex; justify-content: space-between; align-items: baseline; }
-  .cover-foot .lbl { font-size: 5.8pt; letter-spacing: .16em; text-transform: uppercase; color: #9D9385; }
-  .cover-foot .val { font-size: 7.2pt; color: #38342D; }
+  .cover-foot .lbl { font-size: 5.8pt; letter-spacing: .16em; text-transform: uppercase; color: #9B9182; }
+  .cover-foot .val { font-size: 7.2pt; color: #36322C; }
 
   /* ── Detalle: encabezado ─────────────────────────────────── */
   .dhead-iso { width: 40px; height: auto; opacity: .55; margin-bottom: 4mm; display: block; }
   .dhead { display: flex; justify-content: space-between; align-items: flex-start; }
-  .dhead .kick { font-size: 5.3pt; letter-spacing: .26em; text-transform: uppercase; color: #9D9385; font-weight: 600; }
-  .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 15.5pt; line-height: 1.08; letter-spacing: .05em; text-transform: uppercase; color: #38342D; margin-top: 3pt; padding-right: 8mm; }
-  .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 6.7pt; color: #9D9385; margin-top: 3pt; }
+  .dhead .kick { font-size: 5.3pt; letter-spacing: .26em; text-transform: uppercase; color: #9B9182; font-weight: 600; }
+  .dhead .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 15.5pt; line-height: 1.08; letter-spacing: .05em; text-transform: uppercase; color: #36322C; margin-top: 3pt; padding-right: 8mm; }
+  .dhead .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 6.7pt; color: #9B9182; margin-top: 3pt; }
   .dhead .right { text-align: right; }
-  .dhead .ver { font-size: 5.3pt; letter-spacing: .28em; text-transform: uppercase; color: #AFA79C; font-weight: 600; }
+  .dhead .ver { font-size: 5.3pt; letter-spacing: .28em; text-transform: uppercase; color: #ADA599; font-weight: 600; }
   .dhead .doc { font-family: 'Hanken Grotesk', sans-serif; font-weight: 300; font-size: 13.5pt; line-height: 1.08; letter-spacing: .05em; text-transform: uppercase; color: #776E60; margin-top: 3pt; }
   /* "OBRA" en recuadro fino, alineado a la derecha, para que se note. */
   .dhead .docsub { display: inline-block; font-family: 'Hanken Grotesk', sans-serif; font-weight: 500; font-size: 6.4pt; letter-spacing: .28em; text-transform: uppercase; color: #6C6B6B; margin-top: 5pt; border: 0.5px solid #B2ACA0; padding: 2.5pt 6pt 2.5pt 9pt; }
@@ -214,30 +214,30 @@ const CSS = `
      · descripción ~50% · un 3.5 · cant 4.4 · p.unit 8 · total 9.1). La
      descripción ancha evita que el texto se apile en muchas líneas. */
   .grid { display: grid; grid-template-columns: 6% 20% 1fr 3.5% 4.4% 8% 9.1%; }
-  .hd { border-bottom: 0.3px solid #9D9385; padding: 3.5pt 0; margin-top: 7mm; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #776E60; font-weight: 700; }
+  .hd { border-bottom: 0.3px solid #9B9182; padding: 3.5pt 0; margin-top: 7mm; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9B9182; font-weight: 700; }
   .hd span:nth-child(4){ text-align:center; } .hd span:nth-child(5),.hd span:nth-child(6),.hd span:nth-child(7){ text-align:right; }
 
-  .cap { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #38342D; padding: 5pt 2pt 3pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }
+  .cap { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #36322C; padding: 5pt 2pt 3pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }
   /* El primer capítulo se acerca al encabezado de columnas (menos aire que
      entre capítulos, que conservan su separación). */
   .hd + .chpage .cap { margin-top: 1pt; }
-  .cap b { font-family: 'Hanken Grotesk', sans-serif; font-size: 5.75pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: #38342D; }
-  .cap span { font-size: 5.3pt; color: #9D9385; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+  .cap b { font-family: 'Hanken Grotesk', sans-serif; font-size: 5.75pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: #36322C; }
+  .cap span { font-size: 5.3pt; color: #9B9182; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
 
   /* La banda de zona y el título de capítulo no deben quedar solos al pie de
      una página (huérfanos): break-after:avoid los mantiene con su primera fila. */
-  .zone { display: flex; justify-content: space-between; align-items: baseline; background: #EDEDEC; padding: 2pt 10pt; margin-top: 1.5pt; font-size: 4.8pt; letter-spacing: .14em; text-transform: uppercase; color: #504A40; font-weight: 700; break-inside: avoid; break-after: avoid; }
-  .zone .zamt { font-size: 5.3pt; letter-spacing: 0; text-transform: none; font-weight: 400; color: #756C5E; font-variant-numeric: tabular-nums; }
+  .zone { display: flex; justify-content: space-between; align-items: baseline; background: #EDECEB; padding: 2pt 10pt; margin-top: 1.5pt; font-size: 4.8pt; letter-spacing: .14em; text-transform: uppercase; color: #504A40; font-weight: 700; break-inside: avoid; break-after: avoid; }
+  .zone .zamt { font-size: 5.3pt; letter-spacing: 0; text-transform: none; font-weight: 400; color: #736A5C; font-variant-numeric: tabular-nums; }
 
-  .r { align-items: start; padding: 2.5pt 0; border-bottom: 1px solid #E9E8E6; font-size: 5.3pt; page-break-inside: avoid; }
+  .r { align-items: start; padding: 2.5pt 0; border-bottom: 1px solid #E7E6E4; font-size: 5.3pt; page-break-inside: avoid; }
   .r span { line-height: 1.32; }
   .it { position: relative; padding-left: 9pt; color: #776E60; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .pt { color: #38342D; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; padding-right: 8pt; }
-  .ds { color: #645C51; padding-right: 10pt; }
-  .un { text-align: center; color: #9D9385; }
-  .ct { text-align: right; color: #645C51; font-variant-numeric: tabular-nums; }
-  .pu { text-align: right; color: #645C51; font-variant-numeric: tabular-nums; }
-  .tt { text-align: right; color: #38342D; font-variant-numeric: tabular-nums; }
+  .pt { color: #36322C; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; padding-right: 8pt; }
+  .ds { color: #625A4F; padding-right: 10pt; }
+  .un { text-align: center; color: #9B9182; }
+  .ct { text-align: right; color: #625A4F; font-variant-numeric: tabular-nums; }
+  .pu { text-align: right; color: #625A4F; font-variant-numeric: tabular-nums; }
+  .tt { text-align: right; color: #36322C; font-variant-numeric: tabular-nums; }
   .ds p { margin: 0; } .ds ul { margin: 0; padding-left: 12px; } .ds ol { margin: 0; padding-left: 14px; }
   .ds strong { font-weight: 700; } .ds em { font-style: italic; }
 
@@ -245,40 +245,46 @@ const CSS = `
   /* Marca de cambio: símbolo absoluto en un gutter a la IZQUIERDA del número.
      Así el número siempre arranca en la misma x (padding-left de .it) y queda
      alineado en columna, con o sin marca. */
-  .mk { position: absolute; left: 0; top: 0; color: #38342D; font-weight: 700; }
+  .mk { position: absolute; left: 0; top: 0; color: #36322C; font-weight: 700; }
   .mk .mkarrow { width: 4.5pt; height: 5.2pt; display: inline-block; vertical-align: -0.4pt; }
   /* Leyenda de símbolos, al PIE del detalle, italica muy sutil. */
-  .leyenda { margin-top: 4mm; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9D9385; }
-  .leyenda .mk { position: static; font-weight: 700; color: #756C5E; }
+  .leyenda { margin-top: 4mm; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9B9182; }
+  .leyenda .mk { position: static; font-weight: 700; color: #736A5C; }
 
   /* ── Cierre: formas de pago + cuadro ─────────────────────── */
-  .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 6mm; align-items: start; page-break-inside: avoid; }
+  /* Bottom-align: la columna Formas de pago (izq) cierra a la misma altura que
+     el Costo total de la derecha (corrección MJ). */
+  .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 6mm; align-items: end; page-break-inside: avoid; }
   /* "Formas de pago" / "Observaciones": tinta oscura, más grande y subrayado. */
-  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 7pt; letter-spacing: .2em; text-transform: uppercase; color: #38342D; font-weight: 400; border-bottom: 0.6px solid #C2BCB4; padding-bottom: 2.5pt; }
-  .pagos { margin-top: 6pt; border-top: 1px solid #DEDCD9; }
-  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 2.5pt 0; border-bottom: 1px solid #E9E8E6; }
+  .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 7pt; letter-spacing: .2em; text-transform: uppercase; color: #36322C; font-weight: 400; border-bottom: 0.6px solid #C2BCB4; padding-bottom: 2.5pt; }
+  /* Formas de pago: formato ÚNICO en los 3 PDF (corrección MJ) — bloque
+     secundario a 5,6pt, no debe competir con el cuadro de costos. El título va
+     scopeado a .formas para no achicar el de Observaciones. */
+  .pagos { margin-top: 5pt; border-top: 1px solid #DCDAD6; }
+  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 2pt 0; border-bottom: 1px solid #E7E6E4; }
   .pagos .row:last-child { border-bottom: none; }
-  .pagos .s { font-size: 7pt; color: #38342D; }
-  .pagos .p { font-size: 7pt; color: #756C5E; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .cuadro { border-top: 1.5px solid #38342D; }
-  .cuadro .row { display: grid; grid-template-columns: 1fr 30px 92px; align-items: baseline; padding: 2pt 0; border-bottom: 1px solid #DEDCD9; }
-  .cuadro .cl { font-size: 7pt; color: #645C51; }
-  .cuadro .cl.strong { color: #38342D; font-weight: 600; }
-  .cuadro .cp { text-align: right; font-size: 6pt; color: #9D9385; font-variant-numeric: tabular-nums; }
-  .cuadro .cv { text-align: right; font-size: 7pt; color: #645C51; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .cuadro .cv.strong { color: #38342D; font-weight: 600; }
+  .pagos .s { font-size: 5.6pt; color: #36322C; }
+  .pagos .p { font-size: 5.6pt; color: #736A5C; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .formas .blk-title { font-size: 5.6pt; padding-bottom: 2pt; }
+  .cuadro { border-top: 1.5px solid #36322C; }
+  .cuadro .row { display: grid; grid-template-columns: 1fr 30px 92px; align-items: baseline; padding: 2pt 0; border-bottom: 1px solid #DCDAD6; }
+  .cuadro .cl { font-size: 7pt; color: #625A4F; }
+  .cuadro .cl.strong { color: #36322C; font-weight: 600; }
+  .cuadro .cp { text-align: right; font-size: 6pt; color: #9B9182; font-variant-numeric: tabular-nums; }
+  .cuadro .cv { text-align: right; font-size: 7pt; color: #625A4F; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cuadro .cv.strong { color: #36322C; font-weight: 600; }
   /* Costo total: mismo trato que el total de ambiente de Artefactos — fila en
      negrita con línea negra ABAJO (no arriba), sin número gigante. */
-  .cuadro .row.grand { grid-template-columns: 1fr 110px; border-top: none; border-bottom: 1px solid #38342D; padding-top: 5pt; padding-bottom: 3pt; margin-top: 2pt; }
-  .cuadro .row.grand .cl { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #38342D; }
-  .cuadro .row.grand .cv { font-size: 8.5pt; font-weight: 700; color: #38342D; }
-  .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9D9385; margin-top: 3pt; }
+  .cuadro .row.grand { grid-template-columns: 1fr 110px; border-top: none; border-bottom: 1px solid #36322C; padding-top: 5pt; padding-bottom: 3pt; margin-top: 2pt; }
+  .cuadro .row.grand .cl { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #36322C; }
+  .cuadro .row.grand .cv { font-size: 8.5pt; font-weight: 700; color: #36322C; }
+  .iva-note { text-align: right; font-family: 'Spectral', serif; font-style: italic; font-size: 6.5pt; color: #9B9182; margin-top: 3pt; }
 
   /* ── Observaciones ───────────────────────────────────────── */
   .obs { margin-top: 3mm; page-break-inside: avoid; }
   .obs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5pt 14mm; margin-top: 5pt; }
-  .obs-item { display: flex; gap: 8pt; font-size: 6pt; line-height: 1.22; color: #6C6B6B; }
-  .obs-num { color: #948E85; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .obs-item { display: flex; gap: 8pt; font-size: 6.3pt; line-height: 1.22; color: #6C6B6B; }
+  .obs-num { color: #948E85; font-variant-numeric: tabular-nums; flex-shrink: 0; font-weight: 600; }
 `;
 
 // ─── Renderer ─────────────────────────────────────────────────────────────
@@ -458,7 +464,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
       ${tableRows}
 
       <div class="cierre">
-        <div>
+        <div class="formas">
           <div class="blk-title">Formas de pago</div>
           <div class="pagos">
             ${terms
@@ -477,7 +483,6 @@ export function renderObraHTML(data: ObraHTMLInput): string {
             <div class="row"><span class="cl">IVA</span><span class="cp">19%</span><span class="cv">${fmtMoney(iva)}</span></div>
             <div class="row grand"><span class="cl">Costo total</span><span class="cv">${fmtMoney(total)}</span></div>
           </div>
-          <div class="iva-note">Valor IVA incluido</div>
         </div>
       </div>
 

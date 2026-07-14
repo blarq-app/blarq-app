@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-13 — Banco: el estado de una factura cuenta pago + Nota de Crédito
+
+- **Qué.** `recomputeInvoiceStatus` (la función que decide si una factura recibida está pendiente/parcial/pagada) ahora suma, además de los pagos del banco, las **Notas de Crédito aplicadas** (compensationType "other_invoice"). Antes miraba solo los pagos → creía "descuadradas" a 27 facturas que en realidad estaban bien (pago parcial + NC que cubre el resto, ej. SODIMAC pago $40k + NC $148k sobre $188k).
+- **Por qué.** Al desasignar/reasignar un pago de una de esas facturas, el recompute bajaba mal el estado a "pendiente" perdiendo la NC. Es el hallazgo §3.5 de la auditoría de banco ("el estado no tenía una única fuente de verdad"). Con el cambio, el estado baja bien: cae solo hasta donde la NC deja de cubrir. Mismo criterio en `bumpInvoiceStatusUpwards` (sync SII).
+- **Alcance.** Solo `src/lib/banco/invoicePayments.ts`. NO toca `metrics.ts` ni mueve datos: el estado guardado de cada factura no cambia hasta que haya un evento de pago (asignar/desasignar). Verificado sobre la base viva: la NC rescata 25 facturas que la lógica vieja habría bajado mal; 0 facturas pago+NC se rompen.
+- **Nota.** NO cubre la retención de una BHE pagada al líquido ni pagos manuales fuera del banco (no hay dato que los respalde): esas, si se les quita el pago, sí bajan — se reajustan a mano. Diagnóstico: `scripts/diag-factura-status-descuadre.ts` + regresión `scripts/test-recompute-status-nc.ts` (ambos solo lectura, leen `.env.prod` directo por §4.9). No hubo corrección de datos: 0 facturas "stale" reales (el caso SODIMAC F-145362306 ya lo había arreglado MJ a mano).
+
 ## 2026-07-09 — BLARQ: sueldos y Previred se imputan al mes que corresponde
 
 - **Qué.** En el Estado de Resultados de BLARQ, sueldos y Previred se agrupan por el **mes que corresponde**, no por la fecha de la transferencia. Antes, el sueldo de junio pagado el 1-jul caía en julio y la planilla Previred de mayo pagada en junio dejaba mayo vacío y junio doble.

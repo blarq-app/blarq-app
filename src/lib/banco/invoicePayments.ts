@@ -8,12 +8,43 @@
 import { prisma } from "@/lib/prisma";
 
 /**
- * Recalcula el `status` y `paidAt` de una factura a partir de sus
- * InvoicePayment. Llamar después de crear/borrar/modificar pagos.
+ * Suma de las Notas de Crédito aplicadas a una factura para REDUCIR su saldo
+ * (compensationType "other_invoice" → appliedToInvoiceId apunta a la factura).
+ * Devuelve un monto positivo (las NC se guardan con signo variable, se usa abs).
  *
- *   pendiente : 0 imputado
- *   parcial   : 0 < imputado < totalAmount
- *   pagada    : imputado >= totalAmount   (paidAt = max(date) de los movs)
+ * OJO: solo cuentan las "other_invoice" (el proveedor aplica el crédito a esta
+ * factura, bajando lo que debés). Las NC de devolución (cash_refund /
+ * bank_refund) NO ponen appliedToInvoiceId → no entran acá, porque esas te
+ * devuelven la plata, no reducen el saldo de la factura.
+ */
+async function appliedCreditNotesTotal(invoiceId: string): Promise<number> {
+  const ncs = await prisma.invoice.findMany({
+    where: { tipoDoc: 61, appliedToInvoiceId: invoiceId },
+    select: { totalAmount: true },
+  });
+  return ncs.reduce((s, n) => s + Math.abs(n.totalAmount), 0);
+}
+
+/**
+ * Recalcula el `status` y `paidAt` de una factura a partir de lo que la SALDA:
+ * los InvoicePayment (pagos del banco) MÁS las Notas de Crédito aplicadas.
+ * Llamar después de crear/borrar/modificar pagos.
+ *
+ *   pendiente : nada saldado
+ *   parcial   : 0 < saldado < totalAmount
+ *   pagada    : saldado >= totalAmount   (paidAt = max(date) de los pagos)
+ *
+ * Por qué cuenta las NC (fix 2026-07-13, §3.5 auditoría banco): el saldo real de
+ * una factura recibida no es solo lo que pagaste por banco — una Nota de Crédito
+ * "other_invoice" también la salda. Muchas facturas están "pagada" con un pago
+ * parcial + una NC que cubre el resto (ej. SODIMAC: pago $40k + NC $148k sobre
+ * $188k). Si el recompute mirara solo los pagos, al desasignar/reasignar bajaría
+ * mal el estado a "parcial"/"pendiente" perdiendo la NC. Contando la NC, el
+ * estado baja bien: cae solo hasta donde la NC deja de cubrir.
+ *
+ * NO cubre la retención de una BHE pagada al líquido ni pagos fuera del banco
+ * (no hay dato que lo respalde): esas, si se les desasigna el pago, sí bajan a
+ * parcial/pendiente. Es aceptable — son manuales y MJ las reajusta a mano.
  *
  * Tolera $1 de redondeo (CLP no tiene decimales pero la API devuelve floats).
  */
@@ -36,18 +67,21 @@ export async function recomputeInvoiceStatus(invoiceId: string) {
   });
 
   const sumApplied = payments.reduce((s, p) => s + p.amountApplied, 0);
+  const ncApplied = await appliedCreditNotesTotal(invoiceId);
+  const settled = sumApplied + ncApplied;
 
   let nextStatus: "pendiente" | "parcial" | "pagada" = "pendiente";
   let paidAt: Date | null = null;
 
-  if (sumApplied >= invoice.totalAmount - 1) {
+  if (settled >= invoice.totalAmount - 1) {
     nextStatus = "pagada";
-    // paidAt = fecha del último movimiento que cerró la factura.
+    // paidAt = fecha del último movimiento que cerró la factura (si hubo pago
+    // por banco; si la salda solo la NC, no hay fecha de pago → queda null).
     paidAt = payments.reduce<Date | null>((latest, p) => {
       const d = p.bankMovement.date;
       return !latest || d > latest ? d : latest;
     }, null);
-  } else if (sumApplied > 0) {
+  } else if (settled > 0) {
     nextStatus = "parcial";
   }
 
@@ -124,16 +158,18 @@ export async function bumpInvoiceStatusUpwards(invoiceId: string): Promise<boole
     select: { amountApplied: true, bankMovement: { select: { date: true } } },
   });
   const sumApplied = payments.reduce((s, p) => s + p.amountApplied, 0);
+  // Mismo criterio de "saldado" que recomputeInvoiceStatus: pago + NC aplicadas.
+  const settled = sumApplied + (await appliedCreditNotesTotal(invoiceId));
 
   let derived: "pendiente" | "parcial" | "pagada" = "pendiente";
   let paidAt: Date | null = null;
-  if (sumApplied >= invoice.totalAmount - 1) {
+  if (settled >= invoice.totalAmount - 1) {
     derived = "pagada";
     paidAt = payments.reduce<Date | null>((latest, p) => {
       const d = p.bankMovement.date;
       return !latest || d > latest ? d : latest;
     }, null);
-  } else if (sumApplied > 0) {
+  } else if (settled > 0) {
     derived = "parcial";
   }
 

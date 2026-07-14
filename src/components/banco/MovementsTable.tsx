@@ -256,12 +256,12 @@ export default function MovementsTable({
                           interna) se mantiene. */}
                       <td className="px-4 py-2 text-xs">
                         {isInternal ? (
-                          // Interna: etiqueta + selectores de obra/concepto (son
+                          // Traspaso: etiqueta + selectores de obra/concepto (son
                           // los que atribuyen el traspaso a una obra — funcionan
                           // igual que antes).
                           <div className="space-y-1">
                             <span className="inline-block text-[9px] uppercase tracking-wide bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
-                              Interna
+                              Traspaso
                             </span>
                             <div className="flex items-center gap-1.5">
                               <InternalTransferProjectSelect

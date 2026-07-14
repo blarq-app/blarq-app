@@ -7,7 +7,6 @@ import MovementsSearch from "@/components/banco/MovementsSearch";
 import MovementsMontoSearch from "@/components/banco/MovementsMontoSearch";
 import MovementsAdvancedFilters from "@/components/banco/MovementsAdvancedFilters";
 import MovementsTable from "@/components/banco/MovementsTable";
-import RespaldoFilter from "@/components/banco/RespaldoFilter";
 import { SOCIO_RUTS, SOCIO_GLOSA_HINTS } from "@/lib/banco/socios";
 
 type SearchParams = {
@@ -243,7 +242,7 @@ export default async function MovimientosPage({
   if (q) statsWhere.OR = where.OR;
   if (andFilters.length > 0) statsWhere.AND = andFilters;
 
-  const [movements, accounts, statusCounts, ingresos, egresos, parcialMovs, projects, categories] = await Promise.all([
+  const [movements, accounts, statusCounts, ingresos, egresos, parcialMovs, projects, categories, boletaCount, internacionalCount] = await Promise.all([
     prisma.bankMovement.findMany({
       where,
       orderBy: { date: "desc" },
@@ -307,6 +306,16 @@ export default async function MovimientosPage({
         parent: { select: { name: true } },
       },
       orderBy: { sortOrder: "asc" },
+    }),
+    // ¿Existe al menos un gasto con boleta / internacional? Las pastillas de esos
+    // respaldos solo se muestran cuando hay (hoy 0; se llenan al usar "Registrar
+    // gasto"). Conteo GLOBAL a propósito — que la pastilla no aparezca/desaparezca
+    // según los otros filtros activos.
+    prisma.bankMovement.count({
+      where: { payments: { some: { invoice: { origin: "gasto_boleta" } } } },
+    }),
+    prisma.bankMovement.count({
+      where: { payments: { some: { invoice: { origin: "gasto_internacional" } } } },
     }),
   ]);
 
@@ -522,14 +531,33 @@ export default async function MovimientosPage({
           </div>
         </div>
 
-        {/* Respaldo (naturaleza / documento) + Tipo (ingreso/egreso) + socios.
-            El Respaldo cubre lo que antes eran estados de naturaleza (sin
-            factura → gasto propio, interna, neto cero → devolución) y agrega el
-            filtro por documento (factura / boleta / internacional / pago sin
-            respaldo). */}
+        {/* Respaldo (naturaleza / documento) en pastillas, igual que Cuenta y
+            Estado (antes era el único filtro-desplegable — inconsistente). Las
+            opciones raras/vacías se curan: "Devolución" (neto cero, ~6 casos) se
+            saca de la barra — esos movimientos igual aparecen dentro de "Pagado"
+            y su etiqueta se ve en la columna Respaldo. "Boleta" e "Internacional"
+            solo se muestran cuando existe al menos un gasto de ese tipo (hoy 0;
+            se llenan al usar "Registrar gasto"). Los valores de la URL siguen
+            siendo los mismos (?respaldo=…), el switch de arriba los mapea igual. */}
         <div className="flex items-center gap-2 flex-wrap">
           <FilterRowLabel>Respaldo</FilterRowLabel>
-          <RespaldoFilter value={sp.respaldo ?? ""} />
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 flex-wrap">
+            <FilterLink sp={sp} field="respaldo" value={undefined} label="Todos" />
+            <FilterLink sp={sp} field="respaldo" value="factura" label="Factura" />
+            {boletaCount > 0 && (
+              <FilterLink sp={sp} field="respaldo" value="boleta" label="Boleta" />
+            )}
+            {internacionalCount > 0 && (
+              <FilterLink sp={sp} field="respaldo" value="internacional" label="Internacional" />
+            )}
+            <FilterLink sp={sp} field="respaldo" value="sin_respaldo" label="Pago sin respaldo" />
+            <FilterLink sp={sp} field="respaldo" value="gasto_propio" label="Gasto BLARQ" />
+            <FilterLink sp={sp} field="respaldo" value="interna" label="Traspaso" />
+          </div>
+        </div>
+
+        {/* Tipo (ingreso/egreso) + filtro de revisión "transferencias a socios". */}
+        <div className="flex items-center gap-2 flex-wrap">
           <FilterRowLabel>Tipo</FilterRowLabel>
           <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
             <FilterLink sp={sp} field="tipo" value={undefined} label="Todos" />

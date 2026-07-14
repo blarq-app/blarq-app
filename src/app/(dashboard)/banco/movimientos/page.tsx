@@ -7,11 +7,17 @@ import MovementsSearch from "@/components/banco/MovementsSearch";
 import MovementsMontoSearch from "@/components/banco/MovementsMontoSearch";
 import MovementsAdvancedFilters from "@/components/banco/MovementsAdvancedFilters";
 import MovementsTable from "@/components/banco/MovementsTable";
+import RespaldoFilter from "@/components/banco/RespaldoFilter";
 import { SOCIO_RUTS, SOCIO_GLOSA_HINTS } from "@/lib/banco/socios";
 
 type SearchParams = {
   accountId?: string;
+  // Estado (resolución): "pendiente" | "parcial" | "pagado" (o valores DB
+  // legacy: sin_asignar/conciliado/sin_factura/interno/neto_cero, para URLs viejos).
   status?: string;
+  // Respaldo (naturaleza/documento): factura | boleta | internacional |
+  // sin_respaldo | gasto_propio | interna | devolucion.
+  respaldo?: string;
   q?: string;
   // Drill-down a UN movimiento puntual (link "ver" desde el historial de pagos
   // de una factura). No es un filtro persistente: cualquier tab/búsqueda lo
@@ -48,17 +54,8 @@ const IMPUTACION_CATEGORY_OPTIONS: { value: string; label: string }[] = [
   { value: "otro_sin_factura", label: "Otro" },
 ];
 
-// Labels alineados con los de facturas — "pendiente / parcial / conciliado".
-// El campo `status` en BD sigue siendo `sin_asignar` por compat, pero en UI
-// MJ ve "Pendiente" para que el lenguaje coincida con el de facturas.
-const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
-  sin_asignar: { label: "Pendiente", tone: "bg-amber-100 text-amber-800" },
-  parcial: { label: "Parcial", tone: "bg-blue-100 text-blue-800" },
-  conciliado: { label: "Conciliado", tone: "bg-green-100 text-green-800" },
-  sin_factura: { label: "Sin factura", tone: "bg-gray-100 text-gray-700" },
-  interno: { label: "Transfer interna", tone: "bg-gray-100 text-gray-500" },
-  neto_cero: { label: "Neto cero", tone: "bg-gray-100 text-gray-500" },
-};
+// Estado y Respaldo se derivan ahora en src/lib/banco/movementDisplay.ts
+// (el viejo STATUS_LABEL de 7 estados se dividió en los dos ejes).
 
 const CATEGORY_LABEL: Record<string, string> = {
   sueldo: "Sueldo",
@@ -96,9 +93,22 @@ export default async function MovimientosPage({
   // de "sin filtro" (lo usan links de drill-down ?status=all). Cualquier otro
   // valor filtra por ese status. Las transferencias internas igual aparecen
   // solo en "Todos" o en su propia pestaña (las demás filtran por su estado).
-  const effectiveStatus = sp.estado || sp.status;
-  if (effectiveStatus && effectiveStatus !== "all") {
-    where.status = effectiveStatus;
+  // Estado (resolución): las pestañas Pendiente / Parcial / Pagado se mapean a
+  // los status de la BD. "Pagado" agrupa todo lo ya resuelto (conciliado, sin
+  // factura, interno, neto cero) — la naturaleza de cada uno se ve en la
+  // columna/filtro "Respaldo". Se aceptan también los valores DB crudos
+  // (URLs viejos: sin_asignar, conciliado, etc.). sp.estado (avanzado) pisa.
+  const estadoParam = sp.estado || sp.status;
+  if (estadoParam && estadoParam !== "all") {
+    if (estadoParam === "pendiente" || estadoParam === "sin_asignar") {
+      where.status = "sin_asignar";
+    } else if (estadoParam === "parcial") {
+      where.status = "parcial";
+    } else if (estadoParam === "pagado") {
+      where.status = { in: ["conciliado", "sin_factura", "interno", "neto_cero"] };
+    } else {
+      where.status = estadoParam;
+    }
   }
   if (q) {
     // Búsqueda libre: descripción + nombre contraparte + RUT contraparte.
@@ -175,6 +185,38 @@ export default async function MovimientosPage({
   if (sp.imputacion) {
     andFilters.push({ category: sp.imputacion });
   }
+  // Respaldo (naturaleza / documento). Reemplaza los estados "sin factura /
+  // transfer interna / neto cero" que antes vivían en las pestañas de Estado, y
+  // agrega el filtro por documento (factura / boleta / internacional / pago sin
+  // respaldo) según el origin de la factura imputada. Va a andFilters para
+  // combinarse con el Estado sin pisar where.status.
+  if (sp.respaldo) {
+    switch (sp.respaldo) {
+      case "gasto_propio":
+        andFilters.push({ status: "sin_factura" });
+        break;
+      case "interna":
+        andFilters.push({ status: "interno" });
+        break;
+      case "devolucion":
+        andFilters.push({ status: "neto_cero" });
+        break;
+      case "factura":
+        andFilters.push({
+          payments: { some: { invoice: { origin: { in: ["sii_automatica", "manual"] } } } },
+        });
+        break;
+      case "boleta":
+        andFilters.push({ payments: { some: { invoice: { origin: "gasto_boleta" } } } });
+        break;
+      case "internacional":
+        andFilters.push({ payments: { some: { invoice: { origin: "gasto_internacional" } } } });
+        break;
+      case "sin_respaldo":
+        andFilters.push({ payments: { some: { invoice: { origin: "sin_respaldo" } } } });
+        break;
+    }
+  }
   if (andFilters.length > 0) where.AND = andFilters;
 
   // Cantidad de registros (default 500). "all" = sin límite efectivo (usamos
@@ -211,7 +253,11 @@ export default async function MovimientosPage({
         payments: {
           include: {
             invoice: {
-              select: { id: true, folioNumber: true, businessName: true, totalAmount: true },
+              // origin distingue el tipo de respaldo del pago: sii_automatica /
+              // manual = factura real; sin_respaldo = pago a obra sin documento;
+              // gasto_boleta / gasto_internacional = gasto registrado. Se usa
+              // para derivar la columna "Respaldo".
+              select: { id: true, folioNumber: true, businessName: true, totalAmount: true, origin: true },
             },
           },
         },
@@ -277,6 +323,16 @@ export default async function MovimientosPage({
   for (const r of ingresos) ingresoByStatus[r.status] = r._sum.amount ?? 0;
   const egresoByStatus: Record<string, number> = {};
   for (const r of egresos) egresoByStatus[r.status] = Math.abs(r._sum.amount ?? 0);
+
+  // Conteos para las pestañas de Estado (Pendiente / Parcial / Pagado).
+  // "Pagado" agrupa todo lo resuelto (conciliado + sin factura + interno + neto cero).
+  const countPendiente = countByStatus.sin_asignar ?? 0;
+  const countParcial = countByStatus.parcial ?? 0;
+  const countPagado =
+    (countByStatus.conciliado ?? 0) +
+    (countByStatus.sin_factura ?? 0) +
+    (countByStatus.interno ?? 0) +
+    (countByStatus.neto_cero ?? 0);
 
   const sinAsignar = (countByStatus.sin_asignar ?? 0) + (countByStatus.parcial ?? 0);
   // Cuántos movs son candidatos a auto-conciliarse contra factura: están
@@ -363,6 +419,7 @@ export default async function MovimientosPage({
         folioNumber: p.invoice.folioNumber,
         businessName: p.invoice.businessName,
         totalAmount: p.invoice.totalAmount,
+        origin: p.invoice.origin,
       },
     })),
   }));
@@ -451,29 +508,28 @@ export default async function MovimientosPage({
           </div>
         </div>
 
-        {/* Estado — cómo está resuelto el movimiento. Pestañas separadas
-            (Pendiente, Parcial, ...), sin una combinada. */}
+        {/* Estado — SOLO resolución: Pendiente / Parcial / Pagado. Los que
+            antes eran estados por naturaleza (Sin factura / Transfer interna /
+            Neto cero) se movieron al filtro "Respaldo". "Pagado" agrupa todo lo
+            ya resuelto. */}
         <div className="flex items-center gap-2 flex-wrap">
           <FilterRowLabel>Estado</FilterRowLabel>
-          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 flex-wrap">
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
             <FilterLink sp={sp} field="status" value={undefined} label="Todos" />
-            {Object.entries(STATUS_LABEL).map(([key, { label }]) => (
-              <FilterLink
-                key={key}
-                sp={sp}
-                field="status"
-                value={key}
-                label={`${label}${countByStatus[key] ? ` (${countByStatus[key]})` : ""}`}
-              />
-            ))}
+            <FilterLink sp={sp} field="status" value="pendiente" label={`Pendiente${countPendiente ? ` (${countPendiente})` : ""}`} />
+            <FilterLink sp={sp} field="status" value="parcial" label={`Parcial${countParcial ? ` (${countParcial})` : ""}`} />
+            <FilterLink sp={sp} field="status" value="pagado" label={`Pagado${countPagado ? ` (${countPagado})` : ""}`} />
           </div>
         </div>
 
-        {/* Tipo (ingreso / egreso) + atajo de socios. Las flechas ↗/↘ son las
-            mismas de las tarjetas de arriba. "Transfer interna" no va acá: ya
-            tiene su propia pestaña de estado. El toggle de socios ve solo lo
-            transferido a MJ/JT para confirmar sueldos o re-imputar. */}
+        {/* Respaldo (naturaleza / documento) + Tipo (ingreso/egreso) + socios.
+            El Respaldo cubre lo que antes eran estados de naturaleza (sin
+            factura → gasto propio, interna, neto cero → devolución) y agrega el
+            filtro por documento (factura / boleta / internacional / pago sin
+            respaldo). */}
         <div className="flex items-center gap-2 flex-wrap">
+          <FilterRowLabel>Respaldo</FilterRowLabel>
+          <RespaldoFilter value={sp.respaldo ?? ""} />
           <FilterRowLabel>Tipo</FilterRowLabel>
           <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
             <FilterLink sp={sp} field="tipo" value={undefined} label="Todos" />
@@ -516,7 +572,6 @@ export default async function MovimientosPage({
 
       <MovementsTable
         movements={movementRows}
-        statusLabels={STATUS_LABEL}
         categoryLabels={CATEGORY_LABEL}
         blarqRutDigits={BLARQ_RUT_DIGITS}
         projects={projects}

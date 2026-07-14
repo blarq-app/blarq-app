@@ -10,6 +10,7 @@ import InternalTransferConceptoSelect from "./InternalTransferConceptoSelect";
 import SalaryPeriodSelect from "./SalaryPeriodSelect";
 import CategoryInlineSelect from "./CategoryInlineSelect";
 import ImputacionColumnFilter from "./ImputacionColumnFilter";
+import { deriveEstado, derivePaymentRespaldo } from "@/lib/banco/movementDisplay";
 
 type Payment = {
   id: string;
@@ -20,6 +21,9 @@ type Payment = {
     folioNumber: string | null;
     businessName: string | null;
     totalAmount: number;
+    // Distingue factura real (sii_automatica/manual) de pago sin respaldo /
+    // boleta / internacional. Se usa para derivar la columna "Respaldo".
+    origin: string | null;
   };
 };
 
@@ -73,7 +77,6 @@ function toMenuMovement(m: MovementRow): MenuMovement {
 // de la fila es idéntico a lo que antes renderizaba el server component.
 export default function MovementsTable({
   movements,
-  statusLabels,
   categoryLabels,
   blarqRutDigits,
   projects,
@@ -83,7 +86,6 @@ export default function MovementsTable({
   imputacionFilterValue,
 }: {
   movements: MovementRow[];
-  statusLabels: Record<string, { label: string; tone: string }>;
   categoryLabels: Record<string, string>;
   blarqRutDigits: string;
   projects: { id: string; name: string; numeroProyecto: number | null }[];
@@ -156,8 +158,9 @@ export default function MovementsTable({
                   <th className="text-left px-4 py-2 w-24">Cuenta</th>
                   <th className="text-left px-4 py-2">Descripción</th>
                   <th className="text-right px-4 py-2">Monto</th>
+                  <th className="text-left px-4 py-2 w-28">Estado</th>
                   <th className="text-left px-4 py-2 w-72 align-top">
-                    Imputación
+                    Respaldo
                     {showImputacionFilter && (
                       <ImputacionColumnFilter
                         value={imputacionFilterValue}
@@ -165,7 +168,6 @@ export default function MovementsTable({
                       />
                     )}
                   </th>
-                  <th className="text-left px-4 py-2 w-32">Estado</th>
                   <th className="px-4 py-2 w-44 text-right">Acción</th>
                 </tr>
               </thead>
@@ -233,65 +235,95 @@ export default function MovementsTable({
                           </div>
                         )}
                       </td>
+                      {/* ── ESTADO: solo resolución (Pendiente / Parcial /
+                          Pagado). Derivado del status; ver movementDisplay.ts. */}
+                      <td className="px-4 py-2">
+                        {(() => {
+                          const est = deriveEstado(m.status);
+                          return (
+                            <span
+                              className={`text-[9px] uppercase tracking-wide whitespace-nowrap px-1.5 py-0.5 rounded ${est.tone}`}
+                            >
+                              {est.label}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      {/* ── RESPALDO: qué es / con qué documento. Reemplaza la
+                          vieja columna "Imputación": el folio fantasma F-SR- de
+                          los pagos sin respaldo se ESCONDE y en su lugar sale una
+                          etiqueta limpia. Lo editable (categoría, mes, obra
+                          interna) se mantiene. */}
                       <td className="px-4 py-2 text-xs">
                         {isInternal ? (
-                          // Transferencia interna Operativa↔Sueldos: dejamos
-                          // elegir la obra a la que se concilia (cuánta utilidad
-                          // se traspasó por obra). Va PRIMERO en la cadena
-                          // porque estos movs traen category="transfer_interno"
-                          // y si no, caerían en la rama de categoría (texto gris).
-                          <div className="flex items-center gap-1.5">
-                            <InternalTransferProjectSelect
-                              movimientoId={m.id}
-                              projectId={m.projectId}
-                              projects={projects}
-                            />
-                            <InternalTransferConceptoSelect
-                              movimientoId={m.id}
-                              concepto={m.internalConcepto}
-                            />
+                          // Interna: etiqueta + selectores de obra/concepto (son
+                          // los que atribuyen el traspaso a una obra — funcionan
+                          // igual que antes).
+                          <div className="space-y-1">
+                            <span className="inline-block text-[9px] uppercase tracking-wide bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                              Interna
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <InternalTransferProjectSelect
+                                movimientoId={m.id}
+                                projectId={m.projectId}
+                                projects={projects}
+                              />
+                              <InternalTransferConceptoSelect
+                                movimientoId={m.id}
+                                concepto={m.internalConcepto}
+                              />
+                            </div>
                           </div>
+                        ) : m.status === "neto_cero" ? (
+                          <span className="inline-block text-[9px] uppercase tracking-wide bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                            Devolución
+                          </span>
                         ) : m.payments.length > 0 ? (
-                          <div className="space-y-0.5">
-                            {m.payments.slice(0, 2).map((p) => (
-                              <Link
-                                key={p.id}
-                                // Va a la lista de facturas filtrada por el ID
-                                // EXACTO de la factura imputada (no al formulario
-                                // de edición): MJ prefiere ver la factura en la
-                                // lista, con su estado y el botón de PDF. Se usa
-                                // el invoiceId —no el folio— porque el folio por
-                                // texto matchea por "contiene": buscar "3322"
-                                // también traía "11332256". Con el id exacto
-                                // aparece solo la factura correcta.
-                                href={`/facturas?invoiceId=${p.invoice.id}`}
-                                className="block text-gray-700 hover:text-gray-900 hover:underline truncate"
-                              >
-                                F-{p.invoice.folioNumber} (
-                                {formatCLP(p.amountApplied)})
-                              </Link>
-                            ))}
-                            {m.payments.length > 2 && (
-                              <span className="text-[10px] text-gray-400">
-                                + {m.payments.length - 2} más
-                              </span>
-                            )}
-                            {overImputed && (
-                              <span
-                                className="inline-block text-[9px] uppercase tracking-wide bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded"
-                                title={`Este movimiento tiene ${formatCLP(sumApplied)} imputados, más que su monto de ${formatCLP(Math.abs(m.amount))}. Revisá las imputaciones.`}
-                              >
-                                ⚠ imputado de más {formatCLP(sumApplied - Math.abs(m.amount))}
-                              </span>
-                            )}
-                          </div>
+                          (() => {
+                            const resp = derivePaymentRespaldo(
+                              m.payments.map((p) => p.invoice.origin),
+                              m.payments[0].invoice.folioNumber
+                            );
+                            return (
+                              <div className="space-y-0.5">
+                                {resp.esFacturaReal ? (
+                                  // Factura real: la etiqueta linkea a la factura
+                                  // (como antes se podía clickear el folio).
+                                  <Link
+                                    href={`/facturas?invoiceId=${m.payments[0].invoice.id}`}
+                                    className="inline-block text-[9px] uppercase tracking-wide bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded hover:bg-gray-200"
+                                  >
+                                    {resp.label}
+                                  </Link>
+                                ) : (
+                                  // Pago sin respaldo / boleta / internacional: sin
+                                  // folio fantasma, solo la etiqueta limpia.
+                                  <span className="inline-block text-[9px] uppercase tracking-wide bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                                    {resp.label}
+                                  </span>
+                                )}
+                                {m.payments.length > 1 && (
+                                  <span className="block text-[10px] text-gray-400 tabular-nums">
+                                    {m.payments.length} pagos · {formatCLP(sumApplied)}
+                                  </span>
+                                )}
+                                {overImputed && (
+                                  <span
+                                    className="inline-block text-[9px] uppercase tracking-wide bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded"
+                                    title={`Este movimiento tiene ${formatCLP(sumApplied)} imputados, más que su monto de ${formatCLP(Math.abs(m.amount))}. Revisá las imputaciones.`}
+                                  >
+                                    imputado de más {formatCLP(sumApplied - Math.abs(m.amount))}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()
                         ) : m.category ? (
                           <span className="text-gray-600">
-                            {/* Sin factura: la categoría se puede corregir en
-                                un paso desde acá (ej. "Sueldo" → "Préstamo
-                                socio"). En sin_asignar ("a confirmar") se deja
-                                el texto — ahí se ratifica con el menú de la
-                                columna Acción. */}
+                            {/* Gasto propio sin factura: la categoría se corrige
+                                inline (ej. "Sueldo" → "Préstamo socio"). En
+                                sin_asignar ("a confirmar") se deja el texto. */}
                             {m.status === "sin_factura" ? (
                               <CategoryInlineSelect
                                 movimientoId={m.id}
@@ -300,11 +332,9 @@ export default function MovementsTable({
                               />
                             ) : (
                               <>
-                                {categoryLabels[m.category] ?? m.category}
-                                {/* Sugerencia sin confirmar: un movimiento con
-                                    categoría pero todavía "sin_asignar" es una
-                                    propuesta del import (ej. sueldo a socio) que
-                                    MJ aún no ratificó — no cuenta como archivado. */}
+                                <span className="uppercase tracking-wide">
+                                  {categoryLabels[m.category] ?? m.category}
+                                </span>
                                 {m.status === "sin_asignar" && (
                                   <span className="ml-1 text-[9px] uppercase tracking-wide bg-amber-100 text-amber-800 px-1 py-0.5 rounded align-middle whitespace-nowrap">
                                     a confirmar
@@ -312,9 +342,6 @@ export default function MovementsTable({
                                 )}
                               </>
                             )}
-                            {/* A qué mes corresponde el sueldo/previred, para
-                                que el Estado de Resultados de BLARQ lo agrupe en
-                                el mes correcto (no el de la transferencia). */}
                             {(m.category === "sueldo" || m.category === "previred") && (
                               <span className="mt-1 block">
                                 <SalaryPeriodSelect
@@ -329,15 +356,6 @@ export default function MovementsTable({
                         ) : (
                           <span className="text-gray-300">—</span>
                         )}
-                      </td>
-                      <td className="px-4 py-2">
-                        <span
-                          className={`text-[9px] uppercase tracking-wide whitespace-nowrap px-1.5 py-0.5 rounded ${
-                            statusLabels[m.status]?.tone ?? "bg-gray-100"
-                          }`}
-                        >
-                          {statusLabels[m.status]?.label ?? m.status}
-                        </span>
                       </td>
                       <td className="px-4 py-2">
                         <div className="flex items-center justify-end">

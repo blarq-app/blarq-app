@@ -62,7 +62,7 @@ export default function CategoryInlineSelect({
       onChange={(e) => onChange(e.target.value)}
       disabled={busy}
       title="Cambiar la categoría de este movimiento sin factura"
-      className="max-w-[150px] text-xs border border-gray-300 rounded px-1.5 py-1 text-gray-700 bg-white outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 cursor-pointer"
+      className="max-w-[160px] text-[11px] uppercase tracking-wide border border-gray-300 rounded px-1.5 py-1 text-gray-700 bg-white outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 cursor-pointer"
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>

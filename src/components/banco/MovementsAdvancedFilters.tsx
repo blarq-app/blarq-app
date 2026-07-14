@@ -13,13 +13,17 @@ import { useRouter } from "next/navigation";
 // a la barra visible (MovementsMontoSearch y las pestañas de tipo), porque MJ los
 // usa seguido y no quería abrir este panel cada vez. Los params ?monto= y ?tipo=
 // los manejan esos controles; acá se conservan (preserveParams) pero no se editan.
+// "estado" se sacó de acá: era redundante con las pestañas de Estado de la
+// barra (§2.2 de la auditoría). Las pestañas cubren el mismo dominio (y más:
+// también transfer interna / neto cero), así que el filtro de estado vive en
+// un solo lugar. Los URLs viejos con ?estado= siguen funcionando (la página
+// lo lee en effectiveStatus), pero ya no se edita desde este panel.
 export type AdvancedFiltersValue = {
   rut: string;
   name: string;
   desc: string;
   dateFrom: string;
   dateTo: string;
-  estado: string; // "" | "sin_asignar" | "parcial" | "conciliado" | "sin_factura"
   limit: string; // "100" | "200" | "500" | "all"
 };
 
@@ -29,7 +33,6 @@ const EMPTY: AdvancedFiltersValue = {
   desc: "",
   dateFrom: "",
   dateTo: "",
-  estado: "",
   limit: "",
 };
 
@@ -61,7 +64,6 @@ export default function MovementsAdvancedFilters({
     if (values.desc) params.set("desc", values.desc);
     if (values.dateFrom) params.set("dateFrom", values.dateFrom);
     if (values.dateTo) params.set("dateTo", values.dateTo);
-    if (values.estado) params.set("estado", values.estado);
     if (values.limit) params.set("limit", values.limit);
     const qs = params.toString();
     return `/banco/movimientos${qs ? `?${qs}` : ""}`;
@@ -82,7 +84,6 @@ export default function MovementsAdvancedFilters({
     v.desc,
     v.dateFrom,
     v.dateTo,
-    v.estado,
     v.limit,
   ].filter(Boolean).length;
 
@@ -156,20 +157,6 @@ export default function MovementsAdvancedFilters({
                 className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
               />
             </Field>
-            <Field label="Estado asignación">
-              <select
-                value={v.estado}
-                onChange={(e) => setV({ ...v, estado: e.target.value })}
-                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white text-gray-700 focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
-              >
-                <option value="">Todos</option>
-                <option value="sin_asignar">Pendiente</option>
-                <option value="parcial">Parcial</option>
-                <option value="conciliado">Conciliado</option>
-                <option value="sin_factura">Sin factura</option>
-              </select>
-            </Field>
-
             <Field label="Cantidad registros">
               <select
                 value={v.limit}

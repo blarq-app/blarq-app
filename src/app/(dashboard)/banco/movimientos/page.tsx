@@ -427,52 +427,70 @@ export default async function MovimientosPage({
         />
       </div>
 
-      {/* Filtros: cuenta + status + search + toggle internas */}
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
-          <FilterLink sp={sp} field="accountId" value={undefined} label="Todas las cuentas" />
-          {accounts.map((a) => (
-            <FilterLink
-              key={a.id}
-              sp={sp}
-              field="accountId"
-              value={a.id}
-              label={a.alias}
-            />
-          ))}
+      {/* Filtros ordenados en jerarquía (§2.2 de la auditoría): se leen de
+          arriba a abajo — primero la CUENTA (dónde miro), después ESTADO,
+          después TIPO, después BUSCAR. Cada fila con su rótulo a la izquierda.
+          Antes estaban todos apretados al mismo peso, sin orden mental. Ningún
+          filtro se perdió: solo se reordenaron y se sacó el "estado" duplicado
+          que además vivía en "Filtros avanzados". */}
+      <div className="space-y-2 mb-4">
+        {/* Cuenta — la decisión primaria: primero elegí dónde mirás. */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <FilterRowLabel>Cuenta</FilterRowLabel>
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
+            <FilterLink sp={sp} field="accountId" value={undefined} label="Todas las cuentas" />
+            {accounts.map((a) => (
+              <FilterLink
+                key={a.id}
+                sp={sp}
+                field="accountId"
+                value={a.id}
+                label={a.alias}
+              />
+            ))}
+          </div>
         </div>
-        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
-          {/* Default (sin params) = Todos. Las pestañas de estado van
-              separadas (Pendiente, Parcial, ...), sin una combinada. */}
-          <FilterLink sp={sp} field="status" value={undefined} label="Todos" />
-          {Object.entries(STATUS_LABEL).map(([key, { label }]) => (
-            <FilterLink
-              key={key}
-              sp={sp}
-              field="status"
-              value={key}
-              label={`${label}${countByStatus[key] ? ` (${countByStatus[key]})` : ""}`}
-            />
-          ))}
+
+        {/* Estado — cómo está resuelto el movimiento. Pestañas separadas
+            (Pendiente, Parcial, ...), sin una combinada. */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <FilterRowLabel>Estado</FilterRowLabel>
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 flex-wrap">
+            <FilterLink sp={sp} field="status" value={undefined} label="Todos" />
+            {Object.entries(STATUS_LABEL).map(([key, { label }]) => (
+              <FilterLink
+                key={key}
+                sp={sp}
+                field="status"
+                value={key}
+                label={`${label}${countByStatus[key] ? ` (${countByStatus[key]})` : ""}`}
+              />
+            ))}
+          </div>
         </div>
-        {/* Tipo de movimiento (ingreso / egreso) — antes estaba escondido en
-            "Filtros avanzados". MJ lo usa seguido y lo quería visible. Las
-            flechas ↗/↘ son las mismas de las tarjetas de arriba. "Transfer
-            interna" no va acá: ya tiene su propia pestaña de estado. */}
-        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
-          <FilterLink sp={sp} field="tipo" value={undefined} label="Todos" />
-          <FilterLink sp={sp} field="tipo" value="ingreso" label="↗ Ingresos" />
-          <FilterLink sp={sp} field="tipo" value="egreso" label="↘ Egresos" />
+
+        {/* Tipo (ingreso / egreso) + atajo de socios. Las flechas ↗/↘ son las
+            mismas de las tarjetas de arriba. "Transfer interna" no va acá: ya
+            tiene su propia pestaña de estado. El toggle de socios ve solo lo
+            transferido a MJ/JT para confirmar sueldos o re-imputar. */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <FilterRowLabel>Tipo</FilterRowLabel>
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
+            <FilterLink sp={sp} field="tipo" value={undefined} label="Todos" />
+            <FilterLink sp={sp} field="tipo" value="ingreso" label="↗ Ingresos" />
+            <FilterLink sp={sp} field="tipo" value="egreso" label="↘ Egresos" />
+          </div>
+          <SociosFilterLink sp={sp} />
         </div>
-        {/* Atajo de revisión: ver solo lo transferido a los socios (MJ/JT)
-            para confirmar sueldos o re-imputar reembolsos/retiros/bonos. */}
-        <SociosFilterLink sp={sp} />
-        {/* Buscador de texto + búsqueda por monto exacto, juntos en la barra
-            visible. El monto antes estaba escondido en "Filtros avanzados";
-            MJ lo usa seguido para conciliar y lo quería a mano. */}
-        <div className="flex items-center gap-2 flex-1 min-w-[260px]">
-          <MovementsSearch defaultQ={q} sp={sp} />
-          <MovementsMontoSearch defaultMonto={sp.monto ?? ""} sp={sp} />
+
+        {/* Buscar — texto libre + monto exacto, a mano en la barra (MJ los usa
+            seguido para conciliar). */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <FilterRowLabel>Buscar</FilterRowLabel>
+          <div className="flex items-center gap-2 flex-1 min-w-[260px]">
+            <MovementsSearch defaultQ={q} sp={sp} />
+            <MovementsMontoSearch defaultMonto={sp.monto ?? ""} sp={sp} />
+          </div>
         </div>
       </div>
 
@@ -483,7 +501,6 @@ export default async function MovimientosPage({
           desc: sp.desc ?? "",
           dateFrom: sp.dateFrom ?? "",
           dateTo: sp.dateTo ?? "",
-          estado: sp.estado ?? "",
           limit: sp.limit ?? "",
         }}
         preserveParams={{
@@ -509,6 +526,18 @@ export default async function MovimientosPage({
         imputacionFilterValue={sp.imputacion ?? ""}
       />
     </div>
+  );
+}
+
+// Rótulo a la izquierda de cada fila de filtros. Da el orden de lectura
+// (Cuenta → Estado → Tipo → Buscar) sin peso visual: gris chico, alineado a
+// la derecha para que "apunte" a los controles. En pantallas angostas la fila
+// hace wrap y el rótulo queda arriba de sus controles.
+function FilterRowLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="w-16 shrink-0 text-right pr-1 text-[10px] uppercase tracking-wider text-gray-400 select-none">
+      {children}
+    </span>
   );
 }
 

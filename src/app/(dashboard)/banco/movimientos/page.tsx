@@ -336,57 +336,8 @@ export default async function MovimientosPage({
   const conciliadoMonto = conciliadosIngresos + conciliadosEgresos;
   const pctConciliado = totalMonto > 0 ? Math.round((conciliadoMonto / totalMonto) * 100) : 0;
 
-  // Match hints: para cada mov pendiente con counterparty RUT, buscamos si
-  // hay UNA factura abierta con saldo restante = |amount| (±$10) y mismo
-  // RUT. Si hay match único, el botón ✨ lo concilia con un click.
-  const pendientes = movements.filter(
-    (m) => (m.status === "sin_asignar" || m.status === "parcial") && m.counterpartyRut
-  );
-  const matchHints = new Map<string, { invoiceId: string; folio: string | null; remaining: number }>();
-  if (pendientes.length > 0) {
-    const candidateInvoices = await prisma.invoice.findMany({
-      where: {
-        status: { in: ["pendiente", "parcial"] },
-        tipoDoc: { not: 61 },
-      },
-      select: {
-        id: true,
-        type: true,
-        folioNumber: true,
-        rutIssuer: true,
-        rutReceiver: true,
-        totalAmount: true,
-        payments: { select: { amountApplied: true } },
-      },
-    });
-    const enrichedCandidates = candidateInvoices.map((inv) => ({
-      ...inv,
-      remaining: inv.totalAmount - inv.payments.reduce((s, p) => s + p.amountApplied, 0),
-    }));
-    for (const m of pendientes) {
-      const isCargo = m.amount < 0;
-      const targetType = isCargo ? "recibida" : "emitida";
-      const counterpartyDigits = (m.counterpartyRut ?? "").replace(/\D/g, "");
-      if (counterpartyDigits.length < 7) continue;
-      const movRemaining = Math.abs(m.amount) - m.payments.reduce((s, p) => s + p.amountApplied, 0);
-      const matches = enrichedCandidates.filter((inv) => {
-        if (inv.type !== targetType) return false;
-        const counterField = targetType === "emitida" ? inv.rutReceiver : inv.rutIssuer;
-        const counterDigits = (counterField ?? "").replace(/\D/g, "");
-        if (!counterDigits.includes(counterpartyDigits.slice(-8))) return false;
-        return Math.abs(inv.remaining - movRemaining) <= 10;
-      });
-      if (matches.length === 1) {
-        matchHints.set(m.id, {
-          invoiceId: matches[0].id,
-          folio: matches[0].folioNumber,
-          remaining: matches[0].remaining,
-        });
-      }
-    }
-  }
-
-  // RUT BLARQ — necesario para el botón "↔ Interna" inline.
+  // RUT BLARQ — necesario para ofrecer "Marcar transferencia interna" en el
+  // menú Resolver (solo cuando la contraparte es la propia BLARQ).
   const BLARQ_RUT_DIGITS = "077270733";
 
   // Serializar para el componente client de la tabla (Date → ISO string).
@@ -415,7 +366,6 @@ export default async function MovimientosPage({
       },
     })),
   }));
-  const matchHintsObj = Object.fromEntries(matchHints);
 
   // El filtro de imputación en la columna es contextual: solo aparece cuando la
   // cuenta seleccionada es la de Sueldos (role "salary_fund"). En "Todas las
@@ -549,7 +499,6 @@ export default async function MovimientosPage({
 
       <MovementsTable
         movements={movementRows}
-        matchHints={matchHintsObj}
         statusLabels={STATUS_LABEL}
         categoryLabels={CATEGORY_LABEL}
         blarqRutDigits={BLARQ_RUT_DIGITS}

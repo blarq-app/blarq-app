@@ -202,18 +202,20 @@ const CSS = `
   /* Cierre */
   .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 14mm; margin-top: 4mm; align-items: start; break-inside: avoid; }
   .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 7pt; letter-spacing: .2em; text-transform: uppercase; color: #36322C; font-weight: 400; border-bottom: 0.6px solid #C2BCB4; padding-bottom: 2.5pt; }
+  /* Formas de pago: formato ÚNICO en los 3 PDF (corrección MJ) — 5,6pt. */
   .pagos { margin-top: 5pt; border-top: 1px solid #DCDAD6; }
-  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 1.4pt 0; border-bottom: 1px solid #E7E6E4; }
+  .pagos .row { display: flex; justify-content: space-between; align-items: baseline; padding: 2pt 0; border-bottom: 1px solid #E7E6E4; }
   .pagos .row:last-child { border-bottom: none; }
-  .pagos .s { font-size: 7.5pt; color: #36322C; }
-  .pagos .p { font-size: 7.5pt; color: #736A5C; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .pagos .s { font-size: 5.6pt; color: #36322C; }
+  .pagos .p { font-size: 5.6pt; color: #736A5C; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .formas .blk-title { font-size: 5.6pt; padding-bottom: 2pt; }
   /* Costo total: mismo trato que el total de ambiente de Artefactos — fila en
      negrita con línea negra ABAJO (no arriba), sin número gigante. */
   .totalbox { display: flex; flex-direction: column; }
   .totalbox .totrow { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #36322C; padding: 5pt 0 3pt; }
   .totalbox .tl { font-family: 'Hanken Grotesk', sans-serif; font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #36322C; font-weight: 700; }
   .totalbox .tv { font-variant-numeric: tabular-nums; font-size: 8.5pt; color: #36322C; font-weight: 700; }
-  .totalbox .tn { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 7.5pt; color: #9B9182; text-align: right; margin-top: 3pt; }
+  .totalbox .tn { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 7.5pt; color: #78716A; text-align: right; margin-top: 3pt; }
 
   /* Observaciones */
   .obs { margin-top: 2.5mm; break-inside: avoid; }
@@ -352,7 +354,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
       ${tableRows}
 
       <div class="cierre">
-        <div>
+        <div class="formas">
           <div class="blk-title">Formas de pago</div>
           <div class="pagos">
             ${terms

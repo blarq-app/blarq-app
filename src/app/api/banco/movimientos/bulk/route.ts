@@ -277,35 +277,32 @@ export async function POST(request: NextRequest) {
     // ── REGISTRAR GASTO (boleta / internacional, sin documento del SII) ──
     if (action === "registrar_gasto") {
       const { projectId, categoryId, tipoGasto } = body;
-      if (!projectId || !categoryId) {
-        return NextResponse.json(
-          { error: "Falta el proyecto o la categoría" },
-          { status: 400 }
-        );
-      }
       if (tipoGasto !== "boleta" && tipoGasto !== "internacional") {
         return NextResponse.json(
           { error: "Tipo de gasto inválido (boleta | internacional)" },
           { status: 400 }
         );
       }
+      // Obra y categoría son OPCIONALES: el gasto se puede crear "sin asignar"
+      // (ej. un click en el banco marcando Google como internacional) y se
+      // cataloga después en Contabilidad → Gastos, con el mismo criterio que
+      // las facturas (obra/categoría viven en el documento). Si vienen, se
+      // validan; si no, quedan null.
       const [project, category] = await Promise.all([
-        prisma.project.findUnique({
-          where: { id: projectId },
-          select: { id: true },
-        }),
-        prisma.costCategory.findUnique({
-          where: { id: categoryId },
-          select: { id: true },
-        }),
+        projectId
+          ? prisma.project.findUnique({ where: { id: projectId }, select: { id: true } })
+          : Promise.resolve(null),
+        categoryId
+          ? prisma.costCategory.findUnique({ where: { id: categoryId }, select: { id: true } })
+          : Promise.resolve(null),
       ]);
-      if (!project) {
+      if (projectId && !project) {
         return NextResponse.json(
           { error: "El proyecto no existe" },
           { status: 404 }
         );
       }
-      if (!category) {
+      if (categoryId && !category) {
         return NextResponse.json(
           { error: "La categoría no existe" },
           { status: 404 }
@@ -342,8 +339,8 @@ export async function POST(request: NextRequest) {
           const folio = `${prefijo}-${m.externalRef || m.id}`;
           const inv = await tx.invoice.create({
             data: {
-              projectId,
-              categoryId,
+              projectId: projectId ?? null,
+              categoryId: categoryId ?? null,
               type: "recibida",
               // 1043 = gasto sin documento tributario del SII → fuera del F29
               // y de la vista Facturación (igual que el pago a maestro).

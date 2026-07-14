@@ -4,25 +4,24 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP } from "@/lib/utils";
 
-// Modal unificado "Gasto de obra sin factura". Junta lo que antes eran DOS
-// botones separados en la barra negra:
-//   - "Pago sin factura"  → pago a un maestro/proveedor que no emite documento.
-//   - "Registrar gasto"   → boleta o compra internacional (sin IVA).
-// Por debajo los dos crean EL MISMO registro: un costo de la obra (Invoice
-// tipoDoc 1043, iva 0, conciliado contra el movimiento). La única diferencia
-// es la etiqueta de RESPALDO, que sirve para separarlos en los impuestos:
-//   - sin respaldo  → action "pago_sin_factura"  (origin sin_respaldo)
-//   - boleta        → action "registrar_gasto" tipoGasto=boleta
-//   - internacional → action "registrar_gasto" tipoGasto=internacional
-// Elegir el respaldo acá decide a qué acción del endpoint /bulk se llama; no
-// hay cambio de plumbing ni de plata respecto de los dos botones viejos.
+// Modal para registrar un costo de una OBRA sin factura. Dos variantes, según
+// desde qué opción del menú Resolver se abre:
+//   - variant="pago"  → "Pago a obra sin factura": pago a un maestro/proveedor
+//     que no emite documento. action /bulk "pago_sin_factura".
+//   - variant="gasto" → "Registrar gasto": boleta o compra internacional
+//     (sin IVA). Pide el tipo (boleta | internacional). action "registrar_gasto".
+// Por debajo los dos crean un costo de la obra (Invoice tipoDoc 1043, iva 0,
+// conciliado contra el movimiento); cambia el `origin` según el caso. No hay
+// cambio de plumbing ni de plata respecto de los botones viejos de la barra.
 //
 // OJO: esto es SOLO para costos de una OBRA. Los gastos propios de BLARQ
-// (sueldo, retiro, previred, impuestos…) NO son costo de obra y van por otro
-// camino — la opción "Sueldo, retiro, previred…" del menú Resolver.
-type Respaldo = "sin_respaldo" | "boleta" | "internacional";
+// (sueldo, retiro, previred…) NO son costo de obra y van por otro camino —
+// la opción "Sueldo, retiro, previred…" del menú Resolver.
+type Variant = "pago" | "gasto";
+type TipoGasto = "boleta" | "internacional";
 
 export default function GastoObraModal({
+  variant,
   movementIds,
   movementCount,
   totalNeto,
@@ -31,6 +30,7 @@ export default function GastoObraModal({
   onClose,
   onDone,
 }: {
+  variant: Variant;
   movementIds: string[];
   movementCount: number;
   totalNeto: number;
@@ -41,46 +41,33 @@ export default function GastoObraModal({
   onDone?: () => void;
 }) {
   const router = useRouter();
-  const [respaldo, setRespaldo] = useState<Respaldo>("sin_respaldo");
+  const [tipoGasto, setTipoGasto] = useState<TipoGasto>("boleta");
   const [projectId, setProjectId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const OPCIONES_RESPALDO: { value: Respaldo; label: string; hint: string }[] = [
-    {
-      value: "sin_respaldo",
-      label: "Sin respaldo",
-      hint: "Pago a un maestro/proveedor que no emite documento.",
-    },
-    {
-      value: "boleta",
-      label: "Boleta",
-      hint: "Compra con boleta (no da crédito de IVA).",
-    },
-    {
-      value: "internacional",
-      label: "Internacional",
-      hint: "Servicio del exterior (Claude, Google…). Sin IVA chileno.",
-    },
-  ];
+  const esPago = variant === "pago";
+  const titulo = esPago ? "Pago a obra sin factura" : "Registrar gasto";
+  const submitLabel = esPago ? "Registrar pago sin factura" : "Registrar gasto";
+  const descripcion = esPago
+    ? "Cada egreso se registra como un costo de la obra (sin documento tributario) y queda conciliado con el movimiento."
+    : "Para gastos que no llegan como factura del SII. Cuenta el total como costo de la obra (sin IVA) y queda conciliado con el movimiento.";
 
   async function guardar() {
     if (busy || !projectId || !categoryId) return;
     setBusy(true);
     setError(null);
     try {
-      // El respaldo decide la acción del endpoint /bulk.
-      const body =
-        respaldo === "sin_respaldo"
-          ? { action: "pago_sin_factura", movementIds, projectId, categoryId }
-          : {
-              action: "registrar_gasto",
-              movementIds,
-              projectId,
-              categoryId,
-              tipoGasto: respaldo,
-            };
+      const body = esPago
+        ? { action: "pago_sin_factura", movementIds, projectId, categoryId }
+        : {
+            action: "registrar_gasto",
+            movementIds,
+            projectId,
+            categoryId,
+            tipoGasto,
+          };
       const res = await fetch("/api/banco/movimientos/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -88,7 +75,7 @@ export default function GastoObraModal({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Error al registrar el gasto de obra");
+        setError(data.error ?? "Error al registrar");
         return;
       }
       onDone?.();
@@ -110,13 +97,10 @@ export default function GastoObraModal({
       >
         <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">
-              Gasto de obra sin factura
-            </h2>
+            <h2 className="text-base font-semibold text-gray-900">{titulo}</h2>
             <p className="text-xs text-gray-500 mt-1 tabular-nums">
               {movementCount} movimiento{movementCount !== 1 ? "s" : ""} · neto{" "}
-              {formatCLP(totalNeto)}. Cada egreso se registra como un costo de
-              la obra (sin IVA) y queda conciliado con el movimiento.
+              {formatCLP(totalNeto)}. {descripcion}
             </p>
           </div>
           <button
@@ -129,30 +113,42 @@ export default function GastoObraModal({
         </div>
 
         <div className="p-6 space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Tipo de respaldo
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {OPCIONES_RESPALDO.map((o) => (
+          {!esPago && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Tipo de gasto
+              </label>
+              <div className="grid grid-cols-2 gap-2">
                 <button
-                  key={o.value}
                   type="button"
-                  onClick={() => setRespaldo(o.value)}
-                  className={`text-xs px-2 py-2 rounded border ${
-                    respaldo === o.value
+                  onClick={() => setTipoGasto("boleta")}
+                  className={`text-xs px-3 py-2 rounded border ${
+                    tipoGasto === "boleta"
                       ? "border-gray-900 bg-gray-900 text-white"
                       : "border-gray-300 text-gray-700 hover:border-gray-400"
                   }`}
                 >
-                  {o.label}
+                  Boleta
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => setTipoGasto("internacional")}
+                  className={`text-xs px-3 py-2 rounded border ${
+                    tipoGasto === "internacional"
+                      ? "border-gray-900 bg-gray-900 text-white"
+                      : "border-gray-300 text-gray-700 hover:border-gray-400"
+                  }`}
+                >
+                  Internacional
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1">
+                {tipoGasto === "boleta"
+                  ? "Compra con boleta (no da crédito de IVA)."
+                  : "Servicio del exterior (Claude, Google…). Sin IVA chileno."}
+              </p>
             </div>
-            <p className="text-[11px] text-gray-400 mt-1">
-              {OPCIONES_RESPALDO.find((o) => o.value === respaldo)?.hint}
-            </p>
-          </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -192,9 +188,11 @@ export default function GastoObraModal({
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-gray-400 mt-1">
-              Para pagos a maestros suele ser Mano de obra o Subcontrato.
-            </p>
+            {esPago && (
+              <p className="text-[11px] text-gray-400 mt-1">
+                Para pagos a maestros suele ser Mano de obra o Subcontrato.
+              </p>
+            )}
           </div>
 
           {error && (
@@ -216,7 +214,7 @@ export default function GastoObraModal({
             disabled={busy || !projectId || !categoryId}
             className="text-xs bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
           >
-            {busy ? "Registrando…" : "Registrar gasto de obra"}
+            {busy ? "Registrando…" : submitLabel}
           </button>
         </div>
       </div>

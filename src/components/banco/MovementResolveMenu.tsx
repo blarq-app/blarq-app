@@ -81,7 +81,9 @@ export default function MovementResolveMenu({
   // Modales.
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [gastoOpen, setGastoOpen] = useState(false);
+  // Modal de costo de obra: "pago" (pago a maestro sin factura) o "gasto"
+  // (boleta / internacional). null = cerrado.
+  const [gastoVariant, setGastoVariant] = useState<null | "pago" | "gasto">(null);
 
   const single = movements.length === 1 ? movements[0] : null;
   const ids = movements.map((m) => m.id);
@@ -301,10 +303,18 @@ export default function MovementResolveMenu({
           title: "Costo de una obra, sin factura",
           items: [
             {
-              label: "Gasto de obra sin factura…",
+              label: "Pago a obra sin factura…",
               icon: "tools",
               onClick: () => {
-                setGastoOpen(true);
+                setGastoVariant("pago");
+                closeMenu();
+              },
+            },
+            {
+              label: "Registrar gasto (boleta / internacional)…",
+              icon: "receipt",
+              onClick: () => {
+                setGastoVariant("gasto");
                 closeMenu();
               },
             },
@@ -371,10 +381,18 @@ export default function MovementResolveMenu({
         title: "Costo de una obra, sin factura",
         items: [
           {
-            label: "Gasto de obra sin factura…",
+            label: "Pago a obra sin factura…",
             icon: "tools",
             onClick: () => {
-              setGastoOpen(true);
+              setGastoVariant("pago");
+              closeMenu();
+            },
+          },
+          {
+            label: "Registrar gasto (boleta / internacional)…",
+            icon: "receipt",
+            onClick: () => {
+              setGastoVariant("gasto");
               closeMenu();
             },
           },
@@ -548,14 +566,15 @@ export default function MovementResolveMenu({
         />
       )}
 
-      {gastoOpen && (
+      {gastoVariant && (
         <GastoObraModal
+          variant={gastoVariant}
           movementIds={ids}
           movementCount={movements.length}
           totalNeto={neto}
           projects={projects}
           categories={categories}
-          onClose={() => setGastoOpen(false)}
+          onClose={() => setGastoVariant(null)}
           onDone={onDone}
         />
       )}
@@ -647,6 +666,13 @@ function MenuGlyph({ name }: { name: string }) {
       return (
         <svg {...common}>
           <path d="M14.7 6.3a4 4 0 0 0-5.3 5.3L3 18l3 3 6.4-6.4a4 4 0 0 0 5.3-5.3l-2.8 2.8-2.1-2.1z" />
+        </svg>
+      );
+    case "receipt":
+      return (
+        <svg {...common}>
+          <path d="M6 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1-2-1z" />
+          <path d="M9 8h6M9 12h6" />
         </svg>
       );
     case "user":

@@ -7,6 +7,7 @@ import {
   type CategoryOption,
   type ProjectOption,
 } from "@/components/facturas/EditableInvoiceFields";
+import GastoAttachmentCell from "@/components/contabilidad/GastoAttachmentCell";
 
 // Contabilidad → Gastos.
 //
@@ -83,6 +84,7 @@ export default async function GastosPage({
         totalAmount: true,
         origin: true,
         notes: true,
+        attachmentUrl: true,
         projectId: true,
         categoryId: true,
         project: { select: { id: true, name: true, numeroProyecto: true } },
@@ -198,6 +200,7 @@ export default async function GastosPage({
                 <Th>Obra</Th>
                 <Th right>Monto</Th>
                 <Th>IVA</Th>
+                <Th>Comprobante</Th>
               </tr>
             </thead>
             <tbody>
@@ -270,6 +273,12 @@ export default async function GastosPage({
                         {esBoleta ? "Con IVA" : "Sin IVA"}
                       </span>
                     </td>
+                    <td className="px-4 py-2.5">
+                      <GastoAttachmentCell
+                        invoiceId={g.id}
+                        attachmentUrl={g.attachmentUrl}
+                      />
+                    </td>
                   </tr>
                 );
               })}
@@ -281,8 +290,7 @@ export default async function GastosPage({
       <p className="text-xs text-gray-400 mt-4 leading-relaxed">
         La obra es opcional (dejala sin asignar cuando el gasto es de BLARQ en
         general). Estos gastos ya cuentan como costo de su obra o de BLARQ.
-        Próximo: adjuntar la foto del comprobante, el PDF del mes y el informe
-        anual F22.
+        Próximo: el PDF del mes y el informe anual F22.
       </p>
     </div>
   );

@@ -69,6 +69,7 @@ export default function EditorEP({
   previousEps,
   latestBudgetVersion,
   hasNewerVersion,
+  hiddenItemIds = [],
 }: {
   ep: EP;
   prevExecutedByLineage: Record<string, number>;
@@ -76,6 +77,9 @@ export default function EditorEP({
   previousEps: PreviousEpSummary[];
   latestBudgetVersion: { id: string; version: string } | null;
   hasNewerVersion: boolean;
+  // Ids de partidas a esconder: material/subcontrato de un tercero, sin mano de
+  // obra de este maestro (ej. "espejo a medida"). Ver src/lib/ep/hideNoLabor.ts.
+  hiddenItemIds?: string[];
 }) {
   const router = useRouter();
   const [items, setItems] = useState<Item[]>(ep.items);
@@ -118,9 +122,14 @@ export default function EditorEP({
     0
   );
 
+  const hiddenSet = useMemo(() => new Set(hiddenItemIds), [hiddenItemIds]);
   const grouped = useMemo(() => {
     const g: Record<string, Item[]> = {};
     items.forEach((i) => {
+      // Las partidas sin mano de obra de este maestro (material/subcontrato de
+      // un tercero) no se muestran en el EP. Su MO es $0, así que esconderlas
+      // no cambia ningún total.
+      if (hiddenSet.has(i.id)) return;
       g[i.chapter] = g[i.chapter] || [];
       g[i.chapter].push(i);
     });

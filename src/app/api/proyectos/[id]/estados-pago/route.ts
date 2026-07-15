@@ -35,15 +35,33 @@ export async function POST(
     const { id: projectId } = await params;
 
     // maestroId puede venir en el body (EP por maestro) o no (legacy).
+    // budgetVersionId puede venir si MJ eligió a mano sobre qué versión del
+    // presupuesto armar el EP (si no, se usa la versión de obra vigente).
     let maestroId: string | null = null;
+    let budgetVersionId: string | null = null;
     try {
       const body = await request.json();
       if (body && typeof body.maestroId === "string") maestroId = body.maestroId;
+      if (body && typeof body.budgetVersionId === "string")
+        budgetVersionId = body.budgetVersionId;
     } catch {
-      // sin body → EP legacy de obra completa
+      // sin body → EP legacy de obra completa, versión vigente
     }
 
-    const obraBudget = await findLatestObraBudget(prisma, projectId);
+    // Versión elegida a mano (validada: obra de este proyecto) o, por defecto,
+    // la vigente.
+    const obraBudget = budgetVersionId
+      ? await prisma.budgetVersion.findFirst({
+          where: { id: budgetVersionId, projectId, type: "obra" },
+          include: { obraItems: { orderBy: { sortOrder: "asc" } } },
+        })
+      : await findLatestObraBudget(prisma, projectId);
+    if (budgetVersionId && !obraBudget) {
+      return NextResponse.json(
+        { error: "La versión de presupuesto elegida no existe o no es de esta obra" },
+        { status: 400 }
+      );
+    }
     if (!obraBudget || obraBudget.obraItems.length === 0) {
       return NextResponse.json(
         { error: "No hay presupuesto de obra con partidas para este proyecto" },

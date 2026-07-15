@@ -85,10 +85,15 @@ export async function GET(
           coverSubtitle: budget.coverSubtitle,
           coverNote: budget.coverNote,
         },
-        items: budget.obraItems.map((it) => ({
-          ...it,
-          changeMarker: markers.get(it.lineageId)?.marker ?? null,
-        })),
+        // Las partidas "NO COBRADO" (BLARQ las absorbe) son invisibles para el
+        // cliente: no van en el PDF ni suman al total. El costo directo y el
+        // total de la cotización se calculan sobre estos items filtrados.
+        items: budget.obraItems
+          .filter((it) => !it.noCobrado)
+          .map((it) => ({
+            ...it,
+            changeMarker: markers.get(it.lineageId)?.marker ?? null,
+          })),
         paymentTerms: budget.paymentTerms.map((t) => ({
           stage: t.stage,
           percentage: t.percentage,

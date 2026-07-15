@@ -267,6 +267,12 @@ model ObraItem {
   sortOrder         Int     @default(0)
   catalogPartidaId  String?
   isCustomized      Boolean @default(false) // True si la partida fue editada respecto a su PartidaCatalog origen, o si fue creada manualmente sin catálogo. Habilita "refrescar precios desde catálogo" sin pisar customizaciones.
+  // Partida que BLARQ absorbe: se le paga al maestro pero NO se le cobra al
+  // cliente (ej. volcanita de Sena). Invisible al cliente (fuera del PDF y del
+  // total acordado; queda FUERA de todo el presupuesto en metrics.ts), normal
+  // para el maestro (va en su alcance/EP). Su costo real aparece igual como
+  // gasto → se ve como MO más cara y baja la utilidad.
+  noCobrado         Boolean @default(false)
   // Maestro que ejecuta esta partida (una partida = un solo maestro). null =
   // sin asignar → queda fuera de todo alcance/EP de maestro hasta repartirla.
   // Se asigna desde la zona "Maestros" de la obra (selector de partidas), NO

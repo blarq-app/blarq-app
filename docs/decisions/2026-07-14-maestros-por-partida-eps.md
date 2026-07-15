@@ -1,7 +1,11 @@
 # ADR — Repartir la obra entre varios maestros: partidas por maestro + EPs por maestro
 
 - **Fecha**: 2026-07-14
-- **Estado**: aceptado (diseño Fase 0 — construcción pendiente)
+- **Estado**: aceptado — construido (Etapas 1 y 2) en `feat/maestros-por-partida`;
+  base viva migrada con ALTER quirúrgico el 2026-07-14 (ver
+  `scripts/migrate-maestros-live.sql`). Pendiente: merge + deploy para que la
+  UI llegue a prod (hoy prod corre `main`, que aún no tiene la feature; las
+  columnas nuevas son aditivas/nullable → `main` sigue funcionando igual).
 - **Autor**: MJ, con diseño asistido en sesión Claude Code (rama `feat/maestros-por-partida`)
 
 ## Contexto

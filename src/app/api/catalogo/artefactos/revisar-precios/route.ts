@@ -7,6 +7,8 @@
  * Para cada artefacto CON link trae el precio de hoy de la web:
  *   - tiendas VTEX (mk.cl, ledstudio.cl): vía API de catálogo → ListPrice
  *     (lista) + Price (con dcto). De ahí sale el descuento del web solo.
+ *   - tiendas Shopify (kitchenhouse.cl): vía <producto>.js → compare_at_price
+ *     (lista) + price (con dcto). Mismo criterio que VTEX.
  *   - otras tiendas: scraping liviano (fetchArtefactoData) → solo precio, dcto 0.
  *
  * NO pisa nada: devuelve la comparación guardado-vs-web (lista, dcto y total)
@@ -16,6 +18,7 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { fetchArtefactoData } from "@/lib/catalog/fetchArtefactoData";
 import { fetchVtexPrice, isVtexStoreUrl } from "@/lib/catalog/fetchVtexPrice";
+import { fetchShopifyPrice, isShopifyStoreUrl } from "@/lib/catalog/fetchShopifyPrice";
 import { requireSession } from "@/lib/apiAuth";
 
 // Vercel: el fetch a la web puede tardar; subimos el límite de la función
@@ -103,6 +106,13 @@ export async function POST(request: NextRequest) {
             if (vtex) {
               webListPrice = vtex.listPrice;
               webPrice = vtex.price;
+            }
+          } else if (isShopifyStoreUrl(link)) {
+            // Shopify (Kitchen House): compare_at_price = lista, price = venta.
+            const sh = await fetchShopifyPrice(link);
+            if (sh) {
+              webListPrice = sh.listPrice;
+              webPrice = sh.price;
             }
           } else {
             const data = await fetchArtefactoData(link);

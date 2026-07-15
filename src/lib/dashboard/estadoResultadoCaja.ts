@@ -24,6 +24,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { esSocio, nombreSocio } from "@/lib/banco/socios";
+import { effectiveSalaryPeriod } from "@/lib/banco/salaryPeriod";
 
 // Socios de BLARQ: un pago hacia/desde ellos NO es gasto de operación. La
 // definición de "quién es socio" vive en banco/socios.ts (misma que usa el
@@ -161,13 +162,23 @@ export async function computeEstadoResultadoCaja(
   const end = new Date(year + 1, 0, 1);
 
   const movs = await prisma.bankMovement.findMany({
-    where: { date: { gte: start, lt: end } },
+    where: {
+      OR: [
+        { date: { gte: start, lt: end } },
+        // Sueldos y Previred se imputan al MES QUE CORRESPONDE, que puede caer
+        // en otro mes/año que el de la transferencia (el sueldo de junio pagado
+        // el 1-jul cuenta en junio). Los traemos de cualquier fecha; el guard
+        // de año de abajo descarta los que no pertenecen a este cuadro.
+        { category: { in: ["sueldo", "previred"] } },
+      ],
+    },
     select: {
       date: true,
       amount: true,
       type: true,
       category: true,
       status: true,
+      salaryPeriod: true,
       counterpartyName: true,
       counterpartyRut: true,
       description: true,
@@ -201,9 +212,31 @@ export async function computeEstadoResultadoCaja(
   };
 
   for (const mov of movs) {
-    const m = mov.date.getMonth();
     const tipo = mov.type === "abono" ? "ingreso" : "egreso";
     const signo = mov.amount < 0 ? -1 : 1;
+
+    // Mes de imputación. Regla general: la fecha del movimiento. Excepción:
+    // sueldos y Previred SIN factura conciliada van al "mes que corresponde"
+    // (el que fija MJ en el banco, o el default por fecha) — igual que la vista
+    // por proyecto. Así el sueldo de junio pagado el 1-jul cuenta en junio, no
+    // en julio. Un sueldo/previred cuyo período cae en OTRO año se omite de
+    // este cuadro (aparece en el del año que le corresponde). Un sueldo
+    // conciliado a factura es un reembolso (gasto de operación): NO se reubica,
+    // queda en su fecha como cualquier otro gasto.
+    let m: number;
+    const usaPeriodo =
+      (mov.category === "sueldo" || mov.category === "previred") &&
+      !(mov.payments && mov.payments.length > 0);
+    if (usaPeriodo) {
+      const [yy, mm] = effectiveSalaryPeriod(mov).split("-").map(Number);
+      if (yy !== year) continue;
+      m = mm - 1;
+    } else {
+      // Traemos sueldo/previred de cualquier fecha (ver query); el resto de los
+      // movimientos solo cuenta si su fecha cae dentro del año mostrado.
+      if (mov.date < start || mov.date >= end) continue;
+      m = mov.date.getMonth();
+    }
 
     if (mov.status === "neto_cero") continue;
     if (mov.status === "interno") {

@@ -32,6 +32,7 @@ export async function POST(
 
     const { prevExecutedByLineage } = await buildPrevAccumulators(prisma, {
       projectId: ep.projectId,
+      maestroId: ep.maestroId,
       beforeNumber: ep.number,
     });
 

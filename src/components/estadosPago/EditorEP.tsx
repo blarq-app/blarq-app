@@ -48,6 +48,8 @@ type EP = {
     ufReference: number | null;
     maestro: { name: string; rut: string | null } | null;
   };
+  // Maestro dueño de este EP (Opción B). null en EPs legacy de obra completa.
+  maestro: { name: string; rut: string | null } | null;
   budgetVersion: { id: string; version: string; status: string } | null;
   items: Item[];
 };
@@ -304,7 +306,11 @@ export default function EditorEP({
             </div>
             <Field
               label="Maestro"
-              value={ep.project.maestro?.name || "— Sin asignar —"}
+              value={
+                ep.maestro?.name ||
+                ep.project.maestro?.name ||
+                "— Sin asignar —"
+              }
             />
             <div className="flex items-center justify-between">
               <Field

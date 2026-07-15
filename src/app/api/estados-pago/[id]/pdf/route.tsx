@@ -19,6 +19,7 @@ export async function GET(
       where: { id },
       include: {
         project: { include: { maestro: true } },
+        maestro: true,
         items: { orderBy: { sortOrder: "asc" } },
         budgetVersion: { select: { version: true } },
       },
@@ -28,10 +29,13 @@ export async function GET(
       return NextResponse.json({ error: "No encontrado" }, { status: 404 });
     }
 
-    // EPs CERRADOS anteriores → para acumulado y para histórico
+    // EPs CERRADOS anteriores de la MISMA serie (mismo maestro) → para
+    // acumulado y para histórico. Sin esto, un EP de maestro mezclaría el
+    // avance de los otros maestros.
     const prevClosedEps = await prisma.estadoPago.findMany({
       where: {
         projectId: ep.projectId,
+        maestroId: ep.maestroId,
         status: "cerrado",
         number: { lt: ep.number },
       },
@@ -99,7 +103,9 @@ export async function GET(
     }));
 
     const html = renderEPHtml({
-      project: ep.project,
+      // El PDF muestra el maestro dueño del EP (si es de un maestro puntual);
+      // si es legacy de obra completa, cae al maestro "principal" del proyecto.
+      project: { ...ep.project, maestro: ep.maestro ?? ep.project.maestro },
       ep: {
         number: ep.number,
         date: ep.date,

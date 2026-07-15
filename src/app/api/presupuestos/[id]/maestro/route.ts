@@ -28,6 +28,9 @@ export async function GET(
   try {
     const { id } = await params;
     const format = request.nextUrl.searchParams.get("format") ?? "pdf";
+    // Si viene maestroId, el alcance sale filtrado a las partidas de ese
+    // maestro (un alcance limpio por contratista). Sin maestroId → todas.
+    const maestroId = request.nextUrl.searchParams.get("maestroId");
 
     if (format !== "pdf" && format !== "xlsx") {
       return NextResponse.json(
@@ -40,7 +43,10 @@ export async function GET(
       where: { id },
       include: {
         project: { include: { maestro: true } },
-        obraItems: { orderBy: { sortOrder: "asc" } },
+        obraItems: {
+          where: maestroId ? { maestroId } : undefined,
+          orderBy: { sortOrder: "asc" },
+        },
       },
     });
 
@@ -58,16 +64,38 @@ export async function GET(
       );
     }
 
-    const baseName = budget.project.name.replace(/\s+/g, "_");
+    // Cuando el alcance es de un maestro puntual, el encabezado lleva SU nombre
+    // (no el maestro "principal" legacy del proyecto).
+    const maestroFiltrado = maestroId
+      ? await prisma.maestro.findUnique({
+          where: { id: maestroId },
+          select: { name: true },
+        })
+      : null;
+
+    if (maestroId && budget.obraItems.length === 0) {
+      return NextResponse.json(
+        { error: "Este maestro no tiene partidas asignadas en esta versión" },
+        { status: 400 }
+      );
+    }
+
+    const maestroSuffix = maestroFiltrado
+      ? "_" + maestroFiltrado.name.replace(/\s+/g, "_")
+      : "";
+    const baseName =
+      budget.project.name.replace(/\s+/g, "_") + maestroSuffix;
     const projectInput = {
       name: budget.project.name,
       clientName: budget.project.clientName,
       address: budget.project.address,
     };
     const budgetInput = { version: budget.version, date: budget.date };
-    const maestroInput = budget.project.maestro
-      ? { name: budget.project.maestro.name }
-      : null;
+    const maestroInput = maestroFiltrado
+      ? { name: maestroFiltrado.name }
+      : budget.project.maestro
+        ? { name: budget.project.maestro.name }
+        : null;
     const itemsInput = budget.obraItems.map((it) => ({
       chapter: it.chapter,
       subChapter: it.subChapter,

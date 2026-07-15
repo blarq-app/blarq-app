@@ -42,14 +42,20 @@ export async function GET(
       );
     }
 
+    // EP de maestro → comparar solo contra sus partidas de la versión vigente.
+    const budgetItems = ep.maestroId
+      ? obraBudget.obraItems.filter((it) => it.maestroId === ep.maestroId)
+      : obraBudget.obraItems;
+
     const { prevAmountPaidByLineage } = await buildPrevAccumulators(prisma, {
       projectId: ep.projectId,
+      maestroId: ep.maestroId,
       beforeNumber: ep.number,
     });
 
     const diff = computeSyncDiff(
       ep.items,
-      obraBudget.obraItems,
+      budgetItems,
       prevAmountPaidByLineage
     );
 

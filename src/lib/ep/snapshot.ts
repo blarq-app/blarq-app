@@ -8,14 +8,19 @@ import type { PrismaClient } from "@prisma/client";
 // pdf (cálculo de incrementales), sync (detección de outOfScope con pagos).
 export async function buildPrevAccumulators(
   prisma: PrismaClient,
-  opts: { projectId: string; beforeNumber?: number }
+  opts: { projectId: string; beforeNumber?: number; maestroId?: string | null }
 ): Promise<{
   prevExecutedByLineage: Map<string, number>;
   prevAmountPaidByLineage: Map<string, number>;
 }> {
+  // Los acumuladores se scopean por maestro cuando la obra está repartida:
+  // cada maestro lleva su propia serie de EPs, así que su avance anterior solo
+  // suma los EPs cerrados DE ESE maestro. Si maestroId no viene (undefined),
+  // no se filtra por maestro (comportamiento legacy: EPs de obra completa).
   const where = {
     projectId: opts.projectId,
     status: "cerrado",
+    ...(opts.maestroId !== undefined ? { maestroId: opts.maestroId } : {}),
     ...(opts.beforeNumber !== undefined
       ? { number: { lt: opts.beforeNumber } }
       : {}),

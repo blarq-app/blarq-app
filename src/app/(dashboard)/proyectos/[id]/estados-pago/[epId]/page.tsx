@@ -14,6 +14,7 @@ export default async function EPDetailPage({
     where: { id: epId },
     include: {
       project: { include: { maestro: true } },
+      maestro: true,
       items: { orderBy: { sortOrder: "asc" } },
       budgetVersion: { select: { id: true, version: true, status: true } },
     },
@@ -21,9 +22,12 @@ export default async function EPDetailPage({
 
   if (!ep || ep.projectId !== projectId) notFound();
 
-  // EPs previos para calcular acumulado por partida + histórico
+  // EPs previos para calcular acumulado por partida + histórico.
+  // Se scopean a la MISMA serie: cada maestro lleva su numeración, así que el
+  // acumulado anterior de un EP de maestro solo mira los EPs de ese maestro
+  // (los legacy sin maestro son su propia serie con maestroId null).
   const prevEps = await prisma.estadoPago.findMany({
-    where: { projectId, number: { lt: ep.number } },
+    where: { projectId, maestroId: ep.maestroId, number: { lt: ep.number } },
     orderBy: { number: "asc" },
     include: { items: true },
   });

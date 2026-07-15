@@ -69,24 +69,33 @@ export async function POST(
       );
     }
 
+    // Si el EP es de un maestro, se sincroniza SOLO contra sus partidas de la
+    // versión vigente — sino el sync le metería las partidas de los otros
+    // maestros. Una partida reasignada a otro maestro sale de este alcance
+    // (se comporta como "removida": outOfScope si tenía pagos, o se borra).
+    const budgetItems = ep.maestroId
+      ? obraBudget.obraItems.filter((it) => it.maestroId === ep.maestroId)
+      : obraBudget.obraItems;
+
     const { prevAmountPaidByLineage } = await buildPrevAccumulators(prisma, {
       projectId: ep.projectId,
+      maestroId: ep.maestroId,
       beforeNumber: ep.number,
     });
 
     const diff = computeSyncDiff(
       ep.items,
-      obraBudget.obraItems,
+      budgetItems,
       prevAmountPaidByLineage
     );
 
     // Indexamos para resolver detalles al aplicar
     const epItemByLineage = new Map(ep.items.map((i) => [i.lineageId, i]));
     const budgetItemByLineage = new Map(
-      obraBudget.obraItems.map((b) => [b.lineageId, b])
+      budgetItems.map((b) => [b.lineageId, b])
     );
     const budgetIndexByLineage = new Map(
-      obraBudget.obraItems.map((b, idx) => [b.lineageId, idx])
+      budgetItems.map((b, idx) => [b.lineageId, idx])
     );
 
     let added = 0;
@@ -192,7 +201,7 @@ export async function POST(
 
     // 5) Sin cambios visibles pero el pointer obraItemId puede estar stale
     //    (V4 → V5 con datos idénticos). Refrescamos silenciosamente.
-    for (const b of obraBudget.obraItems) {
+    for (const b of budgetItems) {
       const existing = epItemByLineage.get(b.lineageId);
       if (!existing) continue;
       // ya procesado en updated/added

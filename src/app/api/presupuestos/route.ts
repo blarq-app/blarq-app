@@ -161,6 +161,11 @@ export async function POST(request: NextRequest) {
               catalogPartidaId: item.catalogPartidaId,
               // En modo plantilla, isCustomized=false (estado limpio).
               isCustomized: isTemplateMode ? false : item.isCustomized,
+              // Preservar el maestro asignado a la partida al duplicar la
+              // versión (así las asignaciones sobreviven un cambio de versión).
+              // En modo plantilla (importar de otro proyecto) NO aplica: los
+              // maestros son de la otra obra → queda sin asignar.
+              maestroId: isTemplateMode ? null : item.maestroId,
               sortOrder: item.sortOrder,
             },
           });

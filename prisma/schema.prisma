@@ -60,6 +60,10 @@ model Project {
   invoices        Invoice[]
   maestroId       String?
   maestro         Maestro?        @relation(fields: [maestroId], references: [id])
+  // Maestros que trabajan en esta obra (varios contratistas). El maestro
+  // "principal" legacy sigue en maestroId de arriba; esta lista es la nueva
+  // fuente para repartir la obra por maestro.
+  projectMaestros ProjectMaestro[]
   estadosPago     EstadoPago[]
   shoppingItems   ShoppingItem[]
   invoiceRules    InvoiceCategorizationRule[]
@@ -88,7 +92,29 @@ model Maestro {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  projects      Project[]
+  projects        Project[]          // legacy: maestro "principal" único por obra (Project.maestroId)
+  obraItems       ObraItem[]         // partidas asignadas a este maestro (una partida = un maestro)
+  projectMaestros ProjectMaestro[]   // obras en las que trabaja (varios maestros por obra)
+  estadosPago     EstadoPago[]       // sus estados de pago (Opción B: serie propia por maestro)
+}
+
+// Obra ↔ maestros: una obra puede repartirse entre varios contratistas (uno
+// hace obra gruesa, otro porcelanato, etc). Este join lista los maestros que
+// trabajan en la obra. Existe ANTES de asignarles partidas — primero se agrega
+// el maestro a la obra, después se reparten sus partidas. La asignación
+// partida→maestro vive en ObraItem.maestroId (una partida = un solo maestro).
+model ProjectMaestro {
+  id         String   @id @default(cuid())
+  projectId  String
+  maestroId  String
+  createdAt  DateTime @default(now())
+
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  maestro    Maestro  @relation(fields: [maestroId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, maestroId])
+  @@index([projectId])
+  @@index([maestroId])
 }
 
 // ==================== ESTADOS DE PAGO ====================
@@ -97,7 +123,12 @@ model EstadoPago {
   id              String   @id @default(cuid())
   projectId       String
   budgetVersionId String?  // versión del presupuesto base de este EP (null si es legacy o todavía no asociado)
-  number          Int      // correlativo por proyecto: 1, 2, 3...
+  // Maestro dueño de este EP (Opción B: cada maestro lleva su propia serie de
+  // EPs y avanza/se paga por separado). null = EP legacy de obra completa,
+  // creado antes de repartir la obra por maestro. Su presencia scopea el
+  // snapshot de partidas y los acumuladores de avance a ese maestro.
+  maestroId       String?
+  number          Int      // correlativo por (proyecto, maestro): cada maestro tiene su EP 1, 2, 3...
   date            DateTime @default(now())
   status          String   @default("borrador") // borrador | cerrado
   closedAt        DateTime? // se setea cuando status pasa a cerrado
@@ -107,10 +138,15 @@ model EstadoPago {
 
   project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   budgetVersion   BudgetVersion?   @relation(fields: [budgetVersionId], references: [id])
+  maestro         Maestro?         @relation(fields: [maestroId], references: [id])
   items           EstadoPagoItem[]
 
-  @@unique([projectId, number])
+  // Numeración por maestro: (proyecto, maestro, número). Los EPs legacy tienen
+  // maestroId null y su número sigue siendo único por proyecto de facto (no se
+  // crean nuevos EPs con maestroId null una vez repartida la obra).
+  @@unique([projectId, maestroId, number])
   @@index([projectId])
+  @@index([maestroId])
   @@index([budgetVersionId])
 }
 
@@ -231,6 +267,12 @@ model ObraItem {
   sortOrder         Int     @default(0)
   catalogPartidaId  String?
   isCustomized      Boolean @default(false) // True si la partida fue editada respecto a su PartidaCatalog origen, o si fue creada manualmente sin catálogo. Habilita "refrescar precios desde catálogo" sin pisar customizaciones.
+  // Maestro que ejecuta esta partida (una partida = un solo maestro). null =
+  // sin asignar → queda fuera de todo alcance/EP de maestro hasta repartirla.
+  // Se asigna desde la zona "Maestros" de la obra (selector de partidas), NO
+  // en el editor de presupuesto. Se preserva al duplicar la versión.
+  maestroId         String?
+  maestro           Maestro? @relation(fields: [maestroId], references: [id], onDelete: SetNull)
 
   budgetVersion     BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)
   components        ObraItemComponent[]
@@ -239,6 +281,7 @@ model ObraItem {
   @@index([budgetVersionId])
   @@index([catalogPartidaId])
   @@index([lineageId])
+  @@index([maestroId])
 }
 
 // Snapshot de los componentes de una partida AL MOMENTO de crearse el ObraItem

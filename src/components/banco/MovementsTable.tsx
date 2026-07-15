@@ -329,6 +329,7 @@ export default function MovementsTable({
                                 movimientoId={m.id}
                                 category={m.category}
                                 options={imputacionCategories}
+                                enableGastoEmpresa={m.amount < 0}
                               />
                             ) : (
                               <>

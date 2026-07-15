@@ -128,6 +128,9 @@ export async function PATCH(
     const updates: Record<string, unknown> = {};
     if ("categoryId" in data) updates.categoryId = data.categoryId || null;
     if ("projectId" in data) updates.projectId = data.projectId || null;
+    // Comprobante subido a mano (data URL de la foto comprimida, o null para
+    // quitarlo). Lo usan los gastos de empresa en Contabilidad → Gastos.
+    if ("attachmentUrl" in data) updates.attachmentUrl = data.attachmentUrl || null;
     // conceptoCobro: solo aplica a facturas EMITIDAS (obra | muebles |
     // artefactos | mixto). Define a qué "centro" del proyecto entra el cobro,
     // y con eso cuánta utilidad se reconoce para Sueldos (ver utilidadPorCobro).

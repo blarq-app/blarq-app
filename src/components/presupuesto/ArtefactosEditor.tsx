@@ -963,7 +963,7 @@ export default function ArtefactosEditor({
                         {showCost && (
                           <>
                             <div className="text-right text-red-700/80">
-                              Neto BLARQ
+                              Costo BLARQ
                             </div>
                             <div className="text-right text-green-700/80">
                               Utilidad

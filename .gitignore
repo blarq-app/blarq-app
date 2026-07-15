@@ -53,8 +53,9 @@ next-env.d.ts
 sii-cert/
 cert/
 
-# claude sessions
-.claude/
+# claude sessions (settings.local, worktrees, etc.) — pero SÍ versionamos las skills del repo
+.claude/*
+!.claude/skills/
 
 # backups locales de la BD (script db:backup) — datos sensibles, NO commitear
 /backups/

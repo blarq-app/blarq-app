@@ -916,6 +916,12 @@ model Invoice {
   siiCodigo       String?
   pdfContent      Bytes?
   pdfFetchedAt    DateTime?
+  // Comprobante subido a mano (foto de la boleta, screenshot del cargo
+  // internacional). Se guarda como data URL (image/jpeg;base64,…) comprimida
+  // en el cliente antes de subir — la app no usa almacenamiento externo. Lo
+  // usan los gastos de empresa 1043 (Contabilidad → Gastos) para respaldar el
+  // F22, pero el campo es genérico a cualquier Invoice.
+  attachmentUrl   String?
   notes           String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

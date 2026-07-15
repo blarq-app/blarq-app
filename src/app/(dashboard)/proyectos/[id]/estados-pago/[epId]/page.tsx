@@ -125,6 +125,11 @@ export default async function EPDetailPage({
         }
         hasNewerVersion={hasNewerVersion}
         hiddenItemIds={hiddenItemIds}
+        budgetVersions={obraVersions.map((v) => ({
+          id: v.id,
+          version: v.version,
+          status: v.status,
+        }))}
       />
     </div>
   );

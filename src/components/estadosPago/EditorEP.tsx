@@ -70,6 +70,7 @@ export default function EditorEP({
   latestBudgetVersion,
   hasNewerVersion,
   hiddenItemIds = [],
+  budgetVersions = [],
 }: {
   ep: EP;
   prevExecutedByLineage: Record<string, number>;
@@ -77,6 +78,8 @@ export default function EditorEP({
   previousEps: PreviousEpSummary[];
   latestBudgetVersion: { id: string; version: string } | null;
   hasNewerVersion: boolean;
+  // Versiones de obra disponibles, para elegir a mano contra cuál sincronizar.
+  budgetVersions?: { id: string; version: string; status: string }[];
   // Ids de partidas a esconder: material/subcontrato de un tercero, sin mano de
   // obra de este maestro (ej. "espejo a medida"). Ver src/lib/ep/hideNoLabor.ts.
   hiddenItemIds?: string[];
@@ -668,6 +671,8 @@ export default function EditorEP({
       {showSyncModal && (
         <SyncDiffModal
           epId={ep.id}
+          versions={budgetVersions}
+          defaultTargetVersionId={latestBudgetVersion?.id}
           onClose={() => setShowSyncModal(false)}
           onApplied={() => {
             setShowSyncModal(false);

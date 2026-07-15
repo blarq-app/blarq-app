@@ -27,6 +27,7 @@ export async function POST(
     const { id } = await params;
 
     let body: {
+      targetVersionId?: string;
       selection?: {
         addedLineageIds?: string[];
         removedSafeItemIds?: string[];
@@ -61,7 +62,15 @@ export async function POST(
       );
     }
 
-    const obraBudget = await findLatestObraBudget(prisma, ep.projectId);
+    // Versión destino: la elegida a mano (body.targetVersionId), validada como
+    // obra de este proyecto; si no, la vigente. DEBE ser la misma que mostró el
+    // preview, así que la UI manda el id que el usuario eligió.
+    const obraBudget = body.targetVersionId
+      ? await prisma.budgetVersion.findFirst({
+          where: { id: body.targetVersionId, projectId: ep.projectId, type: "obra" },
+          include: { obraItems: { orderBy: { sortOrder: "asc" } } },
+        })
+      : await findLatestObraBudget(prisma, ep.projectId);
     if (!obraBudget) {
       return NextResponse.json(
         { error: "No hay presupuesto de obra para sincronizar" },

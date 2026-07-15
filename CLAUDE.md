@@ -87,6 +87,15 @@ Si un campo tiene un motor de automatización que decide en base a "está vacío
 
 ### 4.8 Trabajo en paralelo — ramas y worktrees
 
+> **Regla simple (para MJ, que trabaja en una sola carpeta `blarq-app`):**
+>
+> - **Una sesión de código a la vez.** Commiteá lo tuyo ANTES de abrir la próxima. Así podés quedarte siempre en `blarq-app` sin enredos.
+> - **Nunca dos sesiones de código a la vez en `blarq-app`** — ahí se pisan las ramas (es el enredo clásico).
+> - Si querés paralelo de verdad, **"Nueva sesión"** (worktree automático, no manejás carpetas a mano).
+> - `git switch -c` **NO aísla** por sí solo — solo crea una rama en la misma carpeta.
+
+Lo de abajo es el detalle para cuando SÍ corren sesiones en paralelo.
+
 MJ trabaja con **varias sesiones a la vez** (a propósito, es más eficiente). El riesgo es perder trabajo o enredar dos features. Regla base: **una sesión = una rama propia = una carpeta de trabajo propia (worktree)**. Si cada sesión vive en su carpeta, son incapaces de pisarse aunque corran al mismo tiempo. El enredo clásico ocurre cuando dos sesiones editan la **misma** carpeta sobre la **misma** rama.
 
 **El aislamiento se hace AL ABRIR la sesión, NO con un comando adentro** — una sesión no se puede mudar sola de carpeta, trabaja donde se la lanza. Un worktree es una **copia COMPLETA** del proyecto en otra carpeta (todo el código, compartiendo ramas/historial/GitHub) — NO una carpeta vacía ni otro proyecto. Cómo se abre aislada:

@@ -121,7 +121,7 @@ export default function CategoryInlineSelect({
       onChange={(e) => onChange(e.target.value)}
       disabled={busy}
       title="Cambiar la categoría, o registrarlo como gasto de empresa (boleta / internacional)"
-      className="max-w-[170px] text-[11px] uppercase tracking-wide border border-gray-300 rounded px-1.5 py-1 text-gray-700 bg-white outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 cursor-pointer"
+      className="max-w-[150px] text-force-10 uppercase tracking-wide border border-gray-300 rounded px-1 py-0.5 text-gray-700 bg-white outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 cursor-pointer"
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>

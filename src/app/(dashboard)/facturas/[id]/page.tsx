@@ -4,6 +4,8 @@ import Link from "next/link";
 import FacturaForm from "@/components/facturas/FacturaForm";
 import CompensacionNC from "@/components/facturas/CompensacionNC";
 import RemovePaymentButton from "@/components/facturas/RemovePaymentButton";
+import DesgloseArtefactos from "@/components/facturas/DesgloseArtefactos";
+import { conceptoDeFactura } from "@/lib/invoices/conceptoCobro";
 import { formatCLP } from "@/lib/utils";
 
 const DTE_LABEL: Record<number, string> = {
@@ -39,7 +41,12 @@ export default async function EditFacturaPage({
     // Carga todos los campos del Invoice — incluye `pdfContent` (Bytes
     // ~170KB) pero el page no lo pasa al client, solo lo accede el endpoint
     // /api/facturas/[id]/pdf. El overhead server-only es aceptable.
-    prisma.invoice.findUnique({ where: { id } }),
+    // Se incluye la categoría (nombre) para resolver el concepto del cobro
+    // (obra/muebles/artefactos) y decidir si mostramos el desglose de artefactos.
+    prisma.invoice.findUnique({
+      where: { id },
+      include: { category: { select: { name: true } } },
+    }),
     prisma.project.findMany({
       // Solo proyectos asignables al conciliar: se esconden las cotizaciones
       // no ganadas (status="cotizacion"). Los centros internos (BLARQ) se
@@ -82,6 +89,13 @@ export default async function EditFacturaPage({
   ]);
 
   if (!invoice) notFound();
+
+  // Desglose de artefactos: solo para facturas EMITIDAS cuyo concepto de cobro
+  // es "artefactos" (una sola factura que agrupa Cocina + Sanitarios +
+  // Iluminación). Sin desglose, el Cuadro Resumen reparte proporcional al
+  // presupuesto; cargándolo, usa los montos reales.
+  const mostrarDesgloseArtefactos =
+    invoice.type === "emitida" && conceptoDeFactura(invoice) === "artefactos";
 
   // Para NC (61) / ND (56): facturas candidatas a referenciar.
   // Mismo type + mismo rutIssuer (SII recibidas) o rutReceiver (emitidas)
@@ -353,6 +367,18 @@ export default async function EditFacturaPage({
             ))}
           </ul>
         </div>
+      )}
+
+      {mostrarDesgloseArtefactos && (
+        <DesgloseArtefactos
+          invoiceId={invoice.id}
+          totalAmount={Math.abs(invoice.totalAmount)}
+          initial={{
+            artefactoCocina: invoice.artefactoCocina,
+            artefactoSanitario: invoice.artefactoSanitario,
+            artefactoIluminacion: invoice.artefactoIluminacion,
+          }}
+        />
       )}
 
       <FacturaForm

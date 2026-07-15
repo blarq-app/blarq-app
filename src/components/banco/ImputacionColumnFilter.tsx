@@ -33,7 +33,7 @@ export default function ImputacionColumnFilter({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       title="Filtrar por tipo de imputación"
-      className={`mt-1 block w-full max-w-[150px] text-[11px] normal-case tracking-normal border rounded px-1.5 py-1 bg-white outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 cursor-pointer ${
+      className={`mt-1 block w-full max-w-[150px] text-force-10 normal-case tracking-normal border rounded px-1 py-0.5 bg-white outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 cursor-pointer ${
         value ? "border-gray-400 text-gray-800 font-medium" : "border-gray-200 text-gray-500 font-normal"
       }`}
     >

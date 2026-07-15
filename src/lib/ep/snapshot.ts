@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { selectVigente } from "@/lib/projects/selectVersion";
 
 // Acumuladores de EPs cerrados anteriores, indexados por lineageId.
 // La fuente de verdad es lineageId (no obraItemId), porque obraItemId rota
@@ -50,23 +51,27 @@ export async function buildPrevAccumulators(
   return { prevExecutedByLineage, prevAmountPaidByLineage };
 }
 
-// Devuelve la versión de obra más reciente del proyecto:
-// preferentemente la última aprobada; si no hay ninguna aprobada, la última
-// existente. Incluye obraItems ordenados por sortOrder.
+// Devuelve la versión de obra VIGENTE del proyecto, con sus obraItems ordenados
+// por sortOrder. Usa el criterio ÚNICO de selectVersion.ts (la última
+// enviada/aprobada; si solo hay borradores, el más reciente) — el mismo que el
+// Resumen/Fondo, para que el mundo de los EPs y el del Resumen nunca miren
+// versiones distintas. Antes acá había un criterio propio ("la aprobada gana")
+// que divergía del Resumen.
+//
+// Es el DEFAULT: al crear un EP, MJ puede elegir otra versión a mano (el EP
+// guarda su budgetVersionId), pero si no elige, se usa esta.
 export async function findLatestObraBudget(
   prisma: PrismaClient,
   projectId: string
 ) {
-  return (
-    (await prisma.budgetVersion.findFirst({
-      where: { projectId, type: "obra", status: "aprobado" },
-      orderBy: { createdAt: "desc" },
-      include: { obraItems: { orderBy: { sortOrder: "asc" } } },
-    })) ||
-    (await prisma.budgetVersion.findFirst({
-      where: { projectId, type: "obra" },
-      orderBy: { createdAt: "desc" },
-      include: { obraItems: { orderBy: { sortOrder: "asc" } } },
-    }))
-  );
+  const versions = await prisma.budgetVersion.findMany({
+    where: { projectId, type: "obra" },
+    select: { id: true, status: true, createdAt: true },
+  });
+  const vigente = selectVigente(versions);
+  if (!vigente) return null;
+  return prisma.budgetVersion.findUnique({
+    where: { id: vigente.id },
+    include: { obraItems: { orderBy: { sortOrder: "asc" } } },
+  });
 }

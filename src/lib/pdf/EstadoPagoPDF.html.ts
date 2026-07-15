@@ -130,7 +130,7 @@ const CSS = `
     letter-spacing: 0.05em; text-transform: uppercase;
     background: #FFF;
     padding: 4px 10px;
-    border-top: 1.5pt solid #000; border-bottom: 1.5pt solid #000;
+    border-top: 0.75pt solid #000; border-bottom: 0.75pt solid #000;
     width: 35%; text-align: center;
   }
 
@@ -143,20 +143,20 @@ const CSS = `
     margin-top: 4px;
   }
   .partidas th, .partidas td {
-    padding: 1.5px 4px;
+    padding: 0.8px 4px;
     vertical-align: top;
     border: none;
     border-bottom: 0.5pt solid #CCCCCC;
     word-wrap: break-word;
-    line-height: 1.15;
+    line-height: 1.08;
   }
   .partidas thead th {
     background: #FFFFFF;
     color: #000;
     font-weight: 700;
     text-transform: uppercase;
-    border-top: 1.5pt solid #000;
-    border-bottom: 1.5pt solid #000;
+    border-top: 0.75pt solid #000;
+    border-bottom: 0.75pt solid #000;
     padding: 4px 4px;
     font-size: 7pt;
   }
@@ -164,8 +164,8 @@ const CSS = `
     background: #DBDBDB;
     font-weight: 700;
     text-transform: uppercase;
-    padding-top: 2.5px;
-    padding-bottom: 2.5px;
+    padding-top: 1.5px;
+    padding-bottom: 1.5px;
   }
   .partidas tr.sub-chapter-row td {
     background: #F2F2F2;
@@ -176,12 +176,12 @@ const CSS = `
     padding: 2px 4px;
     letter-spacing: 0.02em;
   }
-  .partidas tbody tr:first-child td { padding-top: 7px; }
+  .partidas tbody tr:first-child td { padding-top: 4px; }
   .partidas tr.chapter-row td.chapter-idx { text-align: center; }
 
   /* Column widths (sum 100%) */
   .col-item   { width: 4%;  text-align: center; white-space: nowrap; }
-  .col-name   { width: 18%; text-align: left; }
+  .col-name   { width: 18%; text-align: left; text-transform: uppercase; }
   .col-desc   { width: 28%; text-align: left; font-size: 6pt; color: #555; }
   /* Descripción con formato (negrita/cursiva/listas/color del editor). */
   .col-desc p  { margin: 0; }
@@ -254,8 +254,8 @@ const CSS = `
 
   /* ── Totals row at end of table ──────────────────────────────── */
   tr.total-row td {
-    border-top: 1.5pt solid #000;
-    border-bottom: 1.5pt solid #000;
+    border-top: 0.75pt solid #000;
+    border-bottom: 0.75pt solid #000;
     background: #FFFFFF;
     padding: 5px 4px;
     font-weight: 700;

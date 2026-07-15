@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { renderEPHtml, buildEPFooter, type EPItemInput } from "@/lib/pdf/EstadoPagoPDF.html";
 import { renderPDF } from "@/lib/pdf/renderPDF";
 import { computeEPItem, type EPItemSnapshot } from "@/lib/ep/calculations";
+import { esSinManoDeObra } from "@/lib/ep/hideNoLabor";
 import { requireSession } from "@/lib/apiAuth";
 
 export async function GET(
@@ -59,8 +60,31 @@ export async function GET(
       }
     }
 
+    // Esconder del PDF las partidas sin mano de obra de este maestro
+    // (material/subcontrato de un tercero), igual que en la pantalla del EP.
+    // Se lee el costo "por otro lado" del ObraItem vigente.
+    const obraItemIds = ep.items
+      .map((i) => i.obraItemId)
+      .filter((v): v is string => !!v);
+    const obraItemsCosto = obraItemIds.length
+      ? await prisma.obraItem.findMany({
+          where: { id: { in: obraItemIds } },
+          select: {
+            id: true,
+            costMaterial: true,
+            costSubcontract: true,
+            costTools: true,
+          },
+        })
+      : [];
+    const costoByObraItemId = new Map(obraItemsCosto.map((o) => [o.id, o]));
+    const visibleItems = ep.items.filter(
+      (i) =>
+        !esSinManoDeObra(i.laborUnitPrice, costoByObraItemId.get(i.obraItemId))
+    );
+
     // Compute amountThisEp por item usando la lógica pura
-    const itemsForPdf: EPItemInput[] = ep.items.map((i) => {
+    const itemsForPdf: EPItemInput[] = visibleItems.map((i) => {
       const snap: EPItemSnapshot = {
         quantity: i.quantity,
         laborUnitPrice: i.laborUnitPrice,
@@ -87,7 +111,7 @@ export async function GET(
       };
     });
 
-    const totalLaborBudget = ep.items.reduce(
+    const totalLaborBudget = visibleItems.reduce(
       (s, i) => s + i.quantity * i.laborUnitPrice,
       0
     );

@@ -6,6 +6,7 @@ import {
 } from "@/lib/pdf/ObraMaestroPDF.html";
 import { buildObraMaestroXLSX } from "@/lib/xlsx/ObraMaestroXLSX";
 import { renderPDF } from "@/lib/pdf/renderPDF";
+import { esSinManoDeObra } from "@/lib/ep/hideNoLabor";
 import { requireSession } from "@/lib/apiAuth";
 
 // Puppeteer/Chromium necesita Node runtime; XLSX tambien.
@@ -73,7 +74,14 @@ export async function GET(
         })
       : null;
 
-    if (maestroId && budget.obraItems.length === 0) {
+    // Esconder las partidas que no llevan mano de obra del maestro
+    // (material/subcontrato de un tercero, ej. "espejo a medida"): no son su
+    // trabajo, no tiene que cotizarlas. Mismo criterio que el EP.
+    const visibleObraItems = budget.obraItems.filter(
+      (it) => !esSinManoDeObra(it.costLabor ?? 0, it)
+    );
+
+    if (maestroId && visibleObraItems.length === 0) {
       return NextResponse.json(
         { error: "Este maestro no tiene partidas asignadas en esta versión" },
         { status: 400 }
@@ -96,7 +104,7 @@ export async function GET(
       : budget.project.maestro
         ? { name: budget.project.maestro.name }
         : null;
-    const itemsInput = budget.obraItems.map((it) => ({
+    const itemsInput = visibleObraItems.map((it) => ({
       chapter: it.chapter,
       subChapter: it.subChapter,
       sortOrder: it.sortOrder,

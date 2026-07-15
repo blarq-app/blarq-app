@@ -89,7 +89,7 @@ export default async function MaestroEstadosPagoPage({
         </Link>
       </div>
 
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-xl font-medium text-gray-900">{maestro.name}</h2>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -99,38 +99,31 @@ export default async function MaestroEstadosPagoPage({
             {maestro.emitsInvoice && " · emite factura"}
           </p>
         </div>
-        {budget && (
-          <a
-            href={`/api/presupuestos/${budget.id}/maestro?format=pdf&maestroId=${maestroId}`}
-            target="_blank"
-            className="border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
-            title="PDF con solo las partidas de este maestro, sin precios"
-          >
-            Alcance PDF
-          </a>
-        )}
+        <div className="flex items-center gap-2">
+          {budget && (
+            <a
+              href={`/api/presupuestos/${budget.id}/maestro?format=pdf&maestroId=${maestroId}`}
+              target="_blank"
+              className="border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+              title="PDF con solo las partidas de este maestro, sin precios"
+            >
+              Alcance PDF
+            </a>
+          )}
+          <NuevoEPButton
+            projectId={projectId}
+            maestroId={maestroId}
+            label="+ Nuevo EP"
+            disabled={assignedCount === 0}
+          />
+        </div>
       </div>
 
-      {/* Selector de partidas del maestro */}
-      <div className="mb-8">
-        <PartidaAssigner
-          projectId={projectId}
-          maestroId={maestroId}
-          items={assignerItems}
-        />
-      </div>
-
-      {/* Estados de pago de este maestro */}
+      {/* Estados de pago de este maestro (arriba: es lo principal) */}
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-gray-700">
           Estados de pago de {maestro.name}
         </h3>
-        <NuevoEPButton
-          projectId={projectId}
-          maestroId={maestroId}
-          label="+ Nuevo EP"
-          disabled={assignedCount === 0}
-        />
       </div>
 
       {assignedCount === 0 ? (
@@ -202,6 +195,16 @@ export default async function MaestroEstadosPagoPage({
           </table>
         </div>
       )}
+
+      {/* Reparto de partidas — colapsado por default una vez asignadas, para no
+          tapar los EPs. Se despliega si MJ quiere cambiar el reparto. */}
+      <div className="mt-8">
+        <PartidaAssigner
+          projectId={projectId}
+          maestroId={maestroId}
+          items={assignerItems}
+        />
+      </div>
     </div>
   );
 }

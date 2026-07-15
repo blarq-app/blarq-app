@@ -35,6 +35,11 @@ export default function PartidaAssigner({
     () => new Set(items.filter((i) => i.assignedToThis).map((i) => i.id))
   );
   const [saving, setSaving] = useState(false);
+  // Arranca colapsado si el maestro ya tiene partidas asignadas (el reparto ya
+  // está hecho; no queremos tapar los EPs). Si no tiene ninguna, arranca
+  // abierto para invitar a repartir.
+  const initialAssigned = items.filter((i) => i.assignedToThis).length;
+  const [collapsed, setCollapsed] = useState(initialAssigned > 0);
 
   const initial = useMemo(
     () => new Set(items.filter((i) => i.assignedToThis).map((i) => i.id)),
@@ -104,39 +109,64 @@ export default function PartidaAssigner({
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
+      <div
+        className={`flex items-center justify-between px-4 py-3 bg-gray-50 ${
+          collapsed ? "" : "border-b border-gray-200"
+        }`}
+      >
         <div className="flex items-center gap-3">
           <span className="text-sm font-medium text-gray-900">
-            Sus partidas
+            Reparto de partidas
           </span>
           <span className="text-xs text-gray-500 tabular-nums">
-            {selected.size} de {items.length} tildadas
+            {collapsed
+              ? `${selected.size} asignada${selected.size !== 1 ? "s" : ""}`
+              : `${selected.size} de ${items.length} tildadas`}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={selectAll}
-            className="text-xs text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100"
-          >
-            Seleccionar todo
-          </button>
-          <button
-            onClick={selectNone}
-            className="text-xs text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100"
-          >
-            Ninguno
-          </button>
-          <button
-            onClick={save}
-            disabled={!dirty || saving}
-            className="bg-gray-900 text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {saving ? "Guardando..." : dirty ? "Guardar cambios" : "Guardado"}
-          </button>
+          {collapsed ? (
+            <button
+              onClick={() => setCollapsed(false)}
+              className="text-xs text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100"
+            >
+              Editar reparto
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={selectAll}
+                className="text-xs text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100"
+              >
+                Seleccionar todo
+              </button>
+              <button
+                onClick={selectNone}
+                className="text-xs text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100"
+              >
+                Ninguno
+              </button>
+              <button
+                onClick={save}
+                disabled={!dirty || saving}
+                className="bg-gray-900 text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {saving ? "Guardando..." : dirty ? "Guardar cambios" : "Guardado"}
+              </button>
+              {initialAssigned > 0 && (
+                <button
+                  onClick={() => setCollapsed(true)}
+                  className="text-xs text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100"
+                >
+                  Contraer
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
 
-      {items.length === 0 ? (
+      {collapsed ? null : items.length === 0 ? (
         <div className="px-4 py-8 text-center text-sm text-gray-500">
           Esta obra no tiene partidas de presupuesto todavía.
         </div>

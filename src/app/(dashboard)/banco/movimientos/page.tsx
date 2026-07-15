@@ -433,12 +433,21 @@ export default async function MovimientosPage({
     })),
   }));
 
-  // El filtro de imputación en la columna es contextual: solo aparece cuando la
-  // cuenta seleccionada es la de Sueldos (role "salary_fund"). En "Todas las
-  // cuentas" u "Operativa" no se muestra.
-  const salaryAccount = accounts.find((a) => a.role === "salary_fund");
+  // El filtro de imputación en la columna filtra por la categoría del
+  // movimiento sin factura (sueldo / préstamo socio / retiro / etc.). Antes
+  // solo aparecía en la cuenta Sueldos, pero los pagos a socios pasan por
+  // Sueldos Y por Operativa, así que en "Todas las cuentas" no se podían
+  // pescar. Ahora se muestra en "Todas las cuentas", "Operativa" y "Sueldos"
+  // (donde el filtro tiene sentido); se oculta solo si la cuenta elegida es
+  // "otra". El filtro es agnóstico de cuenta en la query, así que respeta la
+  // URL igual en todas las vistas.
+  const selectedAccount = sp.accountId
+    ? accounts.find((a) => a.id === sp.accountId)
+    : null;
   const showImputacionFilter =
-    !!salaryAccount && sp.accountId === salaryAccount.id;
+    !sp.accountId || // Todas las cuentas
+    selectedAccount?.role === "operating" || // Operativa
+    selectedAccount?.role === "salary_fund"; // Sueldos
 
   return (
     <div>

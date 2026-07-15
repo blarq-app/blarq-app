@@ -69,13 +69,21 @@ const FIELD_LABEL: Record<DiffField, string> = {
 
 export default function SyncDiffModal({
   epId,
+  versions,
+  defaultTargetVersionId,
   onClose,
   onApplied,
 }: {
   epId: string;
+  // Versiones de obra disponibles: MJ elige contra cuál sincronizar.
+  versions: { id: string; version: string; status: string }[];
+  defaultTargetVersionId?: string;
   onClose: () => void;
   onApplied: () => void;
 }) {
+  const [targetVersionId, setTargetVersionId] = useState<string>(
+    defaultTargetVersionId ?? versions[0]?.id ?? ""
+  );
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +107,10 @@ export default function SyncDiffModal({
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/estados-pago/${epId}/sync/preview`);
+        const qs = targetVersionId
+          ? `?targetVersionId=${encodeURIComponent(targetVersionId)}`
+          : "";
+        const res = await fetch(`/api/estados-pago/${epId}/sync/preview${qs}`);
         if (!res.ok) {
           const j = await res.json().catch(() => ({}));
           if (alive) setError(j.error || "No se pudo cargar la previsualización.");
@@ -124,7 +135,7 @@ export default function SyncDiffModal({
     return () => {
       alive = false;
     };
-  }, [epId]);
+  }, [epId, targetVersionId]);
 
   const totals = useMemo(() => {
     if (!preview) return null;
@@ -179,6 +190,7 @@ export default function SyncDiffModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          targetVersionId,
           selection: {
             addedLineageIds: Array.from(acceptedAdds),
             removedSafeItemIds: Array.from(acceptedRemovedSafe),
@@ -217,6 +229,36 @@ export default function SyncDiffModal({
         onClose={applying ? undefined : onClose}
       />
       <ModalBody>
+          {/* Selector de versión destino: MJ elige contra cuál sincronizar. */}
+          {versions.length > 1 && (
+            <div className="flex items-center gap-2 text-xs mb-3">
+              <span className="uppercase tracking-wider text-gray-500">
+                Sincronizar contra
+              </span>
+              <select
+                value={targetVersionId}
+                onChange={(e) => setTargetVersionId(e.target.value)}
+                disabled={applying}
+                className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 focus:border-gray-900 focus:outline-none disabled:opacity-50"
+              >
+                {versions.map((v) => {
+                  const estado =
+                    v.status === "aprobado"
+                      ? "aprobada"
+                      : v.status === "enviado"
+                        ? "enviada"
+                        : v.status === "borrador"
+                          ? "borrador"
+                          : v.status;
+                  return (
+                    <option key={v.id} value={v.id}>
+                      {v.version} · {estado}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
           {loading && (
             <div className="text-sm text-gray-500 text-center py-12">
               Calculando diferencias...

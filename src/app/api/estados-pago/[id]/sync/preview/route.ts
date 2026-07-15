@@ -8,7 +8,7 @@ import { requireSession } from "@/lib/apiAuth";
 // SIN mutar nada. La UI lo usa para mostrar checkboxes y dejar que el usuario
 // elija qué cambios aplicar.
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const gate = await requireSession();
@@ -34,7 +34,15 @@ export async function GET(
       );
     }
 
-    const obraBudget = await findLatestObraBudget(prisma, ep.projectId);
+    // Versión destino: la que MJ elija a mano (?targetVersionId=), validada como
+    // obra de este proyecto; si no, la vigente.
+    const targetVersionId = request.nextUrl.searchParams.get("targetVersionId");
+    const obraBudget = targetVersionId
+      ? await prisma.budgetVersion.findFirst({
+          where: { id: targetVersionId, projectId: ep.projectId, type: "obra" },
+          include: { obraItems: { orderBy: { sortOrder: "asc" } } },
+        })
+      : await findLatestObraBudget(prisma, ep.projectId);
     if (!obraBudget) {
       return NextResponse.json(
         { error: "No hay presupuesto de obra para sincronizar" },

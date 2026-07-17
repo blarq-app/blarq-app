@@ -1,11 +1,9 @@
 # ADR — Repartir la obra entre varios maestros: partidas por maestro + EPs por maestro
 
 - **Fecha**: 2026-07-14
-- **Estado**: aceptado — construido (Etapas 1 y 2) en `feat/maestros-por-partida`;
-  base viva migrada con ALTER quirúrgico el 2026-07-14 (ver
-  `scripts/migrate-maestros-live.sql`). Pendiente: merge + deploy para que la
-  UI llegue a prod (hoy prod corre `main`, que aún no tiene la feature; las
-  columnas nuevas son aditivas/nullable → `main` sigue funcionando igual).
+- **Estado**: aceptado — **EN PROD** desde el 2026-07-15 (PR #297 la feature,
+  PR #298 el ajuste de layout). Base viva migrada con ALTER quirúrgico aditivo
+  el 2026-07-14 (ver `scripts/migrate-maestros-live.sql`).
 - **Autor**: MJ, con diseño asistido en sesión Claude Code (rama `feat/maestros-por-partida`)
 
 ## Contexto
@@ -71,8 +69,9 @@ divide y se paga la mano de obra, no cuánto vale.
   MJ: mete demasiada información en la pantalla principal del presupuesto. Se reemplazó por
   el selector de partidas desde el maestro (mismo dato `ObraItem.maestroId` por debajo, otro
   punto de entrada en la UI).
-- **Asignar por capítulo.** No sirve para Sena: los retiros del porcelanato (1.3/1.5/1.7/1.8)
-  viven en el capítulo 1 junto a partidas del maestro de obra.
+- **Asignar por capítulo.** No sirve para Sena: las 4 partidas del ceramista (inst. pavimento
+  5.1, revestimiento 5.5, guardapolvo 5.4) viven en TERMINACIONES junto a pintura, puertas y
+  espejo, que son del maestro de obra gruesa. El corte es por oficio, no por capítulo.
 - **Tabla intermedia maestro↔partidas (muchos a muchos).** Permitiría una partida en varios
   maestros, pero no es la realidad (una partida la ejecuta un maestro) y complica el avance
   (¿quién ejecutó?). Se prefiere `ObraItem.maestroId` único.
@@ -99,8 +98,16 @@ divide y se paga la mano de obra, no cuánto vale.
 2. **EPs por maestro**: `EstadoPago.maestroId`, numeración por maestro, creación de EP que
    snapshotea solo las partidas del maestro, editor/PDF del EP por maestro.
 
-Caso de prueba (Sena): maestro obra = todo menos porcelanato; maestro porcelanato =
-instalación pavimento 5.1/5.8 + instalación revestimiento 5.9 + retiros 1.3/1.5/1.7/1.8.
+Caso real aplicado (Sena V2, 54 partidas) — **corregido por MJ**: los retiros los hace la
+obra gruesa, NO el ceramista. Reparto definitivo:
+- **Jefrey Gomez — obra gruesa**: 50 partidas (todo, incluidos los retiros 1.1/1.2/1.3/1.4/1.6
+  y la perforación 1.5).
+- **Juan Mena — ceramista**: 4 partidas, SOLO la instalación de porcelanato — inst. pavimento
+  porcelanato (5.1, cocina y baño), inst. revestimiento porcelanato (5.5), inst. guardapolvo
+  porcelanato (5.4).
+
+(La numeración `5.8`/`5.9` y "retiros 1.3/1.5/1.7/1.8" de la conversación inicial NO existe en
+V2 — venía de otra numeración. El criterio correcto es por oficio, no por número.)
 
 ## Referencias
 

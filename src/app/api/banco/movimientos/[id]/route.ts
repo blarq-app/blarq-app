@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cleanupInvoicesAfterUnassign } from "@/lib/banco/invoicePayments";
 import { upsertRuleFromMovement } from "@/lib/banco/categorizationRules";
 import { requireSession } from "@/lib/apiAuth";
+import { SOCIO_RUTS, esCategoriaPrestamoSocio } from "@/lib/banco/socios";
 
 // PATCH /api/banco/movimientos/[id]
 //
@@ -57,6 +58,9 @@ export async function PATCH(
       // A qué mes corresponde un sueldo/previred, formato "YYYY-MM" (o null para
       // volver al default por fecha). Ver src/lib/banco/salaryPeriod.ts.
       salaryPeriod: string | null;
+      // A qué socio corresponde un préstamo/devolución cuando la plata fue a un
+      // tercero por cuenta del socio. RUT sin puntos ni DV; null = limpiar.
+      socioRut: string | null;
       notes: string;
     }>;
 
@@ -143,6 +147,27 @@ export async function PATCH(
       await prisma.bankMovement.update({
         where: { id: mov.id },
         data: { salaryPeriod: body.salaryPeriod },
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    // Marcar a QUÉ SOCIO corresponde un préstamo/devolución cuando la plata fue
+    // a un tercero por cuenta del socio (caso real: $500k a Rojas Mella por
+    // cuenta de JT). Solo aplica a esas categorías — el resto no tiene socio
+    // detrás. null = limpiar la marca (la contraparte vuelve a mandar).
+    if (body.socioRut !== undefined) {
+      if (!esCategoriaPrestamoSocio(mov.category)) {
+        return NextResponse.json(
+          { error: "Solo se puede marcar el socio en préstamos y devoluciones de socio" },
+          { status: 400 }
+        );
+      }
+      if (body.socioRut !== null && !SOCIO_RUTS.includes(body.socioRut)) {
+        return NextResponse.json({ error: "Socio inválido" }, { status: 400 });
+      }
+      await prisma.bankMovement.update({
+        where: { id: mov.id },
+        data: { socioRut: body.socioRut },
       });
       return NextResponse.json({ ok: true });
     }

@@ -23,7 +23,13 @@
 //   - Devolución neto-cero → se ignora.
 
 import { prisma } from "@/lib/prisma";
-import { esSocio, nombreSocio } from "@/lib/banco/socios";
+import {
+  esSocio,
+  socioDeMovimiento,
+  esCategoriaPrestamoSocio,
+  CATEGORIA_PRESTAMO_SOCIO,
+  CATEGORIA_DEVOLUCION_PRESTAMO_SOCIO,
+} from "@/lib/banco/socios";
 import { effectiveSalaryPeriod } from "@/lib/banco/salaryPeriod";
 
 // Socios de BLARQ: un pago hacia/desde ellos NO es gasto de operación. La
@@ -44,12 +50,25 @@ const esPagoSocio = esSocio;
 // El reembolso (devolución de un gasto de bolsillo) NO usa categoría: se
 // resuelve conciliando el egreso contra la factura del proveedor (PR #239),
 // y queda como gasto de operación. No pasa por acá.
-const CATEGORIA_PRESTAMO_SOCIO = "prestamo_socio";
-const LABEL_PRESTAMO_SOCIO = "Préstamos de socios";
+// Financiamiento entre BLARQ y un socio. Son DOS categorías, y la DIRECCIÓN la
+// da el signo del movimiento — con eso quedan cubiertos los cuatro casos reales
+// sin inventar más etiquetas (decidido con MJ 2026-07-16):
+//
+//   Préstamo  + entra plata → el socio le presta a BLARQ    → BLARQ le debe
+//   Préstamo  + sale plata  → BLARQ le presta/adelanta       → el socio le debe
+//   Devolución + sale plata → BLARQ le devuelve al socio      → baja lo que BLARQ debe
+//   Devolución + entra plata→ el socio le devuelve a BLARQ    → baja lo que el socio debe
+//
+// Antes había UNA sola categoría "prestamo_socio" para todo, así que una
+// devolución se leía como "préstamo" y el saldo salía dado vuelta.
+// OJO: esto NO es la "Devolución (neto cero)" del banco — esa es para un pago
+// por error que vuelve entero y se cancela solo. Acá el saldo queda vivo.
 function labelPagoSocio(category: string | null): string {
   switch (category) {
     case CATEGORIA_PRESTAMO_SOCIO:
-      return LABEL_PRESTAMO_SOCIO;
+      return "Préstamos de socios";
+    case CATEGORIA_DEVOLUCION_PRESTAMO_SOCIO:
+      return "Devoluciones de préstamos";
     case "sueldo":
       return "Sueldos socios";
     case "bono_socio":
@@ -98,9 +117,14 @@ export type CajaRow = {
 // depósito original como "Préstamo socio".
 export type SaldoPrestamoSocio = {
   socio: string;
-  prestado: number;
-  devuelto: number;
-  saldo: number;
+  // Relación 1 — el socio financió a BLARQ (caso camioneta 2022).
+  prestadoPorSocio: number; // entró plata del socio → BLARQ le debe
+  devueltoPorBlarq: number; // salió plata al socio → baja lo que BLARQ debe
+  saldoBlarqDebe: number; // prestadoPorSocio − devueltoPorBlarq
+  // Relación 2 — BLARQ le adelantó plata al socio (caso Rojas Mella).
+  prestadoPorBlarq: number; // salió plata por el socio → el socio le debe
+  devueltoPorSocio: number; // entró plata del socio → baja lo que el socio debe
+  saldoSocioDebe: number; // prestadoPorBlarq − devueltoPorSocio
 };
 
 export type EstadoResultadoCaja = {
@@ -131,28 +155,79 @@ export async function computeSaldoPrestamosSocios(
   hasta: Date
 ): Promise<SaldoPrestamoSocio[]> {
   const movs = await prisma.bankMovement.findMany({
-    where: { category: CATEGORIA_PRESTAMO_SOCIO, date: { lt: hasta } },
-    select: { amount: true, counterpartyRut: true, counterpartyName: true },
+    where: {
+      category: {
+        in: [CATEGORIA_PRESTAMO_SOCIO, CATEGORIA_DEVOLUCION_PRESTAMO_SOCIO],
+      },
+      date: { lt: hasta },
+    },
+    select: {
+      amount: true,
+      category: true,
+      socioRut: true,
+      counterpartyRut: true,
+      counterpartyName: true,
+      description: true,
+    },
   });
-  const porSocio = new Map<string, { prestado: number; devuelto: number }>();
+  type Acc = {
+    prestadoPorSocio: number;
+    devueltoPorBlarq: number;
+    prestadoPorBlarq: number;
+    devueltoPorSocio: number;
+  };
+  const porSocio = new Map<string, Acc>();
   for (const mov of movs) {
-    const socio = nombreSocio(mov.counterpartyRut, mov.counterpartyName);
-    const e = porSocio.get(socio) ?? { prestado: 0, devuelto: 0 };
-    // Abono (monto > 0): entró plata del socio a la empresa = préstamo.
-    // Cargo (monto < 0): salió plata al socio = la empresa le devolvió.
-    if (mov.amount > 0) e.prestado += mov.amount;
-    else e.devuelto += -mov.amount;
+    // Si la plata fue a un tercero por cuenta de un socio y nadie marcó de qué
+    // socio es, no se lo atribuimos a nadie (antes se le cargaba al tercero,
+    // que aparecía como si fuera socio). La UI del banco pide ese dato.
+    const socio = socioDeMovimiento(
+      mov.socioRut,
+      mov.counterpartyRut,
+      mov.counterpartyName,
+      mov.description
+    );
+    if (!socio) continue;
+    const e =
+      porSocio.get(socio) ??
+      ({
+        prestadoPorSocio: 0,
+        devueltoPorBlarq: 0,
+        prestadoPorBlarq: 0,
+        devueltoPorSocio: 0,
+      } satisfies Acc);
+    // El signo dice la dirección; la categoría dice si crea o salda la deuda.
+    if (mov.category === CATEGORIA_DEVOLUCION_PRESTAMO_SOCIO) {
+      if (mov.amount < 0) e.devueltoPorBlarq += -mov.amount;
+      else e.devueltoPorSocio += mov.amount;
+    } else {
+      if (mov.amount > 0) e.prestadoPorSocio += mov.amount;
+      else e.prestadoPorBlarq += -mov.amount;
+    }
     porSocio.set(socio, e);
   }
   return Array.from(porSocio.entries())
     .map(([socio, e]) => ({
       socio,
-      prestado: Math.round(e.prestado),
-      devuelto: Math.round(e.devuelto),
-      saldo: Math.round(e.prestado - e.devuelto),
+      prestadoPorSocio: Math.round(e.prestadoPorSocio),
+      devueltoPorBlarq: Math.round(e.devueltoPorBlarq),
+      saldoBlarqDebe: Math.round(e.prestadoPorSocio - e.devueltoPorBlarq),
+      prestadoPorBlarq: Math.round(e.prestadoPorBlarq),
+      devueltoPorSocio: Math.round(e.devueltoPorSocio),
+      saldoSocioDebe: Math.round(e.prestadoPorBlarq - e.devueltoPorSocio),
     }))
-    .filter((s) => s.prestado > 1 || s.devuelto > 1)
-    .sort((a, b) => b.prestado + b.devuelto - (a.prestado + a.devuelto));
+    .filter(
+      (s) =>
+        s.prestadoPorSocio > 1 ||
+        s.devueltoPorBlarq > 1 ||
+        s.prestadoPorBlarq > 1 ||
+        s.devueltoPorSocio > 1
+    )
+    .sort(
+      (a, b) =>
+        b.prestadoPorSocio + b.devueltoPorBlarq + b.prestadoPorBlarq -
+        (a.prestadoPorSocio + a.devueltoPorBlarq + a.prestadoPorBlarq)
+    );
 }
 
 export async function computeEstadoResultadoCaja(
@@ -284,7 +359,12 @@ export async function computeEstadoResultadoCaja(
     // presta a la empresa); por eso interceptamos también los ingresos cuando
     // están marcados como préstamo. El resto de los ingresos de socio (sin
     // categoría de préstamo) sigue el flujo normal de abajo.
-    if (movSocio && (egresoSocio || mov.category === CATEGORIA_PRESTAMO_SOCIO)) {
+    // Un préstamo/devolución de socio va SIEMPRE al bloque no operativo, aunque
+    // la contraparte del banco no sea el socio. Caso real: BLARQ le pagó $500k a
+    // un tercero (Rojas Mella) por cuenta de JT — como la glosa no dice "socio",
+    // antes caía en el bloque OPERATIVO y restaba de la utilidad como si fuera
+    // un gasto del negocio. Prestar plata no es costo de operar.
+    if (esCategoriaPrestamoSocio(mov.category) || (movSocio && egresoSocio)) {
       add("no", tipo, labelPagoSocio(mov.category), m, mov.amount);
       continue;
     }

@@ -43,7 +43,10 @@ type SearchParams = {
 // sección Sueldos.
 const IMPUTACION_CATEGORY_OPTIONS: { value: string; label: string }[] = [
   { value: "sueldo", label: "Sueldo" },
+  // Préstamo = se crea la deuda; Devolución = se salda. La dirección (quién le
+  // debe a quién) la da el signo del movimiento — ver estadoResultadoCaja.ts.
   { value: "prestamo_socio", label: "Préstamo socio" },
+  { value: "devolucion_prestamo_socio", label: "Devolución préstamo socio" },
   { value: "retiro_personal", label: "Retiro socio" },
   { value: "bono_socio", label: "Bono socio" },
   { value: "previred", label: "Previred" },
@@ -63,6 +66,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   retiro_personal: "Retiro socio",
   bono_socio: "Bono socio",
   prestamo_socio: "Préstamo socio",
+  devolucion_prestamo_socio: "Devolución préstamo socio",
   deposito_efectivo: "Depósito efectivo",
   impuestos: "Impuestos",
   compra_tarjeta: "Compra tarjeta",
@@ -419,6 +423,7 @@ export default async function MovimientosPage({
     projectId: m.projectId,
     internalConcepto: m.internalConcepto,
     salaryPeriod: m.salaryPeriod,
+    socioRut: m.socioRut,
     payments: m.payments.map((p) => ({
       id: p.id,
       invoiceId: p.invoiceId,

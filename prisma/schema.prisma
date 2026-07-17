@@ -1141,8 +1141,19 @@ model BankMovement {
   // null — la factura ya tiene su categoría. Cuando es egreso sin factura
   // (sueldo, previred, comisión, retiro personal, etc) acá se etiqueta.
   // Valores típicos: sueldo | previred | comision_bancaria | retiro_personal
-  // | deposito_efectivo | otro_sin_factura | null.
+  // | deposito_efectivo | otro_sin_factura | prestamo_socio |
+  // devolucion_prestamo_socio | null.
   category        String?
+  // A qué SOCIO corresponde un préstamo/devolución cuando la contraparte del
+  // banco NO es el socio. Caso real: BLARQ le pagó $500k a un tercero (Rojas
+  // Mella) por cuenta de JT porque JT no tenía plata en su cuenta; la glosa
+  // dice "Rojas Mella", pero el que le debe a BLARQ es JT. Sin este campo el
+  // saldo se le atribuía al tercero, como si fuera socio.
+  // Formato: RUT sin puntos ni dígito verificador (ver SOCIO_RUTS en
+  // src/lib/banco/socios.ts). null = la contraparte ES el socio (lo normal) o
+  // el movimiento no es de préstamo. Solo aplica a category
+  // prestamo_socio / devolucion_prestamo_socio.
+  socioRut        String?
   // Para sueldos y Previred: a qué MES corresponde el pago, formato "YYYY-MM".
   // El pago cae en el banco cuando MJ transfiere —a veces el mes siguiente (el
   // sueldo de junio pagado el 1-jul, la planilla Previred de mayo pagada en

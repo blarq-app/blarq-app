@@ -152,13 +152,22 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   //
   // Cuando hay múltiples obras aprobadas (caso anexos como BAÑO VISITAS),
   // se calcula el costo total de cada una con sus propios % y se suman.
+  //
+  // Las partidas "NO COBRADO" (BLARQ absorbe el costo, no se le cobra al
+  // cliente — ObraItem.noCobrado) quedan FUERA de todo el presupuesto del
+  // proyecto: ni acá (acordado al cliente) ni abajo en el presupuesto de
+  // costos por categoría. Su costo real igual aparece como gasto (facturas/EP),
+  // así que se ve como MO más cara de lo presupuestado y baja la utilidad —
+  // que es justo lo que MJ quiere ver. Helper `cobrables` para no repetir.
+  const cobrables = (o: (typeof obras)[number]) =>
+    o.obraItems.filter((i) => !i.noCobrado);
   let obraCostoDirecto = 0;
   let obraGG = 0;
   let obraUtilidad = 0;
   let obraNeto = 0;
   let obraTotal = 0;
   for (const o of obras) {
-    const cd = o.obraItems.reduce((s, i) => s + i.total, 0);
+    const cd = cobrables(o).reduce((s, i) => s + i.total, 0);
     const gg = cd * ((o.ggPercentage ?? 0) / 100);
     const util = cd * ((o.utilityPercentage ?? 0) / 100);
     const neto = cd + gg + util;
@@ -264,7 +273,9 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   // Suma componentes de TODAS las obras aprobadas (incluye anexos como
   // BAÑO VISITAS). costMargin se incluye explícitamente: el margen por
   // partida es parte del costo directo y MJ quiere verlo en el resumen.
-  const obraItems = obras.flatMap((o) => o.obraItems);
+  // Excluye las "NO COBRADO" (ver arriba): no entran en el presupuesto de
+  // costos por categoría ni en el presupuesto de mano de obra / avance.
+  const obraItems = obras.flatMap((o) => cobrables(o));
   const budgetByType: Record<string, number> = {
     costMaterial: 0,
     costLabor: 0,

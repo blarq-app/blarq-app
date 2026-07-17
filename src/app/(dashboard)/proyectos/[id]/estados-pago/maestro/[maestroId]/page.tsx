@@ -33,6 +33,14 @@ export default async function MaestroEstadosPagoPage({
   // Versión de obra vigente + partidas (para el selector).
   const budget = await findLatestObraBudget(prisma, projectId);
 
+  // Todas las versiones de obra, para que MJ pueda elegir a mano sobre cuál
+  // armar el EP (default: la vigente = la que devuelve findLatestObraBudget).
+  const obraVersions = await prisma.budgetVersion.findMany({
+    where: { projectId, type: "obra" },
+    select: { id: true, version: true, status: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+  });
+
   // Nombres de maestros con partidas en esta versión, para etiquetar "de otro".
   const otherMaestros = budget
     ? await prisma.maestro.findMany({
@@ -115,6 +123,12 @@ export default async function MaestroEstadosPagoPage({
             maestroId={maestroId}
             label="+ Nuevo EP"
             disabled={assignedCount === 0}
+            versions={obraVersions.map((v) => ({
+              id: v.id,
+              version: v.version,
+              status: v.status,
+            }))}
+            defaultVersionId={budget?.id}
           />
         </div>
       </div>

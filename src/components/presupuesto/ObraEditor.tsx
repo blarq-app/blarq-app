@@ -193,6 +193,10 @@ interface ObraItem {
   costLoss: number | null;
   sortOrder: number;
   catalogPartidaId: string | null;
+  // BLARQ absorbe el costo: se le paga al maestro pero NO se le cobra al
+  // cliente. Invisible en el PDF/total del cliente; normal en el alcance/EP
+  // del maestro. Se marca acá con un toggle.
+  noCobrado?: boolean;
   components?: ObraItemComponent[];
 }
 
@@ -774,6 +778,30 @@ export default function ObraEditor({
     }
   }
 
+  // Marcar/desmarcar una partida como "NO COBRADO" (BLARQ absorbe el costo:
+  // se le paga al maestro pero no se le cobra al cliente). PATCH liviano —
+  // solo el flag — con update optimista de la UI.
+  async function handleToggleNoCobrado(itemId: string, value: boolean) {
+    setItems((curr) =>
+      curr.map((i) => (i.id === itemId ? { ...i, noCobrado: value } : i))
+    );
+    setSaveStatus("saving");
+    try {
+      await fetch(
+        `/api/presupuestos/${initialBudget.id}/partidas/${itemId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ noCobrado: value }),
+        }
+      );
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 1500);
+    } catch {
+      setSaveStatus("idle");
+    }
+  }
+
   // Asignar (o quitar) zona en bulk a todas las partidas seleccionadas.
   // Llama al PUT individual en paralelo. Pasar `null` quita la zona.
   async function handleBulkSetZone(zone: string | null) {
@@ -1282,7 +1310,11 @@ export default function ObraEditor({
                       ref={drag.setNodeRef}
                       style={drag.style}
                       className={`border-b border-gray-100 hover:bg-gray-50/60 group ${
-                        selectedItemIds.has(item.id) || drag.isDragging ? "bg-gray-50" : ""
+                        item.noCobrado
+                          ? "bg-amber-50/60 shadow-[inset_3px_0_0_theme(colors.amber.500)]"
+                          : selectedItemIds.has(item.id) || drag.isDragging
+                            ? "bg-gray-50"
+                            : ""
                       }`}
                     >
                       <td className="px-2 py-1 align-top text-center">
@@ -1437,13 +1469,21 @@ export default function ObraEditor({
                             La pastilla "NUEVO" va acá adelante, en un flex, con
                             su propio espacio (shrink-0): el nombre queda a su
                             derecha y nunca arranca debajo de ella. */}
-                        <div className="flex items-start gap-1.5">
+                        <div className="flex items-start gap-1.5 flex-wrap">
                           {chg?.marker === "added" && (
                             <span
                               className="mt-0.5 shrink-0 inline-block whitespace-nowrap rounded-full border border-gray-900 px-1 text-[8px] font-semibold uppercase leading-none tracking-wide text-gray-900"
                               title="Partida nueva — no estaba en la versión enviada al cliente"
                             >
                               Nuevo
+                            </span>
+                          )}
+                          {item.noCobrado && (
+                            <span
+                              className="mt-0.5 shrink-0 inline-block whitespace-nowrap rounded-full bg-amber-100 px-1.5 text-[8px] font-semibold uppercase leading-none tracking-wide text-amber-800 py-0.5"
+                              title="No se le cobra al cliente — BLARQ absorbe el costo. Igual va en el alcance/EP del maestro."
+                            >
+                              No cobrado
                             </span>
                           )}
                           <textarea
@@ -1636,6 +1676,35 @@ export default function ObraEditor({
                     {expandedItems[item.id] && (
                       <tr className="bg-gray-50">
                         <td colSpan={10} className="p-0">
+                          {/* Toggle NO COBRADO: BLARQ absorbe el costo (se le
+                              paga al maestro pero no se le cobra al cliente).
+                              Solo editable en versiones no congeladas. */}
+                          <label
+                            className={`flex items-center gap-2 px-4 py-2 border-b border-gray-200 text-xs ${
+                              canEditDetail
+                                ? "cursor-pointer text-gray-700"
+                                : "cursor-default text-gray-400"
+                            }`}
+                            title="No se le cobra al cliente — no aparece en el PDF ni suma al total. Igual va en el alcance/EP del maestro."
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-3.5 w-3.5 accent-amber-600"
+                              checked={!!item.noCobrado}
+                              disabled={!canEditDetail}
+                              onChange={(e) =>
+                                handleToggleNoCobrado(item.id, e.target.checked)
+                              }
+                            />
+                            <span>
+                              No cobrar al cliente
+                              <span className="text-gray-400">
+                                {" "}
+                                — BLARQ absorbe el costo (invisible en el PDF y
+                                el total; igual va al alcance/EP del maestro)
+                              </span>
+                            </span>
+                          </label>
                           <PartidaExpandedPanel
                             item={item}
                             saveStatus={saveStatus}

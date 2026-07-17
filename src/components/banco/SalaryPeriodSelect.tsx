@@ -77,7 +77,7 @@ export default function SalaryPeriodSelect({
       onChange={(e) => onChange(e.target.value)}
       disabled={busy}
       title="A qué mes corresponde este pago (para el Estado de Resultados)"
-      className={`text-[11px] border rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 ${
+      className={`text-force-10 border rounded px-1 py-0.5 outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 ${
         value ? "border-gray-300 text-gray-700" : "border-gray-200 text-gray-400"
       }`}
     >

@@ -32,6 +32,14 @@ export default async function EstadosPagoPage({
   const obraItems = obraBudget?.obraItems ?? [];
   const hasObra = obraItems.length > 0;
 
+  // Todas las versiones de obra, para elegir a mano sobre cuál armar el EP
+  // (default: la vigente).
+  const obraVersions = await prisma.budgetVersion.findMany({
+    where: { projectId: id, type: "obra" },
+    select: { id: true, version: true, status: true },
+    orderBy: { createdAt: "desc" },
+  });
+
   // Conteos de partidas por maestro + sin asignar (sobre la versión vigente).
   const partidasByMaestro = new Map<string, number>();
   let sinAsignar = 0;
@@ -154,7 +162,12 @@ export default async function EstadosPagoPage({
                 : "Obra completa (sin repartir)"}
             </h3>
             {maestrosEnObra.length === 0 && (
-              <NuevoEPButton projectId={id} disabled={!hasObra} />
+              <NuevoEPButton
+                projectId={id}
+                disabled={!hasObra}
+                versions={obraVersions}
+                defaultVersionId={obraBudget?.id}
+              />
             )}
           </div>
 

@@ -127,6 +127,39 @@ export async function PUT(
   }
 }
 
+// PATCH parcial: hoy solo el flag `noCobrado` (BLARQ absorbe el costo, no se
+// le cobra al cliente). Es un toggle liviano — no queremos mandar toda la
+// partida (como hace el PUT) solo para marcar/desmarcar esto.
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; itemId: string }> }
+) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
+  try {
+    const { itemId } = await params;
+    const data = await request.json();
+    if (typeof data.noCobrado !== "boolean") {
+      return NextResponse.json(
+        { error: "noCobrado debe ser booleano" },
+        { status: 400 }
+      );
+    }
+    const item = await prisma.obraItem.update({
+      where: { id: itemId },
+      data: { noCobrado: data.noCobrado },
+    });
+    return NextResponse.json(item);
+  } catch (error) {
+    console.error("Error updating partida (patch):", error);
+    return NextResponse.json(
+      { error: "Error al actualizar partida" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> }

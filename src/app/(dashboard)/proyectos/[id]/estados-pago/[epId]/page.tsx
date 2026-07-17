@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import EditorEP from "@/components/estadosPago/EditorEP";
+import { esSinManoDeObra } from "@/lib/ep/hideNoLabor";
+import { selectVigente } from "@/lib/projects/selectVersion";
 
 export default async function EPDetailPage({
   params,
@@ -58,12 +60,41 @@ export default async function EPDetailPage({
     totalPaid: p.items.reduce((s, i) => s + (i.amountPaid ?? 0), 0),
   }));
 
-  // ¿Hay versión más nueva del presupuesto que la usada por este EP?
-  const latestBudgetVersion = await prisma.budgetVersion.findFirst({
+  // Partidas a esconder: las que no llevan mano de obra de este maestro (son
+  // material/subcontrato de un tercero, ej. "espejo a medida"). Se lee el costo
+  // "por otro lado" del ObraItem vigente; el snapshot del EP no lo guarda.
+  const obraItemIds = ep.items
+    .map((i) => i.obraItemId)
+    .filter((v): v is string => !!v);
+  const obraItemsCosto = obraItemIds.length
+    ? await prisma.obraItem.findMany({
+        where: { id: { in: obraItemIds } },
+        select: {
+          id: true,
+          costMaterial: true,
+          costSubcontract: true,
+          costTools: true,
+        },
+      })
+    : [];
+  const costoByObraItemId = new Map(obraItemsCosto.map((o) => [o.id, o]));
+  const hiddenItemIds = ep.items
+    .filter((i) =>
+      esSinManoDeObra(i.laborUnitPrice, costoByObraItemId.get(i.obraItemId))
+    )
+    .map((i) => i.id);
+
+  // ¿Este EP está armado sobre una versión distinta de la VIGENTE del proyecto?
+  // Se usa el criterio único (selectVigente), el MISMO que el backend de sync,
+  // para que el aviso no muestre una versión contra la que después no sincroniza.
+  const obraVersions = await prisma.budgetVersion.findMany({
     where: { projectId, type: "obra" },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, version: true },
+    select: { id: true, version: true, status: true, createdAt: true },
   });
+  const vigente = selectVigente(obraVersions);
+  const latestBudgetVersion = vigente
+    ? { id: vigente.id, version: vigente.version }
+    : null;
   const hasNewerVersion =
     latestBudgetVersion != null &&
     ep.budgetVersionId != null &&
@@ -93,6 +124,12 @@ export default async function EPDetailPage({
             : null
         }
         hasNewerVersion={hasNewerVersion}
+        hiddenItemIds={hiddenItemIds}
+        budgetVersions={obraVersions.map((v) => ({
+          id: v.id,
+          version: v.version,
+          status: v.status,
+        }))}
       />
     </div>
   );

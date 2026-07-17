@@ -30,6 +30,7 @@
 // se cablee a la UI se unificará para no duplicar la fuente de verdad.
 
 import type { Prisma } from "@prisma/client";
+import { selectVigente } from "@/lib/projects/selectVersion";
 
 // Categorías de costo que cuentan como "muebles" para la utilidad REAL de
 // muebles al cierre. Derivado de cómo /resumen separa el gasto por concepto.
@@ -159,8 +160,11 @@ export function computeUtilidadPorCobro(p: ProjectWithUtilidad): UtilidadPorCobr
   }
   const tasaUtilidadObra = obraTotalAcordado > 0 ? obraGGTotal / obraTotalAcordado : 0;
 
-  // ── MUEBLES: utilidad estimada y total acordado (mejor versión) ────────
-  const muebles = bestVersion(p.budgetVersions.filter((b) => b.type === "muebles"));
+  // ── MUEBLES: utilidad estimada y total acordado (versión vigente) ──────
+  // Criterio único de "versión vigente" (selectVersion.ts), el mismo que usan
+  // metrics/resumen/fondo. Antes había una copia local (`bestVersion`) que
+  // podía divergir.
+  const muebles = selectVigente(p.budgetVersions.filter((b) => b.type === "muebles"));
   const muebleItems = muebles ? muebles.muebleChapters.flatMap((c) => c.items) : [];
   const utilMueblesEstimadaTotal = muebleItems.reduce(
     (s, i) => s + (i.clientPriceNet - i.costDistributor) * i.quantity,
@@ -282,12 +286,3 @@ export function computeUtilidadPorCobro(p: ProjectWithUtilidad): UtilidadPorCobr
   };
 }
 
-// Mejor versión: la aprobada más reciente; si no hay aprobada, la más reciente.
-// (Misma que fondoSueldos.ts — para muebles/artefactos se usa una sola versión
-// vigente, a diferencia de obra que suma todas las aprobadas.)
-function bestVersion<T extends { status: string; createdAt: Date }>(arr: T[]): T | undefined {
-  const aprobado = arr
-    .filter((b) => b.status === "aprobado")
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-  return aprobado ?? arr.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-}

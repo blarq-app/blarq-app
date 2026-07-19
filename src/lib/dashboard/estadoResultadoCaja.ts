@@ -26,9 +26,9 @@ import { prisma } from "@/lib/prisma";
 import {
   esSocio,
   socioDeMovimiento,
-  esCategoriaPrestamoSocio,
+  esCategoriaFinanciamientoSocio,
   CATEGORIA_PRESTAMO_SOCIO,
-  CATEGORIA_DEVOLUCION_PRESTAMO_SOCIO,
+  CATEGORIA_ADELANTO_SOCIO,
 } from "@/lib/banco/socios";
 import { effectiveSalaryPeriod } from "@/lib/banco/salaryPeriod";
 
@@ -43,32 +43,18 @@ const esPagoSocio = esSocio;
 //   - Retiro (default): sacan utilidad para uso personal.
 //   - Sueldo: lo que se pagan por su trabajo (decisión MJ: no-operativo, fila propia).
 //   - Bono: pago extra (decisión MJ: no-operativo, fila propia).
-//   - Préstamo: la empresa les presta o ellos a la empresa. NI gasto NI retiro:
-//     es una cuenta por cobrar/pagar. Una sola categoría para los dos sentidos;
-//     el signo del movimiento (sale/entra) dice qué es. Alimenta el saldo de
-//     préstamos por socio (ver computeSaldoPrestamosSocios).
+//   - Préstamo / Adelanto de socio: financiamiento en los dos sentidos (ver el
+//     detalle en banco/socios.ts). NI gasto NI retiro: es una cuenta por
+//     cobrar/pagar. Alimenta el saldo por socio (ver computeSaldoPrestamosSocios).
 // El reembolso (devolución de un gasto de bolsillo) NO usa categoría: se
 // resuelve conciliando el egreso contra la factura del proveedor (PR #239),
 // y queda como gasto de operación. No pasa por acá.
-// Financiamiento entre BLARQ y un socio. Son DOS categorías, y la DIRECCIÓN la
-// da el signo del movimiento — con eso quedan cubiertos los cuatro casos reales
-// sin inventar más etiquetas (decidido con MJ 2026-07-16):
-//
-//   Préstamo  + entra plata → el socio le presta a BLARQ    → BLARQ le debe
-//   Préstamo  + sale plata  → BLARQ le presta/adelanta       → el socio le debe
-//   Devolución + sale plata → BLARQ le devuelve al socio      → baja lo que BLARQ debe
-//   Devolución + entra plata→ el socio le devuelve a BLARQ    → baja lo que el socio debe
-//
-// Antes había UNA sola categoría "prestamo_socio" para todo, así que una
-// devolución se leía como "préstamo" y el saldo salía dado vuelta.
-// OJO: esto NO es la "Devolución (neto cero)" del banco — esa es para un pago
-// por error que vuelve entero y se cancela solo. Acá el saldo queda vivo.
 function labelPagoSocio(category: string | null): string {
   switch (category) {
     case CATEGORIA_PRESTAMO_SOCIO:
       return "Préstamos de socios";
-    case CATEGORIA_DEVOLUCION_PRESTAMO_SOCIO:
-      return "Devoluciones de préstamos";
+    case CATEGORIA_ADELANTO_SOCIO:
+      return "Adelantos a socios";
     case "sueldo":
       return "Sueldos socios";
     case "bono_socio":
@@ -156,9 +142,7 @@ export async function computeSaldoPrestamosSocios(
 ): Promise<SaldoPrestamoSocio[]> {
   const movs = await prisma.bankMovement.findMany({
     where: {
-      category: {
-        in: [CATEGORIA_PRESTAMO_SOCIO, CATEGORIA_DEVOLUCION_PRESTAMO_SOCIO],
-      },
+      category: { in: [CATEGORIA_PRESTAMO_SOCIO, CATEGORIA_ADELANTO_SOCIO] },
       date: { lt: hasta },
     },
     select: {
@@ -196,13 +180,17 @@ export async function computeSaldoPrestamosSocios(
         prestadoPorBlarq: 0,
         devueltoPorSocio: 0,
       } satisfies Acc);
-    // El signo dice la dirección; la categoría dice si crea o salda la deuda.
-    if (mov.category === CATEGORIA_DEVOLUCION_PRESTAMO_SOCIO) {
-      if (mov.amount < 0) e.devueltoPorBlarq += -mov.amount;
+    // La categoría dice QUIÉN presta; el signo dice si crea o salda la deuda.
+    if (mov.category === CATEGORIA_ADELANTO_SOCIO) {
+      // BLARQ le presta al socio: sale = adelanto (socio debe); entra = el
+      // socio devuelve (baja lo que debe).
+      if (mov.amount < 0) e.prestadoPorBlarq += -mov.amount;
       else e.devueltoPorSocio += mov.amount;
     } else {
+      // El socio le presta a BLARQ: entra = préstamo (BLARQ debe); sale = BLARQ
+      // le devuelve (baja lo que debe).
       if (mov.amount > 0) e.prestadoPorSocio += mov.amount;
-      else e.prestadoPorBlarq += -mov.amount;
+      else e.devueltoPorBlarq += -mov.amount;
     }
     porSocio.set(socio, e);
   }
@@ -364,7 +352,7 @@ export async function computeEstadoResultadoCaja(
     // un tercero (Rojas Mella) por cuenta de JT — como la glosa no dice "socio",
     // antes caía en el bloque OPERATIVO y restaba de la utilidad como si fuera
     // un gasto del negocio. Prestar plata no es costo de operar.
-    if (esCategoriaPrestamoSocio(mov.category) || (movSocio && egresoSocio)) {
+    if (esCategoriaFinanciamientoSocio(mov.category) || (movSocio && egresoSocio)) {
       add("no", tipo, labelPagoSocio(mov.category), m, mov.amount);
       continue;
     }

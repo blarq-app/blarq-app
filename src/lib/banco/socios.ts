@@ -22,18 +22,49 @@ export const SOCIO_NOMBRES = ["jose tomas lar", "maria jose blanco", "maría jos
 // (eso lo hace esSocio, que se apoya en el RUT). No usar para categorizar.
 export const SOCIO_GLOSA_HINTS = ["maria jose", "jose tomas"];
 
-// Financiamiento entre BLARQ y un socio. Son DOS categorías y la DIRECCIÓN la
-// da el signo del movimiento (ver el detalle en estadoResultadoCaja.ts).
-// Viven acá —y no allá— porque este módulo es seguro para el cliente:
-// estadoResultadoCaja importa prisma, y usarlo desde la tabla del banco
-// arrastraría prisma al bundle del browser.
+// Financiamiento entre BLARQ y un socio. Son DOS relaciones, según QUIÉN es el
+// que presta; dentro de cada una, el SIGNO del movimiento dice si crea o salda
+// la deuda. Con eso quedan los cuatro casos reales sin re-etiquetar lo viejo
+// (decidido con MJ 2026-07-18):
+//
+//   prestamo_socio (el SOCIO le presta a BLARQ — caso camioneta 2022):
+//       entra plata → el socio presta   → BLARQ le debe
+//       sale plata  → BLARQ le devuelve  → baja lo que BLARQ debe  ("Devolución")
+//   adelanto_socio (BLARQ le presta al SOCIO — caso Rojas Mella):
+//       sale plata  → BLARQ adelanta     → el socio le debe
+//       entra plata → el socio devuelve  → baja lo que el socio debe
+//
+// Los movimientos viejos ya están en `prestamo_socio` y se leen igual que
+// siempre (una salida = devolución); no hay que tocarlos. `adelanto_socio` es
+// el rótulo nuevo, solo para cuando BLARQ es el que financia.
+// OJO: esto NO es la "Devolución (neto cero)" del banco — esa es para un pago
+// por error que vuelve entero y se cancela solo. Acá el saldo queda vivo.
+//
+// Viven acá —y no en estadoResultadoCaja— porque este módulo es seguro para el
+// cliente: estadoResultadoCaja importa prisma, y usarlo desde la tabla del
+// banco arrastraría prisma al bundle del browser.
 export const CATEGORIA_PRESTAMO_SOCIO = "prestamo_socio";
-export const CATEGORIA_DEVOLUCION_PRESTAMO_SOCIO = "devolucion_prestamo_socio";
-export function esCategoriaPrestamoSocio(category: string | null): boolean {
+export const CATEGORIA_ADELANTO_SOCIO = "adelanto_socio";
+export function esCategoriaFinanciamientoSocio(category: string | null): boolean {
   return (
     category === CATEGORIA_PRESTAMO_SOCIO ||
-    category === CATEGORIA_DEVOLUCION_PRESTAMO_SOCIO
+    category === CATEGORIA_ADELANTO_SOCIO
   );
+}
+
+// Rótulo para la fila del banco: el signo dice si el movimiento crea o salda la
+// deuda, así una devolución NO se lee como "préstamo" (era la queja de MJ).
+export function labelFinanciamientoSocio(
+  category: string | null,
+  amount: number
+): string | null {
+  if (category === CATEGORIA_PRESTAMO_SOCIO) {
+    return amount < 0 ? "Devolución a socio" : "Préstamo del socio";
+  }
+  if (category === CATEGORIA_ADELANTO_SOCIO) {
+    return amount < 0 ? "Adelanto a socio" : "Devolución del socio";
+  }
+  return null;
 }
 
 export function esSocio(

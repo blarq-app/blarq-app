@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cleanupInvoicesAfterUnassign } from "@/lib/banco/invoicePayments";
 import { upsertRuleFromMovement } from "@/lib/banco/categorizationRules";
 import { requireSession } from "@/lib/apiAuth";
-import { SOCIO_RUTS, esCategoriaPrestamoSocio } from "@/lib/banco/socios";
+import { SOCIO_RUTS, esCategoriaFinanciamientoSocio } from "@/lib/banco/socios";
 
 // PATCH /api/banco/movimientos/[id]
 //
@@ -156,9 +156,9 @@ export async function PATCH(
     // cuenta de JT). Solo aplica a esas categorías — el resto no tiene socio
     // detrás. null = limpiar la marca (la contraparte vuelve a mandar).
     if (body.socioRut !== undefined) {
-      if (!esCategoriaPrestamoSocio(mov.category)) {
+      if (!esCategoriaFinanciamientoSocio(mov.category)) {
         return NextResponse.json(
-          { error: "Solo se puede marcar el socio en préstamos y devoluciones de socio" },
+          { error: "Solo se puede marcar el socio en préstamos y adelantos de socio" },
           { status: 400 }
         );
       }

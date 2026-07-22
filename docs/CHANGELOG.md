@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-18 — Banco: cuenta corriente de préstamos con socios (PRs #306 y #307, EN PROD)
+
+- **Qué.** Los préstamos entre BLARQ y los socios quedan en **una sola categoría `prestamo_socio`**, que funciona como cuenta corriente con los socios **en conjunto**. El **signo** hace todo el trabajo: lo que entra sube lo que BLARQ les debe, lo que sale lo baja. No se distingue "préstamo" de "devolución" — es información redundante, la suma es idéntica. Saldo de partida `SALDO_INICIAL_PRESTAMOS_SOCIOS = $14.000.000` (la camioneta que los socios financiaron en 2022; esos movimientos son anteriores a la app).
+- **Por qué.** Había UNA categoría para las dos direcciones y el saldo salía **dado vuelta** ("María José le debe −$19M" cuando es al revés). Peor: un préstamo cuya contraparte no era el socio (BLARQ le pagó $500.000 a un tercero por cuenta de JT) caía en el bloque **operativo** y **restaba de la utilidad** como gasto del negocio. Ahora el financiamiento va siempre a no operativo — prestar plata no es costo de operar.
+- **Alcance.** `src/lib/banco/socios.ts`, `estadoResultadoCaja.ts` (`computeSaldoPrestamosSocios`), `EstadoResultadoChart.tsx` (recuadro con desglose partida/entró/salió + aviso en ámbar si el saldo se da vuelta). Columna aditiva `BankMovement.socioRut` aplicada a la viva pero **sin uso** (reservada por si se abre el saldo por socio). NO toca `metrics.ts` ni la "Devolución (neto cero)".
+- **Dato pendiente.** Hoy la cuenta da $14.000.000 − $22.149.894 = **−$8.149.894**, que no es real: ~$8,1M de los movimientos marcados como préstamo son probablemente **sueldos o retiros mal etiquetados**. Las devoluciones reales deberían sumar ~$14M. Lo revisa MJ; el recuadro avisa mientras tanto.
+- **Contexto completo** (incluidas las otras dos familias de "plata que no es gasto ni ingreso": reversas neto cero y sobrepagos sobre factura, esta última sin resolver): ADR [`2026-07-18-plata-que-no-es-gasto-ni-ingreso.md`](decisions/2026-07-18-plata-que-no-es-gasto-ni-ingreso.md).
+
 ## 2026-07-13 — Banco: el estado de una factura cuenta pago + Nota de Crédito
 
 - **Qué.** `recomputeInvoiceStatus` (la función que decide si una factura recibida está pendiente/parcial/pagada) ahora suma, además de los pagos del banco, las **Notas de Crédito aplicadas** (compensationType "other_invoice"). Antes miraba solo los pagos → creía "descuadradas" a 27 facturas que en realidad estaban bien (pago parcial + NC que cubre el resto, ej. SODIMAC pago $40k + NC $148k sobre $188k).

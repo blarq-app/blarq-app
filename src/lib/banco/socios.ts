@@ -22,50 +22,42 @@ export const SOCIO_NOMBRES = ["jose tomas lar", "maria jose blanco", "maría jos
 // (eso lo hace esSocio, que se apoya en el RUT). No usar para categorizar.
 export const SOCIO_GLOSA_HINTS = ["maria jose", "jose tomas"];
 
-// Financiamiento entre BLARQ y un socio. Son DOS relaciones, según QUIÉN es el
-// que presta; dentro de cada una, el SIGNO del movimiento dice si crea o salda
-// la deuda. Con eso quedan los cuatro casos reales sin re-etiquetar lo viejo
-// (decidido con MJ 2026-07-18):
+// CUENTA DE PRÉSTAMOS CON LOS SOCIOS — una sola cuenta corriente, como en
+// contabilidad de verdad (idea de MJ, 2026-07-18; es más simple y dice lo mismo
+// que el intento anterior de separar "préstamo" de "devolución").
 //
-//   prestamo_socio (el SOCIO le presta a BLARQ — caso camioneta 2022):
-//       entra plata → el socio presta   → BLARQ le debe
-//       sale plata  → BLARQ le devuelve  → baja lo que BLARQ debe  ("Devolución")
-//   adelanto_socio (BLARQ le presta al SOCIO — caso Rojas Mella):
-//       sale plata  → BLARQ adelanta     → el socio le debe
-//       entra plata → el socio devuelve  → baja lo que el socio debe
+// Toda la plata que se mueve entre BLARQ y los socios por financiamiento va a
+// ESTA categoría, y el SIGNO hace todo el trabajo:
 //
-// Los movimientos viejos ya están en `prestamo_socio` y se leen igual que
-// siempre (una salida = devolución); no hay que tocarlos. `adelanto_socio` es
-// el rótulo nuevo, solo para cuando BLARQ es el que financia.
+//   entra plata (el socio pone / devuelve)  → BLARQ les debe MÁS
+//   sale plata  (BLARQ devuelve / adelanta) → BLARQ les debe MENOS
+//
+// Da igual si el movimiento es "un préstamo" o "una devolución": la suma es la
+// misma. Por eso NO hace falta distinguirlos — el saldo corrido dice la verdad:
+// positivo = BLARQ les debe; negativo = los socios le deben a BLARQ.
+//
+// Por ahora la cuenta es de "los socios" en conjunto, sin separar por persona
+// (decisión de MJ: no lo separaría todavía). El campo BankMovement.socioRut
+// queda en el schema, sin uso, por si más adelante se quiere abrir por socio.
+//
 // OJO: esto NO es la "Devolución (neto cero)" del banco — esa es para un pago
 // por error que vuelve entero y se cancela solo. Acá el saldo queda vivo.
 //
-// Viven acá —y no en estadoResultadoCaja— porque este módulo es seguro para el
+// Vive acá —y no en estadoResultadoCaja— porque este módulo es seguro para el
 // cliente: estadoResultadoCaja importa prisma, y usarlo desde la tabla del
 // banco arrastraría prisma al bundle del browser.
 export const CATEGORIA_PRESTAMO_SOCIO = "prestamo_socio";
-export const CATEGORIA_ADELANTO_SOCIO = "adelanto_socio";
 export function esCategoriaFinanciamientoSocio(category: string | null): boolean {
-  return (
-    category === CATEGORIA_PRESTAMO_SOCIO ||
-    category === CATEGORIA_ADELANTO_SOCIO
-  );
+  return category === CATEGORIA_PRESTAMO_SOCIO;
 }
 
-// Rótulo para la fila del banco: el signo dice si el movimiento crea o salda la
-// deuda, así una devolución NO se lee como "préstamo" (era la queja de MJ).
-export function labelFinanciamientoSocio(
-  category: string | null,
-  amount: number
-): string | null {
-  if (category === CATEGORIA_PRESTAMO_SOCIO) {
-    return amount < 0 ? "Devolución a socio" : "Préstamo del socio";
-  }
-  if (category === CATEGORIA_ADELANTO_SOCIO) {
-    return amount < 0 ? "Adelanto a socio" : "Devolución del socio";
-  }
-  return null;
-}
+// Cuánto le debía BLARQ a los socios cuando empezamos a registrar. Es la
+// camioneta que los socios financiaron en 2022 ($14.000.000, dato de MJ
+// 2026-07-18). Los movimientos de ese préstamo original NO están en el banco
+// —son de antes de la app—, así que sin este número de partida el saldo
+// arrancaría en cero y mostraría que los socios le deben plata a BLARQ, que es
+// justo al revés. Si aparece el monto exacto, se corrige acá.
+export const SALDO_INICIAL_PRESTAMOS_SOCIOS = 14_000_000;
 
 export function esSocio(
   rut: string | null,

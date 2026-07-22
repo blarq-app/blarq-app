@@ -472,87 +472,62 @@ function VistaCaja({ data, year }: { data: EstadoResultadoCaja; year: number }) 
         &quot;No asignado&quot; = movimientos que todavía no catalogaste.
       </p>
 
-      {data.saldoPrestamos.length > 0 && (
-        <SaldoPrestamos saldos={data.saldoPrestamos} />
-      )}
+      <SaldoPrestamos saldo={data.saldoPrestamos} />
     </div>
   );
 }
 
-// Financiamiento entre los socios y la empresa. No es gasto ni retiro: es plata
-// que se devuelve. Hay DOS relaciones posibles por socio, y se muestran por
-// separado porque van en sentidos opuestos:
-//   1. El socio financió a BLARQ (camioneta 2022) → BLARQ le debe.
-//   2. BLARQ le adelantó plata al socio (le pagó a un tercero por él) → el
-//      socio le debe a BLARQ.
-// Cuando el préstamo original del socio no está cargado (prestadoPorSocio = 0)
-// no se puede calcular un saldo: mostramos solo lo devuelto a la fecha, en vez
-// de inventar un saldo negativo que se lee como "el socio le debe" (bug que MJ
-// pescó el 2026-07-16).
-function SaldoPrestamos({ saldos }: { saldos: EstadoResultadoCaja["saldoPrestamos"] }) {
-  const faltaOriginal = saldos.some(
-    (s) => s.prestadoPorSocio === 0 && s.devueltoPorBlarq > 0
-  );
+// Cuenta corriente con los socios: una sola cuenta, como en contabilidad. Lo
+// que entra sube lo que BLARQ les debe; lo que sale lo baja. El saldo dice quién
+// le debe a quién, sin distinguir "préstamo" de "devolución" (la suma es la
+// misma). Se muestra el desglose para que el número se pueda auditar de un
+// vistazo: de dónde parte, cuánto entró y cuánto salió.
+function SaldoPrestamos({ saldo }: { saldo: EstadoResultadoCaja["saldoPrestamos"] }) {
+  const blarqDebe = saldo.saldo >= 0;
+  // Si salió más plata de la que se debía, o el saldo se da vuelta, casi seguro
+  // hay movimientos marcados como préstamo que en realidad son sueldo o retiro.
+  // Avisamos en vez de mostrar un número raro sin explicación.
+  const sospechoso = saldo.saldo < 0;
   return (
     <div className="mt-4 border-t border-gray-100 pt-4">
       <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-2">
-        Préstamos con socios
+        Préstamos socios
       </p>
       <div className="max-w-md space-y-1.5">
-        {saldos.map((s) => {
-          // Relación 1: si el préstamo original está cargado, hay saldo real;
-          // si no, solo podemos decir cuánto se le devolvió.
-          const tienePrestado = s.prestadoPorSocio > 0;
-          const mostrarBlarqDebe = tienePrestado || s.devueltoPorBlarq > 0;
-          // Relación 2: el socio le debe a BLARQ (adelantos no devueltos).
-          const mostrarSocioDebe = s.saldoSocioDebe > 1;
-          return (
-            <div key={s.socio} className="space-y-0.5">
-              {mostrarBlarqDebe && (
-                <FilaSaldoSocio
-                  socio={s.socio}
-                  glosa={tienePrestado ? "le debe la empresa" : "la empresa le devolvió"}
-                  monto={tienePrestado ? Math.abs(s.saldoBlarqDebe) : s.devueltoPorBlarq}
-                />
-              )}
-              {mostrarSocioDebe && (
-                <FilaSaldoSocio
-                  socio={mostrarBlarqDebe ? "" : s.socio}
-                  glosa="le debe a la empresa"
-                  monto={s.saldoSocioDebe}
-                />
-              )}
-            </div>
-          );
-        })}
+        <div className="flex items-baseline justify-between text-sm">
+          <span className="text-gray-700">
+            {blarqDebe ? "BLARQ les debe" : "Los socios le deben a BLARQ"}
+          </span>
+          <span className="tabular-nums font-medium text-gray-900">
+            {formatCLP(Math.abs(saldo.saldo))}
+          </span>
+        </div>
+        <div className="flex items-baseline justify-between text-[11px] text-gray-400">
+          <span>Préstamo de partida (camioneta)</span>
+          <span className="tabular-nums">{formatCLP(saldo.saldoInicial)}</span>
+        </div>
+        {saldo.entradas > 0 && (
+          <div className="flex items-baseline justify-between text-[11px] text-gray-400">
+            <span>Entró de los socios</span>
+            <span className="tabular-nums">{formatCLP(saldo.entradas)}</span>
+          </div>
+        )}
+        <div className="flex items-baseline justify-between text-[11px] text-gray-400">
+          <span>Salió hacia los socios</span>
+          <span className="tabular-nums">−{formatCLP(saldo.salidas)}</span>
+        </div>
       </div>
       <p className="text-[11px] text-gray-400 mt-2 leading-snug">
-        {faltaOriginal
-          ? "“La empresa le devolvió” = lo que ya se le pagó de vuelta. No se puede mostrar el saldo pendiente porque el préstamo original del socio no está cargado; para verlo, etiquetá ese depósito (el que entró a la empresa) como “Préstamo socio”."
-          : "Saldo pendiente = lo prestado menos lo ya devuelto, en cada sentido."}
+        {sospechoso ? (
+          <span className="text-amber-700">
+            Salió más plata de la que BLARQ debía. Revisá los movimientos
+            marcados como “Préstamos socios”: es probable que alguno sea en
+            realidad un sueldo o un retiro.
+          </span>
+        ) : (
+          "Saldo = préstamo de partida + lo que entró − lo que salió. Sueldos, retiros y bonos van aparte: no son deuda."
+        )}
       </p>
-    </div>
-  );
-}
-
-function FilaSaldoSocio({
-  socio,
-  glosa,
-  monto,
-}: {
-  socio: string;
-  glosa: string;
-  monto: number;
-}) {
-  return (
-    <div className="flex items-baseline justify-between text-sm">
-      <span className="text-gray-700">{socio}</span>
-      <span className="flex items-baseline gap-2">
-        <span className="text-[11px] text-gray-400">{glosa}</span>
-        <span className="tabular-nums font-medium text-gray-900">
-          {formatCLP(monto)}
-        </span>
-      </span>
     </div>
   );
 }

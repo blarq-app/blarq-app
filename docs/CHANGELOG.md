@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-22 — Gastos F22: respaldo mensual en PDF + reembolso de varias boletas
+
+- **Qué.** Dos piezas de Contabilidad → Gastos. (1) Botón **"Respaldo del mes"**: baja un PDF con la planilla del mes (n° de documento, fecha, comercio, quién pagó, tipo y monto) y, atrás, la **foto de cada boleta a media página**, numerada para poder ir de la fila a su respaldo. El desplegable también ofrece la copia sin fotos. (2) **"Reembolso de boletas"** en el menú Resolver de cualquier egreso: un cargo del banco que cubre VARIAS boletas de obras distintas se carga como una boleta por fila, con su foto, su obra y su categoría.
+- **Por qué.** El F22 se declara igual con estos gastos, pero el respaldo no lo puede sacar el SII — es la foto de la boleta. Y hasta ahora un reembolso a una persona que puso plata de su bolsillo (caso real: $63.773 a Daniel Ignacio por tres boletas) solo se podía registrar como UN gasto: se perdía a qué obra iba cada boleta.
+- **La app pasa a leer fotos.** La imagen se le manda a Claude y vuelve con número, fecha, comercio y monto en formato fijo (`src/lib/contabilidad/leerBoleta.ts`). Es una **propuesta editable**, nunca un dato dado por bueno: si la foto está mala los campos vuelven vacíos y avisa. Cuesta unos centavos de dólar por foto y usa `ANTHROPIC_API_KEY` (ya cargada en Vercel, solo en Production).
+- **Alcance / plata.** El PDF es de salida: comparte la consulta con la pantalla (`src/lib/contabilidad/gastosMes.ts`) para que los totales no puedan separarse. El reembolso crea Invoices 1043 (mismo tipo que ya usaban los gastos sin documento) con tope: la suma nunca pasa el saldo libre del movimiento; si suma menos, queda parcial a propósito. **NO toca `metrics.ts`** ni el schema.
+- **"Quién pagó" no es un campo**: se deriva de la contraparte del movimiento — si le transferiste a una persona, esa persona puso la plata; si el cargo salió directo al comercio, pagó BLARQ.
+
 ## 2026-07-18 — Banco: cuenta corriente de préstamos con socios (PRs #306 y #307, EN PROD)
 
 - **Qué.** Los préstamos entre BLARQ y los socios quedan en **una sola categoría `prestamo_socio`**, que funciona como cuenta corriente con los socios **en conjunto**. El **signo** hace todo el trabajo: lo que entra sube lo que BLARQ les debe, lo que sale lo baja. No se distingue "préstamo" de "devolución" — es información redundante, la suma es idéntica. Saldo de partida `SALDO_INICIAL_PRESTAMOS_SOCIOS = $14.000.000` (la camioneta que los socios financiaron en 2022; esos movimientos son anteriores a la app).

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { comprimirImagen } from "@/lib/comprimirImagen";
 
 // Celda "Comprobante" de un gasto (Contabilidad → Gastos). Deja subir una foto
 // de la boleta / screenshot del cargo internacional, verla en grande, o
@@ -9,23 +10,6 @@ import { useRouter } from "next/navigation";
 // guardarla como data URL en la BD — la app no usa almacenamiento externo, así
 // que achicarla es lo que la hace viable (una foto de celular de ~3MB queda en
 // ~150KB). Se guarda con PATCH /api/facturas/[id] { attachmentUrl }.
-
-// Comprime un archivo de imagen a un JPEG data URL, con el lado mayor limitado
-// a maxSide px. Devuelve el data URL listo para guardar.
-async function compressImage(file: File, maxSide = 1400, quality = 0.7): Promise<string> {
-  const bitmap = await createImageBitmap(file);
-  const escala = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
-  const w = Math.round(bitmap.width * escala);
-  const h = Math.round(bitmap.height * escala);
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("No se pudo procesar la imagen");
-  ctx.drawImage(bitmap, 0, 0, w, h);
-  bitmap.close?.();
-  return canvas.toDataURL("image/jpeg", quality);
-}
 
 export default function GastoAttachmentCell({
   invoiceId,
@@ -70,7 +54,7 @@ export default function GastoAttachmentCell({
     setBusy(true);
     setError(null);
     try {
-      const dataUrl = await compressImage(file);
+      const dataUrl = await comprimirImagen(file);
       await save(dataUrl);
     } catch (err) {
       console.error(err);

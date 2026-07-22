@@ -8,6 +8,7 @@ import {
   type ProjectOption,
 } from "@/components/facturas/EditableInvoiceFields";
 import GastoAttachmentCell from "@/components/contabilidad/GastoAttachmentCell";
+import DescargarPDFMes from "@/components/contabilidad/DescargarPDFMes";
 
 // Contabilidad → Gastos.
 //
@@ -67,6 +68,7 @@ export default async function GastosPage({
   const next = new Date(year, month + 1, 1);
   const prevParam = fmtMesParam(prev.getFullYear(), prev.getMonth());
   const nextParam = fmtMesParam(next.getFullYear(), next.getMonth());
+  const mesParam = fmtMesParam(year, month);
 
   const [gastos, projectsRaw, categoriesRaw] = await Promise.all([
     prisma.invoice.findMany({
@@ -148,25 +150,30 @@ export default async function GastosPage({
             — para respaldar y declarar en el F22.
           </p>
         </div>
-        {/* Navegación por mes con flechitas. */}
-        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-1 py-1">
-          <Link
-            href={`/contabilidad/gastos?mes=${prevParam}`}
-            className="px-2 py-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded"
-            title="Mes anterior"
-          >
-            ‹
-          </Link>
-          <span className="px-2 text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap">
-            {MESES[month]} {year}
-          </span>
-          <Link
-            href={`/contabilidad/gastos?mes=${nextParam}`}
-            className="px-2 py-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded"
-            title="Mes siguiente"
-          >
-            ›
-          </Link>
+        <div className="flex items-center gap-2">
+          {/* Navegación por mes con flechitas. */}
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-1 py-1">
+            <Link
+              href={`/contabilidad/gastos?mes=${prevParam}`}
+              className="px-2 py-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded"
+              title="Mes anterior"
+            >
+              ‹
+            </Link>
+            <span className="px-2 text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap">
+              {MESES[month]} {year}
+            </span>
+            <Link
+              href={`/contabilidad/gastos?mes=${nextParam}`}
+              className="px-2 py-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded"
+              title="Mes siguiente"
+            >
+              ›
+            </Link>
+          </div>
+          {/* Respaldo del mes: la planilla + la foto de cada boleta. Es el
+              archivo que se le pasa al contador o se guarda para el F22. */}
+          <DescargarPDFMes mes={mesParam} deshabilitado={gastos.length === 0} />
         </div>
       </div>
 
@@ -290,7 +297,8 @@ export default async function GastosPage({
       <p className="text-xs text-gray-400 mt-4 leading-relaxed">
         La obra es opcional (dejala sin asignar cuando el gasto es de BLARQ en
         general). Estos gastos ya cuentan como costo de su obra o de BLARQ.
-        Próximo: el PDF del mes y el informe anual F22.
+        &quot;Respaldo del mes&quot; baja la planilla con la foto de cada boleta,
+        listo para el contador. Próximo: el informe anual F22.
       </p>
     </div>
   );

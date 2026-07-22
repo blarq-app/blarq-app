@@ -25,10 +25,9 @@
 import { prisma } from "@/lib/prisma";
 import {
   esSocio,
-  socioDeMovimiento,
   esCategoriaFinanciamientoSocio,
   CATEGORIA_PRESTAMO_SOCIO,
-  CATEGORIA_ADELANTO_SOCIO,
+  SALDO_INICIAL_PRESTAMOS_SOCIOS,
 } from "@/lib/banco/socios";
 import { effectiveSalaryPeriod } from "@/lib/banco/salaryPeriod";
 
@@ -52,9 +51,7 @@ const esPagoSocio = esSocio;
 function labelPagoSocio(category: string | null): string {
   switch (category) {
     case CATEGORIA_PRESTAMO_SOCIO:
-      return "Préstamos de socios";
-    case CATEGORIA_ADELANTO_SOCIO:
-      return "Adelantos a socios";
+      return "Préstamos socios";
     case "sueldo":
       return "Sueldos socios";
     case "bono_socio":
@@ -101,16 +98,15 @@ export type CajaRow = {
 // Mientras el préstamo original no esté registrado (prestado = 0), solo se
 // puede mostrar lo devuelto a la fecha; el saldo aparece cuando MJ etiqueta ese
 // depósito original como "Préstamo socio".
-export type SaldoPrestamoSocio = {
-  socio: string;
-  // Relación 1 — el socio financió a BLARQ (caso camioneta 2022).
-  prestadoPorSocio: number; // entró plata del socio → BLARQ le debe
-  devueltoPorBlarq: number; // salió plata al socio → baja lo que BLARQ debe
-  saldoBlarqDebe: number; // prestadoPorSocio − devueltoPorBlarq
-  // Relación 2 — BLARQ le adelantó plata al socio (caso Rojas Mella).
-  prestadoPorBlarq: number; // salió plata por el socio → el socio le debe
-  devueltoPorSocio: number; // entró plata del socio → baja lo que el socio debe
-  saldoSocioDebe: number; // prestadoPorBlarq − devueltoPorSocio
+// Cuenta corriente con los socios, en conjunto (no separada por persona).
+// saldo = saldoInicial + entradas − salidas.
+//   saldo > 0 → BLARQ les debe a los socios.
+//   saldo < 0 → los socios le deben a BLARQ.
+export type SaldoPrestamosSocios = {
+  saldoInicial: number; // lo que BLARQ debía antes de la app (camioneta 2022)
+  entradas: number; // plata que entró de los socios
+  salidas: number; // plata que salió hacia los socios
+  saldo: number;
 };
 
 export type EstadoResultadoCaja = {
@@ -130,92 +126,38 @@ export type EstadoResultadoCaja = {
   resultadoOperacionAnual: number;
   totalNoOperativoAnual: number;
   totalAnual: number;
-  // Saldo acumulado de préstamos por socio, hasta fin del año mostrado.
-  saldoPrestamos: SaldoPrestamoSocio[];
+  // Saldo acumulado de la cuenta de préstamos con los socios, hasta fin del
+  // año mostrado.
+  saldoPrestamos: SaldoPrestamosSocios;
 };
 
-// Préstamos por socio, considerando TODOS los movimientos categoría
-// "prestamo_socio" hasta `hasta` (fin del año mostrado). Cross-year a propósito:
-// un préstamo de hace años sigue vivo hasta que se devuelva entero.
+// Cuenta corriente con los socios: TODOS los movimientos de categoría
+// "prestamo_socio" hasta `hasta` (fin del año mostrado), más el saldo de
+// partida. Cross-year a propósito: un préstamo de hace años sigue vivo hasta
+// que se devuelva entero.
+//
+// El signo hace todo: lo que entra sube lo que BLARQ debe, lo que sale lo baja.
+// No hace falta distinguir "préstamo" de "devolución" — la suma es la misma.
 export async function computeSaldoPrestamosSocios(
   hasta: Date
-): Promise<SaldoPrestamoSocio[]> {
+): Promise<SaldoPrestamosSocios> {
   const movs = await prisma.bankMovement.findMany({
-    where: {
-      category: { in: [CATEGORIA_PRESTAMO_SOCIO, CATEGORIA_ADELANTO_SOCIO] },
-      date: { lt: hasta },
-    },
-    select: {
-      amount: true,
-      category: true,
-      socioRut: true,
-      counterpartyRut: true,
-      counterpartyName: true,
-      description: true,
-    },
+    where: { category: CATEGORIA_PRESTAMO_SOCIO, date: { lt: hasta } },
+    select: { amount: true },
   });
-  type Acc = {
-    prestadoPorSocio: number;
-    devueltoPorBlarq: number;
-    prestadoPorBlarq: number;
-    devueltoPorSocio: number;
-  };
-  const porSocio = new Map<string, Acc>();
+  let entradas = 0;
+  let salidas = 0;
   for (const mov of movs) {
-    // Si la plata fue a un tercero por cuenta de un socio y nadie marcó de qué
-    // socio es, no se lo atribuimos a nadie (antes se le cargaba al tercero,
-    // que aparecía como si fuera socio). La UI del banco pide ese dato.
-    const socio = socioDeMovimiento(
-      mov.socioRut,
-      mov.counterpartyRut,
-      mov.counterpartyName,
-      mov.description
-    );
-    if (!socio) continue;
-    const e =
-      porSocio.get(socio) ??
-      ({
-        prestadoPorSocio: 0,
-        devueltoPorBlarq: 0,
-        prestadoPorBlarq: 0,
-        devueltoPorSocio: 0,
-      } satisfies Acc);
-    // La categoría dice QUIÉN presta; el signo dice si crea o salda la deuda.
-    if (mov.category === CATEGORIA_ADELANTO_SOCIO) {
-      // BLARQ le presta al socio: sale = adelanto (socio debe); entra = el
-      // socio devuelve (baja lo que debe).
-      if (mov.amount < 0) e.prestadoPorBlarq += -mov.amount;
-      else e.devueltoPorSocio += mov.amount;
-    } else {
-      // El socio le presta a BLARQ: entra = préstamo (BLARQ debe); sale = BLARQ
-      // le devuelve (baja lo que debe).
-      if (mov.amount > 0) e.prestadoPorSocio += mov.amount;
-      else e.devueltoPorBlarq += -mov.amount;
-    }
-    porSocio.set(socio, e);
+    if (mov.amount > 0) entradas += mov.amount;
+    else salidas += -mov.amount;
   }
-  return Array.from(porSocio.entries())
-    .map(([socio, e]) => ({
-      socio,
-      prestadoPorSocio: Math.round(e.prestadoPorSocio),
-      devueltoPorBlarq: Math.round(e.devueltoPorBlarq),
-      saldoBlarqDebe: Math.round(e.prestadoPorSocio - e.devueltoPorBlarq),
-      prestadoPorBlarq: Math.round(e.prestadoPorBlarq),
-      devueltoPorSocio: Math.round(e.devueltoPorSocio),
-      saldoSocioDebe: Math.round(e.prestadoPorBlarq - e.devueltoPorSocio),
-    }))
-    .filter(
-      (s) =>
-        s.prestadoPorSocio > 1 ||
-        s.devueltoPorBlarq > 1 ||
-        s.prestadoPorBlarq > 1 ||
-        s.devueltoPorSocio > 1
-    )
-    .sort(
-      (a, b) =>
-        b.prestadoPorSocio + b.devueltoPorBlarq + b.prestadoPorBlarq -
-        (a.prestadoPorSocio + a.devueltoPorBlarq + a.prestadoPorBlarq)
-    );
+  const saldoInicial = SALDO_INICIAL_PRESTAMOS_SOCIOS;
+  return {
+    saldoInicial,
+    entradas: Math.round(entradas),
+    salidas: Math.round(salidas),
+    saldo: Math.round(saldoInicial + entradas - salidas),
+  };
 }
 
 export async function computeEstadoResultadoCaja(

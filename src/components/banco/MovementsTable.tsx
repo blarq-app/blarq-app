@@ -10,12 +10,6 @@ import InternalTransferConceptoSelect from "./InternalTransferConceptoSelect";
 import SalaryPeriodSelect from "./SalaryPeriodSelect";
 import CategoryInlineSelect from "./CategoryInlineSelect";
 import ImputacionColumnFilter from "./ImputacionColumnFilter";
-import SocioPrestamoSelect from "./SocioPrestamoSelect";
-import {
-  esSocio,
-  esCategoriaFinanciamientoSocio,
-  labelFinanciamientoSocio,
-} from "@/lib/banco/socios";
 import { deriveEstado, derivePaymentRespaldo } from "@/lib/banco/movementDisplay";
 
 type Payment = {
@@ -49,9 +43,6 @@ export type MovementRow = {
   internalConcepto: string | null;
   // A qué mes corresponde el pago (sueldo/previred), "YYYY-MM" o null (=auto).
   salaryPeriod: string | null;
-  // A qué socio corresponde un préstamo/devolución cuando la plata fue a un
-  // tercero por cuenta del socio. null = la contraparte ya dice quién es.
-  socioRut: string | null;
   payments: Payment[];
 };
 
@@ -343,12 +334,7 @@ export default function MovementsTable({
                             ) : (
                               <>
                                 <span className="uppercase tracking-wide">
-                                  {/* Financiamiento con socios: el rótulo es
-                                      direccional (una salida = "Devolución a
-                                      socio", no "Préstamo") según el signo. */}
-                                  {labelFinanciamientoSocio(m.category, m.amount) ??
-                                    categoryLabels[m.category] ??
-                                    m.category}
+                                  {categoryLabels[m.category] ?? m.category}
                                 </span>
                                 {m.status === "sin_asignar" && (
                                   <span className="ml-1 text-[9px] uppercase tracking-wide bg-amber-100 text-amber-800 px-1 py-0.5 rounded align-middle whitespace-nowrap">
@@ -367,19 +353,6 @@ export default function MovementsTable({
                                 />
                               </span>
                             )}
-                            {/* Préstamo/devolución cuya plata fue a un TERCERO:
-                                el banco no sabe de qué socio es la deuda, así
-                                que lo pedimos. Si va derecho a MJ/JT no se
-                                muestra — la contraparte ya lo dice. */}
-                            {esCategoriaFinanciamientoSocio(m.category) &&
-                              !esSocio(m.counterpartyRut, m.counterpartyName, m.description) && (
-                                <span className="mt-1 block">
-                                  <SocioPrestamoSelect
-                                    movimientoId={m.id}
-                                    socioRut={m.socioRut}
-                                  />
-                                </span>
-                              )}
                           </span>
                         ) : (
                           <span className="text-gray-300">—</span>

@@ -18,6 +18,11 @@ const MESES = [
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
 
+// Armar el PDF levanta un Chromium y mete todas las fotos del mes adentro: en
+// un mes cargado tarda bastante más que el default de Vercel, que lo cortaría
+// a mitad de camino. Mismo techo que los otros PDF de la app.
+export const maxDuration = 60;
+
 export async function GET(request: NextRequest) {
   const gate = await requireSession();
   if (gate instanceof Response) return gate;

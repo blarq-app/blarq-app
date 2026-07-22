@@ -17,6 +17,11 @@ import {
 // Requiere ANTHROPIC_API_KEY en el entorno. En la mac de MJ ya está; en Vercel
 // hay que cargarla a mano en las variables del proyecto.
 
+// Leer una foto tarda varios segundos (se sube la imagen y se espera la
+// respuesta). El default de Vercel corta antes y la pantalla mostraría un
+// error falso, así que se pide el mismo techo que usan las otras rutas lentas.
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   const gate = await requireSession();
   if (gate instanceof Response) return gate;

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import MovementReconcileModal from "./MovementReconcileModal";
 import InvoicePickerModal from "./InvoicePickerModal";
 import GastoObraModal from "./GastoObraModal";
+import ReembolsoBoletasModal from "./ReembolsoBoletasModal";
 
 // Un movimiento, con lo que el menú necesita para decidir qué acciones ofrecer
 // y para abrir los modales (asignar/editar necesita la descripción, fecha, etc.).
@@ -84,6 +85,7 @@ export default function MovementResolveMenu({
   // Modal de costo de obra: "pago" (pago a maestro sin factura) o "gasto"
   // (boleta / internacional). null = cerrado.
   const [gastoVariant, setGastoVariant] = useState<null | "pago" | "gasto">(null);
+  const [reembolsoOpen, setReembolsoOpen] = useState(false);
 
   const single = movements.length === 1 ? movements[0] : null;
   const ids = movements.map((m) => m.id);
@@ -315,6 +317,25 @@ export default function MovementResolveMenu({
               icon: "receipt",
               onClick: () => {
                 setGastoVariant("gasto");
+                closeMenu();
+              },
+            },
+          ],
+        });
+      }
+
+      // Reembolso de boletas: se ofrece en CUALQUIER egreso, no solo en los
+      // pendientes — un movimiento ya parcial todavía puede recibir boletas
+      // por el saldo que le queda. El tope lo pone el servidor.
+      if (egreso) {
+        sections.push({
+          title: "Le devolví plata a alguien",
+          items: [
+            {
+              label: "Reembolso de boletas (varias)…",
+              icon: "receipt",
+              onClick: () => {
+                setReembolsoOpen(true);
                 closeMenu();
               },
             },
@@ -575,6 +596,24 @@ export default function MovementResolveMenu({
           projects={projects}
           categories={categories}
           onClose={() => setGastoVariant(null)}
+          onDone={onDone}
+        />
+      )}
+      {reembolsoOpen && mode === "row" && movements[0] && (
+        <ReembolsoBoletasModal
+          movementId={movements[0].id}
+          contraparte={
+            movements[0].counterpartyName ?? movements[0].description
+          }
+          fechaMovimiento={new Date(movements[0].date).toLocaleDateString("es-CL")}
+          montoMovimiento={Math.abs(movements[0].amount)}
+          yaImputado={movements[0].payments.reduce(
+            (s, p) => s + p.amountApplied,
+            0
+          )}
+          projects={projects}
+          categories={categories}
+          onClose={() => setReembolsoOpen(false)}
           onDone={onDone}
         />
       )}

@@ -143,9 +143,14 @@ function cobradoDe(inv: {
 export function computeUtilidadPorCobro(p: ProjectWithUtilidad): UtilidadPorCobro {
   const terminado = p.status === "terminado" || p.status === "cerrado";
 
-  // ── OBRA: GG y total acordado sobre TODAS las versiones aprobadas ──────
-  // (igual que metrics.ts: soporta anexos como "BAÑO VISITAS"). Cada versión
-  // aporta con su propio ggPercentage/utilityPercentage.
+  // ── OBRA: GG y total acordado sobre las versiones APROBADAS ──────
+  // OJO (2026-07-22): este módulo NO usa el criterio único de selectVersion.ts.
+  // Filtra solo status "aprobado" (sin el fallback a "enviado" ni el "una sola
+  // versión"). Para proyectos con la obra solo ENVIADA (no aprobada aún) esto
+  // da tasa de utilidad 0 — diferencia PREEXISTENTE, no la introdujo el cambio
+  // de "una sola versión". Alinearlo con selectVigentes movería la utilidad
+  // traspasada en ~6 proyectos, así que se dejó como estaba; pendiente decidir
+  // con MJ. Cada versión aporta con su propio ggPercentage/utilityPercentage.
   const obrasAprobadas = p.budgetVersions.filter(
     (b) => b.type === "obra" && b.status === "aprobado"
   );

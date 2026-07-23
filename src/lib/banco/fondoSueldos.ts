@@ -70,16 +70,17 @@ export type FondoSueldosCalculo = {
 };
 
 export function computeFondoSueldos(p: ProjectWithFondo): FondoSueldosCalculo {
-  // Criterio único de selección (selectVersion.ts): obra SUMA anexos (igual
-  // que metrics.ts — antes acá se tomaba una sola versión, así que el fondo y
-  // el Resumen se contradecían y en Aguirre el fondo usaba solo el anexo chico).
+  // Criterio único de selección (selectVersion.ts): manda una sola versión, la
+  // última enviada/aprobada (igual que metrics.ts). selectVigentes devuelve un
+  // arreglo de 0 ó 1; el loop de abajo lo recorre igual (ya no hay anexos).
   const obras = selectVigentes(p.budgetVersions.filter((b) => b.type === "obra"));
   const obra = selectVigente(p.budgetVersions.filter((b) => b.type === "obra"));
   const muebles = selectVigente(p.budgetVersions.filter((b) => b.type === "muebles"));
   const artefactos = selectVigente(p.budgetVersions.filter((b) => b.type === "artefactos"));
 
   // ── Obra ────────────────────────────────────────────────────────────
-  // Cada obra (principal + anexos) con sus propios % de GG/utilidad, sumadas.
+  // La obra vigente con sus % de GG/utilidad (el loop soporta más de una por
+  // compatibilidad, pero hoy selectVigentes devuelve una sola).
   let obraGGTotal = 0;
   let obraTotalAcordado = 0;
   for (const o of obras) {

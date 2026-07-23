@@ -38,10 +38,11 @@ export async function PUT(
     }
 
     // Nota: NO se auto-desaprueban otras versiones cuando se aprueba una.
-    // Caso de uso: anexos (Aguirre V7 + V4-BAÑO-VISITAS), donde múltiples
-    // versiones de obra aprobadas se SUMAN al Total Acordado en metrics.
     // El control de qué versión está aprobada lo lleva MJ manualmente
-    // (puede des-aprobar clickeando el badge "✓ Aprobado").
+    // (puede des-aprobar clickeando el badge "✓ Aprobado"). Desde 2026-07-22
+    // el Resumen muestra UNA sola versión (la última enviada/aprobada por
+    // createdAt; ver selectVersion.ts) — ya no se suman versiones aprobadas,
+    // así que dejar una vieja aprobada no infla el total: gana la más nueva.
 
     const budget = await prisma.budgetVersion.update({
       where: { id },

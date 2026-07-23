@@ -126,8 +126,10 @@ const CATEGORY_TO_BREAKDOWN: Record<
 };
 
 export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetrics {
-  // Selección de versión vigente — criterio único en selectVersion.ts (obra
-  // suma anexos vía selectVigentes; muebles/artefactos toman una sola).
+  // Selección de versión vigente — criterio único en selectVersion.ts: manda
+  // UNA sola versión (la última enviada/aprobada). selectVigentes devuelve un
+  // arreglo de 0 ó 1; el loop de abajo lo recorre igual (ya no hay anexos que
+  // sumar — un anexo se mete DENTRO de una versión nueva, ver selectVersion.ts).
   const obras = selectVigentes(
     project.budgetVersions.filter((b) => b.type === "obra")
   );
@@ -270,8 +272,8 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   const pctCobrado = totalAcordado > 0 ? (totalCobrado / totalAcordado) * 100 : 0;
 
   // ── Desviaciones por concepto interno ─────────────────────────────────
-  // Suma componentes de TODAS las obras aprobadas (incluye anexos como
-  // BAÑO VISITAS). costMargin se incluye explícitamente: el margen por
+  // Suma componentes de la(s) obra(s) vigente(s) — hoy siempre una sola (ver
+  // selectVersion.ts). costMargin se incluye explícitamente: el margen por
   // partida es parte del costo directo y MJ quiere verlo en el resumen.
   // Excluye las "NO COBRADO" (ver arriba): no entran en el presupuesto de
   // costos por categoría ni en el presupuesto de mano de obra / avance.

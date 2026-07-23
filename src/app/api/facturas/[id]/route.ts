@@ -133,7 +133,7 @@ export async function PATCH(
     if ("attachmentUrl" in data) updates.attachmentUrl = data.attachmentUrl || null;
     // conceptoCobro: solo aplica a facturas EMITIDAS (obra | muebles |
     // artefactos | mixto). Define a qué "centro" del proyecto entra el cobro,
-    // y con eso cuánta utilidad se reconoce para Sueldos (ver utilidadPorCobro).
+    // y con eso cuánta utilidad se reconoce para Sueldos (ver fondoSueldos.ts).
     if ("conceptoCobro" in data) updates.conceptoCobro = data.conceptoCobro || null;
     // Desglose del cobro de artefactos (Cocina / Sanitarios / Iluminación).
     // Solo aplica a facturas EMITIDAS con concepto "artefactos" que agrupan los

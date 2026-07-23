@@ -47,8 +47,13 @@ export async function listarGastosDelMes(
   year: number,
   month: number // 0-11
 ): Promise<GastoPDFItem[]> {
-  const inicio = new Date(year, month, 1);
-  const finExclusivo = new Date(year, month + 1, 1);
+  // Límites del mes en UTC: las fechas de los gastos se guardan como día
+  // calendario a medianoche UTC (vienen de la fecha del movimiento/boleta, sin
+  // hora). Si se filtrara con límites en hora local (UTC-4 en Chile), un gasto
+  // del día 1 —guardado 00:00Z— caería en el mes anterior. UTC hace que el día
+  // guardado y el filtro coincidan.
+  const inicio = new Date(Date.UTC(year, month, 1));
+  const finExclusivo = new Date(Date.UTC(year, month + 1, 1));
 
   const gastos = await db.invoice.findMany({
     where: {
@@ -84,6 +89,12 @@ export async function listarGastosDelMes(
       g.payments[0]?.bankMovement?.counterpartyName
     ),
     monto: g.totalAmount,
-    foto: g.attachmentUrl,
+    // El respaldo puede ser una foto (se embebe en el PDF) o un PDF adjunto
+    // (factura de proveedor internacional; no se puede embeber como imagen).
+    foto:
+      g.attachmentUrl && !g.attachmentUrl.startsWith("data:application/pdf")
+        ? g.attachmentUrl
+        : null,
+    respaldoPdf: g.attachmentUrl?.startsWith("data:application/pdf") ?? false,
   }));
 }

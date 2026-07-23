@@ -28,8 +28,13 @@ export interface GastoPDFItem {
   // el cargo salió directo de la cuenta de la empresa.
   quienPago: string;
   monto: number;
-  // Foto del respaldo (data URL). Null = gasto sin respaldo cargado todavía.
+  // Foto del respaldo, SOLO si es una imagen (data URL). El PDF mensual la
+  // embebe a media página. Null = no hay imagen (o el respaldo es un PDF).
   foto: string | null;
+  // El respaldo cargado es un PDF (factura de proveedor internacional). No se
+  // puede embeber como imagen acá, así que en la planilla se marca "PDF" y el
+  // documento vive adjunto en la app.
+  respaldoPdf?: boolean;
 }
 
 export interface GastosMesPDFInput {
@@ -55,7 +60,17 @@ function fmtCLP(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-CL");
 }
 
+// Fecha de un gasto: es un día calendario guardado a medianoche UTC, así que
+// se formatea en UTC. Con getDate() (local) mostraría un día menos en Chile.
 function fmtFecha(d: Date): string {
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${dd}-${mm}-${d.getUTCFullYear()}`;
+}
+
+// La fecha de emisión del PDF es un instante real (cuándo se generó), no un día
+// calendario: se muestra en hora local.
+function fmtEmitido(d: Date): string {
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   return `${dd}-${mm}-${d.getFullYear()}`;
@@ -69,7 +84,7 @@ function cabecera(titulo: string, emitidoEl: Date): string {
       <div class="sub">Gastos de la empresa sin documento electrónico del SII — respaldo para el F22</div>
     </div>
     <div class="head-der">
-      <div class="sub">Emitido ${fmtFecha(emitidoEl)}</div>
+      <div class="sub">Emitido ${fmtEmitido(emitidoEl)}</div>
       <div class="sub">RUT ${BLARQ_RUT}</div>
     </div>
   </div>`;
@@ -85,8 +100,10 @@ export function renderGastosMesHtml(input: GastosMesPDFInput): string {
   const totalInternacionales = items
     .filter((g) => g.tipo === "internacional")
     .reduce((s, g) => s + g.monto, 0);
-  const conFoto = items.filter((g) => g.foto).length;
-  const sinFoto = items.length - conFoto;
+  // Un gasto tiene respaldo si trae foto (imagen) o un PDF adjunto. Los que no
+  // tienen ninguno son los que hay que perseguir.
+  const conPdf = items.filter((g) => g.respaldoPdf).length;
+  const sinRespaldo = items.filter((g) => !g.foto && !g.respaldoPdf).length;
 
   // Los gastos sin foto no ocupan página de respaldo, así que la página donde
   // cae cada foto se cuenta sobre los que SÍ tienen (dos por hoja, arrancando
@@ -113,7 +130,9 @@ export function renderGastosMesHtml(input: GastosMesPDFInput): string {
           ? incluirFotos
             ? `pág. ${paginaDelRespaldo.get(g.orden)}`
             : "sí"
-          : '<span class="vacio">falta</span>'
+          : g.respaldoPdf
+            ? "PDF"
+            : '<span class="vacio">falta</span>'
       }</td>
     </tr>`
     )
@@ -256,16 +275,27 @@ export function renderGastosMesHtml(input: GastosMesPDFInput): string {
     }
     <div class="pie">
       ${
-        incluirFotos
-          ? "El número de la primera columna corresponde a la foto del respaldo en las páginas siguientes."
-          : "Copia sin las fotos de los respaldos."
-      }<br />
+        incluirFotos && conFotoItems.length > 0
+          ? "El número de la primera columna corresponde a la foto del respaldo en las páginas siguientes.<br />"
+          : !incluirFotos
+            ? "Copia sin las fotos de los respaldos.<br />"
+            : ""
+      }
       Boletas y gastos internacionales no dan crédito de IVA: el monto es el costo total pagado.
       ${
-        sinFoto > 0
-          ? `<br /><span class="aviso-falta">${sinFoto} ${
-              sinFoto === 1 ? "gasto no tiene" : "gastos no tienen"
-            } foto del respaldo cargada.</span>`
+        conPdf > 0
+          ? `<br />${conPdf} ${
+              conPdf === 1
+                ? "gasto tiene su factura en PDF adjunta"
+                : "gastos tienen su factura en PDF adjunta"
+            } en la app (no se incluye acá).`
+          : ""
+      }
+      ${
+        sinRespaldo > 0
+          ? `<br /><span class="aviso-falta">${sinRespaldo} ${
+              sinRespaldo === 1 ? "gasto no tiene" : "gastos no tienen"
+            } respaldo cargado.</span>`
           : ""
       }
     </div>

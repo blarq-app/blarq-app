@@ -36,8 +36,7 @@ const MESES = [
 ];
 
 // Parsear ?mes=YYYY-MM → { año, mes(0-11) }. Sin parámetro o inválido → mes
-// actual. Los límites se construyen en hora local (es un filtro de display,
-// no plata) — [inicio, inicioMesSiguiente).
+// actual. Los límites del mes se construyen en UTC (ver abajo), no en local.
 function parseMes(raw: string | undefined): { year: number; month: number } {
   const m = raw?.match(/^(\d{4})-(\d{2})$/);
   if (m) {
@@ -60,14 +59,16 @@ export default async function GastosPage({
 }) {
   const sp = await searchParams;
   const { year, month } = parseMes(sp.mes);
-  const inicio = new Date(year, month, 1);
-  const finExclusivo = new Date(year, month + 1, 1);
+  // Límites en UTC: las fechas de los gastos se guardan como día calendario a
+  // medianoche UTC. Con límites en hora local (UTC-4), un gasto del día 1 caería
+  // en el mes anterior. UTC alinea el filtro con lo guardado (mismo criterio que
+  // listarGastosDelMes, el que usa el PDF).
+  const inicio = new Date(Date.UTC(year, month, 1));
+  const finExclusivo = new Date(Date.UTC(year, month + 1, 1));
 
   // Mes anterior / siguiente para las flechitas.
-  const prev = new Date(year, month - 1, 1);
-  const next = new Date(year, month + 1, 1);
-  const prevParam = fmtMesParam(prev.getFullYear(), prev.getMonth());
-  const nextParam = fmtMesParam(next.getFullYear(), next.getMonth());
+  const prevParam = fmtMesParam(month === 0 ? year - 1 : year, (month + 11) % 12);
+  const nextParam = fmtMesParam(month === 11 ? year + 1 : year, (month + 1) % 12);
   const mesParam = fmtMesParam(year, month);
 
   const [gastos, projectsRaw, categoriesRaw] = await Promise.all([
@@ -229,7 +230,7 @@ export default async function GastosPage({
                     className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50/60"
                   >
                     <td className="px-4 py-2.5 text-gray-600 tabular-nums whitespace-nowrap">
-                      {g.issueDate.toLocaleDateString("es-CL")}
+                      {g.issueDate.toLocaleDateString("es-CL", { timeZone: "UTC" })}
                     </td>
                     <td className="px-4 py-2.5">
                       <span className="text-gray-900">

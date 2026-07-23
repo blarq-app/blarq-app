@@ -605,7 +605,7 @@ export default function MovementResolveMenu({
           contraparte={
             movements[0].counterpartyName ?? movements[0].description
           }
-          fechaMovimiento={new Date(movements[0].date).toLocaleDateString("es-CL")}
+          fechaMovimiento={new Date(movements[0].date).toLocaleDateString("es-CL", { timeZone: "UTC" })}
           montoMovimiento={Math.abs(movements[0].amount)}
           yaImputado={movements[0].payments.reduce(
             (s, p) => s + p.amountApplied,

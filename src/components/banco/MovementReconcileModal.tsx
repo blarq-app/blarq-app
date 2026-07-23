@@ -507,6 +507,7 @@ export default function MovementReconcileModal({
                   day: "2-digit",
                   month: "long",
                   year: "numeric",
+                  timeZone: "UTC", // fecha guardada a medianoche UTC (ver MovementsTable)
                 })}{" "}
                 · {movement.bankAccountAlias}
               </span>

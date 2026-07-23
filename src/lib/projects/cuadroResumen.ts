@@ -116,8 +116,8 @@ function fmtDate(d: Date): string {
 
 export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenData {
   const { invoices, budgets } = input;
-  // Selección de versión vigente — criterio único (selectVersion.ts): obra
-  // suma anexos; el resto toma su versión vigente. Antes acá se usaba solo
+  // Selección de versión vigente — criterio único (selectVersion.ts): manda
+  // una sola versión, la última enviada/aprobada. Antes acá se usaba solo
   // "aprobado" sin fallback, así que un presupuesto solo-enviado daba $0 en el
   // cuadro aunque el Resumen sí lo mostraba (se contradecían).
   const obrasVigentes = selectVigentes(budgets.filter((b) => b.type === "obra"));

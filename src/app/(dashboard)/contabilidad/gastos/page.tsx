@@ -177,47 +177,51 @@ export default async function GastosPage({
         <DescargarPDFMes mes={mesParam} deshabilitado={gastos.length === 0} />
       </div>
 
-      {/* Selector de año (mismo patrón que el F29). */}
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-xs uppercase tracking-wider text-gray-400">Año</span>
-        {years.map((y) => (
-          <Link
-            key={y}
-            href={`/contabilidad/gastos?mes=${fmtMesParam(y, month)}`}
-            className={`px-2.5 py-1 rounded text-sm font-medium tabular-nums transition-colors ${
-              y === year
-                ? "bg-gray-900 text-white"
-                : "text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            {y}
-          </Link>
-        ))}
-      </div>
-
-      {/* Selector de mes: los que no tienen gastos quedan en gris (como el F29). */}
-      <div className="grid grid-cols-6 sm:grid-cols-12 gap-1 mb-6">
-        {MESES.map((nombre, i) => {
-          const m = i + 1;
-          const activo = i === month;
-          const tieneDatos = mesesConDatos.has(m);
-          return (
+      {/* Selector de año + meses (mismo patrón y ancho que el F29). Va dentro
+          de un contenedor angosto para que la grilla de meses quede apretada;
+          la tabla de abajo sigue a lo ancho de la página. */}
+      <div className="max-w-3xl">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs uppercase tracking-wider text-gray-400">Año</span>
+          {years.map((y) => (
             <Link
-              key={m}
-              href={`/contabilidad/gastos?mes=${fmtMesParam(year, i)}`}
-              className={`text-center py-1.5 rounded text-xs font-medium transition-colors ${
-                activo
+              key={y}
+              href={`/contabilidad/gastos?mes=${fmtMesParam(y, month)}`}
+              className={`px-2.5 py-1 rounded text-sm font-medium tabular-nums transition-colors ${
+                y === year
                   ? "bg-gray-900 text-white"
-                  : tieneDatos
-                    ? "text-gray-700 hover:bg-gray-100"
-                    : "text-gray-300 hover:bg-gray-50"
+                  : "text-gray-600 hover:bg-gray-100"
               }`}
-              title={nombre}
             >
-              {nombre.slice(0, 3)}
+              {y}
             </Link>
-          );
-        })}
+          ))}
+        </div>
+
+        {/* Los meses sin gastos quedan en gris (como el F29). */}
+        <div className="grid grid-cols-6 sm:grid-cols-12 gap-1 mb-6">
+          {MESES.map((nombre, i) => {
+            const m = i + 1;
+            const activo = i === month;
+            const tieneDatos = mesesConDatos.has(m);
+            return (
+              <Link
+                key={m}
+                href={`/contabilidad/gastos?mes=${fmtMesParam(year, i)}`}
+                className={`text-center py-1.5 rounded text-xs font-medium transition-colors ${
+                  activo
+                    ? "bg-gray-900 text-white"
+                    : tieneDatos
+                      ? "text-gray-700 hover:bg-gray-100"
+                      : "text-gray-300 hover:bg-gray-50"
+                }`}
+                title={nombre}
+              >
+                {nombre.slice(0, 3)}
+              </Link>
+            );
+          })}
+        </div>
       </div>
 
       {/* Totales del mes. */}

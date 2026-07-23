@@ -278,7 +278,7 @@ export default function CompensacionNC({
                 <>
                   El proveedor devolvió {formatCLP(refundMov.amount)} a tu cuenta{" "}
                   <span className="font-medium">{refundMov.bankAccountAlias}</span> el{" "}
-                  {new Date(refundMov.date).toLocaleDateString("es-CL")}. La NC está cerrada.
+                  {new Date(refundMov.date).toLocaleDateString("es-CL", { timeZone: "UTC" })}. La NC está cerrada.
                 </>
               ) : (
                 <>
@@ -424,7 +424,7 @@ export default function CompensacionNC({
                   className="w-full text-left px-2 py-2 hover:bg-indigo-50 disabled:opacity-50 flex items-center gap-3"
                 >
                   <span className="text-xs text-gray-500 w-20 whitespace-nowrap">
-                    {new Date(m.date).toLocaleDateString("es-CL")}
+                    {new Date(m.date).toLocaleDateString("es-CL", { timeZone: "UTC" })}
                   </span>
                   <span className="text-xs text-gray-500 w-24 truncate">
                     {m.bankAccountAlias}

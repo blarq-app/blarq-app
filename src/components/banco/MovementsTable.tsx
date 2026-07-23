@@ -210,6 +210,10 @@ export default function MovementsTable({
                           day: "2-digit",
                           month: "short",
                           year: "2-digit",
+                          // Las fechas de movimientos se guardan a medianoche UTC
+                          // (día calendario de la cartola). Sin UTC, en Chile se
+                          // verían un día menos.
+                          timeZone: "UTC",
                         })}
                       </td>
                       <td className="px-4 py-2 text-xs text-gray-700">

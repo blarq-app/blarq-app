@@ -66,12 +66,9 @@ export default async function GastosPage({
   const inicio = new Date(Date.UTC(year, month, 1));
   const finExclusivo = new Date(Date.UTC(year, month + 1, 1));
 
-  // Mes anterior / siguiente para las flechitas.
-  const prevParam = fmtMesParam(month === 0 ? year - 1 : year, (month + 11) % 12);
-  const nextParam = fmtMesParam(month === 11 ? year + 1 : year, (month + 1) % 12);
   const mesParam = fmtMesParam(year, month);
 
-  const [gastos, projectsRaw, categoriesRaw] = await Promise.all([
+  const [gastos, projectsRaw, categoriesRaw, todosLosGastos] = await Promise.all([
     prisma.invoice.findMany({
       where: {
         type: "recibida",
@@ -114,7 +111,31 @@ export default async function GastosPage({
       },
       orderBy: { sortOrder: "asc" },
     }),
+    // Solo las fechas de TODOS los gastos, para armar el selector: qué años
+    // tienen gastos y, dentro del año elegido, qué meses tienen (para agrisar
+    // los vacíos como en el F29). Son pocos registros, traer las fechas es barato.
+    prisma.invoice.findMany({
+      where: {
+        type: "recibida",
+        origin: { in: ["gasto_boleta", "gasto_internacional"] },
+      },
+      select: { issueDate: true },
+    }),
   ]);
+
+  // Años con gastos (en UTC, igual que el filtro), siempre incluyendo el año en
+  // curso, de más nuevo a más viejo.
+  const añosConDatos = new Set(todosLosGastos.map((g) => g.issueDate.getUTCFullYear()));
+  añosConDatos.add(new Date().getUTCFullYear());
+  añosConDatos.add(year); // el que se esté mirando, aunque no tenga gastos
+  const years = [...añosConDatos].sort((a, b) => b - a);
+
+  // Meses (1-12) del año elegido que tienen al menos un gasto.
+  const mesesConDatos = new Set(
+    todosLosGastos
+      .filter((g) => g.issueDate.getUTCFullYear() === year)
+      .map((g) => g.issueDate.getUTCMonth() + 1)
+  );
 
   const projectOptions: ProjectOption[] = projectsRaw.map((p) => ({
     id: p.id,
@@ -143,7 +164,7 @@ export default async function GastosPage({
 
   return (
     <div>
-      <div className="flex items-end justify-between mb-6 gap-4 flex-wrap">
+      <div className="flex items-start justify-between mb-4 gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gastos</h1>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -151,31 +172,52 @@ export default async function GastosPage({
             — para respaldar y declarar en el F22.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Navegación por mes con flechitas. */}
-          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-1 py-1">
+        {/* Respaldo del mes: la planilla + la foto de cada boleta. Es el
+            archivo que se le pasa al contador o se guarda para el F22. */}
+        <DescargarPDFMes mes={mesParam} deshabilitado={gastos.length === 0} />
+      </div>
+
+      {/* Selector de año (mismo patrón que el F29). */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xs uppercase tracking-wider text-gray-400">Año</span>
+        {years.map((y) => (
+          <Link
+            key={y}
+            href={`/contabilidad/gastos?mes=${fmtMesParam(y, month)}`}
+            className={`px-2.5 py-1 rounded text-sm font-medium tabular-nums transition-colors ${
+              y === year
+                ? "bg-gray-900 text-white"
+                : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            {y}
+          </Link>
+        ))}
+      </div>
+
+      {/* Selector de mes: los que no tienen gastos quedan en gris (como el F29). */}
+      <div className="grid grid-cols-6 sm:grid-cols-12 gap-1 mb-6">
+        {MESES.map((nombre, i) => {
+          const m = i + 1;
+          const activo = i === month;
+          const tieneDatos = mesesConDatos.has(m);
+          return (
             <Link
-              href={`/contabilidad/gastos?mes=${prevParam}`}
-              className="px-2 py-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded"
-              title="Mes anterior"
+              key={m}
+              href={`/contabilidad/gastos?mes=${fmtMesParam(year, i)}`}
+              className={`text-center py-1.5 rounded text-xs font-medium transition-colors ${
+                activo
+                  ? "bg-gray-900 text-white"
+                  : tieneDatos
+                    ? "text-gray-700 hover:bg-gray-100"
+                    : "text-gray-300 hover:bg-gray-50"
+              }`}
+              title={nombre}
             >
-              ‹
+              {nombre.slice(0, 3)}
             </Link>
-            <span className="px-2 text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap">
-              {MESES[month]} {year}
-            </span>
-            <Link
-              href={`/contabilidad/gastos?mes=${nextParam}`}
-              className="px-2 py-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded"
-              title="Mes siguiente"
-            >
-              ›
-            </Link>
-          </div>
-          {/* Respaldo del mes: la planilla + la foto de cada boleta. Es el
-              archivo que se le pasa al contador o se guarda para el F22. */}
-          <DescargarPDFMes mes={mesParam} deshabilitado={gastos.length === 0} />
-        </div>
+          );
+        })}
       </div>
 
       {/* Totales del mes. */}

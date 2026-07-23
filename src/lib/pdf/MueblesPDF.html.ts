@@ -172,28 +172,31 @@ const CSS = `
   .dhead .docsub { display: inline-block; font-family: 'Hanken Grotesk', sans-serif; font-weight: 500; font-size: 6.4pt; letter-spacing: .28em; text-transform: uppercase; color: #6C6B6B; margin-top: 5pt; border: 0.5px solid #B2ACA0; padding: 2.5pt 6pt 2.5pt 9pt; }
 
   /* Tabla */
-  .mhd { display: grid; grid-template-columns: 4.5% 1fr 7% 13%; padding: 3.5pt 0; border-bottom: 0.3px solid #9B9182; margin-top: 4mm; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9B9182; font-weight: 700; }
+  .mhd { display: grid; grid-template-columns: 4.5% 1fr 13%; padding: 3.5pt 0; border-bottom: 0.3px solid #9B9182; margin-top: 4mm; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9B9182; font-weight: 700; }
   .mhd .ct { text-align: center; } .mhd .rt { text-align: right; }
 
-  .cap { display: flex; justify-content: space-between; align-items: center; background: #EDECEB; padding: 3.5pt 10pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }
-  .cap b { font-family: 'Hanken Grotesk', sans-serif; font-size: 7pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: #36322C; }
-  .cap span { font-variant-numeric: tabular-nums; font-size: 8pt; color: #736A5C; letter-spacing: .04em; }
+  /* Banda de capítulo: el subtotal se alinea a la MISMA columna que los totales
+     de partida (borde derecho del contenido, padding-right 0) para que la plata
+     forme una sola espina vertical. Número en ink + negrita, con etiqueta chica. */
+  .cap { display: flex; justify-content: space-between; align-items: baseline; background: #EDECEB; padding: 4pt 0 4pt 10pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }
+  .cap b { font-family: 'Hanken Grotesk', sans-serif; font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: #36322C; }
+  .cap span { display: inline-flex; align-items: baseline; gap: 7pt; font-variant-numeric: tabular-nums; font-size: 8pt; color: #36322C; font-weight: 700; letter-spacing: .02em; }
+  .cap span em { font-style: normal; font-family: 'Hanken Grotesk', sans-serif; font-size: 4.8pt; letter-spacing: .18em; text-transform: uppercase; color: #8A8175; font-weight: 700; }
 
   /* Cada partida (fila + su bloque de especificaciones/herrajes) se mantiene
      junta: no se separa el título de sus specs entre páginas. */
   .partida { break-inside: avoid; }
-  .mr { display: grid; grid-template-columns: 4.5% 1fr 7% 13%; align-items: baseline; padding: 3pt 0 1.5pt; border-top: 1px solid #E1DFDD; }
+  .mr { display: grid; grid-template-columns: 4.5% 1fr 13%; align-items: baseline; padding: 3pt 0 1.5pt; border-top: 1px solid #E1DFDD; }
   .mit { color: #776E60; font-variant-numeric: tabular-nums; font-size: 6.5pt; }
-  .mpt { color: #36322C; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 6.5pt; }
+  .mpt { color: #36322C; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 7.5pt; }
   .msub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; color: #776E60; font-size: 5.7pt; display: block; margin-top: 2pt; }
-  .mct { text-align: center; color: #625A4F; font-variant-numeric: tabular-nums; font-size: 6.5pt; }
   .mtt { text-align: right; color: #36322C; font-variant-numeric: tabular-nums; font-size: 7pt; font-weight: 700; }
 
-  .spec { margin: 1pt 0 3pt 7%; padding: 2pt 0 2pt 12pt; border-left: 2px solid #E1DFDD; }
-  .specrow { display: grid; grid-template-columns: 34% 1fr; padding: 0.4pt 0; font-size: 6.5pt; line-height: 1.24; }
-  .speclbl { letter-spacing: .1em; text-transform: uppercase; color: #5C5449; font-weight: 700; }
+  .spec { margin: 1pt 0 3pt 7%; padding: 1pt 0 1pt 12pt; border-left: 2px solid #E1DFDD; }
+  .specrow { display: grid; grid-template-columns: 34% 1fr; padding: 0; font-size: 5.8pt; line-height: 1.08; }
+  .speclbl { letter-spacing: .06em; text-transform: uppercase; color: #5C5449; font-weight: 700; }
   .specval { color: #625A4F; }
-  .hrow { display: flex; justify-content: space-between; align-items: baseline; padding: 0.8pt 0; border-bottom: 1px solid #EBEAE9; font-size: 6.5pt; }
+  .hrow { display: flex; justify-content: space-between; align-items: baseline; padding: 0.8pt 0; border-bottom: 1px solid #EBEAE9; font-size: 5.8pt; }
   .hrow:last-child { border-bottom: none; }
   .hname { color: #625A4F; }
   .hmut { color: #AAA194; }
@@ -285,7 +288,6 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
             <div class="mr">
               <span class="mit">${chapterNumber}.${itemIdx + 1}</span>
               <span><span class="mpt">${esc(item.name)}</span>${item.descriptionGeneral ? `<span class="msub">${esc(item.descriptionGeneral)}</span>` : ""}</span>
-              <span class="mct">${fmtQty(item.quantity)}</span>
               <span class="mtt">${fmtMoney(item.clientPriceIva * item.quantity)}</span>
             </div>
             ${specBody ? `<div class="spec">${specBody}</div>` : ""}
@@ -293,7 +295,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
         })
         .join("");
       return `
-        <div class="cap"><b>${chapterNumber} · ${esc(ch.name)}</b><span>Subtotal&nbsp;&nbsp;${fmtMoney(subtotal)}</span></div>
+        <div class="cap"><b>${chapterNumber} · ${esc(ch.name)}</b><span><em>Subtotal</em>${fmtMoney(subtotal)}</span></div>
         ${rows}`;
     })
     .join("");
@@ -350,7 +352,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
           <div class="docsub">Muebles</div>
         </div>
       </div>
-      <div class="mhd"><span>Ítem</span><span>Partida · Descripción</span><span class="ct">Cant</span><span class="rt">Total</span></div>
+      <div class="mhd"><span>Ítem</span><span>Partida · Descripción</span><span class="rt">Total</span></div>
       ${tableRows}
 
       <div class="cierre">

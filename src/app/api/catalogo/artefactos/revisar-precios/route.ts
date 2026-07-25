@@ -2,7 +2,13 @@
  * "Revisar precios" del catálogo de artefactos.
  *
  * POST /api/catalogo/artefactos/revisar-precios
- *   Body opcional: { subcategory?: string } para acotar a una pestaña.
+ *   Body opcional para acotar qué se revisa:
+ *     - { ids?: string[] }: revisa SOLO esos artefactos. Es lo que manda la
+ *       pantalla para respetar lo que MJ tiene filtrado (pestaña + buscador +
+ *       chips de tipo/línea/color). Si viene un arreglo vacío, no revisa nada.
+ *     - { subcategory?: string }: acota a una pestaña (compat; se usa si NO
+ *       vienen ids).
+ *   Sin body (o sin ninguno de los dos): revisa TODOS los que tengan link.
  *
  * Para cada artefacto CON link trae el precio de hoy de la web:
  *   - tiendas VTEX (mk.cl, ledstudio.cl): vía API de catálogo → ListPrice
@@ -67,11 +73,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const subcategory: string | undefined = body?.subcategory;
+    // La pantalla manda los ids de lo que está a la vista (ya filtrado por
+    // pestaña + buscador + chips). Si viene el arreglo (aunque sea vacío)
+    // manda; si no viene, caemos a subcategory o a "todos".
+    const ids: string[] | undefined = Array.isArray(body?.ids)
+      ? (body.ids as unknown[]).filter((x): x is string => typeof x === "string")
+      : undefined;
 
     const items = await prisma.artefactoCatalog.findMany({
       where: {
         referenceLink: { not: null },
-        ...(subcategory ? { subcategory } : {}),
+        ...(ids ? { id: { in: ids } } : subcategory ? { subcategory } : {}),
       },
       select: {
         id: true,

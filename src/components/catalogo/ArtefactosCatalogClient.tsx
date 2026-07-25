@@ -446,6 +446,14 @@ export default function ArtefactosCatalogClient({
     });
   }, [tabItems, onlyStandard, filterTag, filterLine, filterFinish, search]);
 
+  // Cuántos de los que están a la vista tienen link (son los que "Revisar
+  // precios" va a consultar). Se muestra en el botón para que MJ vea de una
+  // que respeta el filtro: en Cocina + "teka" dirá (3), no (121).
+  const revisablesCount = useMemo(
+    () => visible.filter((it) => it.referenceLink).length,
+    [visible]
+  );
+
   // ── Drag & drop ───────────────────────────────────────────────────────
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -913,10 +921,16 @@ export default function ArtefactosCatalogClient({
     setReviewRows([]);
     setReviewResumen(null);
     try {
+      // Respeta lo que MJ tiene a la vista: revisa SOLO los artefactos visibles
+      // (pestaña activa + buscador + chips de tipo/línea/color) que tengan link.
+      // Así, parada en Cocina buscando "teka", revisa esos y no los 121.
+      const ids = visible
+        .filter((it) => it.referenceLink)
+        .map((it) => it.id);
       const res = await fetch("/api/catalogo/artefactos/revisar-precios", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ ids }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error");
@@ -1276,11 +1290,13 @@ export default function ArtefactosCatalogClient({
         </label>
         <button
           onClick={handleRevisarPrecios}
-          disabled={reviewLoading}
+          disabled={reviewLoading || revisablesCount === 0}
           className="ml-auto text-sm border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium hover:border-gray-500 disabled:opacity-50"
-          title="Trae el precio web de hoy para los artefactos con link y te muestra los cambios"
+          title="Trae el precio web de hoy para los artefactos con link que tenés a la vista (respeta la pestaña y el buscador) y te muestra los cambios"
         >
-          {reviewLoading ? "Revisando…" : "Revisar precios"}
+          {reviewLoading
+            ? "Revisando…"
+            : `Revisar precios${revisablesCount > 0 ? ` (${revisablesCount})` : ""}`}
         </button>
         {/* Crear un tipo nuevo en esta pestaña. */}
         {creatingTipo ? (

@@ -19,13 +19,20 @@
 //   + Colación + movilización             (no imponible, no tributable)
 //   = Total haberes
 //
-//   DESCUENTOS LEGALES (sobre el imponible)
+//   DESCUENTOS LEGALES (sobre el imponible, CAPADO en el tope de 90 UF para
+//   AFP y el 7% de salud; ver nota del tope más abajo)
 //   − AFP: 10% capitalización + comisión de la AFP (Planvital 1,16%)
 //   − Salud: el plan de Isapre en UF (mínimo legal 7% del imponible)
 //   − Seguro de cesantía: 0,6% (parte trabajador, contrato indefinido)
 //   − Impuesto único de 2da categoría (por tramos en UTM)
 //
 //   LÍQUIDO = Total haberes − total descuentos legales
+//
+// Tope imponible previsional (90 UF): AFP y el 7% legal de salud NO se calculan
+// sobre el imponible completo sino sobre la renta capada en 90 UF. Para sueldos
+// bajo ese techo no cambia nada; muerde recién cuando el imponible cruza las
+// 90 UF (caso MJ junio 2026). La cesantía usa su propio tope, más alto, que hoy
+// no muerde a ningún sueldo de BLARQ.
 //
 // Detalle fino del impuesto único: la base NO descuenta toda la salud, solo el
 // 7% obligatorio + la parte adicional del plan hasta un tope (7% del tope
@@ -170,17 +177,31 @@ export function computeLiquidacion(
   const totalNoImponible = emp.colacion + emp.movilizacion;
   const totalHaberes = totalImponible + totalNoImponible;
 
-  // AFP
-  const afpCapitalizacion = Math.round(totalImponible * AFP_CAPITALIZACION);
-  const afpComision = Math.round(totalImponible * emp.afpComisionRate);
+  // Tope imponible previsional: AFP y el 7% legal de salud se calculan sobre la
+  // renta imponible CAPADA en el tope legal (90 UF), no sobre el imponible
+  // completo. Para sueldos bajo el tope no cambia nada (imponibleTopado ==
+  // totalImponible); recién muerde cuando el imponible cruza las 90 UF. Así
+  // calza al peso con la liquidación del contador (validado MJ junio 2026).
+  // La cesantía tiene un tope propio más alto (~131 UF) que hoy no muerde a
+  // ningún sueldo de BLARQ, así que se sigue calculando sobre el imponible pleno
+  // (igual que el contador).
+  const imponibleTopado = Math.min(
+    totalImponible,
+    Math.round(ind.topeImponibleSaludUF * ind.uf)
+  );
+
+  // AFP (sobre el imponible topado)
+  const afpCapitalizacion = Math.round(imponibleTopado * AFP_CAPITALIZACION);
+  const afpComision = Math.round(imponibleTopado * emp.afpComisionRate);
   const totalAfp = afpCapitalizacion + afpComision;
 
-  // Salud: el plan completo en UF se descuenta del líquido.
-  const saludLegal = Math.round(totalImponible * SALUD_LEGAL);
+  // Salud: el 7% legal se calcula sobre el imponible topado; el plan completo en
+  // UF se descuenta igual del líquido (el adicional es la diferencia).
+  const saludLegal = Math.round(imponibleTopado * SALUD_LEGAL);
   const totalSalud = Math.round(emp.isaprePlanUF * ind.uf);
   const saludAdicional = totalSalud - saludLegal;
 
-  // Cesantía
+  // Cesantía (sobre el imponible pleno, ver nota del tope arriba)
   const cesantia = Math.round(totalImponible * CESANTIA_TRABAJADOR);
 
   // Impuesto único: la base descuenta AFP + salud (capada al 7% del tope

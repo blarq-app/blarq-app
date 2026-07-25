@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-24 — Estado de Resultado vista Caja: préstamos en una fila neta + sin traspasos
+
+- **Qué.** Dos arreglos de presentación en la vista Caja. (1) **"Préstamos socios"** pasa de dos filas (una roja de egreso, una verde de ingreso) a **una sola fila neta**: cada mes muestra el neto, coloreado por su signo (verde si el socio prestó, rojo si BLARQ devolvió). (2) Los **traspasos entre cuentas propias** (Operativa ↔ Sueldos) **ya no aparecen** en el Estado de Resultado — antes figuraban como un "ingreso" de $7M–$14M/mes que no es plata que entra, solo movida de un bolsillo a otro.
+- **Por qué.** Las dos cosas confundían la lectura: el préstamo repetido y un "ingreso" fantasma que inflaba la columna de ingresos.
+- **Alcance / plata.** Solo display. `estadoResultadoCaja.ts` (fusión de la fila de préstamo con `porSigno`; los traspasos `status="interno"` se saltan como `neto_cero`) y `EstadoResultadoChart.tsx` (colorea por signo cuando `porSigno`). **NO toca `metrics.ts`.** Verificado sobre la base viva (2025 y 2026): `resultadoOperacion` y `totalMes` quedan **idénticos mes a mes** — los traspasos tienen sus dos patas presentes y suman cero. El **Fondo de Sueldos NO se afecta**: lo calcula aparte (`fondoSueldos.ts` / `proyectos/[id]/resumen`, leyendo `bankMovement` por `role=salary_fund`), no desde esta fila.
+
 ## 2026-07-22 — Gastos F22: respaldo mensual en PDF + reembolso de varias boletas
 
 - **Qué.** Dos piezas de Contabilidad → Gastos. (1) Botón **"Respaldo del mes"**: baja un PDF con la planilla del mes (n° de documento, fecha, comercio, quién pagó, tipo y monto) y, atrás, la **foto de cada boleta a media página**, numerada para poder ir de la fila a su respaldo. El desplegable también ofrece la copia sin fotos. (2) **"Reembolso de boletas"** en el menú Resolver de cualquier egreso: un cargo del banco que cubre VARIAS boletas de obras distintas se carga como una boleta por fila, con su foto, su obra y su categoría.

@@ -87,6 +87,10 @@ export type CajaRow = {
   tipo: "ingreso" | "egreso";
   monthly: number[]; // 12 — ingresos positivos, egresos negativos
   total: number;
+  // Si true, cada monto se colorea por su PROPIO signo (verde entra / rojo
+  // sale) en vez de por un tipo fijo. Lo usa la fila neta de "Préstamos socios":
+  // un mes el socio presta (entra) y otro la empresa devuelve (sale).
+  porSigno?: boolean;
 };
 
 // Préstamos entre un socio y la empresa, ACUMULADO hasta fin del año mostrado.
@@ -203,17 +207,18 @@ export async function computeEstadoResultadoCaja(
   // grupo: "operativo" | "no" — y dentro, key por etiqueta
   const rows: Record<
     string,
-    { label: string; tipo: "ingreso" | "egreso"; grupo: "op" | "no"; monthly: number[] }
+    { label: string; tipo: "ingreso" | "egreso"; grupo: "op" | "no"; porSigno?: boolean; monthly: number[] }
   > = {};
   const add = (
     grupo: "op" | "no",
     tipo: "ingreso" | "egreso",
     label: string,
     m: number,
-    v: number
+    v: number,
+    porSigno = false
   ) => {
     const key = `${grupo}|${tipo}|${label}`;
-    (rows[key] ??= { label, tipo, grupo, monthly: Array(12).fill(0) }).monthly[m] += v;
+    (rows[key] ??= { label, tipo, grupo, porSigno, monthly: Array(12).fill(0) }).monthly[m] += v;
   };
 
   for (const mov of movs) {
@@ -244,10 +249,14 @@ export async function computeEstadoResultadoCaja(
     }
 
     if (mov.status === "neto_cero") continue;
-    if (mov.status === "interno") {
-      add("op", tipo, "Traspasos entre cuentas", m, mov.amount);
-      continue;
-    }
+    // Traspaso entre cuentas propias de BLARQ (Operativa ↔ Sueldos, etc.): NO es
+    // ingreso ni gasto, es plata movida de un bolsillo a otro. Las dos patas
+    // (salida y entrada) suman cero, así que NO va al Estado de Resultado — ni
+    // arriba ni abajo (antes se mostraba como fila "Traspasos entre cuentas",
+    // que confundía porque figuraba como ingreso de $7M–$14M/mes). El Fondo de
+    // Sueldos NO depende de esto: lo calcula aparte leyendo bankMovement por
+    // role=salary_fund (ver fondoSueldos.ts y proyectos/[id]/resumen).
+    if (mov.status === "interno") continue;
 
     // ¿Pago hacia/desde un socio (MJ / JT)? Por sí solo NO es gasto de
     // operación (va al bloque no-operativo). PERO si un egreso a socio está
@@ -295,7 +304,17 @@ export async function computeEstadoResultadoCaja(
     // antes caía en el bloque OPERATIVO y restaba de la utilidad como si fuera
     // un gasto del negocio. Prestar plata no es costo de operar.
     if (esCategoriaFinanciamientoSocio(mov.category) || (movSocio && egresoSocio)) {
-      add("no", tipo, labelPagoSocio(mov.category), m, mov.amount);
+      if (esCategoriaFinanciamientoSocio(mov.category)) {
+        // Préstamos de socios: UNA sola fila. La empresa devuelve (egreso) y el
+        // socio presta (ingreso) van a la MISMA fila; el color lo decide el
+        // signo del neto de cada mes (verde entra / rojo sale), no un tipo fijo.
+        // Por eso la key usa tipo fijo "egreso" (para que las dos patas caigan
+        // en la misma fila) + porSigno=true. Antes salían DOS filas (una roja de
+        // egreso, una verde de ingreso), que confundía.
+        add("no", "egreso", labelPagoSocio(mov.category), m, mov.amount, true);
+      } else {
+        add("no", tipo, labelPagoSocio(mov.category), m, mov.amount);
+      }
       continue;
     }
 
@@ -314,9 +333,10 @@ export async function computeEstadoResultadoCaja(
     }
   }
 
-  const toRow = (r: { label: string; tipo: "ingreso" | "egreso"; monthly: number[] }): CajaRow => ({
+  const toRow = (r: { label: string; tipo: "ingreso" | "egreso"; porSigno?: boolean; monthly: number[] }): CajaRow => ({
     label: r.label,
     tipo: r.tipo,
+    porSigno: r.porSigno,
     monthly: r.monthly,
     total: r.monthly.reduce((s, v) => s + v, 0),
   });

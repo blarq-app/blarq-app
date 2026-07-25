@@ -554,18 +554,22 @@ function montoCaja(v: number, positivo: boolean): string {
   return positivo ? "text-green-700" : "text-red-600";
 }
 
-function FilaCaja({ row, positivo }: { row: { label: string; monthly: number[]; total: number }; positivo?: boolean }) {
+function FilaCaja({ row, positivo }: { row: { label: string; monthly: number[]; total: number; porSigno?: boolean }; positivo?: boolean }) {
+  // porSigno: colorea cada monto por su PROPIO signo (verde + / rojo −) en vez
+  // de por un tipo fijo. Lo usa la fila neta de "Préstamos socios": un mes el
+  // socio presta (entra, verde) y otro la empresa devuelve (sale, rojo).
+  const color = (v: number) => (row.porSigno ? montoCaja(v, v >= 0) : montoCaja(v, !!positivo));
   return (
     <tr className="hover:bg-gray-50">
       <td className="text-left text-gray-700 py-1.5 pr-3 sticky left-0 bg-white whitespace-nowrap">
         {row.label}
       </td>
       {row.monthly.map((v, m) => (
-        <td key={m} className={`text-right py-1.5 px-2 ${montoCaja(v, !!positivo)}`}>
+        <td key={m} className={`text-right py-1.5 px-2 ${color(v)}`}>
           {v === 0 ? "$0" : formatCLP(v)}
         </td>
       ))}
-      <td className={`text-right py-1.5 pl-3 font-medium ${montoCaja(row.total, !!positivo)}`}>
+      <td className={`text-right py-1.5 pl-3 font-medium ${color(row.total)}`}>
         {row.total === 0 ? "$0" : formatCLP(row.total)}
       </td>
     </tr>

@@ -1634,12 +1634,22 @@ function ComponentEditRow({
         </select>
       </td>
       <td className="py-1 px-1">
-        {comp.type === "material" ? (
+        {comp.type === "material" || comp.type === "herramientas" ? (
+          // Material y Herramientas se buscan en el catálogo. Con `kind` el
+          // buscador queda separado: la línea Material no ofrece herramientas
+          // y viceversa (antes las herramientas solo se encontraban como
+          // "material"). Elegir un resultado trae precio/unidad/link y NO
+          // cambia el tipo de la línea.
           <MaterialAutocomplete
+            kind={comp.type === "herramientas" ? "herramientas" : "material"}
             value={comp.description}
             onChange={(v) => onUpdate(comp.id, "description", v)}
             onSelect={(m) => onSelectMaterial(comp.id, m)}
-            placeholder="Buscar material…"
+            placeholder={
+              comp.type === "herramientas"
+                ? "Buscar herramienta…"
+                : "Buscar material…"
+            }
           />
         ) : (
           <input

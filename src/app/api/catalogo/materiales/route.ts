@@ -10,6 +10,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const q = searchParams.get("q") || "";
     const category = searchParams.get("category") || "";
+    // Excluir una categoría (ej. HERRAMIENTAS) para separar materiales de
+    // herramientas en el buscador: al desglosar una partida, la línea de tipo
+    // Material solo debe ofrecer materiales, y la de tipo Herramientas solo
+    // herramientas. Las herramientas viven en este mismo catálogo con
+    // category="HERRAMIENTAS". Si viene `category`, gana ese filtro exacto.
+    const excludeCategory = searchParams.get("excludeCategory") || "";
     const limit = parseInt(searchParams.get("limit") || "500");
 
     const where: any = {};
@@ -18,6 +24,8 @@ export async function GET(request: NextRequest) {
     }
     if (category) {
       where.category = category;
+    } else if (excludeCategory) {
+      where.category = { not: excludeCategory };
     }
 
     const materials = await prisma.materialCatalog.findMany({

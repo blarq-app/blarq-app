@@ -464,12 +464,14 @@ export default function ObraItemComponentsEditor({
                       caía en un renglón nuevo e inflaba las filas con
                       referencia (vista densa). */}
                   <div className="flex items-center gap-1">
-                  {canEdit && c.type === "material" ? (
-                    // Material: el nombre es un autocomplete contra el catálogo
-                    // (igual que el buscador "Agregar material" de abajo).
-                    // Elegir un resultado SWAPEA la línea por ese material
-                    // (trae precio + link). Si MJ deja texto libre, se guarda
-                    // como descripción suelta al salir del campo.
+                  {canEdit && (c.type === "material" || c.type === "herramientas") ? (
+                    // Material y Herramientas: el nombre es un autocomplete
+                    // contra el catálogo. Elegir un resultado SWAPEA la línea
+                    // por ese ítem (trae precio + link). El buscador queda
+                    // separado por tipo (`kind`): una línea Herramientas solo
+                    // ofrece herramientas y una Material solo materiales. Si MJ
+                    // deja texto libre, se guarda como descripción suelta al
+                    // salir del campo.
                     <div className="flex-1 min-w-0">
                       <MaterialNameCell
                         key={c.description}
@@ -676,6 +678,7 @@ export default function ObraItemComponentsEditor({
             </span>
             <div className="flex-1 max-w-md">
               <MaterialAutocomplete
+                kind="material"
                 value={matQuery}
                 onChange={setMatQuery}
                 onSelect={(m) => addMaterial(m)}
@@ -733,8 +736,11 @@ function MaterialNameCell({
 }) {
   const [text, setText] = useState(comp.description);
 
+  const isTool = comp.type === "herramientas";
+
   return (
     <MaterialAutocomplete
+      kind={isTool ? "herramientas" : "material"}
       value={text}
       onChange={setText}
       onSelect={(m) => {
@@ -744,7 +750,11 @@ function MaterialNameCell({
       onBlur={(v) => {
         if (v !== comp.description) onRename(v);
       }}
-      placeholder="Buscar material en el catálogo…"
+      placeholder={
+        isTool
+          ? "Buscar herramienta en el catálogo…"
+          : "Buscar material en el catálogo…"
+      }
       // Sin borde, para no romper el look tipo planilla de la tabla densa.
       inputClassName="w-full min-w-0 bg-transparent text-gray-900"
     />

@@ -24,6 +24,15 @@ type Material = {
   isProvision?: boolean;
 };
 
+// Herramientas y materiales conviven en el mismo catálogo (MaterialCatalog),
+// distinguidos solo por category="HERRAMIENTAS". Este buscador separa los dos
+// mundos según `kind`, para que al desglosar una partida la línea de tipo
+// Material ofrezca solo materiales y la de tipo Herramientas solo herramientas
+// (antes todo se mezclaba y para agregar una herramienta había que buscarla
+// como "material"). Si no se pasa `kind`, busca en todo el catálogo (compat).
+type MaterialKind = "material" | "herramientas";
+const TOOL_CATEGORY = "HERRAMIENTAS";
+
 export default function MaterialAutocomplete({
   value,
   onChange,
@@ -31,6 +40,7 @@ export default function MaterialAutocomplete({
   onBlur,
   placeholder,
   inputClassName,
+  kind,
 }: {
   value: string;
   onChange: (newValue: string) => void;
@@ -45,7 +55,11 @@ export default function MaterialAutocomplete({
   // desglose denso del presupuesto pasa uno sin borde para no romper el look
   // tipo planilla (filas bajas, sin marcos).
   inputClassName?: string;
+  // "material" → excluye HERRAMIENTAS; "herramientas" → solo HERRAMIENTAS.
+  // Sin valor → busca en todo (comportamiento previo).
+  kind?: MaterialKind;
 }) {
+  const isTool = kind === "herramientas";
   const [results, setResults] = useState<Material[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -61,8 +75,14 @@ export default function MaterialAutocomplete({
     const t = setTimeout(async () => {
       setLoading(true);
       try {
+        // Separar herramientas de materiales según `kind`.
+        const kindParam = isTool
+          ? `&category=${TOOL_CATEGORY}`
+          : kind === "material"
+            ? `&excludeCategory=${TOOL_CATEGORY}`
+            : "";
         const res = await fetch(
-          `/api/catalogo/materiales?q=${encodeURIComponent(value)}&limit=15`
+          `/api/catalogo/materiales?q=${encodeURIComponent(value)}&limit=15${kindParam}`
         );
         if (res.ok) {
           const data = (await res.json()) as Material[];
@@ -76,7 +96,7 @@ export default function MaterialAutocomplete({
       }
     }, 200);
     return () => clearTimeout(t);
-  }, [value]);
+  }, [value, kind, isTool]);
 
   // Click fuera → cerrar
   useEffect(() => {
@@ -107,7 +127,9 @@ export default function MaterialAutocomplete({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
-          category: "OTROS",
+          // Crear la herramienta en su categoría, para que quede separada del
+          // resto y aparezca la próxima vez al buscar herramientas.
+          category: isTool ? TOOL_CATEGORY : "OTROS",
           unit: "UN",
           netPrice: 0,
         }),
@@ -117,7 +139,7 @@ export default function MaterialAutocomplete({
         handleSelect(m);
       } else {
         const err = await res.json().catch(() => ({}));
-        alert(err.error || "Error al crear material");
+        alert(err.error || (isTool ? "Error al crear herramienta" : "Error al crear material"));
       }
     } finally {
       setLoading(false);
@@ -211,7 +233,7 @@ export default function MaterialAutocomplete({
                 highlight === results.length ? "bg-gray-100" : "hover:bg-gray-50"
               }`}
             >
-              + Crear nuevo material{" "}
+              + Crear {isTool ? "nueva herramienta" : "nuevo material"}{" "}
               <span className="text-gray-500">«{value.trim()}»</span>
             </button>
           )}

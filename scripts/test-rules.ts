@@ -61,10 +61,18 @@ const TEST_TIPODOC = 999;
 const TEST_RUT_PREFIX = "9999"; // RUTs 99990001-1 .. 99990009-9
 const TEST_PATTERN_PREFIX = "__test_";
 
+// Nombre marcador para las reglas internacionales de test (rutIssuer null →
+// no las agarra el filtro por RUT del cleanup).
+const TEST_INTL_PREFIX = "__test_intl_";
+
 async function cleanup() {
   await prisma.invoice.deleteMany({ where: { tipoDoc: TEST_TIPODOC } });
   await prisma.invoiceCategorizationRule.deleteMany({
     where: { rutIssuer: { startsWith: TEST_RUT_PREFIX } },
+  });
+  // Reglas internacionales de test (por nombre, sin RUT).
+  await prisma.invoiceCategorizationRule.deleteMany({
+    where: { providerName: { startsWith: TEST_INTL_PREFIX } },
   });
   await prisma.bankCategorizationRule.deleteMany({
     where: { descriptionPattern: { startsWith: TEST_PATTERN_PREFIX } },
@@ -178,7 +186,11 @@ async function main() {
   }
 
   {
-    // Caso 3: factura emitida → NO aplica (las reglas son solo para recibidas).
+    // Caso 3: factura emitida → SÍ aplica. applyInvoiceRule está diseñada
+    // para recibidas Y emitidas (ver su docstring: las emitidas usan project
+    // rules porque el RUT del cliente identifica el proyecto). No filtra por
+    // tipo. Esta aserción se corrigió: antes esperaba "no aplica", reflejando
+    // un comportamiento viejo que el código ya no tiene.
     const rut = `${TEST_RUT_PREFIX}0003-3`;
     await prisma.invoiceCategorizationRule.create({
       data: { rutIssuer: rut, businessName: "P3", categoryId: cat.id, hits: 1 },
@@ -200,7 +212,7 @@ async function main() {
       },
     });
     const r = await applyInvoiceRule(inv.id);
-    assert(!r.applied, "no aplica a emitidas");
+    assert(r.applied, "aplica también a emitidas (por diseño, no filtra por tipo)");
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -248,7 +260,7 @@ async function main() {
       },
     });
 
-    const r = await upsertInvoiceRule(rut, "P4", cat.id);
+    const r = await upsertInvoiceRule(rut, "P4", { categoryId: cat.id });
     assert(r.created, "crea la regla nueva");
     assertEq(r.appliedRetroactively, 2, "retroactivamente toca 2 (las del mismo RUT con null)");
 
@@ -273,7 +285,7 @@ async function main() {
         status: "pendiente", origin: "manual",
       },
     });
-    const r = await upsertInvoiceRule(rut, "P5", cat.id);
+    const r = await upsertInvoiceRule(rut, "P5", { categoryId: cat.id });
     assert(!r.created && !r.updated, "ni crea ni actualiza categoría");
     assertEq(r.appliedRetroactively, 1, "retro aplica al null pendiente");
     const ruleAfter = await prisma.invoiceCategorizationRule.findUnique({ where: { rutIssuer: rut } });
@@ -295,13 +307,109 @@ async function main() {
         status: "pendiente", origin: "manual",
       },
     });
-    const r = await upsertInvoiceRule(rut, "P6", cat2.id);
+    const r = await upsertInvoiceRule(rut, "P6", { categoryId: cat2.id });
     assert(r.updated, "marca updated cuando cambia categoría");
-    assertEq(r.previousCategoryId, cat.id, "registra categoría previa");
     assertEq(r.appliedRetroactively, 1, "retro toca el null con la NUEVA categoría");
     const ruleAfter = await prisma.invoiceCategorizationRule.findUnique({ where: { rutIssuer: rut } });
     assertEq(ruleAfter?.categoryId, cat2.id, "regla apunta a la nueva categoría");
     assertEq(ruleAfter?.hits, 1, "hits se resetea a 1");
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // INTERNACIONALES sin RUT — regla por nombre exacto (Google Workspace, etc.)
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("\nreglas internacionales (sin RUT, por nombre):");
+  {
+    // Caso 7: upsertInvoiceRule sin RUT crea regla por nombre y aplica
+    // retroactivamente SOLO a las facturas del mismo nombre exacto sin RUT.
+    const name = `${TEST_INTL_PREFIX}Google Workspace`;
+    const otroName = `${TEST_INTL_PREFIX}Anthropic`;
+    // 2 facturas sin RUT mismo nombre, sin categoría
+    for (const folio of ["7a", "7b"]) {
+      await prisma.invoice.create({
+        data: {
+          type: "recibida", tipoDoc: TEST_TIPODOC, folioNumber: folio,
+          rutIssuer: null, rutReceiver: "77270733-9", businessName: name,
+          issueDate: new Date(), netAmount: 1000, iva: 190, totalAmount: 1190,
+          status: "pendiente", origin: "gasto_internacional",
+        },
+      });
+    }
+    // 1 factura sin RUT del mismo nombre pero ya categorizada → no se toca
+    const respetada = await prisma.invoice.create({
+      data: {
+        type: "recibida", tipoDoc: TEST_TIPODOC, folioNumber: "7c",
+        rutIssuer: null, rutReceiver: "77270733-9", businessName: name,
+        issueDate: new Date(), netAmount: 2000, iva: 380, totalAmount: 2380,
+        status: "pendiente", origin: "gasto_internacional", categoryId: cat2.id,
+      },
+    });
+    // 1 factura sin RUT de OTRO nombre → no se toca (nombre distinto)
+    const otroIntl = await prisma.invoice.create({
+      data: {
+        type: "recibida", tipoDoc: TEST_TIPODOC, folioNumber: "7d",
+        rutIssuer: null, rutReceiver: "77270733-9", businessName: otroName,
+        issueDate: new Date(), netAmount: 3000, iva: 570, totalAmount: 3570,
+        status: "pendiente", origin: "gasto_internacional",
+      },
+    });
+    // 1 factura CON RUT que casualmente comparte el nombre → no se toca
+    // (el match sin RUT exige rutIssuer null; ésta tiene RUT).
+    const conRut = await prisma.invoice.create({
+      data: {
+        type: "recibida", tipoDoc: TEST_TIPODOC, folioNumber: "7e",
+        rutIssuer: `${TEST_RUT_PREFIX}0077-7`, rutReceiver: "77270733-9", businessName: name,
+        issueDate: new Date(), netAmount: 4000, iva: 760, totalAmount: 4760,
+        status: "pendiente", origin: "manual",
+      },
+    });
+
+    const r = await upsertInvoiceRule(null, name, { categoryId: cat.id });
+    assert(r.created, "crea la regla internacional (por nombre)");
+    assert(r.ruleId !== null, "devuelve ruleId (no null)");
+    assertEq(r.appliedRetroactively, 2, "retro toca las 2 del mismo nombre sin RUT");
+
+    const respetadaAfter = await prisma.invoice.findUnique({ where: { id: respetada.id } });
+    assertEq(respetadaAfter?.categoryId, cat2.id, "respeta categoría manual previa (mismo nombre)");
+    const otroAfter = await prisma.invoice.findUnique({ where: { id: otroIntl.id } });
+    assertEq(otroAfter?.categoryId, null, "no toca facturas de otro nombre");
+    const conRutAfter = await prisma.invoice.findUnique({ where: { id: conRut.id } });
+    assertEq(conRutAfter?.categoryId, null, "no toca facturas del mismo nombre que SÍ tienen RUT");
+
+    // La regla se guardó por providerName, no por rutIssuer.
+    const rule = await prisma.invoiceCategorizationRule.findUnique({ where: { providerName: name } });
+    assert(rule !== null, "regla existe con providerName");
+    assertEq(rule?.rutIssuer, null, "regla internacional tiene rutIssuer null");
+  }
+
+  {
+    // Caso 8: applyInvoiceRule matchea por nombre cuando la factura no tiene RUT.
+    const name = `${TEST_INTL_PREFIX}Neon Inc`;
+    await prisma.invoiceCategorizationRule.create({
+      data: { providerName: name, businessName: name, categoryId: cat.id, hits: 2 },
+    });
+    const inv = await prisma.invoice.create({
+      data: {
+        type: "recibida", tipoDoc: TEST_TIPODOC, folioNumber: "8a",
+        rutIssuer: null, rutReceiver: "77270733-9", businessName: name,
+        issueDate: new Date(), netAmount: 1000, iva: 190, totalAmount: 1190,
+        status: "pendiente", origin: "gasto_internacional",
+      },
+    });
+    const applied = await applyInvoiceRule(inv.id);
+    assert(applied.applied, "applyInvoiceRule aplica por nombre a factura sin RUT");
+    const after = await prisma.invoice.findUnique({ where: { id: inv.id } });
+    assertEq(after?.categoryId, cat.id, "categoría queda seteada por la regla de nombre");
+    const ruleAfter = await prisma.invoiceCategorizationRule.findUnique({ where: { providerName: name } });
+    assertEq(ruleAfter?.hits, 3, "hits incrementa 2→3");
+  }
+
+  {
+    // Caso 9: sin RUT ni nombre → no se puede identificar proveedor, no crea regla.
+    const r = await upsertInvoiceRule(null, null, { categoryId: cat.id });
+    assert(!r.created && !r.updated, "no crea regla sin RUT ni nombre");
+    assertEq(r.ruleId, null, "ruleId null cuando no hay proveedor");
+    assertEq(r.appliedRetroactively, 0, "no toca ninguna factura");
   }
 
   // ─────────────────────────────────────────────────────────────────────

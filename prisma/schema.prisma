@@ -983,8 +983,16 @@ model Invoice {
 // contexto temporal y MJ lo decide siempre a mano.
 model InvoiceCategorizationRule {
   id           String   @id @default(cuid())
-  rutIssuer    String   @unique // RUT del proveedor — único, una regla por proveedor
-  businessName String?  // nombre referencial, se actualiza con la última factura vista
+  // Clave del proveedor. Una regla se identifica por UNO de estos dos:
+  //   - rutIssuer: proveedores chilenos (tienen RUT). Es el caso normal.
+  //   - providerName: proveedores internacionales SIN RUT (Google Workspace,
+  //     Anthropic, Neon...). En esas facturas rutIssuer viene null, así que la
+  //     regla matchea por el nombre exacto del proveedor. Ver categorizationRules.ts.
+  // Ambos son @unique nullable (Postgres permite múltiples null bajo unique),
+  // así que conviven RUT-rules (providerName null) y name-rules (rutIssuer null).
+  rutIssuer    String?  @unique // RUT del proveedor — único cuando existe
+  providerName String?  @unique // nombre exacto del proveedor internacional sin RUT
+  businessName String?  // nombre referencial para mostrar, se actualiza con la última factura vista
   // Acción de la regla. Al menos uno de los dos campos debe estar puesto:
   //   - categoryId: auto-asigna categoría al matchear el RUT
   //   - projectId: auto-asigna centro de costo (proyecto)
@@ -1000,6 +1008,7 @@ model InvoiceCategorizationRule {
   project      Project?      @relation(fields: [projectId], references: [id])
 
   @@index([rutIssuer])
+  @@index([providerName])
   @@index([categoryId])
   @@index([projectId])
 }

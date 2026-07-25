@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
+import { providerInvoiceWhere } from "@/lib/facturas/categorizationRules";
 
 // DELETE /api/facturas/reglas/[id]
 // Elimina la regla. Las facturas previamente categorizadas con esta
@@ -51,17 +52,21 @@ export async function PATCH(
       },
     });
 
+    // WHERE del proveedor: por RUT, o por nombre exacto si la regla es de un
+    // internacional sin RUT. Sin el helper, un `rutIssuer: null` acá haría
+    // updateMany sobre TODAS las facturas sin RUT (bug).
+    const provWhere = providerInvoiceWhere(updated.rutIssuer, updated.providerName);
     let appliedRetroactively = 0;
-    if (body.categoryId) {
+    if (body.categoryId && provWhere) {
       const retro = await prisma.invoice.updateMany({
-        where: { rutIssuer: updated.rutIssuer, categoryId: null },
+        where: { ...provWhere, categoryId: null },
         data: { categoryId: body.categoryId },
       });
       appliedRetroactively += retro.count;
     }
-    if (body.projectId) {
+    if (body.projectId && provWhere) {
       const retro = await prisma.invoice.updateMany({
-        where: { rutIssuer: updated.rutIssuer, projectId: null },
+        where: { ...provWhere, projectId: null },
         data: { projectId: body.projectId },
       });
       appliedRetroactively += retro.count;

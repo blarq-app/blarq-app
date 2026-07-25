@@ -5,7 +5,7 @@ import { useState } from "react";
 
 type Rule = {
   id: string;
-  rutIssuer: string;
+  rutIssuer: string | null;
   businessName: string | null;
   categoryId: string | null;
   categoryLabel: string | null;
@@ -133,7 +133,9 @@ export default function InvoiceRulesTable({
                   {r.businessName ?? <span className="text-gray-400 italic">sin nombre</span>}
                 </td>
                 <td className="px-4 py-2 tabular-nums text-xs text-gray-600">
-                  {r.rutIssuer}
+                  {r.rutIssuer ?? (
+                    <span className="text-gray-400 italic tracking-normal">internacional</span>
+                  )}
                 </td>
                 <td className="px-4 py-2 text-gray-700">
                   {isEditing ? (

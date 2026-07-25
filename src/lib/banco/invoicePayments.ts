@@ -6,6 +6,7 @@
 // para esa factura — el campo Invoice.status es derivado.
 
 import { prisma } from "@/lib/prisma";
+import { CATEGORIAS_PAGO_SOCIO } from "@/lib/banco/socios";
 
 /**
  * Suma de las Notas de Crédito aplicadas a una factura para REDUCIR su saldo
@@ -365,7 +366,7 @@ export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Pr
       counterpartyRut: { contains: counterpartyDigits.slice(-8) },
       ...amountWhere,
     },
-    select: { id: true, amount: true, date: true },
+    select: { id: true, amount: true, date: true, category: true },
     take: 5,
   });
 
@@ -376,7 +377,7 @@ export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Pr
   const { glosas, personRuts } = await reembolsadorSignalsForAliasRut(
     counterpartyDigits
   );
-  let byAlias: { id: string; amount: number; date: Date }[] = [];
+  let byAlias: { id: string; amount: number; date: Date; category: string | null }[] = [];
   const orSignals: Record<string, unknown>[] = [
     ...personRuts.map((pr) => ({ counterpartyRut: { contains: pr } })),
     ...glosas.map((g) => ({
@@ -386,7 +387,7 @@ export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Pr
   if (orSignals.length > 0) {
     byAlias = await prisma.bankMovement.findMany({
       where: { status: "sin_asignar", OR: orSignals, ...amountWhere },
-      select: { id: true, amount: true, date: true },
+      select: { id: true, amount: true, date: true, category: true },
       take: 5,
     });
   }
@@ -397,12 +398,12 @@ export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Pr
   // sin asignar del mismo monto cuya glosa nombre ese comercio, dentro de la
   // ventana de fecha (la boleta de tarjeta es del mismo día). Simétrico al
   // match por comercio del camino movimiento→factura.
-  let byMerchant: { id: string; amount: number; date: Date }[] = [];
+  let byMerchant: { id: string; amount: number; date: Date; category: string | null }[] = [];
   const invMerchant = inv.type === "recibida" ? merchantFromName(inv.businessName) : null;
   if (invMerchant) {
     const sameAmount = await prisma.bankMovement.findMany({
       where: { status: "sin_asignar", ...amountWhere },
-      select: { id: true, amount: true, date: true, description: true },
+      select: { id: true, amount: true, date: true, description: true, category: true },
       take: 20,
     });
     const issueT = new Date(inv.issueDate).getTime();
@@ -413,11 +414,11 @@ export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Pr
           Math.abs(issueT - new Date(m.date).getTime()) / 86400000 <=
           MERCHANT_DATE_WINDOW_DAYS
       )
-      .map((m) => ({ id: m.id, amount: m.amount, date: m.date }));
+      .map((m) => ({ id: m.id, amount: m.amount, date: m.date, category: m.category }));
   }
 
   // Unimos por id (un mov puede caer en varias listas).
-  const byId = new Map<string, { id: string; amount: number; date: Date }>();
+  const byId = new Map<string, { id: string; amount: number; date: Date; category: string | null }>();
   for (const m of [...byRut, ...byAlias, ...byMerchant]) byId.set(m.id, m);
   const candidates = [...byId.values()];
 
@@ -436,10 +437,25 @@ export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Pr
   });
   await prisma.bankMovement.update({
     where: { id: mov.id },
-    data: { status: "conciliado" },
+    // Al conciliar borramos cualquier categoría de PAGO A SOCIO (sueldo /
+    // retiro / bono / préstamo) que el import haya sugerido: un movimiento
+    // conciliado a factura es un reembolso, no un pago a socio, y no puede
+    // tener las dos identidades (si no, aparece en el filtro "sueldos" del
+    // banco aunque tenga factura al lado). Los caminos manuales ya limpiaban
+    // la categoría; el auto-match era el que la dejaba pegada.
+    data: { status: "conciliado", ...limpiarCategoriaSocio(mov.category ?? null) },
   });
   await recomputeInvoiceStatus(inv.id);
   return 1;
+}
+
+// Si la categoría del movimiento es de pago a socio, devuelve { category: null }
+// para borrarla al conciliar; si no, devuelve {} (no toca la categoría — una
+// categoría de costo legítima puesta por una regla se conserva).
+function limpiarCategoriaSocio(category: string | null): { category?: null } {
+  return (CATEGORIAS_PAGO_SOCIO as readonly string[]).includes(category ?? "")
+    ? { category: null }
+    : {};
 }
 
 /**
@@ -647,6 +663,7 @@ export async function tryAutoMatchMovementWithInvoices(
       description: string;
       counterpartyRut: string | null;
       date: Date;
+      category?: string | null;
       payments: { id: string }[];
     };
   }
@@ -739,7 +756,9 @@ export async function tryAutoMatchMovementWithInvoices(
   });
   await prisma.bankMovement.update({
     where: { id: mov.id },
-    data: { status: "conciliado" },
+    // Mismo criterio que el otro auto-match: al conciliar borramos el rótulo
+    // de pago-a-socio (reembolso, no pago a socio). Ver limpiarCategoriaSocio.
+    data: { status: "conciliado", ...limpiarCategoriaSocio(mov.category ?? null) },
   });
   await recomputeInvoiceStatus(match.id);
 

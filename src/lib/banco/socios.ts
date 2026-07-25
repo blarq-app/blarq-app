@@ -51,6 +51,24 @@ export function esCategoriaFinanciamientoSocio(category: string | null): boolean
   return category === CATEGORIA_PRESTAMO_SOCIO;
 }
 
+// TODAS las categorías que significan "plata hacia/desde un socio" (el import
+// las sugiere cuando la contraparte es MJ / JT). Un movimiento NO puede ser al
+// mismo tiempo pago-a-socio Y estar conciliado a una factura de proveedor: si
+// se concilia, es un REEMBOLSO (el socio adelantó un gasto del negocio) y la
+// factura manda. Por eso al conciliar se le borra cualquiera de estas
+// categorías (ver auto-match en invoicePayments.ts; los caminos manuales ya
+// limpiaban toda la categoría). Definida acá, en el módulo seguro para el
+// cliente, para que sea la fuente única de "qué es pago a socio".
+export const CATEGORIAS_PAGO_SOCIO = [
+  "sueldo",
+  "retiro_personal",
+  "bono_socio",
+  CATEGORIA_PRESTAMO_SOCIO,
+] as const;
+export function esCategoriaPagoSocio(category: string | null): boolean {
+  return category != null && (CATEGORIAS_PAGO_SOCIO as readonly string[]).includes(category);
+}
+
 // Cuánto le debía BLARQ a los socios cuando empezamos a registrar. Es la
 // camioneta que los socios financiaron en 2022 ($14.000.000, dato de MJ
 // 2026-07-18). Los movimientos de ese préstamo original NO están en el banco

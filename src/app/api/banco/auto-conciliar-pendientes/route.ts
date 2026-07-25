@@ -61,6 +61,7 @@ export async function POST() {
       description: true,
       counterpartyRut: true,
       date: true,
+      category: true, // para borrar el rótulo pago-a-socio al conciliar (ver invoicePayments)
       payments: { select: { id: true } },
     },
   });

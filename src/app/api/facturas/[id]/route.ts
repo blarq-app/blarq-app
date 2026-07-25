@@ -75,8 +75,9 @@ export async function PUT(
     });
 
     // Si la factura tiene categoría asignada, asegurar que exista una
-    // regla por RUT y aplicarla retroactivamente a las demás facturas del
-    // mismo proveedor sin categoría.
+    // regla del proveedor y aplicarla retroactivamente a las demás facturas
+    // del mismo proveedor sin categoría. El proveedor se identifica por RUT,
+    // o por nombre exacto si no tiene RUT (internacional, ej. Google Workspace).
     //
     // IMPORTANTE: desde acá nunca se guarda PROYECTO como regla. La mayoría
     // de los proveedores son transversales a varias obras (Easy/Sodimac/MK),
@@ -86,15 +87,15 @@ export async function PUT(
     // desde el bulk-assign con el toggle "Guardar centro de costo en regla".
     let rule:
       | {
-          ruleId: string;
+          ruleId: string | null;
           created: boolean;
           updated: boolean;
           appliedRetroactively: number;
         }
       | null = null;
-    if (invoice.rutIssuer && invoice.categoryId) {
+    if ((invoice.rutIssuer || invoice.businessName) && invoice.categoryId) {
       const r = await upsertInvoiceRule(
-        invoice.rutIssuer,
+        invoice.rutIssuer ?? null,
         invoice.businessName ?? null,
         { categoryId: invoice.categoryId }
       ).catch(() => null);
@@ -176,19 +177,19 @@ export async function PATCH(
     // el toggle "Guardar centro de costo en regla".
     let rule:
       | {
-          ruleId: string;
+          ruleId: string | null;
           created: boolean;
           updated: boolean;
           appliedRetroactively: number;
         }
       | null = null;
     if (
-      invoice.rutIssuer &&
+      (invoice.rutIssuer || invoice.businessName) &&
       "categoryId" in updates &&
       invoice.categoryId
     ) {
       const r = await upsertInvoiceRule(
-        invoice.rutIssuer,
+        invoice.rutIssuer ?? null,
         invoice.businessName ?? null,
         { categoryId: invoice.categoryId }
       ).catch(() => null);

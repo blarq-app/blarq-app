@@ -44,8 +44,10 @@ export default async function FacturasReglasPage() {
       <div className="bg-blue-50/40 border border-blue-100 rounded-lg p-3 mb-4 text-xs text-gray-700 leading-relaxed">
         Cada vez que asignás categoría o centro de costo a una factura
         recibida (manual, edición o bulk en /facturas), se guarda una regla{" "}
-        <span className="font-medium">RUT proveedor → categoría / proyecto</span>.
-        Las próximas facturas del mismo proveedor que entren por sync SII o
+        <span className="font-medium">proveedor → categoría / proyecto</span>.
+        El proveedor se reconoce por su RUT; los internacionales sin RUT
+        (Google Workspace, Anthropic…) se reconocen por su nombre exacto. Las
+        próximas facturas del mismo proveedor que entren por sync SII o
         creación manual heredan estos valores automáticamente. Cada regla
         puede tener categoría, proyecto, o ambos.
       </div>

@@ -57,10 +57,10 @@ export async function POST(request: NextRequest) {
     });
 
     const learnedRules: Array<{
-      ruleId: string;
+      ruleId: string | null;
       created: boolean;
       updated: boolean;
-      rutIssuer: string;
+      rutIssuer: string | null;
       businessName: string | null;
     }> = [];
 
@@ -81,21 +81,23 @@ export async function POST(request: NextRequest) {
       body.projectId.length > 0;
 
     if (learnCat || learnProj) {
+      // Incluimos también las facturas SIN RUT (proveedores internacionales):
+      // su regla se guarda por nombre exacto. Antes se filtraban con
+      // rutIssuer: { not: null } y nunca aprendían regla.
       const facturas = await prisma.invoice.findMany({
-        where: {
-          id: { in: body.invoiceIds },
-          rutIssuer: { not: null },
-        },
+        where: { id: { in: body.invoiceIds } },
         select: { rutIssuer: true, businessName: true },
       });
 
+      // Dedup por clave de proveedor: el RUT si existe, si no el nombre.
       const seen = new Set<string>();
       for (const inv of facturas) {
-        if (!inv.rutIssuer || seen.has(inv.rutIssuer)) continue;
-        seen.add(inv.rutIssuer);
+        const key = inv.rutIssuer ?? (inv.businessName ? `name:${inv.businessName}` : null);
+        if (!key || seen.has(key)) continue; // sin RUT ni nombre → no se puede identificar
+        seen.add(key);
         try {
           const r = await upsertInvoiceRule(
-            inv.rutIssuer,
+            inv.rutIssuer ?? null,
             inv.businessName ?? null,
             {
               ...(learnCat && { categoryId: body.categoryId as string }),
@@ -106,11 +108,11 @@ export async function POST(request: NextRequest) {
             ruleId: r.ruleId,
             created: r.created,
             updated: r.updated,
-            rutIssuer: inv.rutIssuer,
+            rutIssuer: inv.rutIssuer ?? null,
             businessName: inv.businessName ?? null,
           });
         } catch (e) {
-          console.error(`[bulk-assign] upsertInvoiceRule failed for ${inv.rutIssuer}:`, e);
+          console.error(`[bulk-assign] upsertInvoiceRule failed for ${key}:`, e);
         }
       }
     }

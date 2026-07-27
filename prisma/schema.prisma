@@ -331,6 +331,14 @@ model ObraItem {
   // para el maestro (va en su alcance/EP). Su costo real aparece igual como
   // gasto → se ve como MO más cara y baja la utilidad.
   noCobrado         Boolean @default(false)
+  // Marca de trabajo INTERNA: "esta partida ya la revisamos" (MJ y JT).
+  // No la ve el cliente ni el maestro y no sale en ningún PDF — se dibuja
+  // únicamente en el editor de presupuesto de obra. No entra en ningún
+  // cálculo: no toca totales, ni metrics.ts, ni estados de pago.
+  // NO se copia al duplicar la versión (arranca en blanco, igual que
+  // noCobrado): una versión nueva se revisa de cero, porque las partidas
+  // pueden haber cambiado de precio o cantidad. Decidido con MJ 2026-07-27.
+  revisado          Boolean @default(false)
   // Maestro que ejecuta esta partida (una partida = un solo maestro). null =
   // sin asignar → queda fuera de todo alcance/EP de maestro hasta repartirla.
   // Se asigna desde la zona "Maestros" de la obra (selector de partidas), NO

@@ -21,6 +21,26 @@ type Factura = {
   projectName: string | null;
 };
 
+// Respuesta de GET /api/banco/movimientos/[id]/sugerencia — la opinión del
+// motor sobre este movimiento, sin haber escrito nada.
+type Sugerencia = {
+  confianza: "segura" | "probable" | "ninguna";
+  invoiceId: string | null;
+  motivo: string;
+  hermanas: number;
+  factura: {
+    id: string;
+    folioNumber: string | null;
+    businessName: string | null;
+    rutIssuer: string | null;
+    totalAmount: number;
+    remaining: number;
+    issueDate: string;
+    status: string;
+    projectName: string | null;
+  } | null;
+};
+
 type ExistingPayment = {
   id: string;
   invoiceId: string;
@@ -293,55 +313,39 @@ export default function MovementReconcileModal({
     }
   }
 
-  // ─── Idea B: sugerir match por monto exacto sin alias ──────────────────
-  // Cuando NO hay reembolsador detectado y NO hay drafts aun, miramos
-  // los candidatos con saldo ±$10 del mov. La logica de sugerencia:
-  //   - 1 candidata        → sugerirla.
-  //   - N candidatas, todas del mismo proveedor (mismo rutIssuer/rutReceiver
-  //     segun el lado) → sugerir la MAS VIEJA por fecha (FIFO contable —
-  //     no importa cual asignamos, son todas del mismo proveedor con el
-  //     mismo monto).
-  //   - N candidatas, distintos proveedores → no sugerir (MJ decide).
-  const exactMatchSuggestion = (() => {
-    if (drafts.length > 0) return null;
-    if (detectedReembolsador) return null; // ya hay otro banner
-    const draftIds = new Set(drafts.map((d) => d.invoiceId));
-    const matches = results.filter(
-      (f) => !draftIds.has(f.id) && Math.abs(f.remaining - absAmount) <= 10
-    );
-    if (matches.length === 0) return null;
-    if (matches.length === 1) return matches[0];
-    // Multi-match: solo sugerimos si todas son del mismo proveedor/cliente.
-    // El campo a comparar depende del lado del movimiento (cargo → rutIssuer
-    // del proveedor; abono → rutReceiver del cliente).
-    const partyField: "rutIssuer" | "rutReceiver" =
-      targetType === "emitida" ? "rutReceiver" : "rutIssuer";
-    const distinctRuts = new Set(
-      matches
-        .map((f) => (f[partyField] ?? "").replace(/\D/g, "").slice(-8))
-        .filter((r) => r.length > 0)
-    );
-    if (distinctRuts.size !== 1) return null;
-    // Todas mismo proveedor → la mas vieja por issueDate.
-    const sorted = [...matches].sort(
-      (a, b) =>
-        new Date(a.issueDate).getTime() - new Date(b.issueDate).getTime()
-    );
-    return sorted[0];
-  })();
+  // ─── La caja SUGERENCIA ────────────────────────────────────────────────
+  // Lo que la app opina sobre este movimiento, traído del MISMO motor que usa
+  // el masivo "Conciliar pendientes" (GET .../sugerencia).
+  //
+  // Antes esto se calculaba acá en el cliente mirando solo el monto (±$10) de
+  // los resultados ya cargados, y se escondía si había reembolsador detectado
+  // o si ya había imputaciones. Resultado: la app tenía DOS opiniones sobre el
+  // mismo movimiento — el masivo lo dejaba pendiente por desconfiar del RUT y
+  // este cartel, en verde, lo daba por bueno. Ahora hay una sola opinión, con
+  // tres niveles de confianza, y cuando duda lo dice con todas las letras.
+  const [sugerencia, setSugerencia] = useState<Sugerencia | null>(null);
+  const [sugerenciaCargando, setSugerenciaCargando] = useState(false);
 
-  // Si hay N matches del mismo proveedor, queremos avisarle a MJ que hay
-  // otras del mismo monto/proveedor disponibles (no asumir que esta es la
-  // unica) — para que pueda elegir otra si esta no calza.
-  const exactMatchSiblings = (() => {
-    if (!exactMatchSuggestion) return 0;
-    if (drafts.length > 0) return 0;
-    const draftIds = new Set(drafts.map((d) => d.invoiceId));
-    const matches = results.filter(
-      (f) => !draftIds.has(f.id) && Math.abs(f.remaining - absAmount) <= 10
-    );
-    return Math.max(0, matches.length - 1);
-  })();
+  useEffect(() => {
+    if (!open) {
+      setSugerencia(null);
+      return;
+    }
+    let cancelado = false;
+    setSugerenciaCargando(true);
+    fetch(`/api/banco/movimientos/${movement.id}/sugerencia`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelado && d) setSugerencia(d as Sugerencia);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelado) setSugerenciaCargando(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [open, movement.id]);
 
   const search = useCallback(async () => {
     if (!open) return;
@@ -500,7 +504,11 @@ export default function MovementReconcileModal({
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
-            <h2 className="text-base font-semibold text-gray-900">Asignar pagos</h2>
+            {/* Mismo verbo que el botón masivo y que el menú Resolver: la
+                conciliación es UN gesto, no tres cosas con nombres distintos. */}
+            <h2 className="text-base font-semibold text-gray-900">
+              Conciliar movimiento
+            </h2>
             <div className="mt-1 flex items-baseline gap-3 flex-wrap">
               <span className="text-xs text-gray-500">
                 {new Date(movement.date).toLocaleDateString("es-CL", {
@@ -704,41 +712,31 @@ export default function MovementReconcileModal({
             </div>
           )}
 
-          {/* Idea B: sugerencia de match por monto exacto (sin alias) —
-              cuando hay UNA SOLA factura sin pagar con saldo ±$10 del
-              mov, ofrecemos un atajo para imputarla con un click. */}
-          {remaining > 0 && exactMatchSuggestion && (
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg px-3 py-2.5 text-xs leading-relaxed">
-              <div className="flex items-start gap-2">
-                <span className="text-emerald-600 mt-0.5">✓</span>
-                <div className="flex-1">
-                  <p>
-                    Match por monto exacto:{" "}
-                    <span className="font-medium">
-                      F-{exactMatchSuggestion.folioNumber} ·{" "}
-                      {exactMatchSuggestion.businessName ?? "—"}
-                    </span>{" "}
-                    tiene saldo {formatCLP(exactMatchSuggestion.remaining)}, que
-                    coincide con este movimiento.
-                  </p>
-                  {exactMatchSiblings > 0 && (
-                    <p className="mt-1 text-[11px] text-emerald-700">
-                      Hay {exactMatchSiblings}{" "}
-                      {exactMatchSiblings === 1 ? "otra factura" : "otras facturas"}{" "}
-                      del mismo proveedor con el mismo saldo. Ésta es la más
-                      antigua sin pagar. Si querés otra, cancelá y elegí en la lista.
-                    </p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => addDraft(exactMatchSuggestion)}
-                  className="px-3 py-1 bg-emerald-900 text-white text-xs rounded hover:bg-emerald-800 whitespace-nowrap"
-                >
-                  Agregar
-                </button>
-              </div>
-            </div>
+          {/* La caja SUGERENCIA — siempre arriba mientras no haya imputaciones
+              elegidas, aunque sea para decir que no encontró nada. Tres caras
+              según la confianza del motor; ver el comentario del estado. */}
+          {remaining > 0 && drafts.length === 0 && (
+            <SugerenciaBox
+              cargando={sugerenciaCargando}
+              sugerencia={sugerencia}
+              onUsar={(f) =>
+                addDraft({
+                  id: f.id,
+                  type: targetType,
+                  tipoDoc: null,
+                  folioNumber: f.folioNumber,
+                  businessName: f.businessName,
+                  rutIssuer: f.rutIssuer,
+                  rutReceiver: null,
+                  totalAmount: f.totalAmount,
+                  paid: f.totalAmount - f.remaining,
+                  remaining: f.remaining,
+                  status: f.status,
+                  issueDate: f.issueDate,
+                  projectName: f.projectName,
+                })
+              }
+            />
           )}
 
           {/* Search — fila 1: búsqueda libre + filtros tipo toggle.
@@ -973,6 +971,99 @@ export default function MovementReconcileModal({
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// La caja de sugerencia, arriba del buscador. Tres caras:
+//
+//   segura   → verde. El motor la ataría solo (mismo criterio que el masivo).
+//   probable → ámbar. El monto calza pero la validación fuerte falló; el
+//              motivo dice POR QUÉ duda. Nunca se aplica sola.
+//   ninguna  → gris. No hay candidata, y se explica qué puede estar pasando.
+//
+// El ámbar es deliberado: es el color de "atención" de la marca, y este caso
+// es exactamente eso — no está mal, pero no lo doy por hecho. Antes este mismo
+// caso salía en VERDE (confirmado), que es lo que hacía que MJ conciliara
+// contra la factura equivocada sin enterarse.
+function SugerenciaBox({
+  cargando,
+  sugerencia,
+  onUsar,
+}: {
+  cargando: boolean;
+  sugerencia: Sugerencia | null;
+  onUsar: (f: NonNullable<Sugerencia["factura"]>) => void;
+}) {
+  if (cargando && !sugerencia) {
+    return (
+      <div className="border border-gray-200 rounded-lg px-3 py-2.5 text-xs text-gray-400">
+        Buscando si alguna factura calza…
+      </div>
+    );
+  }
+  if (!sugerencia) return null;
+
+  const { confianza, motivo, factura } = sugerencia;
+
+  const tono =
+    confianza === "segura"
+      ? {
+          caja: "bg-emerald-50 border-emerald-200",
+          rotulo: "text-emerald-800",
+          titulo: "Sugerencia · calza sola",
+          texto: "text-emerald-900",
+          boton: "bg-emerald-800 hover:bg-emerald-900",
+          cta: "Usar ésta",
+        }
+      : confianza === "probable"
+        ? {
+            caja: "bg-amber-50 border-amber-200",
+            rotulo: "text-amber-800",
+            titulo: "Sugerencia · calza el monto, pero mirala",
+            texto: "text-amber-900",
+            boton: "bg-amber-800 hover:bg-amber-900",
+            cta: "Usar ésta igual",
+          }
+        : {
+            caja: "bg-gray-50 border-gray-200",
+            rotulo: "text-gray-500",
+            titulo: "Sugerencia · no encontré ninguna",
+            texto: "text-gray-600",
+            boton: "",
+            cta: "",
+          };
+
+  return (
+    <div className={`border rounded-lg px-3 py-2.5 ${tono.caja}`}>
+      <p
+        className={`text-[10px] uppercase tracking-wider font-semibold mb-1.5 ${tono.rotulo}`}
+      >
+        {tono.titulo}
+      </p>
+      <div className="flex items-start justify-between gap-3">
+        <div className={`flex-1 text-xs leading-relaxed ${tono.texto}`}>
+          {factura && (
+            <p className="font-medium">
+              F-{factura.folioNumber} · {factura.businessName ?? "—"} — saldo{" "}
+              <span className="tabular-nums">{formatCLP(factura.remaining)}</span>
+              {factura.projectName && (
+                <span className="font-normal opacity-70"> · {factura.projectName}</span>
+              )}
+            </p>
+          )}
+          <p className={factura ? "mt-1 opacity-90" : ""}>{motivo}</p>
+        </div>
+        {factura && confianza !== "ninguna" && (
+          <button
+            type="button"
+            onClick={() => onUsar(factura)}
+            className={`px-3 py-1 text-white text-xs rounded whitespace-nowrap ${tono.boton}`}
+          >
+            {tono.cta}
+          </button>
+        )}
       </div>
     </div>
   );

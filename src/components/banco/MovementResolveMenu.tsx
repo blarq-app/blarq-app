@@ -284,11 +284,14 @@ export default function MovementResolveMenu({
         .replace(/\D/g, "")
         .includes(blarqRutDigits);
 
+      // "Conciliar" — el MISMO verbo que el botón masivo de arriba y que el
+      // título del modal. Antes decía "Asignar a factura…" acá, "Auto-conciliar"
+      // arriba y "Asignar pagos" en el modal: tres nombres para el mismo gesto.
       sections.push({
         title: "Contra factura",
         items: [
           {
-            label: m.hasPayments ? "Editar imputación…" : "Asignar a factura…",
+            label: m.hasPayments ? "Conciliar (editar)…" : "Conciliar…",
             icon: "file",
             onClick: () => {
               setReconcileOpen(true);
@@ -383,11 +386,13 @@ export default function MovementResolveMenu({
       hasEgreso &&
       Math.abs(neto) <= 10;
 
+    // Mismo verbo que en la fila. Acá es "contra UNA factura" porque el picker
+    // de selección imputa los N movimientos tildados a una sola factura.
     sections.push({
       title: "Contra factura",
       items: [
         {
-          label: "Asignar a factura…",
+          label: "Conciliar contra una factura…",
           icon: "file",
           onClick: () => {
             setPickerOpen(true);

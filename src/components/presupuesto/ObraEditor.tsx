@@ -247,16 +247,43 @@ function componentEffectiveTotal(
   return (c.quantity || 0) * (c.unitCost || 0);
 }
 
-// Devuelve el total que DEBERÍA tener la partida según su desglose, o null si no
-// tiene desglose (ahí no hay con qué descuadrar). Comparar con item.total.
-function totalRealDesglose(item: ObraItem): number | null {
+// Devuelve el precio POR UNIDAD que debería tener la partida según su desglose,
+// o null si no tiene desglose (ahí no hay con qué descuadrar). Es el mismo
+// número que el servidor guarda en unitPrice al recalcular
+// (recalcObraItem.ts → unitPrice = suma de los componentes).
+function porUnidadDesglose(item: ObraItem): number | null {
   const comps = item.components ?? [];
   if (comps.length === 0) return null;
-  const porUnidad = comps.reduce(
-    (s, c) => s + componentEffectiveTotal(c, comps),
-    0
-  );
-  return porUnidad * (item.quantity ?? 0);
+  return comps.reduce((s, c) => s + componentEffectiveTotal(c, comps), 0);
+}
+
+// ¿La partida está descuadrada respecto de su desglose?
+//
+// Se compara POR UNIDAD, no por total. Antes se comparaban los totales
+// (porUnidad × cantidad) con umbral de $1, y eso AMPLIFICABA el redondeo: una
+// partida sana con cantidad decimal y componentes con centavos (una herramienta
+// 0,15 × $5.874, un margen en %) da un precio unitario de $7.913,26 contra los
+// $7.913 guardados. Esos 26 centavos, multiplicados por 8,4 m², pasaban el
+// umbral y pintaban un descuadre falso en partidas que estaban bien.
+//
+// Comparar por unidad deja el redondeo donde nació — sin que la cantidad lo
+// infle — y es la misma convención que ya usa clientVisibleTotal() en
+// versionDiff.ts, que resolvió este mismo ruido en las flechas de cambio.
+//
+// La segunda condición es una red de seguridad: cubre el caso de que el total
+// guardado se haya quedado viejo respecto de la cantidad (P.U. correcto pero
+// total de otra cantidad). La tolerancia crece con la cantidad porque el total
+// se escribe a veces desde el P.U. exacto y a veces desde el redondeado, y esa
+// ambigüedad legítima vale hasta medio peso por unidad.
+function estaDescuadrada(item: ObraItem, porUnidad: number | null): boolean {
+  if (porUnidad === null) return false;
+  const cantidad = item.quantity ?? 0;
+  const puGuardado = item.unitPrice ?? 0;
+  const driftUnitario = Math.abs(porUnidad - puGuardado) > 1;
+  const driftTotal =
+    Math.abs((item.total ?? 0) - Math.round(puGuardado) * cantidad) >
+    Math.abs(cantidad) + 1;
+  return driftUnitario || driftTotal;
 }
 
 interface ObraItem {
@@ -284,6 +311,10 @@ interface ObraItem {
   // cliente. Invisible en el PDF/total del cliente; normal en el alcance/EP
   // del maestro. Se marca acá con un toggle.
   noCobrado?: boolean;
+  // Marca interna de revisión (MJ + JT): "esta partida ya la miramos".
+  // Solo se dibuja en este editor — no sale en ningún PDF ni la ve el
+  // cliente o el maestro. No entra en ningún cálculo.
+  revisado?: boolean;
   components?: ObraItemComponent[];
 }
 
@@ -1041,6 +1072,31 @@ export default function ObraEditor({
     }
   }
 
+  // Marcar/desmarcar una partida como REVISADA. Es una marca de trabajo
+  // interna (MJ y JT): no la ve el cliente ni el maestro, no sale en PDFs y
+  // no toca ningún total. Mismo PATCH liviano que noCobrado, con update
+  // optimista para que el tilde responda al instante.
+  async function handleToggleRevisado(itemId: string, value: boolean) {
+    setItems((curr) =>
+      curr.map((i) => (i.id === itemId ? { ...i, revisado: value } : i))
+    );
+    setSaveStatus("saving");
+    try {
+      await fetch(
+        `/api/presupuestos/${initialBudget.id}/partidas/${itemId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ revisado: value }),
+        }
+      );
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 1500);
+    } catch {
+      setSaveStatus("idle");
+    }
+  }
+
   // Asignar (o quitar) zona en bulk a todas las partidas seleccionadas.
   // Llama al PUT individual en paralelo. Pasar `null` quita la zona.
   async function handleBulkSetZone(zone: string | null) {
@@ -1406,6 +1462,13 @@ export default function ObraEditor({
               <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-20" title="Mano de obra por unidad — lo que pagás al maestro">M.O.</th>
               <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-24">P.U.</th>
               <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-28">Total</th>
+              {/* Marca interna de revisión (MJ + JT). No sale en ningún PDF. */}
+              <th
+                className="text-center px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-10"
+                title="Revisada — marca interna nuestra. No la ve el cliente ni el maestro y no sale en ningún PDF."
+              >
+                Rev.
+              </th>
               <th className="w-6"></th>
             </tr>
           </thead>
@@ -1551,6 +1614,7 @@ export default function ObraEditor({
                   <col className="w-20" />
                   <col className="w-24" />
                   <col className="w-28" />
+                  <col className="w-10" />
                   <col className="w-6" />
                 </colgroup>
                 <tbody className="divide-y divide-gray-50">
@@ -1562,14 +1626,14 @@ export default function ObraEditor({
                     const zoneRow = chapter.zoneRows[itemIdx];
                     const zone = zoneRow?.zone ?? null;
                     const showSubHeader = zoneRow?.isZoneStart ?? false;
-                    // Descuadre: el total guardado no coincide con la suma de su
-                    // desglose → el número de arriba es una "foto" vieja. Marca
-                    // roja para que MJ esté atenta antes de enviar. >1 peso para
-                    // ignorar redondeos.
-                    const realDesglose = totalRealDesglose(item);
-                    const descuadrada =
-                      realDesglose !== null &&
-                      Math.abs((item.total ?? 0) - realDesglose) > 1;
+                    // Descuadre: el precio guardado no coincide con la suma de
+                    // su desglose → el número de arriba es una "foto" vieja.
+                    // Marca roja para que MJ esté atenta antes de enviar.
+                    // El criterio vive en estaDescuadrada() — se compara por
+                    // unidad para que el redondeo no se multiplique por la
+                    // cantidad y prenda alarmas falsas.
+                    const realPorUnidad = porUnidadDesglose(item);
+                    const descuadrada = estaDescuadrada(item, realPorUnidad);
                     return (
                     <Fragment key={item.id}>
                     {showSubHeader && (
@@ -1630,6 +1694,8 @@ export default function ObraEditor({
                               )
                             : ""}
                         </td>
+                        {/* Rev. + acciones — vacías en la bandita de zona. */}
+                        <td></td>
                         <td></td>
                       </tr>
                     )}
@@ -1637,7 +1703,18 @@ export default function ObraEditor({
                     {(drag) => (
                     <tr
                       ref={drag.setNodeRef}
-                      style={drag.style}
+                      style={{
+                        ...drag.style,
+                        // Revisada → la fila se atenúa, así la vista queda
+                        // dominada por lo que FALTA revisar. Va acá en el
+                        // style inline y NO como clase de Tailwind: dnd-kit
+                        // ya escribe `opacity` inline en cada fila (ver
+                        // SortableRow) y una clase no le gana. Mientras se
+                        // arrastra manda dnd-kit y esto no se aplica.
+                        ...(item.revisado && !drag.isDragging
+                          ? { opacity: 0.6 }
+                          : null),
+                      }}
                       className={`border-b border-gray-100 hover:bg-gray-50/60 group ${
                         item.noCobrado
                           ? "bg-amber-50/60 shadow-[inset_3px_0_0_theme(colors.amber.500)]"
@@ -1975,13 +2052,32 @@ export default function ObraEditor({
                                   [item.id]: true,
                                 }))
                               }
-                              title={`Este total (${formatCLP(item.total)}) no coincide con su desglose (suma del desglose: ${formatCLP(realDesglose ?? 0)}). El número de arriba quedó como una "foto" vieja. Hacé clic para abrir el desglose y editá/confirmá una línea: así se recalcula y vuelve a coincidir.`}
+                              title={`Este total (${formatCLP(item.total)}) quedó como una "foto" vieja: el precio unitario guardado (${formatCLP(item.unitPrice)}) no coincide con la suma de su desglose (${formatCLP(realPorUnidad ?? 0)} por ${item.unit}). Hacé clic para abrir el desglose y editá/confirmá una línea: así se recalcula y vuelve a coincidir.`}
                               aria-label="Total descuadrado respecto al desglose"
                               className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 hover:ring-2 hover:ring-red-200"
                             />
                           )}
                           {formatCLP(item.total)}
                         </div>
+                      </td>
+                      {/* REVISADA — cuadradito interno nuestro (MJ + JT).
+                          Nunca sale en un PDF ni lo ve el cliente/maestro:
+                          solo vive en esta pantalla. */}
+                      <td className="px-2 py-1 align-top text-center">
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 align-middle accent-gray-900 cursor-pointer"
+                          checked={!!item.revisado}
+                          onChange={(e) =>
+                            handleToggleRevisado(item.id, e.target.checked)
+                          }
+                          aria-label="Partida revisada"
+                          title={
+                            item.revisado
+                              ? "Revisada — destildá para volver a marcarla como pendiente de revisar"
+                              : "Marcar como revisada (marca interna nuestra, no sale en ningún PDF)"
+                          }
+                        />
                       </td>
                       <td className="px-2 py-0.5 align-top whitespace-nowrap">
                         <button
@@ -2004,7 +2100,7 @@ export default function ObraEditor({
                     </RowWrapper>
                     {expandedItems[item.id] && (
                       <tr className="bg-gray-50">
-                        <td colSpan={10} className="p-0">
+                        <td colSpan={11} className="p-0">
                           {/* Toggle NO COBRADO: BLARQ absorbe el costo (se le
                               paga al maestro pero no se le cobra al cliente).
                               Solo editable en versiones no congeladas. */}

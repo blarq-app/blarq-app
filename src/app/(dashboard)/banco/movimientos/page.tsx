@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { formatCLP } from "@/lib/utils";
-import AutoConciliarPendientesButton from "@/components/banco/AutoConciliarPendientesButton";
+import ConciliarPendientesButton from "@/components/banco/ConciliarPendientesButton";
 import MovementsSearch from "@/components/banco/MovementsSearch";
 import MovementsMontoSearch from "@/components/banco/MovementsMontoSearch";
 import MovementsAdvancedFilters from "@/components/banco/MovementsAdvancedFilters";
@@ -438,7 +438,7 @@ export default async function MovimientosPage({
             {movements.length} mostrados de {totalCount} total{totalCount !== 1 ? "es" : ""}
           </p>
         </div>
-        <AutoConciliarPendientesButton pendientesCount={conciliablesAprox} />
+        <ConciliarPendientesButton pendientesCount={conciliablesAprox} />
       </div>
 
       {/* Drill-down a un movimiento puntual: link discreto para salir del filtro

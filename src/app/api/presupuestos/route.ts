@@ -190,6 +190,12 @@ export async function POST(request: NextRequest) {
               // En modo plantilla (importar de otro proyecto) NO aplica: los
               // maestros son de la otra obra → queda sin asignar.
               maestroId: isTemplateMode ? null : item.maestroId,
+              // `revisado` (la marca interna de "esto ya lo revisamos", MJ +
+              // JT) NO se copia a propósito: queda en false por default. Una
+              // versión nueva se revisa de cero, porque sus partidas pueden
+              // haber cambiado de precio o cantidad. Decidido con MJ
+              // 2026-07-27 — si alguien lo "arregla" copiándolo, va a arrastrar
+              // tildes de una versión a otra sin que nadie las haya mirado.
               sortOrder: item.sortOrder,
             },
           });

@@ -532,16 +532,64 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
     }
   }
 
+  type UsoPartida = { obraItems: number; presupuestos: number; proyectos: string[] };
+
+  // Aviso con números concretos: "usada en 4 presupuestos (Lefevre, Portofino…)"
+  // en vez de un "puede que esté en uso".
+  function avisoEnUso(name: string, uso: UsoPartida) {
+    const donde = uso.proyectos.length
+      ? ` (${uso.proyectos.slice(0, 3).join(", ")}${uso.proyectos.length > 3 ? `, +${uso.proyectos.length - 3} más` : ""})`
+      : "";
+    return (
+      `Esta partida está usada en ${uso.presupuestos} presupuesto${uso.presupuestos === 1 ? "" : "s"}${donde}.\n\n` +
+      `Si la borrás, esos presupuestos la conservan igual (mantienen su copia, con sus cantidades y ` +
+      `precios intactos), pero dejan de poder actualizarse desde el catálogo.\n\n` +
+      `¿Borrar "${name}" igual?`
+    );
+  }
+
   async function deletePartida(id: string, name: string) {
-    if (
-      !confirm(
-        `¿Eliminar definitivamente "${name}" del catálogo?\n\nSi está en uso en algún presupuesto el sistema lo va a bloquear.`
+    // Consultamos primero dónde está usada para armar el aviso.
+    let uso: UsoPartida | null = null;
+    try {
+      const resUso = await fetch(`/api/catalogo/partidas/${id}`);
+      if (resUso.ok) uso = (await resUso.json()).uso ?? null;
+    } catch {
+      uso = null;
+    }
+
+    if (uso && uso.presupuestos > 0) {
+      if (!confirm(avisoEnUso(name, uso))) return;
+    } else if (uso) {
+      // Sabemos que no está en ningún presupuesto: confirmación simple.
+      if (
+        !confirm(
+          `¿Eliminar definitivamente "${name}" del catálogo?\n\nNo está usada en ningún presupuesto.`
+        )
       )
-    )
-      return;
-    const res = await fetch(`/api/catalogo/partidas/${id}`, {
-      method: "DELETE",
-    });
+        return;
+    } else {
+      // No pudimos averiguar el uso. Confirmamos en genérico y NO mandamos
+      // `forzar`: si resulta que está en uso, el servidor frena con el 409 y
+      // recién entonces mostramos el aviso completo. Nunca se borra a ciegas.
+      if (!confirm(`¿Eliminar definitivamente "${name}" del catálogo?`)) return;
+    }
+
+    async function borrar(forzar: boolean) {
+      return fetch(`/api/catalogo/partidas/${id}${forzar ? "?forzar=1" : ""}`, {
+        method: "DELETE",
+      });
+    }
+
+    let res = await borrar(uso !== null);
+    if (res.status === 409) {
+      const err = await res.json().catch(() => ({}));
+      if (!err.uso || !confirm(avisoEnUso(name, err.uso))) {
+        alert(err.error || "Error al eliminar");
+        return;
+      }
+      res = await borrar(true);
+    }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       alert(err.error || "Error al eliminar");

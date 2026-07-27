@@ -56,10 +56,14 @@ export default function EstadoResultadoChart({
           <h2 className="text-base font-semibold text-gray-900">
             Estado de Resultado Anual
           </h2>
+          {/* Las dos vistas miden distinto y por eso nunca calzan. El IVA ya
+              se decía; lo que faltaba decir es que Facturación cuenta las
+              facturas ESTÉN PAGADAS O NO, y Caja solo lo que se pagó. Va acá,
+              en el subtítulo que ya existía, en vez de sumar un cartel. */}
           <p className="text-xs text-gray-500 mt-0.5">
             {vista === "facturacion"
-              ? "Solo facturas — lo que declarás al SII (F29) · montos con IVA"
-              : "Plata real del banco — flujo de caja del estudio"}
+              ? "Solo facturas, estén pagadas o no — lo que declarás al SII (F29) · montos con IVA"
+              : "Plata real del banco — solo lo que se pagó · montos con IVA"}
           </p>
         </div>
         <div className="flex items-center gap-3">

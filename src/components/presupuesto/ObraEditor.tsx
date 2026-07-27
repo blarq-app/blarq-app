@@ -160,16 +160,43 @@ function componentEffectiveTotal(
   return (c.quantity || 0) * (c.unitCost || 0);
 }
 
-// Devuelve el total que DEBERÍA tener la partida según su desglose, o null si no
-// tiene desglose (ahí no hay con qué descuadrar). Comparar con item.total.
-function totalRealDesglose(item: ObraItem): number | null {
+// Devuelve el precio POR UNIDAD que debería tener la partida según su desglose,
+// o null si no tiene desglose (ahí no hay con qué descuadrar). Es el mismo
+// número que el servidor guarda en unitPrice al recalcular
+// (recalcObraItem.ts → unitPrice = suma de los componentes).
+function porUnidadDesglose(item: ObraItem): number | null {
   const comps = item.components ?? [];
   if (comps.length === 0) return null;
-  const porUnidad = comps.reduce(
-    (s, c) => s + componentEffectiveTotal(c, comps),
-    0
-  );
-  return porUnidad * (item.quantity ?? 0);
+  return comps.reduce((s, c) => s + componentEffectiveTotal(c, comps), 0);
+}
+
+// ¿La partida está descuadrada respecto de su desglose?
+//
+// Se compara POR UNIDAD, no por total. Antes se comparaban los totales
+// (porUnidad × cantidad) con umbral de $1, y eso AMPLIFICABA el redondeo: una
+// partida sana con cantidad decimal y componentes con centavos (una herramienta
+// 0,15 × $5.874, un margen en %) da un precio unitario de $7.913,26 contra los
+// $7.913 guardados. Esos 26 centavos, multiplicados por 8,4 m², pasaban el
+// umbral y pintaban un descuadre falso en partidas que estaban bien.
+//
+// Comparar por unidad deja el redondeo donde nació — sin que la cantidad lo
+// infle — y es la misma convención que ya usa clientVisibleTotal() en
+// versionDiff.ts, que resolvió este mismo ruido en las flechas de cambio.
+//
+// La segunda condición es una red de seguridad: cubre el caso de que el total
+// guardado se haya quedado viejo respecto de la cantidad (P.U. correcto pero
+// total de otra cantidad). La tolerancia crece con la cantidad porque el total
+// se escribe a veces desde el P.U. exacto y a veces desde el redondeado, y esa
+// ambigüedad legítima vale hasta medio peso por unidad.
+function estaDescuadrada(item: ObraItem, porUnidad: number | null): boolean {
+  if (porUnidad === null) return false;
+  const cantidad = item.quantity ?? 0;
+  const puGuardado = item.unitPrice ?? 0;
+  const driftUnitario = Math.abs(porUnidad - puGuardado) > 1;
+  const driftTotal =
+    Math.abs((item.total ?? 0) - Math.round(puGuardado) * cantidad) >
+    Math.abs(cantidad) + 1;
+  return driftUnitario || driftTotal;
 }
 
 interface ObraItem {
@@ -1233,14 +1260,14 @@ export default function ObraEditor({
                     const zoneRow = chapter.zoneRows[itemIdx];
                     const zone = zoneRow?.zone ?? null;
                     const showSubHeader = zoneRow?.isZoneStart ?? false;
-                    // Descuadre: el total guardado no coincide con la suma de su
-                    // desglose → el número de arriba es una "foto" vieja. Marca
-                    // roja para que MJ esté atenta antes de enviar. >1 peso para
-                    // ignorar redondeos.
-                    const realDesglose = totalRealDesglose(item);
-                    const descuadrada =
-                      realDesglose !== null &&
-                      Math.abs((item.total ?? 0) - realDesglose) > 1;
+                    // Descuadre: el precio guardado no coincide con la suma de
+                    // su desglose → el número de arriba es una "foto" vieja.
+                    // Marca roja para que MJ esté atenta antes de enviar.
+                    // El criterio vive en estaDescuadrada() — se compara por
+                    // unidad para que el redondeo no se multiplique por la
+                    // cantidad y prenda alarmas falsas.
+                    const realPorUnidad = porUnidadDesglose(item);
+                    const descuadrada = estaDescuadrada(item, realPorUnidad);
                     return (
                     <Fragment key={item.id}>
                     {showSubHeader && (
@@ -1646,7 +1673,7 @@ export default function ObraEditor({
                                   [item.id]: true,
                                 }))
                               }
-                              title={`Este total (${formatCLP(item.total)}) no coincide con su desglose (suma del desglose: ${formatCLP(realDesglose ?? 0)}). El número de arriba quedó como una "foto" vieja. Hacé clic para abrir el desglose y editá/confirmá una línea: así se recalcula y vuelve a coincidir.`}
+                              title={`Este total (${formatCLP(item.total)}) quedó como una "foto" vieja: el precio unitario guardado (${formatCLP(item.unitPrice)}) no coincide con la suma de su desglose (${formatCLP(realPorUnidad ?? 0)} por ${item.unit}). Hacé clic para abrir el desglose y editá/confirmá una línea: así se recalcula y vuelve a coincidir.`}
                               aria-label="Total descuadrado respecto al desglose"
                               className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 hover:ring-2 hover:ring-red-200"
                             />

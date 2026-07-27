@@ -53,7 +53,18 @@ async function getGastosBancoBlarq(): Promise<GastoExtra[]> {
     // vista (el sueldo se abre en Socios / Empleados, que no es algo de la
     // categoría sino de quién cobró).
     const section = seccionCostoDeCategoria(m.category) ?? "Otros";
-    let sub = "Otros";
+    // Por default la sub-línea ES la sección: el cuadro solo abre el desglose
+    // cuando una sección tiene más de una sub (ver showSubs en
+    // CentroCostoView), así que entrando con el mismo nombre la fila queda
+    // sola, sin desglose. El único que se abre a propósito es el sueldo, que
+    // sí vale separar en Socios / Empleados.
+    //
+    // La comisión del banco entra como "Gastos financieros" y no como fila
+    // propia: MJ no le ve sentido a separarla de los otros gastos financieros
+    // (decisión 2026-07-26). Antes abría la sección en dos sub-líneas
+    // —"Gastos financieros" (las facturas) y "Comisión banco" (el banco)— y
+    // era ruido: es el mismo concepto, cambia de dónde llega el dato.
+    let sub = section;
     // Los sueldos y Previred se imputan al MES QUE CORRESPONDE, no al de la
     // transferencia (el sueldo de junio pagado el 1-jul cuenta en junio). El
     // mes lo fija MJ (salaryPeriod) o, si no lo marcó, un default por fecha.
@@ -66,10 +77,7 @@ async function getGastosBancoBlarq(): Promise<GastoExtra[]> {
         : "Empleados";
       date = yearMonthToDate(effectiveSalaryPeriod(m));
     } else if (m.category === "previred") {
-      sub = "Previred";
       date = yearMonthToDate(effectiveSalaryPeriod(m));
-    } else if (m.category === "comision_bancaria") {
-      sub = "Comisión banco";
     }
     return {
       section,

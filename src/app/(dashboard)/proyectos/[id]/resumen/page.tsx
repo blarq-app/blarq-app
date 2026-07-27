@@ -73,6 +73,7 @@ async function getGastosBancoBlarq(): Promise<GastoExtra[]> {
 import { computeCuadroResumen, type CuadroResumenInput } from "@/lib/projects/cuadroResumen";
 import ProjectAlerts from "@/components/proyecto/ProjectAlerts";
 import CuadroResumenAvance from "@/components/proyecto/CuadroResumenAvance";
+import { NotaGastadoVsCaja } from "@/components/ui/NotaGastadoVsCaja";
 
 // Mapa: nombre de CostCategory -> campo de desglose en ObraItem.
 // Margen NO está acá — es un componente del costo directo presupuestado
@@ -473,6 +474,12 @@ export default async function ResultadosPage({
           </p>
         </div>
       </div>
+
+      {/* El "Gastado" de arriba es NETO y cuenta las facturas estén pagadas o
+          no; más abajo (Cuadro Resumen) y en el banco los montos son c/IVA y
+          solo de lo efectivamente pagado. Los dos números conviven en esta
+          pantalla y parecen contradecirse — la nota lo aclara. */}
+      <NotaGastadoVsCaja contexto="proyecto" className="mb-6" />
 
       {/* Bloque "Estado de Cobros al Cliente" eliminado 2026-05-15 — la
           info estaba duplicada con los cards arriba (Cobrado / Por cobrar)

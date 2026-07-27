@@ -7,6 +7,7 @@ import type {
   MonthBucket,
 } from "@/lib/dashboard/estadoResultado";
 import type { EstadoResultadoCaja } from "@/lib/dashboard/estadoResultadoCaja";
+import { NotaGastadoVsCaja } from "@/components/ui/NotaGastadoVsCaja";
 
 const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const MESES_LARGO = [
@@ -98,6 +99,14 @@ export default function EstadoResultadoChart({
             ))}
           </select>
         </div>
+      </div>
+
+      {/* Las dos vistas del toggle miden con reglas distintas (facturas en neto
+          estén pagadas o no vs. plata real del banco c/IVA). Como se alternan
+          en el mismo lugar, los totales no calzan y confunde — la nota lo
+          explica sin tocar ningún cálculo. */}
+      <div className="px-5 pt-3">
+        <NotaGastadoVsCaja contexto="eerr" />
       </div>
 
       <div className={loading ? "opacity-40 transition-opacity" : "transition-opacity"}>

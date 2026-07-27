@@ -2,20 +2,12 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import DeleteRuleButton from "@/components/banco/DeleteRuleButton";
 import ApplyRulesButton from "@/components/banco/ApplyRulesButton";
-
-const CATEGORY_LABEL: Record<string, string> = {
-  sueldo: "Sueldo",
-  previred: "Previred",
-  comision_bancaria: "Comisión banco",
-  retiro_personal: "Retiro socio",
-  bono_socio: "Bono socio",
-  prestamo_socio: "Préstamo socio",
-  deposito_efectivo: "Depósito efectivo",
-  impuestos: "Impuestos",
-  compra_tarjeta: "Compra tarjeta",
-  transfer_interno: "Transfer interno",
-  otro_sin_factura: "Otro / sin factura",
-};
+// Las etiquetas salen de la lista única (src/lib/banco/categorias.ts). Antes
+// esta pantalla tenía su propia copia, con dos etiquetas distintas de las de la
+// tabla del banco para las MISMAS categorías ("Préstamo socio" vs "Préstamos
+// socios", "Otro / sin factura" vs "Otro"). Ahora dicen lo mismo en los dos
+// lados.
+import { ETIQUETA_CATEGORIA } from "@/lib/banco/categorias";
 
 export default async function ReglasPage() {
   const [rules, unassignedCount] = await Promise.all([
@@ -77,7 +69,7 @@ export default async function ReglasPage() {
                     {r.descriptionPattern}
                   </td>
                   <td className="px-4 py-2 text-gray-700">
-                    {CATEGORY_LABEL[r.category] ?? r.category}
+                    {ETIQUETA_CATEGORIA[r.category] ?? r.category}
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums text-gray-600">
                     {r.hits}× {r.hits === 0 && <span className="text-gray-300">·</span>}

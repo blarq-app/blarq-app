@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { cleanupInvoicesAfterUnassign } from "@/lib/banco/invoicePayments";
 import { upsertRuleFromMovement } from "@/lib/banco/categorizationRules";
+import { esCategoriaBancoValida } from "@/lib/banco/categorias";
 import { requireSession } from "@/lib/apiAuth";
 
 // PATCH /api/banco/movimientos/[id]
@@ -235,6 +236,18 @@ export async function PATCH(
       if (nextPayments.length > 0) update.category = null;
     }
     if (body.category !== undefined) {
+      // La categoría es texto libre en la base, y hasta 2026-07-26 acá se
+      // guardaba cualquier cosa que llegara. Un valor con un typo se guardaba
+      // igual y después aparecía crudo en la tabla y en el Estado de Resultado
+      // (ningún mapa de etiquetas lo conoce), sin ningún aviso. Ahora se valida
+      // contra la lista única. `null` sigue siendo válido: es "sacarle la
+      // categoría".
+      if (body.category !== null && !esCategoriaBancoValida(body.category)) {
+        return NextResponse.json(
+          { error: `Categoría desconocida: ${body.category}` },
+          { status: 400 }
+        );
+      }
       update.category = body.category;
       update.status = body.category ? "sin_factura" : "sin_asignar";
       // La regla de auto-categorización solo se crea si MJ lo pide explícito

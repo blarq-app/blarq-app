@@ -148,6 +148,9 @@ const TYPE_COLORS: Record<string, string> = {
   perdida: "bg-red-50 text-red-700",
 };
 
+// Dónde está usada una partida del catálogo (lo devuelve el GET del detalle).
+type UsoPartida = { obraItems: number; presupuestos: number; proyectos: string[] };
+
 export default function PartidaSearch({ categories }: { categories: string[] }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
@@ -161,6 +164,15 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
   // Qué partida tiene la descripción para cliente abierta para editar INLINE
   // en la fila (igual que en las cotizaciones). null = ninguna.
   const [editingDescId, setEditingDescId] = useState<string | null>(null);
+
+  // Partida esperando confirmación de borrado, con el detalle de dónde está
+  // usada (null en `uso` = no se pudo averiguar). Alimenta el cartel de aviso.
+  const [porBorrar, setPorBorrar] = useState<{
+    id: string;
+    name: string;
+    uso: UsoPartida | null;
+  } | null>(null);
+  const [borrando, setBorrando] = useState(false);
 
   // Catálogo de categorías como estado (no prop): al crear una partida con
   // una categoría nueva, la agregamos acá para que aparezca sin recargar.
@@ -532,23 +544,54 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
     }
   }
 
+  // Paso 1 del borrado: preguntamos al servidor dónde está usada la partida y
+  // abrimos el cartel de confirmación con esos números. El borrado real ocurre
+  // en confirmarBorrado().
   async function deletePartida(id: string, name: string) {
-    if (
-      !confirm(
-        `¿Eliminar definitivamente "${name}" del catálogo?\n\nSi está en uso en algún presupuesto el sistema lo va a bloquear.`
-      )
-    )
-      return;
-    const res = await fetch(`/api/catalogo/partidas/${id}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      alert(err.error || "Error al eliminar");
-      return;
+    let uso: UsoPartida | null = null;
+    try {
+      const resUso = await fetch(`/api/catalogo/partidas/${id}`);
+      if (resUso.ok) uso = (await resUso.json()).uso ?? null;
+    } catch {
+      uso = null;
     }
-    setPartidas((prev) => prev.filter((p) => p.id !== id));
-    if (editing === id) cancelEdit();
+    setPorBorrar({ id, name, uso });
+  }
+
+  async function confirmarBorrado() {
+    if (!porBorrar) return;
+    const { id, name, uso } = porBorrar;
+    setBorrando(true);
+    try {
+      // Si no pudimos averiguar el uso, NO mandamos `forzar`: el servidor
+      // frena con un 409 y recién entonces mostramos el aviso completo. Nunca
+      // se borra a ciegas.
+      const url = `/api/catalogo/partidas/${id}${uso !== null ? "?forzar=1" : ""}`;
+      const res = await fetch(url, { method: "DELETE" });
+
+      if (res.status === 409) {
+        const err = await res.json().catch(() => ({}));
+        if (err.uso) {
+          // Ahora sí sabemos el uso: volvemos a mostrar el cartel, esta vez con
+          // los números, y que MJ decida.
+          setPorBorrar({ id, name, uso: err.uso });
+          return;
+        }
+        alert(err.error || "Error al eliminar");
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || "Error al eliminar");
+        return;
+      }
+
+      setPartidas((prev) => prev.filter((p) => p.id !== id));
+      if (editing === id) cancelEdit();
+      setPorBorrar(null);
+    } finally {
+      setBorrando(false);
+    }
   }
 
   // Crea una partida en blanco en el catálogo y la abre directamente en
@@ -843,6 +886,104 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
             No se encontraron partidas
           </div>
         )}
+      </div>
+
+      {porBorrar && (
+        <ConfirmarBorradoPartida
+          name={porBorrar.name}
+          uso={porBorrar.uso}
+          borrando={borrando}
+          onCancel={() => setPorBorrar(null)}
+          onConfirm={confirmarBorrado}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// ConfirmarBorradoPartida — cartel de aviso antes de borrar del catálogo
+// ============================================================================
+// Va como cartel dentro de la app (no un confirm del navegador) porque el aviso
+// tiene que explicar QUÉ pasa con los presupuestos que la usan, y eso no se lee
+// bien en una ventanita del navegador.
+function ConfirmarBorradoPartida({
+  name,
+  uso,
+  borrando,
+  onCancel,
+  onConfirm,
+}: {
+  name: string;
+  uso: UsoPartida | null;
+  borrando: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const enUso = !!uso && uso.presupuestos > 0;
+  const proyectos = uso?.proyectos ?? [];
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/30 z-50 flex justify-center items-start py-20 px-4 overflow-y-auto"
+      onClick={onCancel}
+    >
+      <div
+        className="w-[520px] max-w-full bg-white rounded-xl shadow-sm border border-gray-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 py-4 border-b border-gray-200">
+          <div className="text-[10px] uppercase tracking-wider text-gray-500">
+            Eliminar del catálogo
+          </div>
+          <div className="text-sm font-semibold text-gray-900 mt-0.5">{name}</div>
+        </div>
+
+        <div className="px-5 py-4 space-y-3 text-sm text-gray-700">
+          {enUso ? (
+            <>
+              <p>
+                Esta partida está usada en{" "}
+                <span className="font-semibold text-gray-900 tabular-nums">
+                  {uso!.presupuestos} presupuesto{uso!.presupuestos === 1 ? "" : "s"}
+                </span>
+                .
+              </p>
+              {proyectos.length > 0 && (
+                <p className="text-xs text-gray-500">{proyectos.join(" · ")}</p>
+              )}
+              <p>
+                Si la borrás, esos presupuestos la conservan igual — mantienen su copia,
+                con sus cantidades y precios intactos — pero dejan de poder actualizarse
+                desde el catálogo.
+              </p>
+            </>
+          ) : uso ? (
+            <p>No está usada en ningún presupuesto. Se borra del catálogo y listo.</p>
+          ) : (
+            <p>
+              No pudimos verificar en qué presupuestos se usa. Si está en alguno, te
+              avisamos antes de borrarla.
+            </p>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            disabled={borrando}
+            className="text-xs text-gray-600 hover:text-gray-900 border border-gray-300 rounded px-3 py-1 hover:border-gray-500 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={borrando}
+            className="text-xs text-white bg-red-600 hover:bg-red-700 rounded px-3 py-1 disabled:opacity-50"
+          >
+            {borrando ? "Borrando…" : enUso ? "Borrar igual" : "Borrar"}
+          </button>
+        </div>
       </div>
     </div>
   );

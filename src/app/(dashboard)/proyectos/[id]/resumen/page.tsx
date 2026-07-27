@@ -5,6 +5,10 @@ import { formatCLP, OBRA_CHAPTERS, ObraChapter } from "@/lib/utils";
 import Link from "next/link";
 import CentroCostoView, { type GastoExtra } from "@/components/proyecto/CentroCostoView";
 import { esSocio } from "@/lib/banco/socios";
+import {
+  CATEGORIAS_GASTO_ESTRUCTURA,
+  seccionCostoDeCategoria,
+} from "@/lib/banco/categorias";
 import { computeProjectMetrics } from "@/lib/projects/metrics";
 import { effectiveSalaryPeriod, yearMonthToDate } from "@/lib/banco/salaryPeriod";
 import { selectVigente } from "@/lib/projects/selectVersion";
@@ -16,16 +20,22 @@ import { selectVigente } from "@/lib/projects/selectVersion";
 // (amount < 0). Sueldo se sub-divide en Socios vs Empleados (MJ/JT vs el resto)
 // con la misma definición de "socio" que usa el banco.
 //
+// Cuáles entran y bajo qué nombre lo decide la lista única de categorías de
+// banco (src/lib/banco/categorias.ts): `esGastoDeEstructura` filtra, y
+// `seccionCosto` traduce al vocabulario de las facturas — es el ÚNICO puente
+// entre los dos sistemas de categoría, antes estaba escrito a mano acá.
+//
 // Los pagos del F29 al SII (category="impuestos") quedan FUERA a propósito: NO
 // son un gasto de operar BLARQ. El F29 es mayormente IVA —un pasa-manos: lo
 // cobrás al cliente, descontás el de compras, y la diferencia se la das al
 // SII— más PPM (adelanto de renta) y retenciones (plata de terceros). Meterlos
 // como gasto inflaba los costos y subestimaba la utilidad del estudio. Misma
-// lógica que los retiros/préstamos de socios, que tampoco entran acá.
+// lógica que los retiros/préstamos de socios, que tampoco entran acá. Eso vive
+// hoy en el campo `esGastoDeEstructura` de cada categoría.
 async function getGastosBancoBlarq(): Promise<GastoExtra[]> {
   const movs = await prisma.bankMovement.findMany({
     where: {
-      category: { in: ["sueldo", "previred", "comision_bancaria"] },
+      category: { in: CATEGORIAS_GASTO_ESTRUCTURA },
       amount: { lt: 0 },
     },
     select: {
@@ -39,8 +49,22 @@ async function getGastosBancoBlarq(): Promise<GastoExtra[]> {
     },
   });
   return movs.map((m) => {
-    let section = "Otros";
-    let sub = "Otros";
+    // La sección sale del puente; el sub-detalle sigue siendo propio de esta
+    // vista (el sueldo se abre en Socios / Empleados, que no es algo de la
+    // categoría sino de quién cobró).
+    const section = seccionCostoDeCategoria(m.category) ?? "Otros";
+    // Por default la sub-línea ES la sección: el cuadro solo abre el desglose
+    // cuando una sección tiene más de una sub (ver showSubs en
+    // CentroCostoView), así que entrando con el mismo nombre la fila queda
+    // sola, sin desglose. El único que se abre a propósito es el sueldo, que
+    // sí vale separar en Socios / Empleados.
+    //
+    // La comisión del banco entra como "Gastos financieros" y no como fila
+    // propia: MJ no le ve sentido a separarla de los otros gastos financieros
+    // (decisión 2026-07-26). Antes abría la sección en dos sub-líneas
+    // —"Gastos financieros" (las facturas) y "Comisión banco" (el banco)— y
+    // era ruido: es el mismo concepto, cambia de dónde llega el dato.
+    let sub = section;
     // Los sueldos y Previred se imputan al MES QUE CORRESPONDE, no al de la
     // transferencia (el sueldo de junio pagado el 1-jul cuenta en junio). El
     // mes lo fija MJ (salaryPeriod) o, si no lo marcó, un default por fecha.
@@ -48,18 +72,12 @@ async function getGastosBancoBlarq(): Promise<GastoExtra[]> {
     // lo agrupe en la columna correcta. La comisión banco queda en su fecha.
     let date = m.date;
     if (m.category === "sueldo") {
-      section = "Sueldos";
       sub = esSocio(m.counterpartyRut, m.counterpartyName, m.description)
         ? "Socios"
         : "Empleados";
       date = yearMonthToDate(effectiveSalaryPeriod(m));
     } else if (m.category === "previred") {
-      section = "Previred";
-      sub = "Previred";
       date = yearMonthToDate(effectiveSalaryPeriod(m));
-    } else if (m.category === "comision_bancaria") {
-      section = "Gastos financieros";
-      sub = "Comisión banco";
     }
     return {
       section,

@@ -8,6 +8,7 @@ import MovementsMontoSearch from "@/components/banco/MovementsMontoSearch";
 import MovementsAdvancedFilters from "@/components/banco/MovementsAdvancedFilters";
 import MovementsTable from "@/components/banco/MovementsTable";
 import { SOCIO_RUTS, SOCIO_GLOSA_HINTS } from "@/lib/banco/socios";
+import { OPCIONES_IMPUTACION, ETIQUETA_CATEGORIA } from "@/lib/banco/categorias";
 
 type SearchParams = {
   accountId?: string;
@@ -38,40 +39,13 @@ type SearchParams = {
   imputacion?: string;
 };
 
-// Categorías de imputación (sin factura), ordenadas para el editor inline y el
-// filtro de columna. Subconjunto de CATEGORY_LABEL con las que MJ usa en la
-// sección Sueldos.
-const IMPUTACION_CATEGORY_OPTIONS: { value: string; label: string }[] = [
-  { value: "sueldo", label: "Sueldo" },
-  // Cuenta corriente con los socios: préstamos y devoluciones en los dos
-  // sentidos van todos acá, y el signo del movimiento hace el resto (ver
-  // banco/socios.ts). No se separa "préstamo" de "devolución": la suma es igual.
-  { value: "prestamo_socio", label: "Préstamos socios (presta o devuelve)" },
-  { value: "retiro_personal", label: "Retiro socio" },
-  { value: "bono_socio", label: "Bono socio" },
-  { value: "previred", label: "Previred" },
-  { value: "comision_bancaria", label: "Comisión banco" },
-  { value: "impuestos", label: "Impuestos" },
-  { value: "deposito_efectivo", label: "Depósito efectivo" },
-  { value: "otro_sin_factura", label: "Otro" },
-];
+// Las categorías de imputación (las que MJ elige) y sus etiquetas salen de
+// src/lib/banco/categorias.ts — antes esta pantalla tenía DOS copias a mano de
+// la misma lista, y la pantalla de reglas y el Estado de Resultado tenían dos
+// más, ya desincronizadas entre sí.
 
 // Estado y Respaldo se derivan ahora en src/lib/banco/movementDisplay.ts
 // (el viejo STATUS_LABEL de 7 estados se dividió en los dos ejes).
-
-const CATEGORY_LABEL: Record<string, string> = {
-  sueldo: "Sueldo",
-  previred: "Previred",
-  comision_bancaria: "Comisión banco",
-  retiro_personal: "Retiro socio",
-  bono_socio: "Bono socio",
-  prestamo_socio: "Préstamos socios",
-  deposito_efectivo: "Depósito efectivo",
-  impuestos: "Impuestos",
-  compra_tarjeta: "Compra tarjeta",
-  transfer_interno: "Transfer interno",
-  otro_sin_factura: "Otro",
-};
 
 export default async function MovimientosPage({
   searchParams,
@@ -612,11 +586,11 @@ export default async function MovimientosPage({
 
       <MovementsTable
         movements={movementRows}
-        categoryLabels={CATEGORY_LABEL}
+        categoryLabels={ETIQUETA_CATEGORIA}
         blarqRutDigits={BLARQ_RUT_DIGITS}
         projects={projects}
         categories={categoryOptions}
-        imputacionCategories={IMPUTACION_CATEGORY_OPTIONS}
+        imputacionCategories={OPCIONES_IMPUTACION}
         showImputacionFilter={showImputacionFilter}
         imputacionFilterValue={sp.imputacion ?? ""}
       />

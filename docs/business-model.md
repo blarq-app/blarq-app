@@ -173,12 +173,31 @@ Para clasificar gastos por proyecto. La estructura debe soportar jerarquía padr
 
 ### Gastos empresa (no directos del proyecto)
 - Gastos generales
+- Gastos extras
 - Gastos financieros
-- Auto - combustible
-- Auto - autopistas
-- Auto - seguro
+- Auto
+  - Combustible
+  - Autopistas
+  - Seguro
 
-Las categorías son configurables (modelo `CostCategory`). MJ las administra desde la app.
+Las categorías viven en el modelo `CostCategory` (árbol padre/hijo de dos niveles).
+**No hay pantalla para crearlas ni editarlas**: se insertan por script (ver `prisma/seed.ts`
+y los `scripts/*categor*`). Hay además tres categorías paralelas para las facturas que
+BLARQ **emite** al cliente — Obra, Muebles, Artefactos — distinguidas por el campo
+`appliesTo`; "Muebles" y "Artefactos" existen dos veces, una por cada lado.
+
+### El otro vocabulario: categorías de movimiento bancario
+
+Los movimientos del banco que **no** tienen factura usan una lista aparte, plana
+(`BankMovement.category`: sueldo, Previred, comisión banco, impuestos, retiro socio,
+bono socio, préstamo socio, depósito efectivo, otro). No es lo mismo que el árbol de
+arriba y es a propósito: el árbol dice *en qué se gastó*, esta lista dice *qué tipo de
+movimiento es y por qué no tiene papel*. Más de la mitad de sus valores **no son gasto**
+(retiros y préstamos de socios, traspasos entre cuentas propias, depósitos).
+
+La lista vive en `src/lib/banco/categorias.ts`, que también define el único puente entre
+los dos vocabularios. El razonamiento completo y las alternativas evaluadas están en el
+ADR `decisions/2026-07-26-dos-vocabularios-de-categoria.md`.
 
 ## 7. Estados de Pago (EPs) a maestros
 

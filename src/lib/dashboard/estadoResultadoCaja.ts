@@ -30,6 +30,7 @@ import {
   SALDO_INICIAL_PRESTAMOS_SOCIOS,
 } from "@/lib/banco/socios";
 import { effectiveSalaryPeriod } from "@/lib/banco/salaryPeriod";
+import { ETIQUETA_CATEGORIA_EERR } from "@/lib/banco/categorias";
 
 // Socios de BLARQ: un pago hacia/desde ellos NO es gasto de operación. La
 // definición de "quién es socio" vive en banco/socios.ts (misma que usa el
@@ -61,19 +62,11 @@ function labelPagoSocio(category: string | null): string {
   }
 }
 
-const ETIQUETA_CATEGORIA: Record<string, string> = {
-  sueldo: "Sueldos",
-  previred: "Previred",
-  comision_bancaria: "Gastos financieros",
-  impuestos: "Impuestos (SII)",
-  retiro_personal: "Retiros de socios",
-  prestamo_socio: "Préstamos de socios",
-  bono_socio: "Bonos a socios",
-  compra_tarjeta: "Compra con tarjeta",
-  deposito_efectivo: "Depósito en efectivo",
-  reembolso_proveedor: "Reembolso de proveedor",
-  otro_sin_factura: "Otros sin factura",
-};
+// Las etiquetas contables de este cuadro (plural, nombre de cuenta) salen de la
+// lista única: src/lib/banco/categorias.ts, campo `labelEERR`. Son un registro
+// DISTINTO del de la tabla del banco a propósito — acá "sueldo" se lee
+// "Sueldos" y "comision_bancaria" se lee "Gastos financieros", que es el mismo
+// nombre que la CostCategory homónima, para que caigan en la misma fila.
 
 function topCategoria(
   cat: { name: string; parent: { name: string } | null } | null
@@ -326,7 +319,7 @@ export async function computeEstadoResultadoCaja(
         add("no", tipo, label, m, mov.amount);
         continue;
       }
-      const label = ETIQUETA_CATEGORIA[mov.category] ?? mov.category;
+      const label = ETIQUETA_CATEGORIA_EERR[mov.category] ?? mov.category;
       add("op", tipo, label, m, mov.amount);
     } else {
       add("op", tipo, "No asignado", m, mov.amount);

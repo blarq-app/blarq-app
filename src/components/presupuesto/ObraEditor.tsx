@@ -29,6 +29,7 @@ import {
   useSensor,
   useSensors,
   type CollisionDetection,
+  type DraggableAttributes,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -133,7 +134,7 @@ function ChapterDragBox({
   enabled: boolean;
   className?: string;
   children: (drag: {
-    attributes: Record<string, unknown>;
+    attributes: DraggableAttributes;
     listeners: Record<string, unknown> | undefined;
     setDropRef: (node: HTMLElement | null) => void;
     isDragging: boolean;

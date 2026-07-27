@@ -17,7 +17,10 @@
  * esta migración se ven, y el cuadro de capítulos cuadra con el total. MJ
  * puede renombrarlas o reordenarlas desde la pantalla.
  *
- * Idempotente: si una versión ya tiene capítulos creados, la saltea.
+ * Idempotente y SE PUEDE VOLVER A CORRER: una versión ya migrada se saltea,
+ * salvo que le hayan quedado partidas SUELTAS (sin capítulo) — esas se recogen
+ * usando su clave vieja. Pasa si alguien agrega partidas con el código viejo
+ * después de migrar la base: entre migrar y desplegar hay una ventana.
  *
  * Uso:
  *   npx tsx scripts/migrar-capitulos-obra.ts <ruta-env>            (dry-run)
@@ -87,7 +90,7 @@ async function main() {
       status: true,
       type: true,
       project: { select: { numeroProyecto: true, name: true } },
-      obraChapters: { select: { id: true } },
+      obraChapters: { select: { id: true, name: true, sortOrder: true } },
       obraItems: {
         select: { id: true, chapter: true, chapterId: true, total: true },
       },
@@ -104,8 +107,57 @@ async function main() {
     const etiqueta = `#${v.project.numeroProyecto} ${v.project.name} · ${v.version} (${v.status})`;
 
     if (v.obraChapters.length > 0) {
-      versionesSalteadas++;
-      console.log(`SALTEADA  ${etiqueta} — ya tiene ${v.obraChapters.length} capítulos`);
+      // Esta versión ya se migró. Puede haber quedado alguna partida SUELTA
+      // (chapterId en null): pasa si alguien agregó partidas con el código
+      // viejo después de correr la migración — entre que se migra la base y
+      // se despliega el código nuevo hay una ventana. Las recogemos usando su
+      // clave vieja, sin tocar nada de lo ya migrado.
+      const sueltas = v.obraItems.filter((i) => !i.chapterId);
+      if (sueltas.length === 0) {
+        versionesSalteadas++;
+        console.log(`SALTEADA  ${etiqueta} — ya migrada, sin partidas sueltas`);
+        continue;
+      }
+
+      console.log(`\nRECOGIENDO  ${etiqueta} — ${sueltas.length} partidas sueltas`);
+      const porNombre = new Map(
+        v.obraChapters.map((c) => [c.name.trim().toUpperCase(), c.id])
+      );
+      let proximoOrden = v.obraChapters.length;
+      const porClave = new Map<string, string[]>();
+      for (const it of sueltas) {
+        const arr = porClave.get(it.chapter) ?? [];
+        arr.push(it.id);
+        porClave.set(it.chapter, arr);
+      }
+      for (const [clave, ids] of porClave) {
+        const info = infoCapitulo(clave);
+        let capId = porNombre.get(info.nombre.toUpperCase());
+        console.log(
+          `    ${info.nombre.padEnd(42)} ${String(ids.length).padStart(3)} partidas` +
+            (capId ? "  (al capítulo que ya existía)" : "  (capítulo nuevo, al final)")
+        );
+        if (APPLY) {
+          if (!capId) {
+            const cap = await prisma.obraChapter.create({
+              data: {
+                budgetVersionId: v.id,
+                name: info.nombre,
+                sortOrder: proximoOrden++,
+              },
+            });
+            capId = cap.id;
+            porNombre.set(info.nombre.toUpperCase(), capId);
+            capitulosCreados++;
+          }
+          await prisma.obraItem.updateMany({
+            where: { id: { in: ids } },
+            data: { chapterId: capId },
+          });
+        }
+        partidasAsignadas += ids.length;
+      }
+      versionesTocadas++;
       continue;
     }
 

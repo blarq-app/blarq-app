@@ -1,8 +1,10 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-07-22.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-07-26.
 
 ---
+
+- **Señal de guardado en el desplegable de imputación del banco (2026-07-26, rama `feat/banco-senal-guardado`)**: cambiar la categoría de un movimiento desde la celda (ej. "Sueldo" → "Préstamo socio") movía plata de sección en el Estado de Resultados sin ninguna confirmación — la página solo parpadeaba. Ahora `CategoryInlineSelect` muestra "guardando…" mientras dura el PATCH **y** el refresh del servidor, y "✓ guardado" (verde, 2,5 s, con el borde del select en verde) recién cuando la pantalla ya quedó actualizada — el refresh va dentro de un `useTransition` para saber cuándo terminó de verdad. Mismo patrón que el "✓ guardado" que ya existía en facturas (`EditableInvoiceFields`). **Solo UI**: no toca cálculos ni endpoints. **Pendiente/abierto**: los otros desplegables de la misma tabla que también mueven plata (`SalaryPeriodSelect` — a qué mes corresponde el sueldo — y los de traspaso interno) siguen sin señal; se puede extender el mismo patrón si MJ quiere.
 
 - **Puesta al día 15→22 de julio — qué se mergeó y qué quedó abierto (2026-07-22)**: el WIP se había quedado en el 07-07 mientras se mergeaban 15 PRs. El detalle de cada cambio estructural está en [CHANGELOG.md](CHANGELOG.md) y en los ADR; acá va solo el estado y lo que falta.
   - **En prod**: EPs por maestro (#297/#298/#300 — repartir la obra entre maestros, NO COBRADO, versión a mano, PDF de alcance filtrado; ADR en #305) · sueldos y Previred al mes que corresponde, no al de la transferencia (#301) · desglose de artefactos por factura + filtro de imputación en todas las cuentas (#299) · elegir la versión destino al sincronizar un EP (#302) · selects de imputación compactos en el banco (#303/#304) · descuento de Kitchen House vía Shopify (#296) · skill `costo-artefactos` + label "Costo BLARQ" (#295) · contabilidad Partes 2 y 3: foto del comprobante + registrar gasto desde el banco (#294) · **préstamos con socios como una sola cuenta corriente** (#306/#307, ADR `2026-07-18-plata-que-no-es-gasto-ni-ingreso.md` en #308).

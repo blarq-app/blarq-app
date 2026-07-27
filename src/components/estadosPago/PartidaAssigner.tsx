@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { OBRA_CHAPTERS, ObraChapter } from "@/lib/utils";
+import { groupByChapter, type ChapterLike } from "@/lib/presupuesto/chapters";
 
 export type AssignerItem = {
   id: string;
   itemNumber: string;
-  chapter: string;
+  chapterId: string | null;
   subChapter: string | null;
   name: string;
   unit: string;
@@ -24,10 +24,12 @@ export type AssignerItem = {
 export default function PartidaAssigner({
   projectId,
   maestroId,
+  chapters,
   items,
 }: {
   projectId: string;
   maestroId: string;
+  chapters: ChapterLike[];
   items: AssignerItem[];
 }) {
   const router = useRouter();
@@ -51,20 +53,12 @@ export default function PartidaAssigner({
     return false;
   }, [selected, initial]);
 
-  // Agrupar por capítulo, en el orden canónico de OBRA_CHAPTERS.
-  const grouped = useMemo(() => {
-    const g = new Map<string, AssignerItem[]>();
-    for (const it of items) {
-      if (!g.has(it.chapter)) g.set(it.chapter, []);
-      g.get(it.chapter)!.push(it);
-    }
-    for (const arr of g.values()) arr.sort((a, b) => a.sortOrder - b.sortOrder);
-    return [...g.entries()].sort((a, b) => {
-      const ia = OBRA_CHAPTERS[a[0] as ObraChapter]?.index ?? 99;
-      const ib = OBRA_CHAPTERS[b[0] as ObraChapter]?.index ?? 99;
-      return ia - ib;
-    });
-  }, [items]);
+  // Agrupar por capítulo, en el orden de la versión (helper compartido con el
+  // editor y el PDF).
+  const grouped = useMemo(
+    () => groupByChapter(chapters, items),
+    [chapters, items]
+  );
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -103,9 +97,6 @@ export default function PartidaAssigner({
       setSaving(false);
     }
   }
-
-  const chapterLabel = (c: string) =>
-    OBRA_CHAPTERS[c as ObraChapter]?.label ?? c;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -172,10 +163,10 @@ export default function PartidaAssigner({
         </div>
       ) : (
         <div className="divide-y divide-gray-100">
-          {grouped.map(([chapter, arr]) => (
-            <div key={chapter}>
+          {grouped.map(({ chapter, items: arr }) => (
+            <div key={chapter.id}>
               <div className="px-4 py-1.5 bg-gray-50/60 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                {chapterLabel(chapter)}
+                {chapter.name}
               </div>
               {arr.map((it) => {
                 const isSel = selected.has(it.id);

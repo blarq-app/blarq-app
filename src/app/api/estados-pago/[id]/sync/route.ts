@@ -68,7 +68,10 @@ export async function POST(
     const obraBudget = body.targetVersionId
       ? await prisma.budgetVersion.findFirst({
           where: { id: body.targetVersionId, projectId: ep.projectId, type: "obra" },
-          include: { obraItems: { orderBy: { sortOrder: "asc" } } },
+          include: {
+            obraChapters: { orderBy: { sortOrder: "asc" } },
+            obraItems: { orderBy: { sortOrder: "asc" } },
+          },
         })
       : await findLatestObraBudget(prisma, ep.projectId);
     if (!obraBudget) {
@@ -86,6 +89,20 @@ export async function POST(
       ? obraBudget.obraItems.filter((it) => it.maestroId === ep.maestroId)
       : obraBudget.obraItems;
 
+    // El diff compara por NOMBRE de capítulo (los capítulos son filas propias
+    // de cada versión, con ids distintos aunque se llamen igual). Este mapa
+    // traduce el chapterId de cada partida a su nombre y posición.
+    const capitulo = new Map(
+      obraBudget.obraChapters.map((c) => [
+        c.id,
+        { name: c.name, sortOrder: c.sortOrder },
+      ])
+    );
+    const budgetItemsForDiff = budgetItems.map((it) => ({
+      ...it,
+      chapterName: it.chapterId ? capitulo.get(it.chapterId)?.name ?? "" : "",
+    }));
+
     const { prevAmountPaidByLineage } = await buildPrevAccumulators(prisma, {
       projectId: ep.projectId,
       maestroId: ep.maestroId,
@@ -94,17 +111,17 @@ export async function POST(
 
     const diff = computeSyncDiff(
       ep.items,
-      budgetItems,
+      budgetItemsForDiff,
       prevAmountPaidByLineage
     );
 
     // Indexamos para resolver detalles al aplicar
     const epItemByLineage = new Map(ep.items.map((i) => [i.lineageId, i]));
     const budgetItemByLineage = new Map(
-      budgetItems.map((b) => [b.lineageId, b])
+      budgetItemsForDiff.map((b) => [b.lineageId, b])
     );
     const budgetIndexByLineage = new Map(
-      budgetItems.map((b, idx) => [b.lineageId, idx])
+      budgetItemsForDiff.map((b, idx) => [b.lineageId, idx])
     );
 
     let added = 0;
@@ -143,7 +160,11 @@ export async function POST(
       const idx = budgetIndexByLineage.get(a.lineageId) ?? 0;
       await prisma.estadoPagoItem.create({
         data: {
-          chapter: b.chapter,
+          chapterName: b.chapterName,
+          chapterOrder: b.chapterId
+            ? capitulo.get(b.chapterId)?.sortOrder ?? 0
+            : 0,
+          chapter: "", // legacy, ver nota en schema.prisma
           subChapter: b.subChapter,
           itemNumber: b.itemNumber,
           name: b.name,
@@ -182,7 +203,10 @@ export async function POST(
           where: { id: existing.id },
           data: {
             obraItemId: b.id,
-            chapter: b.chapter,
+            chapterName: b.chapterName,
+            chapterOrder: b.chapterId
+              ? capitulo.get(b.chapterId)?.sortOrder ?? 0
+              : 0,
             subChapter: b.subChapter,
             itemNumber: b.itemNumber,
             name: b.name,

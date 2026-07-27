@@ -36,6 +36,7 @@ export async function GET(
       where: { id },
       include: {
         project: true,
+        obraChapters: { orderBy: { sortOrder: "asc" } },
         obraItems: { orderBy: { sortOrder: "asc" } },
         muebleChapters: {
           orderBy: { sortOrder: "asc" },
@@ -85,6 +86,7 @@ export async function GET(
           coverSubtitle: budget.coverSubtitle,
           coverNote: budget.coverNote,
         },
+        chapters: budget.obraChapters,
         // Las partidas "NO COBRADO" (BLARQ las absorbe) son invisibles para el
         // cliente: no van en el PDF ni suman al total. El costo directo y el
         // total de la cotización se calculan sobre estos items filtrados.

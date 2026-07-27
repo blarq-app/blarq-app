@@ -13,13 +13,13 @@
 import ExcelJS from "exceljs";
 import fs from "node:fs";
 import path from "node:path";
-import { OBRA_CHAPTERS } from "@/lib/utils";
+import { groupByChapter, type ChapterLike } from "@/lib/presupuesto/chapters";
 import { annotateZones } from "@/lib/presupuesto/zones";
 
 const PROFESSIONAL = "JOSE TOMAS LARRAIN";
 
 export interface ObraMaestroXLSXItemInput {
-  chapter: string;
+  chapterId: string | null;
   subChapter: string | null;
   // Orden manual (el que arma MJ arrastrando en la cotizacion). El Excel
   // respeta ESTE orden, igual que el PDF.
@@ -35,6 +35,7 @@ export interface ObraMaestroXLSXInput {
   project: { name: string; clientName: string; address: string | null };
   budget: { version: string; date: string | Date };
   maestro: { name: string | null } | null;
+  chapters: ChapterLike[];
   items: ObraMaestroXLSXItemInput[];
 }
 
@@ -84,24 +85,16 @@ export async function buildObraMaestroXLSX(
 ): Promise<Buffer> {
   const { project, budget, maestro, items } = data;
 
-  // Capitulos en el MISMO orden y numeracion que la cotizacion (OBRA_CHAPTERS
-  // con reflow saltando vacios) y nombre formal (pdfLabel). Partidas en orden
-  // de sortOrder (el orden manual de MJ), NO alfabetico. Espejo del PDF.
-  const chapters = (
-    Object.entries(OBRA_CHAPTERS) as [
-      string,
-      { label: string; pdfLabel: string; index: number }
-    ][]
-  )
-    .map(([key, ch]) => ({
-      key,
-      label: ch.pdfLabel,
-      items: items
-        .filter((i) => i.chapter === key)
-        .sort((a, b) => a.sortOrder - b.sortOrder),
-    }))
-    .filter((ch) => ch.items.length > 0)
-    .map((ch, i) => ({ ...ch, index: i + 1 }));
+  // Capitulos en el MISMO orden y numeracion que la cotizacion (helper
+  // compartido lib/presupuesto/chapters.ts, con reflow saltando vacios).
+  // Partidas en orden de sortOrder (el orden manual de MJ), NO alfabetico.
+  // Espejo del PDF.
+  const chapters = groupByChapter(data.chapters, items).map((g) => ({
+    key: g.chapter.id,
+    label: g.chapter.name,
+    items: g.items,
+    index: g.index ?? 0,
+  }));
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "BLARQ";

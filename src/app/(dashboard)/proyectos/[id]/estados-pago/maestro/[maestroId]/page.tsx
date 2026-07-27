@@ -53,7 +53,7 @@ export default async function MaestroEstadosPagoPage({
   const assignerItems: AssignerItem[] = (budget?.obraItems ?? []).map((it) => ({
     id: it.id,
     itemNumber: it.itemNumber,
-    chapter: it.chapter,
+    chapterId: it.chapterId,
     subChapter: it.subChapter,
     name: it.name,
     unit: it.unit,
@@ -216,6 +216,7 @@ export default async function MaestroEstadosPagoPage({
         <PartidaAssigner
           projectId={projectId}
           maestroId={maestroId}
+          chapters={budget?.obraChapters ?? []}
           items={assignerItems}
         />
       </div>

@@ -72,6 +72,9 @@ export async function findLatestObraBudget(
   if (!vigente) return null;
   return prisma.budgetVersion.findUnique({
     where: { id: vigente.id },
-    include: { obraItems: { orderBy: { sortOrder: "asc" } } },
+    include: {
+      obraChapters: { orderBy: { sortOrder: "asc" } },
+      obraItems: { orderBy: { sortOrder: "asc" } },
+    },
   });
 }

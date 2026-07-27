@@ -40,7 +40,10 @@ export async function GET(
     const obraBudget = targetVersionId
       ? await prisma.budgetVersion.findFirst({
           where: { id: targetVersionId, projectId: ep.projectId, type: "obra" },
-          include: { obraItems: { orderBy: { sortOrder: "asc" } } },
+          include: {
+            obraChapters: { orderBy: { sortOrder: "asc" } },
+            obraItems: { orderBy: { sortOrder: "asc" } },
+          },
         })
       : await findLatestObraBudget(prisma, ep.projectId);
     if (!obraBudget) {
@@ -55,6 +58,20 @@ export async function GET(
       ? obraBudget.obraItems.filter((it) => it.maestroId === ep.maestroId)
       : obraBudget.obraItems;
 
+    // El diff compara por NOMBRE de capítulo (los capítulos son filas propias
+    // de cada versión, con ids distintos aunque se llamen igual). Este mapa
+    // traduce el chapterId de cada partida a su nombre y posición.
+    const capitulo = new Map(
+      obraBudget.obraChapters.map((c) => [
+        c.id,
+        { name: c.name, sortOrder: c.sortOrder },
+      ])
+    );
+    const budgetItemsForDiff = budgetItems.map((it) => ({
+      ...it,
+      chapterName: it.chapterId ? capitulo.get(it.chapterId)?.name ?? "" : "",
+    }));
+
     const { prevAmountPaidByLineage } = await buildPrevAccumulators(prisma, {
       projectId: ep.projectId,
       maestroId: ep.maestroId,
@@ -63,7 +80,7 @@ export async function GET(
 
     const diff = computeSyncDiff(
       ep.items,
-      budgetItems,
+      budgetItemsForDiff,
       prevAmountPaidByLineage
     );
 

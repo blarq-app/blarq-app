@@ -11,13 +11,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { sanitizeRichTextHtml } from "@/lib/richText";
-import { OBRA_CHAPTERS } from "@/lib/utils";
+import { groupByChapter, type ChapterLike } from "@/lib/presupuesto/chapters";
 import { annotateZones } from "@/lib/presupuesto/zones";
 
 const PROFESSIONAL = "JOSÉ TOMÁS LARRAÍN";
 
 export interface ObraMaestroItemInput {
-  chapter: string;
+  chapterId: string | null;
   // Sub-chapter opcional (ej. "COCINA", "BANO") para agrupar partidas
   // dentro del capitulo. La zona se DERIVA por posicion (helper compartido
   // annotateZones): una partida sin zona hereda la de arriba. No hay
@@ -46,6 +46,7 @@ export interface ObraMaestroHTMLInput {
     date: string | Date;
   };
   maestro: { name: string | null } | null;
+  chapters: ChapterLike[];
   items: ObraMaestroItemInput[];
 }
 
@@ -196,24 +197,15 @@ const CSS = `
 export function renderObraMaestroHTML(data: ObraMaestroHTMLInput): string {
   const { project, budget, maestro, items } = data;
 
-  // Capitulos en el MISMO orden y numeracion que la cotizacion (OBRA_CHAPTERS
-  // con reflow saltando vacios) y con el nombre formal (pdfLabel). Las partidas
-  // en orden de sortOrder (el orden manual de MJ), NO alfabetico.
-  const chapters = (
-    Object.entries(OBRA_CHAPTERS) as [
-      string,
-      { label: string; pdfLabel: string; index: number }
-    ][]
-  )
-    .map(([key, ch]) => ({
-      key,
-      label: ch.pdfLabel,
-      items: items
-        .filter((i) => i.chapter === key)
-        .sort((a, b) => a.sortOrder - b.sortOrder),
-    }))
-    .filter((ch) => ch.items.length > 0)
-    .map((ch, i) => ({ ...ch, index: i + 1 }));
+  // Capitulos en el MISMO orden y numeracion que la cotizacion (helper
+  // compartido lib/presupuesto/chapters.ts, con reflow saltando vacios). Las
+  // partidas en orden de sortOrder (el orden manual de MJ), NO alfabetico.
+  const chapters = groupByChapter(data.chapters, items).map((g) => ({
+    key: g.chapter.id,
+    label: g.chapter.name,
+    items: g.items,
+    index: g.index ?? 0,
+  }));
 
   const logoUri = getLogoDataUri();
   const dateStr = fmtDate(budget.date);

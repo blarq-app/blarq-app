@@ -2,7 +2,8 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatCLP, formatDate, OBRA_CHAPTERS, ObraChapter } from "@/lib/utils";
+import { formatCLP, formatDate } from "@/lib/utils";
+import { groupEpItemsByChapter } from "@/lib/presupuesto/chapters";
 import { annotateZones } from "@/lib/presupuesto/zones";
 import {
   computeEPItem,
@@ -17,7 +18,8 @@ type Item = {
   id: string;
   obraItemId: string;
   lineageId: string;
-  chapter: string;
+  chapterName: string | null;
+  chapterOrder: number;
   subChapter: string | null;
   itemNumber: string;
   name: string;
@@ -126,39 +128,36 @@ export default function EditorEP({
   );
 
   const hiddenSet = useMemo(() => new Set(hiddenItemIds), [hiddenItemIds]);
-  const grouped = useMemo(() => {
-    const g: Record<string, Item[]> = {};
-    items.forEach((i) => {
-      // Las partidas sin mano de obra de este maestro (material/subcontrato de
-      // un tercero) no se muestran en el EP. Su MO es $0, así que esconderlas
-      // no cambia ningún total.
-      if (hiddenSet.has(i.id)) return;
-      g[i.chapter] = g[i.chapter] || [];
-      g[i.chapter].push(i);
-    });
-    // Orden dentro del capítulo: por sortOrder (el orden manual de MJ en la
-    // cotización), igual que el editor de presupuesto y el PDF — NO alfabético.
-    for (const k of Object.keys(g)) {
-      g[k].sort((a, b) => a.sortOrder - b.sortOrder);
-    }
-    return g;
-  }, [items]);
-  const chapterKeys = Object.keys(OBRA_CHAPTERS) as ObraChapter[];
-  const orderedChapters = chapterKeys.filter((c) => grouped[c]?.length);
+  // Capítulos del EP: agrupados por la FOTO que guarda cada partida
+  // (chapterName + chapterOrder), con el mismo helper y la misma numeración
+  // que la cotización y el PDF. Las partidas sin mano de obra de este maestro
+  // (material/subcontrato de un tercero) quedan fuera: su MO es $0, así que
+  // esconderlas no cambia ningún total.
+  const chapterGroups = useMemo(
+    () =>
+      groupEpItemsByChapter(
+        items
+          .filter((i) => !hiddenSet.has(i.id))
+          .map((i) => ({ ...i, total: i.laborTotal }))
+      ),
+    [items, hiddenSet]
+  );
   // Zona efectiva por partida (derivada por posición, mismo helper que la
-  // cotización y el PDF). Map chapter -> filas alineadas con grouped[chapter].
+  // cotización y el PDF), alineada 1:1 con las partidas de cada capítulo.
   const zoneRowsByChapter = useMemo(() => {
     const m: Record<
       string,
       { item: Item; zone: string | null; isZoneStart: boolean }[]
     > = {};
-    for (const k of Object.keys(grouped)) {
-      m[k] = annotateZones(
-        grouped[k].map((i) => ({ ...i, total: i.laborTotal }))
-      ).rows;
+    for (const g of chapterGroups) {
+      m[g.chapter.id] = annotateZones(g.items).rows as unknown as {
+        item: Item;
+        zone: string | null;
+        isZoneStart: boolean;
+      }[];
     }
     return m;
-  }, [grouped]);
+  }, [chapterGroups]);
 
   // ── Edición ───────────────────────────────────────────────────────────
   function tryUpdateQty(id: string, newQty: number) {
@@ -412,25 +411,25 @@ export default function EditorEP({
           <div className="text-right">$ acumulado</div>
         </div>
 
-        {orderedChapters.map((chapter, chIdx) => {
-          const chItems = grouped[chapter];
+        {chapterGroups.map((group) => {
+          const chItems = group.items;
           // Número de capítulo reflowado (1, 2, 3… saltando vacíos), igual que
           // la cotización y el PDF.
-          const chapterNumber = chIdx + 1;
-          const zoneRows = zoneRowsByChapter[chapter] ?? [];
+          const chapterNumber = group.index ?? 0;
+          const zoneRows = zoneRowsByChapter[group.chapter.id] ?? [];
           const chSubtotal = chItems.reduce((sum, i) => {
             const c = computeEPItem(snapshotsById[i.id]);
             return sum + c.amountThisEp;
           }, 0);
           return (
-            <Fragment key={chapter}>
+            <Fragment key={group.chapter.id}>
               {/* Chapter row */}
               <div className="flex items-center justify-between px-4 py-1.5 bg-[#DBDBDB]">
                 <h3 className="font-bold text-gray-900 text-xs uppercase tracking-wide">
                   <span className="inline-block w-6">
                     {chapterNumber}
                   </span>
-                  {OBRA_CHAPTERS[chapter].label}
+                  {group.chapter.name}
                 </h3>
                 <span className="text-[11px] text-gray-700 tabular-nums">
                   Subtotal capítulo {formatCLP(chSubtotal)}

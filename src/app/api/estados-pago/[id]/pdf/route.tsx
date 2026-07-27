@@ -95,7 +95,8 @@ export async function GET(
       };
       const c = computeEPItem(snap);
       return {
-        chapter: i.chapter,
+        chapterName: i.chapterName,
+        chapterOrder: i.chapterOrder,
         subChapter: i.subChapter,
         sortOrder: i.sortOrder,
         itemNumber: i.itemNumber,

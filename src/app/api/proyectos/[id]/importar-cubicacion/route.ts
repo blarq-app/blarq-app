@@ -115,12 +115,37 @@ export async function POST(
         },
       });
 
+      // Capítulos: se crean con el nombre TAL CUAL viene del Excel, en el
+      // orden en que aparecen. Antes el nombre del Excel se forzaba a una de
+      // las 8 claves fijas (un "INSTALACIONES GAS" terminaba en sanitarias, y
+      // lo que no calzaba con nada quedaba invisible en el editor). Con
+      // capítulos de nombre libre eso ya no hace falta: entra lo que MJ cubicó,
+      // y si quiere lo renombra después.
+      const capituloPorNombre = new Map<string, string>();
+      async function capituloDeExcel(nombreCrudo: string): Promise<string | null> {
+        const nombre = (nombreCrudo || "").trim();
+        if (!nombre) return null;
+        const clave = nombre.toUpperCase();
+        const ya = capituloPorNombre.get(clave);
+        if (ya) return ya;
+        const creado = await tx.obraChapter.create({
+          data: {
+            budgetVersionId: bv.id,
+            name: nombre,
+            sortOrder: capituloPorNombre.size,
+          },
+        });
+        capituloPorNombre.set(clave, creado.id);
+        return creado.id;
+      }
+
       let sortOrder = 0;
       for (const m of matched) {
         const obraItem = await tx.obraItem.create({
           data: {
             budgetVersionId: bv.id,
-            chapter: m.item.chapter,
+            chapterId: await capituloDeExcel(m.item.chapterRaw),
+            chapter: "", // legacy, ver nota en schema.prisma
             subChapter: m.item.subChapter,
             itemNumber: m.item.itemNumber,
             name: m.cat.name,
@@ -169,7 +194,8 @@ export async function POST(
         await tx.obraItem.create({
           data: {
             budgetVersionId: bv.id,
-            chapter: nm.item.chapter,
+            chapterId: await capituloDeExcel(nm.item.chapterRaw),
+            chapter: "", // legacy, ver nota en schema.prisma
             subChapter: nm.item.subChapter,
             itemNumber: nm.item.itemNumber,
             name: nm.item.name,

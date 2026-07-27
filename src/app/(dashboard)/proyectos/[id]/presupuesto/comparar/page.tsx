@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { OBRA_CHAPTERS, ObraChapter, formatCLP } from "@/lib/utils";
+import { formatCLP } from "@/lib/utils";
 import VersionPicker from "@/components/presupuesto/VersionPicker";
 
 // Pantalla comparar 2 versiones de presupuesto Obra del mismo proyecto.
@@ -48,7 +48,10 @@ export default async function CompararPage({
       budgetVersions: {
         where: { type: "obra" },
         orderBy: { date: "desc" },
-        include: { obraItems: true },
+        include: {
+          obraChapters: { orderBy: { sortOrder: "asc" } },
+          obraItems: true,
+        },
       },
     },
   });
@@ -81,11 +84,24 @@ export default async function CompararPage({
   const totA = calcTotal(a);
   const totB = calcTotal(b);
 
-  // Indexar items por (chapter, name)
+  // Cada versión tiene sus PROPIAS filas de capítulo (ids distintos aunque se
+  // llamen igual), así que el emparejamiento entre versiones va por NOMBRE de
+  // capítulo, no por id. Si en V6 renombraste "TERMINACIONES" a "TERMINACIONES
+  // INTERIORES", la comparación muestra dos bloques — que es lo que pasó.
+  const nombreCapA = new Map(a.obraChapters.map((c) => [c.id, normName(c.name)]));
+  const nombreCapB = new Map(b.obraChapters.map((c) => [c.id, normName(c.name)]));
+  const capDe = (
+    mapa: Map<string, string>,
+    chapterId: string | null
+  ): string => (chapterId ? mapa.get(chapterId) ?? "SIN CAPITULO" : "SIN CAPITULO");
+
+  // Indexar items por (nombre de capítulo, nombre de partida)
   const aMap = new Map<string, typeof a.obraItems[number]>();
   const bMap = new Map<string, typeof b.obraItems[number]>();
-  for (const it of a.obraItems) aMap.set(`${it.chapter}|${normName(it.name)}`, it);
-  for (const it of b.obraItems) bMap.set(`${it.chapter}|${normName(it.name)}`, it);
+  for (const it of a.obraItems)
+    aMap.set(`${capDe(nombreCapA, it.chapterId)}|${normName(it.name)}`, it);
+  for (const it of b.obraItems)
+    bMap.set(`${capDe(nombreCapB, it.chapterId)}|${normName(it.name)}`, it);
 
   // Construir filas comparadas: union de keys, ordenadas por capítulo y nombre
   const allKeys = new Set([...aMap.keys(), ...bMap.keys()]);
@@ -100,11 +116,22 @@ export default async function CompararPage({
     const [chapter, name] = key.split("|");
     rows.push({ chapter, name, a: aMap.get(key) ?? null, b: bMap.get(key) ?? null });
   }
-  // Agrupar por capítulo (en orden cronológico), partidas alfabéticas adentro
-  const chapterOrder = Object.keys(OBRA_CHAPTERS) as ObraChapter[];
+  // Orden de los capítulos: manda el de la versión B (la de la derecha, la más
+  // nueva). Los que solo existen en A van después, en el orden de A.
+  const chapterOrder: string[] = [];
+  for (const c of b.obraChapters) {
+    const n = normName(c.name);
+    if (!chapterOrder.includes(n)) chapterOrder.push(n);
+  }
+  for (const c of a.obraChapters) {
+    const n = normName(c.name);
+    if (!chapterOrder.includes(n)) chapterOrder.push(n);
+  }
+  if (!chapterOrder.includes("SIN CAPITULO")) chapterOrder.push("SIN CAPITULO");
+
   rows.sort((x, y) => {
-    const cx = chapterOrder.indexOf(x.chapter as ObraChapter);
-    const cy = chapterOrder.indexOf(y.chapter as ObraChapter);
+    const cx = chapterOrder.indexOf(x.chapter);
+    const cy = chapterOrder.indexOf(y.chapter);
     if (cx !== cy) return cx - cy;
     return x.name.localeCompare(y.name, "es");
   });
@@ -112,8 +139,14 @@ export default async function CompararPage({
   // Subtotales por capítulo (cd) por versión
   const subA = new Map<string, number>();
   const subB = new Map<string, number>();
-  for (const it of a.obraItems) subA.set(it.chapter, (subA.get(it.chapter) ?? 0) + it.total);
-  for (const it of b.obraItems) subB.set(it.chapter, (subB.get(it.chapter) ?? 0) + it.total);
+  for (const it of a.obraItems) {
+    const k = capDe(nombreCapA, it.chapterId);
+    subA.set(k, (subA.get(k) ?? 0) + it.total);
+  }
+  for (const it of b.obraItems) {
+    const k = capDe(nombreCapB, it.chapterId);
+    subB.set(k, (subB.get(k) ?? 0) + it.total);
+  }
 
   return (
     <div className="space-y-4">
@@ -187,13 +220,12 @@ export default async function CompararPage({
             {chapterOrder.map((chKey) => {
               const chRows = rows.filter((r) => r.chapter === chKey);
               if (chRows.length === 0) return null;
-              const ch = OBRA_CHAPTERS[chKey];
               const sa = subA.get(chKey) ?? 0;
               const sb = subB.get(chKey) ?? 0;
               return (
                 <ChapterBlock
                   key={chKey}
-                  label={ch.label}
+                  label={chKey}
                   rows={chRows}
                   subA={sa}
                   subB={sb}

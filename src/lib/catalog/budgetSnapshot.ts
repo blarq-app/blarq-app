@@ -22,7 +22,7 @@ import { prisma } from "@/lib/prisma";
 
 // Campos de ObraItem que viajan en la foto (todo lo que define la partida).
 function pickObraItem(it: {
-  lineageId: string; chapter: string; subChapter: string | null;
+  lineageId: string; chapterName: string; subChapter: string | null;
   itemNumber: string; name: string; descriptionCliente: string | null;
   descriptionMaestro: string | null; unit: string; quantity: number;
   unitPrice: number; total: number; costMaterial: number | null;
@@ -59,11 +59,18 @@ export async function buildBudgetSnapshot(versionId: string) {
         orderBy: { sortOrder: "asc" },
         include: { components: { orderBy: { sortOrder: "asc" } } },
       },
+      obraChapters: { orderBy: { sortOrder: "asc" } },
       muebleItems: true,
       artefactoItems: true,
     },
   });
   if (!bv) throw new Error("Versión no encontrada");
+
+  // La foto guarda el NOMBRE del capítulo de cada partida, no su id: al
+  // restaurar, los capítulos pueden haberse renombrado o borrado, y un id
+  // apuntando a nada dejaría la partida huérfana. Con el nombre se resuelve
+  // (o se recrea) el capítulo al restaurar.
+  const nombreCapitulo = new Map(bv.obraChapters.map((c) => [c.id, c.name]));
 
   const obraItems = bv.obraItems.map((it) => {
     // map de id real -> localId para re-vincular pérdidas
@@ -81,7 +88,9 @@ export async function buildBudgetSnapshot(versionId: string) {
       appliedToType: c.appliedToType,
     }));
     return pickObraItem({
-      lineageId: it.lineageId, chapter: it.chapter, subChapter: it.subChapter,
+      lineageId: it.lineageId,
+      chapterName: it.chapterId ? nombreCapitulo.get(it.chapterId) ?? "" : "",
+      subChapter: it.subChapter,
       itemNumber: it.itemNumber, name: it.name,
       descriptionCliente: it.descriptionCliente, descriptionMaestro: it.descriptionMaestro,
       unit: it.unit, quantity: it.quantity, unitPrice: it.unitPrice, total: it.total,
@@ -127,11 +136,42 @@ export async function restoreObraFromSnapshot(versionId: string) {
     // Borrar partidas actuales (cascade borra sus componentes).
     await tx.obraItem.deleteMany({ where: { budgetVersionId: versionId } });
 
+    // Resolver el capítulo de cada partida POR NOMBRE. Si el capítulo se
+    // renombró o se borró después de enviar, se recrea al final del orden —
+    // así ninguna partida de la foto vuelve sin capítulo.
+    const existentes = await tx.obraChapter.findMany({
+      where: { budgetVersionId: versionId },
+      orderBy: { sortOrder: "asc" },
+    });
+    const porNombre = new Map(
+      existentes.map((c) => [c.name.trim().toUpperCase(), c.id])
+    );
+    let proximoOrden = existentes.length;
+    async function resolverCapitulo(nombre: string): Promise<string | null> {
+      const clave = nombre.trim().toUpperCase();
+      if (!clave) return null;
+      const ya = porNombre.get(clave);
+      if (ya) return ya;
+      const creado = await tx.obraChapter.create({
+        data: {
+          budgetVersionId: versionId,
+          name: nombre.trim(),
+          sortOrder: proximoOrden++,
+        },
+      });
+      porNombre.set(clave, creado.id);
+      return creado.id;
+    }
+
     for (const it of snap.obraItems) {
+      const chapterId = await resolverCapitulo(it.chapterName ?? "");
       const created = await tx.obraItem.create({
         data: {
           budgetVersionId: versionId,
-          lineageId: it.lineageId, chapter: it.chapter, subChapter: it.subChapter,
+          lineageId: it.lineageId,
+          chapterId,
+          chapter: "", // legacy, ver nota en schema.prisma
+          subChapter: it.subChapter,
           itemNumber: it.itemNumber, name: it.name,
           descriptionCliente: it.descriptionCliente, descriptionMaestro: it.descriptionMaestro,
           unit: it.unit, quantity: it.quantity, unitPrice: it.unitPrice, total: it.total,

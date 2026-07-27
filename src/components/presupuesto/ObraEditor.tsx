@@ -2,8 +2,14 @@
 
 import { useState, useEffect, useRef, Fragment, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { OBRA_CHAPTERS, ObraChapter, formatCLP } from "@/lib/utils";
+import { formatCLP } from "@/lib/utils";
 import { annotateZones } from "@/lib/presupuesto/zones";
+import {
+  groupByChapter,
+  CAPITULOS_SUGERIDOS,
+  SIN_CAPITULO_ID,
+  type ChapterLike,
+} from "@/lib/presupuesto/chapters";
 import MoneyInput from "@/components/ui/MoneyInput";
 import BudgetAuditBanner from "@/components/presupuesto/BudgetAuditBanner";
 import ObraItemComponentsEditor from "@/components/presupuesto/ObraItemComponentsEditor";
@@ -17,8 +23,12 @@ import {
   closestCenter,
   KeyboardSensor,
   PointerSensor,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -78,6 +88,82 @@ function SortableRow({
     opacity: isDragging ? 0.4 : 1,
   };
   return <>{children({ setNodeRef, style, attributes, listeners, isDragging })}</>;
+}
+
+// Prefijo de los ids de arrastre de CAPÍTULO, para no confundirlos nunca con
+// los ids de partida dentro del mismo DndContext.
+const CAP_DRAG_PREFIX = "cap:";
+
+// Cómo se decide sobre QUÉ se está soltando.
+//
+// Para las PARTIDAS se mantiene closestCenter, que es lo que había y funciona
+// bien en una lista larga de filas parejas.
+//
+// Para los CAPÍTULOS se usa pointerWithin: gana la zona que contiene al CURSOR.
+// Con closestCenter el capítulo caía sistemáticamente un lugar más arriba del
+// que MJ apuntaba — compara centros de rectángulos, y el centro del capítulo
+// arrastrado no coincide con la punta del mouse. Con pointerWithin cae donde
+// se ve el resalte, sin sorpresas. Si el cursor quedó en un hueco (entre dos
+// zonas), se cae de vuelta a closestCenter para no dejar el arrastre muerto.
+const detectarColision: CollisionDetection = (args) => {
+  if (String(args.active.id).startsWith(CAP_DRAG_PREFIX)) {
+    const bajoElCursor = pointerWithin(args);
+    if (bajoElCursor.length > 0) return bajoElCursor;
+  }
+  return closestCenter(args);
+};
+
+// Caja arrastrable de un capítulo entero.
+//
+// A propósito NO usa useSortable como las filas de partida: useSortable aplica
+// la estrategia de lista vertical, que mide TODOS los nodos del SortableContext
+// como si fueran hermanos en una sola columna. Un capítulo CONTIENE a sus
+// partidas, así que meterlo en el mismo contexto que ellas hacía que la
+// estrategia calculara desplazamientos gigantes y la pantalla se llenaba de
+// huecos en blanco. Con useDraggable + useDroppable el capítulo participa del
+// arrastre pero queda fuera de esa matemática, y el arrastre de partidas sigue
+// funcionando exactamente igual que antes.
+function ChapterDragBox({
+  id,
+  enabled,
+  className,
+  children,
+}: {
+  id: string;
+  enabled: boolean;
+  className?: string;
+  children: (drag: {
+    attributes: Record<string, unknown>;
+    listeners: Record<string, unknown> | undefined;
+    setDropRef: (node: HTMLElement | null) => void;
+    isDragging: boolean;
+    isOver: boolean;
+  }) => React.ReactNode;
+}) {
+  const dragId = `${CAP_DRAG_PREFIX}${id}`;
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } =
+    useDraggable({ id: dragId, disabled: !enabled });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: dragId,
+    disabled: !enabled,
+  });
+  // Tanto lo que se arrastra como la zona donde se suelta son la BARRA del
+  // capítulo, no el bloque entero. dnd-kit compara CENTROS de rectángulos: con
+  // el bloque entero, el centro de un capítulo largo queda lejísimos de su
+  // título, y soltar sobre la barra de "REPARACIONES" terminaba metiendo el
+  // capítulo un lugar más arriba. Con la barra, el rectángulo es chico y sigue
+  // al cursor: el capítulo cae donde MJ apunta. Soltar en el medio de las
+  // filas de un capítulo sigue valiendo — eso se resuelve por la partida de
+  // destino (ver handleChapterDragEnd).
+  const refBarra = (node: HTMLElement | null) => {
+    setDragRef(node);
+    setDropRef(node);
+  };
+  return (
+    <div className={className} style={{ opacity: isDragging ? 0.4 : 1 }}>
+      {children({ attributes, listeners, setDropRef: refBarra, isDragging, isOver })}
+    </div>
+  );
 }
 
 // Versión "plana" de la fila para el render del servidor y la primera
@@ -175,7 +261,7 @@ function totalRealDesglose(item: ObraItem): number | null {
 interface ObraItem {
   id: string;
   lineageId: string;
-  chapter: string;
+  chapterId: string | null;
   subChapter: string | null;
   itemNumber: string;
   name: string;
@@ -208,6 +294,14 @@ interface PaymentTerm {
   sortOrder: number;
 }
 
+// Un capítulo de obra: fila propia de esta versión, con nombre libre y
+// posición arrastrable (modelo ObraChapter). Ver lib/presupuesto/chapters.ts.
+interface Chapter extends ChapterLike {
+  id: string;
+  name: string;
+  sortOrder: number;
+}
+
 interface Budget {
   id: string;
   version: string;
@@ -216,6 +310,7 @@ interface Budget {
   observations: string | null;
   ggPercentage: number | null;
   utilityPercentage: number | null;
+  obraChapters: Chapter[];
   obraItems: ObraItem[];
   paymentTerms: PaymentTerm[];
 }
@@ -266,6 +361,7 @@ export default function ObraEditor({
 }) {
   const router = useRouter();
   const [items, setItems] = useState<ObraItem[]>(initialBudget.obraItems);
+  const [chapters, setChapters] = useState<Chapter[]>(initialBudget.obraChapters);
 
   // Marcas de cambio (subió/bajó/nuevo) por partida, contra la versión base.
   // Se recalcula en vivo cuando MJ edita: usa el total actual de cada item.
@@ -304,12 +400,14 @@ export default function ObraEditor({
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSaveRef = useRef<{ itemId: string; item: ObraItem } | null>(null);
+  // Id del capítulo cuyo formulario "+ Agregar partida" está abierto.
   const [addingChapter, setAddingChapter] = useState<string | null>(null);
-  // Capítulos vacíos que el usuario "habilitó" explícitamente para que se
-  // muestren aunque no tengan items. Se vacía cuando el usuario pone un
-  // ítem dentro (ya no necesita el flag — el chapter se muestra solo).
-  const [enabledEmptyChapters, setEnabledEmptyChapters] = useState<Set<string>>(new Set());
   const [showChapterPicker, setShowChapterPicker] = useState(false);
+  // Capítulo que se está renombrando inline (id) y el texto tipeado.
+  const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
+  const [chapterNameDraft, setChapterNameDraft] = useState("");
+  // Nombre tipeado en el campo libre del panel "+ Capítulo".
+  const [newChapterName, setNewChapterName] = useState("");
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   // Qué partida tiene la descripción del cliente abierta para editar INLINE en
   // la fila (sin abrir el panel). Solo una a la vez: el editor de texto con
@@ -321,7 +419,7 @@ export default function ObraEditor({
   // Edición inline de zona (subChapter) — por fila individual o por grupo
   // (renombrar la "bandita" gris renombra todas las partidas del grupo).
   const [editingZoneItemId, setEditingZoneItemId] = useState<string | null>(null);
-  const [editingZoneGroup, setEditingZoneGroup] = useState<{ chapter: string; name: string } | null>(null);
+  const [editingZoneGroup, setEditingZoneGroup] = useState<{ chapterId: string; name: string } | null>(null);
   const [zoneDraft, setZoneDraft] = useState("");
   // Selección múltiple para asignar zona en bulk. MJ habilita checkbox por
   // fila, selecciona varias y aplica una zona desde la barra flotante.
@@ -416,53 +514,51 @@ export default function ObraEditor({
   const iva = neto * 0.19;
   const totalConIva = neto + iva;
 
-  // Agrupar por capitulo
-  const chapters = Object.entries(OBRA_CHAPTERS) as [
-    ObraChapter,
-    { label: string; index: number }
-  ][];
-  // Orden interno: alfabético por nombre (regla MJ 2026-05-08).
-  // El orden de los capítulos sigue siendo por etapa cronológica (definido
-  // en OBRA_CHAPTERS). Dentro de cada capítulo, las partidas se ordenan
-  // por nombre con localeCompare("es") para manejar acentos correctamente.
+  // Agrupar por capítulo. La regla (orden de capítulos, orden de partidas
+  // adentro, numeración salteando los vacíos, y el rescate de las partidas
+  // huérfanas) vive en lib/presupuesto/chapters.ts — la MISMA que usan el PDF
+  // del cliente, el del maestro, el Excel y el estado de pago.
   //
-  // Capítulos vacíos NO se muestran por default — la numeración se reflowa
-  // sobre los capítulos visibles (1, 2, 3...). Para "agregar" un capítulo
-  // vacío de vuelta, hay un dropdown "+ Capítulo" abajo de todo. (regla
-  // MJ 2026-05-08).
-  const allChaptersData = chapters.map(([key, chapter]) => {
-    const chapterItems = items.filter((item) => item.chapter === key);
-    // Ordenar dentro del chapter:
-    //   1) Por sortOrder — el ORDEN MANUAL que arma MJ arrastrando las filas
-    //      (regla MJ 2026-06-05; reemplaza el orden alfabético previo). Le
-    //      sirve para contar la obra al cliente en orden cronológico.
-    //   2) Desempate: zona (subChapter) y luego nombre. Esto importa para los
-    //      presupuestos viejos donde TODAS las partidas tienen sortOrder=0
-    //      (el campo nunca se pobló): con el empate en 0, caen al orden de
-    //      antes (zona + nombre), o sea se ven IGUAL que hoy hasta que MJ
-    //      arrastre por primera vez. Apenas arrastra, el sortOrder pasa a ser
-    //      distinto para cada fila y manda el orden manual.
-    const sortedItems = [...chapterItems].sort((a, b) => {
-      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-      const aSub = a.subChapter ?? "";
-      const bSub = b.subChapter ?? "";
-      if (aSub !== bSub) return aSub.localeCompare(bSub, "es");
-      return a.name.localeCompare(b.name, "es");
-    });
+  // includeEmpty: en el editor SÍ se ven los capítulos vacíos (MJ acaba de
+  // crearlos y todavía no les puso partidas); en el PDF no salen. Un capítulo
+  // vacío no lleva número (index null) — así la numeración de la pantalla y la
+  // del PDF nunca se separan.
+  //
+  // El desempate de las partidas EMPATADAS en sortOrder (los presupuestos
+  // viejos tienen todo en 0) es propio del editor: zona y después nombre, con
+  // localeCompare("es") para los acentos. Se aplica ACÁ, antes de agrupar,
+  // porque el PDF y el estado de pago tienen su propio criterio y unificarlos
+  // le cambiaría el orden a cotizaciones ya enviadas. Como groupByChapter
+  // ordena de forma estable, este orden se respeta dentro de cada capítulo.
+  const itemsOrdenados = [...items].sort((a, b) => {
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    const aSub = a.subChapter ?? "";
+    const bSub = b.subChapter ?? "";
+    if (aSub !== bSub) return aSub.localeCompare(bSub, "es");
+    return a.name.localeCompare(b.name, "es");
+  });
+  const itemsByChapter = groupByChapter(chapters, itemsOrdenados, {
+    includeEmpty: true,
+  }).map((g) => {
     // Zona DERIVADA por posición (helper compartido con el PDF): una partida
     // sin zona propia hereda la de arriba. Así la pantalla y el PDF agrupan
     // IGUAL y los subtotales de zona incluyen las partidas heredadas (ej: el
     // extractor recién creado sin zona, que cae al fondo de BAÑOS, ahora suma
     // en BAÑOS en vez de quedar en un grupo invisible). `zoneRows` va alineado
     // 1:1 con `items` (mismo orden) para leer la zona efectiva en el render.
-    const { rows: zoneRows, zoneSubtotals, showZoneSubtotals } =
-      annotateZones(sortedItems);
+    const { rows: zoneRows, zoneSubtotals, showZoneSubtotals } = annotateZones(
+      g.items
+    );
     return {
-      key,
-      ...chapter,
-      items: sortedItems,
+      key: g.chapter.id,
+      label: g.chapter.name,
+      index: g.index,
+      // El capítulo sintético de rescate no es una fila real de la base: no se
+      // puede renombrar, borrar ni arrastrar.
+      esSintetico: g.chapter.id === SIN_CAPITULO_ID,
+      items: g.items,
       zoneRows,
-      subtotal: chapterItems.reduce((sum, item) => sum + item.total, 0),
+      subtotal: g.subtotal,
       subChapterSubtotals: zoneSubtotals,
       showZoneSubtotals,
     };
@@ -473,13 +569,6 @@ export default function ObraEditor({
   const zoneSuggestions = Array.from(
     new Set(items.map((i) => i.subChapter).filter((s): s is string => !!s))
   ).sort((a, b) => a.localeCompare(b, "es"));
-  // Filtrar vacíos, EXCEPTO si el usuario está activamente agregando a uno
-  // (addingChapter) — ese se muestra aunque esté vacío.
-  const visibleChapters = allChaptersData.filter(
-    (c) => c.items.length > 0 || c.key === addingChapter || enabledEmptyChapters.has(c.key)
-  );
-  // Re-asignar índices visualmente (1, 2, 3...) en el orden cronológico.
-  const itemsByChapter = visibleChapters.map((c, i) => ({ ...c, index: i + 1 }));
 
   // Orden de arrastre: solo en versiones editables (borrador/enviado). En
   // aprobado/rechazado la lista queda fija.
@@ -491,10 +580,18 @@ export default function ObraEditor({
   // cada uno el orden ya calculado arriba). dnd-kit ordena contra esta lista,
   // así que tiene que reflejar exactamente lo que se ve en pantalla.
   const orderedIds = itemsByChapter.flatMap((c) => c.items.map((i) => i.id));
-  // Para dibujar el "fantasma" mientras se arrastra.
-  const activeDragItem = activeDragId
-    ? items.find((i) => i.id === activeDragId) ?? null
-    : null;
+  // Para dibujar el "fantasma" mientras se arrastra. Puede ser una partida o un
+  // capítulo entero (los ids de capítulo vienen con el prefijo "cap:").
+  const activeDragChapter =
+    activeDragId && activeDragId.startsWith(CAP_DRAG_PREFIX)
+      ? chapters.find(
+          (c) => c.id === activeDragId.slice(CAP_DRAG_PREFIX.length)
+        ) ?? null
+      : null;
+  const activeDragItem =
+    activeDragId && !activeDragChapter
+      ? items.find((i) => i.id === activeDragId) ?? null
+      : null;
   // Solo envolvemos las filas con el arrastre real cuando está montado en el
   // cliente Y la versión es editable. Antes (SSR / 1ª hidratación): fila plana.
   const dndActive = dndMounted && canReorder;
@@ -504,13 +601,23 @@ export default function ObraEditor({
     setActiveDragId(String(e.active.id));
   }
 
+  // Un solo DndContext maneja los dos arrastres (capítulos enteros y partidas
+  // sueltas), porque anidar dos contextos de dnd-kit pelea por el mismo puntero.
+  // Acá se decide cuál es: los ids de capítulo vienen con el prefijo "cap:".
+  async function handleDragEnd(e: DragEndEvent) {
+    setActiveDragId(null);
+    if (String(e.active.id).startsWith(CAP_DRAG_PREFIX)) {
+      return handleChapterDragEnd(e);
+    }
+    return handleItemDragEnd(e);
+  }
+
   // Al soltar una partida: la reubico en el orden visible (arrayMove) y, si
-  // cayó en otro capítulo, le cambio el chapter al del destino (caso "metí
+  // cayó en otro capítulo, le cambio el capítulo al del destino (caso "metí
   // piso flotante en Eléctricas y lo arrastro a Terminaciones"). Después
   // reasigno sortOrder consecutivo a TODAS las partidas en el nuevo orden y lo
   // persisto, igual que el reorder del catálogo de artefactos.
-  async function handleDragEnd(e: DragEndEvent) {
-    setActiveDragId(null);
+  async function handleItemDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
     const activeId = String(active.id);
@@ -528,7 +635,7 @@ export default function ObraEditor({
     // guardada— la mostraba huérfana arriba del capítulo. null = sin zona
     // (caer en un área sin zona, ej. el capítulo Limpieza, la deja sin zona).
     const overItem = items.find((i) => i.id === overId);
-    const targetChapter = overItem?.chapter;
+    const targetChapterId = overItem?.chapterId ?? null;
     const targetSubChapter = overItem ? overItem.subChapter ?? null : null;
 
     const newOrder = arrayMove(orderedIds, oldIndex, newIndex);
@@ -542,8 +649,8 @@ export default function ObraEditor({
       if (it.id === activeId) {
         return {
           ...base,
-          ...(targetChapter && targetChapter !== it.chapter
-            ? { chapter: targetChapter }
+          ...(targetChapterId && targetChapterId !== it.chapterId
+            ? { chapterId: targetChapterId }
             : {}),
           subChapter: targetSubChapter,
         };
@@ -559,7 +666,7 @@ export default function ObraEditor({
         return {
           id,
           sortOrder: it.sortOrder,
-          chapter: it.chapter,
+          chapterId: it.chapterId ?? undefined,
           subChapter: it.subChapter ?? null,
         };
       });
@@ -580,10 +687,135 @@ export default function ObraEditor({
       router.refresh();
     }
   }
-  // Capítulos disponibles para "+ agregar" (los que no están visibles).
-  const hiddenChapters = allChaptersData.filter(
-    (c) => c.items.length === 0 && c.key !== addingChapter && !enabledEmptyChapters.has(c.key)
+  // ── Capítulos: crear, renombrar, borrar, reordenar ─────────────────────
+  // Los nombres de siempre que todavía NO están en este presupuesto, para
+  // ofrecerlos como atajo en el panel "+ Capítulo". Un presupuesto nuevo
+  // arranca vacío (decisión MJ 2026-07-27): la lista clásica sigue a mano como
+  // sugerencia, pero no como obligación.
+  const sugerenciasDisponibles = CAPITULOS_SUGERIDOS.filter(
+    (nombre) =>
+      !chapters.some(
+        (c) => c.name.trim().toUpperCase() === nombre.toUpperCase()
+      )
   );
+
+  async function crearCapitulo(nombre: string) {
+    const name = nombre.trim();
+    if (!name) return;
+    setShowChapterPicker(false);
+    setNewChapterName("");
+    try {
+      const res = await fetch(
+        `/api/presupuestos/${initialBudget.id}/capitulos`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        }
+      );
+      if (!res.ok) throw new Error();
+      const creado: Chapter = await res.json();
+      setChapters((prev) => [...prev, creado]);
+    } catch {
+      alert("Error al crear el capítulo");
+    }
+  }
+
+  async function renombrarCapitulo(chapterId: string, nombre: string) {
+    const name = nombre.trim();
+    setEditingChapterId(null);
+    const actual = chapters.find((c) => c.id === chapterId);
+    if (!name || !actual || actual.name === name) return;
+    // Optimista: el nombre cambia en pantalla antes de que conteste el server.
+    setChapters((prev) =>
+      prev.map((c) => (c.id === chapterId ? { ...c, name } : c))
+    );
+    try {
+      const res = await fetch(
+        `/api/presupuestos/${initialBudget.id}/capitulos/${chapterId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        }
+      );
+      if (!res.ok) throw new Error();
+    } catch {
+      setChapters((prev) =>
+        prev.map((c) => (c.id === chapterId ? { ...c, name: actual.name } : c))
+      );
+      alert("Error al renombrar el capítulo");
+    }
+  }
+
+  // Borrar solo capítulos vacíos: uno con partidas adentro es plata
+  // presupuestada, y un click de más no se puede llevar medio presupuesto.
+  // El server también lo controla (409 con el conteo).
+  async function borrarCapitulo(chapterId: string) {
+    const cantidad = items.filter((i) => i.chapterId === chapterId).length;
+    if (cantidad > 0) {
+      alert(
+        `Este capítulo tiene ${cantidad} partida${cantidad === 1 ? "" : "s"}. ` +
+          `Arrastralas a otro capítulo antes de borrarlo.`
+      );
+      return;
+    }
+    if (!confirm("¿Borrar este capítulo vacío?")) return;
+    const previos = chapters;
+    setChapters((prev) => prev.filter((c) => c.id !== chapterId));
+    try {
+      const res = await fetch(
+        `/api/presupuestos/${initialBudget.id}/capitulos/${chapterId}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) throw new Error((await res.json()).error);
+    } catch (e) {
+      setChapters(previos);
+      alert(e instanceof Error && e.message ? e.message : "Error al borrar");
+    }
+  }
+
+  // Arrastrar un capítulo entero arriba/abajo. Solo cambia sortOrder: la
+  // numeración que ve el cliente se recalcula sola al mostrar.
+  async function handleChapterDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const activeId = String(active.id).slice(CAP_DRAG_PREFIX.length);
+    const oldIdx = chapters.findIndex((c) => c.id === activeId);
+    // Soltar un capítulo encima de una PARTIDA vale como soltarlo en el
+    // capítulo de esa partida — si no, arrastrar un capítulo largo hasta el
+    // medio de otro no hacía nada.
+    const overRaw = String(over.id);
+    const destinoId = overRaw.startsWith(CAP_DRAG_PREFIX)
+      ? overRaw.slice(CAP_DRAG_PREFIX.length)
+      : items.find((i) => i.id === overRaw)?.chapterId ?? "";
+    const newIdx = chapters.findIndex((c) => c.id === destinoId);
+    if (oldIdx < 0 || newIdx < 0 || oldIdx === newIdx) return;
+    const previos = chapters;
+    const reordenados = arrayMove(chapters, oldIdx, newIdx).map((c, i) => ({
+      ...c,
+      sortOrder: i,
+    }));
+    setChapters(reordenados);
+    setSaveStatus("saving");
+    try {
+      const res = await fetch(
+        `/api/presupuestos/${initialBudget.id}/capitulos/reorder`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderedIds: reordenados.map((c) => c.id) }),
+        }
+      );
+      if (!res.ok) throw new Error();
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 1500);
+    } catch {
+      setChapters(previos);
+      setSaveStatus("idle");
+      alert("Error al guardar el orden de los capítulos");
+    }
+  }
 
   function handleSelectFromCatalog(partida: CatalogPartida) {
     setSelectedCatalog(partida);
@@ -645,11 +877,14 @@ export default function ObraEditor({
     return Math.round(provCostNeto + nonMaterial);
   }
 
-  async function handleAddItem(chapter: string) {
+  async function handleAddItem(chapterId: string) {
     if (!newItem.name) return;
+    // El capítulo sintético de rescate no existe en la base: no se le pueden
+    // agregar partidas.
+    if (chapterId === SIN_CAPITULO_ID) return;
 
     try {
-      const body: any = { ...newItem, chapter };
+      const body: any = { ...newItem, chapterId };
       if (selectedCatalog) {
         body.catalogPartidaId = selectedCatalog.id;
         body.costLabor = selectedCatalog.costLabor;
@@ -687,7 +922,7 @@ export default function ObraEditor({
 
       // Si es manual y no existe en catalogo, guardar al catalogo
       if (!selectedCatalog && newItem.name) {
-        saveToCatalog(chapter, newItem);
+        saveToCatalog(chapterId, newItem);
       }
 
       resetAddForm();
@@ -697,15 +932,18 @@ export default function ObraEditor({
   }
 
   async function saveToCatalog(
-    chapter: string,
+    chapterId: string,
     item: { name: string; unit: string; unitPrice: number }
   ) {
     try {
-      // Map chapter key to a category name for the catalog
-      const chapterEntry = OBRA_CHAPTERS[chapter as ObraChapter];
-      const categoryName = chapterEntry
-        ? chapterEntry.label.toUpperCase()
-        : chapter.toUpperCase();
+      // La categoría del catálogo sale del NOMBRE del capítulo. El catálogo
+      // tiene su propia lista de categorías (CATALOG_CATEGORY_ORDER, 12
+      // nombres que no calzan 1:1 con los capítulos) — son cosas separadas y
+      // siguen siéndolo; esto es solo el default al guardar.
+      const categoryName = (
+        chapters.find((c) => c.id === chapterId)?.name ?? ""
+      ).toUpperCase();
+      if (!categoryName) return;
 
       await fetch("/api/catalogo/partidas", {
         method: "POST",
@@ -848,18 +1086,18 @@ export default function ObraEditor({
   // Renombrar TODA una zona dentro de un capítulo (ej: "Cocina" → "Cocina 1").
   // Hace bulk: actualiza state local + persiste cada item afectado.
   async function handleRenameZoneGroup(
-    chapter: string,
+    chapterId: string,
     oldName: string,
     newName: string
   ) {
     const normalized = newName.trim();
     if (!normalized || normalized === oldName) return;
     const affected = items.filter(
-      (i) => i.chapter === chapter && i.subChapter === oldName
+      (i) => i.chapterId === chapterId && i.subChapter === oldName
     );
     setItems((curr) =>
       curr.map((i) =>
-        i.chapter === chapter && i.subChapter === oldName
+        i.chapterId === chapterId && i.subChapter === oldName
           ? { ...i, subChapter: normalized }
           : i
       )
@@ -1176,36 +1414,126 @@ export default function ObraEditor({
       <DndContext
         id="obra-partidas-dnd"
         sensors={dndSensors}
-        collisionDetection={closestCenter}
+        collisionDetection={detectarColision}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
       <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
       <div className="space-y-0 -mt-3">
       {itemsByChapter.map((chapter) => (
-        <div
+        <ChapterDragBox
           key={chapter.key}
+          id={chapter.key}
+          enabled={dndActive && !chapter.esSintetico}
           className="bg-white border-x border-gray-200 overflow-visible last:border-b last:rounded-b-xl"
         >
+          {(drag) => (
+        <>
           {/* Chapter bar — gris claro, formato cuadro Excel */}
-          <div className="flex items-center justify-between px-4 py-1 bg-gray-200 border-y border-gray-200">
-            <h3 className="font-bold text-gray-900 text-xs uppercase tracking-wide">
-              <span className="inline-block w-6">{chapter.index}</span>
-              {chapter.label}
+          <div
+            ref={drag.setDropRef}
+            className={`flex items-center justify-between px-4 py-1 bg-gray-200 border-y ${
+              drag.isOver ? "border-gray-900" : "border-gray-200"
+            }`}
+          >
+            <h3 className="flex items-center min-w-0 font-bold text-gray-900 text-xs uppercase tracking-wide">
+              {/* Manija de arrastre del capítulo entero. Solo acá van los
+                  listeners: si estuvieran en toda la barra, no se podría
+                  hacer click en el nombre para renombrarlo. */}
+              {dndActive && !chapter.esSintetico ? (
+                <button
+                  {...drag.attributes}
+                  {...drag.listeners}
+                  className="mr-1 -ml-1 px-1 text-gray-400 hover:text-gray-900 cursor-grab active:cursor-grabbing shrink-0"
+                  title="Arrastrar para mover el capítulo"
+                  aria-label="Mover capítulo"
+                >
+                  <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
+                    <circle cx="2.5" cy="3" r="1.1" /><circle cx="7.5" cy="3" r="1.1" />
+                    <circle cx="2.5" cy="7" r="1.1" /><circle cx="7.5" cy="7" r="1.1" />
+                    <circle cx="2.5" cy="11" r="1.1" /><circle cx="7.5" cy="11" r="1.1" />
+                  </svg>
+                </button>
+              ) : (
+                <span className="mr-1 -ml-1 px-1 w-[18px] shrink-0" />
+              )}
+              {/* Un capítulo vacío no lleva número y no sale en el PDF. */}
+              <span className="inline-block w-6 shrink-0">
+                {chapter.index ?? <span className="text-gray-400">—</span>}
+              </span>
+              {editingChapterId === chapter.key ? (
+                <input
+                  autoFocus
+                  value={chapterNameDraft}
+                  onChange={(e) => setChapterNameDraft(e.target.value)}
+                  onBlur={() => renombrarCapitulo(chapter.key, chapterNameDraft)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                    if (e.key === "Escape") setEditingChapterId(null);
+                  }}
+                  className="min-w-0 flex-1 bg-white border border-gray-400 rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide focus:outline-none focus:border-gray-900"
+                />
+              ) : (
+                <button
+                  onClick={() => {
+                    if (chapter.esSintetico || !canEditDetail) return;
+                    setChapterNameDraft(chapter.label);
+                    setEditingChapterId(chapter.key);
+                  }}
+                  className={`truncate text-left ${
+                    chapter.esSintetico || !canEditDetail
+                      ? "cursor-default"
+                      : "hover:underline decoration-dotted underline-offset-2"
+                  }`}
+                  title={
+                    chapter.esSintetico
+                      ? "Partidas sin capítulo — arrastralas al capítulo que corresponda"
+                      : canEditDetail
+                      ? "Click para renombrar"
+                      : undefined
+                  }
+                >
+                  {chapter.label}
+                </button>
+              )}
+              {chapter.items.length === 0 && !chapter.esSintetico && (
+                <span className="ml-2 shrink-0 text-[10px] font-medium normal-case tracking-normal text-gray-500">
+                  vacío · no sale en el PDF
+                </span>
+              )}
             </h3>
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-5 shrink-0">
               <span className="text-xs font-medium text-gray-700 tabular-nums">
                 Subtotal {formatCLP(chapter.subtotal)}
               </span>
-              <button
-                onClick={() => {
-                  resetAddForm();
-                  setAddingChapter(chapter.key);
-                }}
-                className="text-xs font-semibold text-gray-700 hover:text-black uppercase tracking-wide"
-              >
-                + Agregar
-              </button>
+              {!chapter.esSintetico && (
+                <button
+                  onClick={() => {
+                    resetAddForm();
+                    setAddingChapter(chapter.key);
+                  }}
+                  className="text-xs font-semibold text-gray-700 hover:text-black uppercase tracking-wide"
+                >
+                  + Agregar
+                </button>
+              )}
+              {/* Borrar: solo capítulos vacíos (uno con partidas es plata
+                  presupuestada). Por eso el botón aparece únicamente cuando
+                  no hay nada adentro. */}
+              {chapter.items.length === 0 &&
+                !chapter.esSintetico &&
+                canEditDetail && (
+                  <button
+                    onClick={() => borrarCapitulo(chapter.key)}
+                    className="text-gray-400 hover:text-gray-900"
+                    title="Borrar capítulo vacío"
+                    aria-label="Borrar capítulo"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                    </svg>
+                  </button>
+                )}
             </div>
           </div>
 
@@ -1250,7 +1578,7 @@ export default function ObraEditor({
                           className="px-3 py-0.5 text-[10px] font-semibold text-gray-600 uppercase tracking-wider"
                         >
                           {editingZoneGroup &&
-                          editingZoneGroup.chapter === chapter.key &&
+                          editingZoneGroup.chapterId === chapter.key &&
                           editingZoneGroup.name === zone ? (
                             <input
                               autoFocus
@@ -1279,7 +1607,7 @@ export default function ObraEditor({
                               onClick={() => {
                                 setZoneDraft(zone ?? "");
                                 setEditingZoneGroup({
-                                  chapter: chapter.key,
+                                  chapterId: chapter.key,
                                   name: zone!,
                                 });
                               }}
@@ -2127,7 +2455,9 @@ export default function ObraEditor({
               )}
             </div>
           )}
-        </div>
+        </>
+          )}
+        </ChapterDragBox>
       ))}
       </div>
       </SortableContext>
@@ -2135,7 +2465,14 @@ export default function ObraEditor({
           versión liviana de la fila (nombre + total), suficiente para que MJ
           vea qué está moviendo sin arrastrar toda la tabla. */}
       <DragOverlay>
-        {activeDragItem ? (
+        {activeDragChapter ? (
+          <div className="flex items-center gap-3 bg-gray-200 border border-gray-400 rounded shadow-sm px-3 py-1.5 text-xs">
+            <span className="text-gray-500">⋮⋮</span>
+            <span className="font-bold text-gray-900 uppercase tracking-wide truncate max-w-[320px]">
+              {activeDragChapter.name}
+            </span>
+          </div>
+        ) : activeDragItem ? (
           <div className="flex items-center gap-3 bg-white border border-gray-300 rounded shadow-sm px-3 py-1.5 text-xs">
             <span className="text-gray-400">⋮⋮</span>
             <span className="font-medium text-gray-900 uppercase truncate max-w-[280px]">
@@ -2149,9 +2486,10 @@ export default function ObraEditor({
       </DragOverlay>
       </DndContext>
 
-      {/* "+ Capítulo": dropdown para re-habilitar capítulos vacíos. Solo
-          aparece cuando hay capítulos ocultos disponibles. */}
-      {hiddenChapters.length > 0 && (
+      {/* "+ Capítulo": crea un capítulo nuevo. Un presupuesto arranca SIN
+          capítulos; los 8 de siempre siguen a mano acá como sugerencia (un
+          click y listo) pero se puede escribir cualquier nombre. */}
+      {canEditDetail && (
         <div className="relative" ref={chapterPickerRef}>
           <button
             onClick={() => setShowChapterPicker((s) => !s)}
@@ -2160,19 +2498,50 @@ export default function ObraEditor({
             + Capítulo
           </button>
           {showChapterPicker && (
-            <div className="absolute z-10 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden min-w-[220px]">
-              {hiddenChapters.map((c) => (
-                <button
-                  key={c.key}
-                  onClick={() => {
-                    setEnabledEmptyChapters((prev) => new Set(prev).add(c.key));
-                    setShowChapterPicker(false);
-                  }}
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-                >
-                  {c.label}
-                </button>
-              ))}
+            <div className="absolute z-10 mt-1 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden min-w-[300px]">
+              <div className="px-4 pt-3 pb-2">
+                <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
+                  Nombre del capítulo
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    autoFocus
+                    value={newChapterName}
+                    onChange={(e) => setNewChapterName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") crearCapitulo(newChapterName);
+                      if (e.key === "Escape") setShowChapterPicker(false);
+                    }}
+                    placeholder="Ej: TERRAZA Y JARDIN"
+                    className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm uppercase focus:outline-none focus:border-gray-900"
+                  />
+                  <button
+                    onClick={() => crearCapitulo(newChapterName)}
+                    disabled={!newChapterName.trim()}
+                    className="px-3 py-1 text-sm font-medium bg-gray-900 text-white rounded disabled:bg-gray-200 disabled:text-gray-400"
+                  >
+                    Crear
+                  </button>
+                </div>
+              </div>
+              {sugerenciasDisponibles.length > 0 && (
+                <>
+                  <div className="px-4 pt-1 pb-1 text-[10px] uppercase tracking-wider text-gray-500 border-t border-gray-100">
+                    Los de siempre
+                  </div>
+                  <div className="pb-2 max-h-64 overflow-y-auto">
+                    {sugerenciasDisponibles.map((nombre) => (
+                      <button
+                        key={nombre}
+                        onClick={() => crearCapitulo(nombre)}
+                        className="w-full text-left px-4 py-1.5 text-sm hover:bg-gray-50 transition-colors"
+                      >
+                        {nombre}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

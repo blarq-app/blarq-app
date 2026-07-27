@@ -7,9 +7,9 @@ import { requireSession } from "@/lib/apiAuth";
 // del orden (sortOrder), una partida puede MOVERSE a otro capítulo cuando se
 // la arrastra a la zona de ese capítulo (ej. metió "piso flotante" en
 // Eléctricas y la corre a Terminaciones) — por eso aceptamos también el
-// chapter de cada fila y lo persistimos.
+// chapterId de cada fila y lo persistimos.
 //
-// Body: { items: [{ id: string, sortOrder: number, chapter: string }] }
+// Body: { items: [{ id: string, sortOrder: number, chapterId?: string }] }
 // El frontend manda la lista COMPLETA con sortOrder consecutivo (0,1,2...)
 // en el orden visible, igual que el reorder del catálogo de artefactos.
 export async function PATCH(
@@ -20,12 +20,12 @@ export async function PATCH(
   if (gate instanceof Response) return gate;
 
   try {
-    await params; // budgetVersionId — no se usa, el id de cada partida basta
+    const { id: budgetVersionId } = await params;
     const { items } = (await request.json()) as {
       items: {
         id: string;
         sortOrder: number;
-        chapter?: string;
+        chapterId?: string;
         subChapter?: string | null;
       }[];
     };
@@ -36,15 +36,26 @@ export async function PATCH(
       );
     }
 
+    // Los capítulos destino tienen que ser de ESTA versión. Un id que no lo
+    // sea se ignora (la partida se queda donde está) en vez de mandar la
+    // partida a un capítulo de otro presupuesto.
+    const propios = await prisma.obraChapter.findMany({
+      where: { budgetVersionId },
+      select: { id: true },
+    });
+    const capitulosValidos = new Set(propios.map((c) => c.id));
+
     await prisma.$transaction(
       items.map((it) =>
         prisma.obraItem.update({
           where: { id: it.id },
           data: {
             sortOrder: it.sortOrder,
-            // chapter solo si vino — un reorden dentro del mismo capítulo no
-            // necesita tocarlo, pero mandarlo igual es inocuo (mismo valor).
-            ...(it.chapter ? { chapter: it.chapter } : {}),
+            // chapterId solo si vino y es de esta versión — un reorden dentro
+            // del mismo capítulo no necesita tocarlo.
+            ...(it.chapterId && capitulosValidos.has(it.chapterId)
+              ? { chapterId: it.chapterId }
+              : {}),
             // subChapter (zona) puede ser null = sin zona, así que NO podemos
             // usar el truco de "solo si es truthy": distinguimos "vino en el
             // payload" (presente la propiedad) de "no vino". El arrastre lo

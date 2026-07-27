@@ -56,7 +56,40 @@ export async function PUT(
   }
 }
 
-export async function DELETE(
+// Dónde está usada esta partida del catálogo. Lo consulta la pantalla ANTES de
+// borrar, para poder avisar con números concretos ("está en 3 presupuestos de
+// Sena y Candelaria") en vez de un cartel genérico.
+async function usoDeLaPartida(id: string) {
+  const items = await prisma.obraItem.findMany({
+    where: { catalogPartidaId: id },
+    select: {
+      id: true,
+      budgetVersion: {
+        select: {
+          id: true,
+          version: true,
+          project: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+
+  const versiones = new Set(items.map((i) => i.budgetVersion.id));
+  // Nombres de proyecto sin repetir, en orden de aparición.
+  const proyectos: string[] = [];
+  for (const i of items) {
+    const nombre = i.budgetVersion.project?.name;
+    if (nombre && !proyectos.includes(nombre)) proyectos.push(nombre);
+  }
+
+  return {
+    obraItems: items.length,
+    presupuestos: versiones.size,
+    proyectos,
+  };
+}
+
+export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -65,12 +98,37 @@ export async function DELETE(
 
   try {
     const { id } = await params;
-
-    // Bloquear si está en uso en algún ObraItem (cualquier presupuesto)
-    const usageCount = await prisma.obraItem.count({
-      where: { catalogPartidaId: id },
+    const partida = await prisma.partidaCatalog.findUnique({
+      where: { id },
+      select: { id: true, name: true, category: true },
     });
-    if (usageCount > 0) {
+    if (!partida) {
+      return NextResponse.json({ error: "Partida no encontrada" }, { status: 404 });
+    }
+    return NextResponse.json({ ...partida, uso: await usoDeLaPartida(id) });
+  } catch (error) {
+    console.error("Error reading partida:", error);
+    return NextResponse.json({ error: "Error al leer partida" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const gate = await requireSession();
+  if (gate instanceof Response) return gate;
+
+  try {
+    const { id } = await params;
+    const forzar = request.nextUrl.searchParams.get("forzar") === "1";
+
+    const uso = await usoDeLaPartida(id);
+
+    // Sin `forzar`, seguimos frenando: es la red de seguridad para cualquier
+    // otro llamador que borre sin avisar. La pantalla del catálogo consulta el
+    // uso primero, muestra la advertencia y recién ahí manda `forzar=1`.
+    if (uso.obraItems > 0 && !forzar) {
       const partida = await prisma.partidaCatalog.findUnique({
         where: { id },
         select: { name: true },
@@ -78,15 +136,41 @@ export async function DELETE(
       return NextResponse.json(
         {
           error:
-            `Esta partida ${partida ? `("${partida.name}") ` : ""}está en uso en ${usageCount} presupuesto${usageCount === 1 ? "" : "s"}. ` +
-            `Duplicala o creá una nueva si necesitás una variante.`,
+            `Esta partida ${partida ? `("${partida.name}") ` : ""}está en uso en ${uso.presupuestos} presupuesto${uso.presupuestos === 1 ? "" : "s"}. ` +
+            `Confirmá el borrado para desvincularla, o duplicala si necesitás una variante.`,
+          uso,
         },
         { status: 409 }
       );
     }
 
-    await prisma.partidaCatalog.delete({ where: { id } });
-    return NextResponse.json({ ok: true });
+    // Borrar la partida del catálogo NO rompe ningún presupuesto: cada ObraItem
+    // guarda su propia copia (nombre, precios y sus ObraItemComponent). El
+    // `catalogPartidaId` es solo el hilo que habilita "actualizar desde el
+    // catálogo". Antes de borrar cortamos ese hilo para no dejar referencias
+    // colgando apuntando a una partida que ya no existe.
+    const componentes = await prisma.partidaComponent.findMany({
+      where: { partidaId: id },
+      select: { id: true },
+    });
+
+    await prisma.$transaction([
+      prisma.obraItem.updateMany({
+        where: { catalogPartidaId: id },
+        data: { catalogPartidaId: null },
+      }),
+      // Marcas de "este componente del catálogo lo descarté" que apuntaban a
+      // componentes que están por desaparecer. No son FK real, así que hay que
+      // limpiarlas a mano para no dejar basura que confunda a un ObraItem si
+      // después se lo re-vincula a otra partida.
+      prisma.obraItemDiscardedCatalogComponent.deleteMany({
+        where: { partidaComponentId: { in: componentes.map((c) => c.id) } },
+      }),
+      // Los PartidaComponent se van solos (onDelete: Cascade).
+      prisma.partidaCatalog.delete({ where: { id } }),
+    ]);
+
+    return NextResponse.json({ ok: true, desvinculados: uso.obraItems });
   } catch (error) {
     console.error("Error deleting partida:", error);
     return NextResponse.json({ error: "Error al eliminar partida" }, { status: 500 });

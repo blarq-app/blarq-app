@@ -1,7 +1,8 @@
 import * as React from "react";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import { formatCLP, OBRA_CHAPTERS, ObraChapter } from "@/lib/utils";
+import { formatCLP } from "@/lib/utils";
+import { groupByChapter } from "@/lib/presupuesto/chapters";
 import Link from "next/link";
 import CentroCostoView, { type GastoExtra } from "@/components/proyecto/CentroCostoView";
 import { esSocio } from "@/lib/banco/socios";
@@ -134,6 +135,7 @@ export default async function ResultadosPage({
       },
       budgetVersions: {
         include: {
+          obraChapters: { orderBy: { sortOrder: "asc" } },
           obraItems: true,
           muebleChapters: { include: { items: true } },
           artefactoItems: true,
@@ -356,35 +358,35 @@ export default async function ResultadosPage({
     }
   }
 
-  const chapterRows = (Object.keys(OBRA_CHAPTERS) as ObraChapter[])
-    .map((chapter) => {
-      const items = obraItems.filter((i) => i.chapter === chapter);
-      if (items.length === 0) return null;
-      const presupuesto = items.reduce((s, i) => s + i.total, 0);
-      const presupuestoMO = items.reduce(
-        (s, i) => s + (i.costLabor ?? 0) * i.quantity,
-        0
-      );
-      // % avance ponderado por MO (lo que se paga al maestro)
-      let moAcumulado = 0;
-      for (const item of items) {
-        const pct = latestPctByLineage.get(item.lineageId) || 0;
-        moAcumulado += (item.costLabor ?? 0) * item.quantity * (pct / 100);
-      }
-      const avance =
-        presupuestoMO > 0 ? (moAcumulado / presupuestoMO) * 100 : 0;
-      return {
-        chapter,
-        label: OBRA_CHAPTERS[chapter].label,
-        index: OBRA_CHAPTERS[chapter].index,
-        presupuesto,
-        presupuestoMO,
-        moAcumulado,
-        avance,
-      };
-    })
-    .filter((r): r is NonNullable<typeof r> => r !== null)
-    .sort((a, b) => a.index - b.index);
+  // Capítulos de la versión vigente, en su orden, saltando los vacíos — mismo
+  // helper que el editor y el PDF.
+  const chapterRows = groupByChapter(
+    lastObra?.obraChapters ?? [],
+    obraItems
+  ).map((g) => {
+    const items = g.items;
+    const presupuesto = g.subtotal;
+    const presupuestoMO = items.reduce(
+      (s, i) => s + (i.costLabor ?? 0) * i.quantity,
+      0
+    );
+    // % avance ponderado por MO (lo que se paga al maestro)
+    let moAcumulado = 0;
+    for (const item of items) {
+      const pct = latestPctByLineage.get(item.lineageId) || 0;
+      moAcumulado += (item.costLabor ?? 0) * item.quantity * (pct / 100);
+    }
+    const avance = presupuestoMO > 0 ? (moAcumulado / presupuestoMO) * 100 : 0;
+    return {
+      chapter: g.chapter.id,
+      label: g.chapter.name,
+      index: g.index ?? 0,
+      presupuesto,
+      presupuestoMO,
+      moAcumulado,
+      avance,
+    };
+  });
 
   // (utilidadProyectada y margenProyectado se declaran arriba)
 

@@ -20,7 +20,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { sanitizeRichTextHtml } from "@/lib/richText";
-import { OBRA_CHAPTERS } from "@/lib/utils";
+import { groupByChapter } from "@/lib/presupuesto/chapters";
 import { annotateZones } from "@/lib/presupuesto/zones";
 
 const PROFESSIONAL = "JOSÉ TOMÁS LARRAÍN";
@@ -44,8 +44,14 @@ const OBSERVACIONES = [
 ];
 
 // ─── Types ────────────────────────────────────────────────────────────────
+export interface ObraChapterInput {
+  id: string;
+  name: string;
+  sortOrder: number;
+}
+
 export interface ObraItemInput {
-  chapter: string;
+  chapterId: string | null;
   subChapter?: string | null;
   sortOrder: number;
   itemNumber: string;
@@ -83,6 +89,7 @@ export interface ObraHTMLInput {
     coverSubtitle?: string | null;
     coverNote?: string | null;
   };
+  chapters: ObraChapterInput[];
   items: ObraItemInput[];
   paymentTerms: PaymentTermInput[];
 }
@@ -300,26 +307,17 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   const iva = Math.round(neto * 0.19);
   const total = neto + iva;
 
-  // Capítulos en el MISMO orden y numeración que el editor (OBRA_CHAPTERS, fuente
-  // compartida): se saltan los vacíos y se renumera 1,2,3… sobre los que tienen
-  // partidas (reflow), con el nombre formal (pdfLabel) para el cliente. Las
-  // partidas van por sortOrder (el orden manual de MJ), NO alfabético — así el
-  // PDF queda igual a lo que se ve en pantalla. (Lógica de prod: PR #231.)
-  const chapters = (
-    Object.entries(OBRA_CHAPTERS) as [
-      string,
-      { label: string; pdfLabel: string; index: number }
-    ][]
-  )
-    .map(([key, ch]) => ({
-      key,
-      label: ch.pdfLabel,
-      items: items
-        .filter((i) => i.chapter === key)
-        .sort((a, b) => a.sortOrder - b.sortOrder),
-    }))
-    .filter((ch) => ch.items.length > 0)
-    .map((ch, i) => ({ ...ch, index: i + 1 }));
+  // Capítulos en el MISMO orden y numeración que el editor: helper compartido
+  // (lib/presupuesto/chapters.ts). Se saltan los vacíos y se renumera 1,2,3…
+  // sobre los que tienen partidas. Las partidas van por sortOrder (el orden
+  // manual de MJ), NO alfabético — así el PDF queda igual a lo que se ve en
+  // pantalla. (Lógica de prod: PR #231.)
+  const chapters = groupByChapter(data.chapters, items).map((g) => ({
+    key: g.chapter.id,
+    label: g.chapter.name,
+    items: g.items,
+    index: g.index ?? 0,
+  }));
 
   const terms = paymentTerms.length > 0 ? paymentTerms : DEFAULT_PAYMENT_TERMS;
   const logoUri = assetDataUri("blarq-logo-horizontal-ink.png") || assetDataUri("logo-blarq.png");

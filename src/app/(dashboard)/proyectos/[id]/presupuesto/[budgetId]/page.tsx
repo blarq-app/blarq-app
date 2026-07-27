@@ -23,6 +23,7 @@ export default async function PresupuestoDetailPage({
   const budget = await prisma.budgetVersion.findUnique({
     where: { id: budgetId },
     include: {
+      obraChapters: { orderBy: { sortOrder: "asc" } },
       obraItems: {
         orderBy: { sortOrder: "asc" },
         include: { components: { orderBy: { sortOrder: "asc" } } },

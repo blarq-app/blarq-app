@@ -86,6 +86,27 @@ export async function POST(request: NextRequest) {
           include: { components: { orderBy: { sortOrder: "asc" } } },
         });
 
+        // Los CAPÍTULOS se duplican primero, y nos quedamos con el mapa
+        // viejo→nuevo para que cada partida caiga en el capítulo equivalente
+        // de la versión nueva. Cada versión tiene sus propias filas de
+        // capítulo: si las partidas apuntaran a las de la versión origen,
+        // renombrar un capítulo en V6 le cambiaría el nombre a V5.
+        const capitulosOrigen = await prisma.obraChapter.findMany({
+          where: { budgetVersionId: previousVersion.id },
+          orderBy: { sortOrder: "asc" },
+        });
+        const mapaCapitulos = new Map<string, string>();
+        for (const cap of capitulosOrigen) {
+          const nuevo = await prisma.obraChapter.create({
+            data: {
+              budgetVersionId: budget.id,
+              name: cap.name,
+              sortOrder: cap.sortOrder,
+            },
+          });
+          mapaCapitulos.set(cap.id, nuevo.id);
+        }
+
         // Si se está usando como plantilla (importar desde otro proyecto),
         // queremos cantidades en 0 y precios refrescados del catálogo actual.
         // Usado por el flujo "Importar desde otro proyecto" — el "Duplicar"
@@ -139,7 +160,10 @@ export async function POST(request: NextRequest) {
               // es un punto de partida nuevo, no una continuación de la línea
               // de versiones del proyecto fuente.
               lineageId: isTemplateMode ? undefined : item.lineageId,
-              chapter: item.chapter,
+              chapterId: item.chapterId
+                ? mapaCapitulos.get(item.chapterId) ?? null
+                : null,
+              chapter: item.chapter, // legacy, ver nota en schema.prisma
               // En modo plantilla (importar desde otro proyecto) no tiene
               // sentido arrastrar el sub-chapter del proyecto fuente — son
               // zonas físicas distintas. En modo duplicar normal, sí.

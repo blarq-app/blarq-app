@@ -53,7 +53,10 @@ export async function POST(
     const obraBudget = budgetVersionId
       ? await prisma.budgetVersion.findFirst({
           where: { id: budgetVersionId, projectId, type: "obra" },
-          include: { obraItems: { orderBy: { sortOrder: "asc" } } },
+          include: {
+            obraChapters: { orderBy: { sortOrder: "asc" } },
+            obraItems: { orderBy: { sortOrder: "asc" } },
+          },
         })
       : await findLatestObraBudget(prisma, projectId);
     if (budgetVersionId && !obraBudget) {
@@ -96,6 +99,16 @@ export async function POST(
       maestroId,
     });
 
+    // Foto del capítulo (nombre + posición) para cada partida del EP. El EP no
+    // apunta al ObraChapter: guarda su propia copia, así una partida que
+    // después quede fuera de alcance sigue mostrando el capítulo que tenía.
+    const capitulo = new Map(
+      obraBudget.obraChapters.map((c) => [
+        c.id,
+        { name: c.name, sortOrder: c.sortOrder },
+      ])
+    );
+
     const ep = await prisma.estadoPago.create({
       data: {
         projectId,
@@ -109,7 +122,13 @@ export async function POST(
             return {
               obraItemId: item.id,
               lineageId: item.lineageId,
-              chapter: item.chapter,
+              chapterName: item.chapterId
+                ? capitulo.get(item.chapterId)?.name ?? null
+                : null,
+              chapterOrder: item.chapterId
+                ? capitulo.get(item.chapterId)?.sortOrder ?? 0
+                : 0,
+              chapter: "", // legacy, ver nota en schema.prisma
               subChapter: item.subChapter,
               itemNumber: item.itemNumber,
               name: item.name,

@@ -156,6 +156,21 @@ model EstadoPagoItem {
   obraItemId          String   // Apunta al ObraItem de la versión actual del presupuesto. Se refresca al sync.
   lineageId           String   @default(cuid()) // Identidad estable de la partida a través de versiones del presupuesto.
   // Snapshot al momento del EP (se actualiza al sync)
+  //
+  // El EP guarda su PROPIA copia del capítulo — nombre y posición — en vez de
+  // apuntar al ObraChapter de la versión. Es a propósito: un EP es una foto, y
+  // una partida marcada `outOfScope` (existía en la versión vieja del
+  // presupuesto y ya no está en la nueva) puede apuntar a un capítulo que se
+  // borró. Con el nombre copiado acá, un EP viejo sigue mostrando sus
+  // capítulos aunque el presupuesto haya cambiado entero. Mismo criterio con
+  // el que ya copia el nombre y la cantidad de cada partida.
+  //
+  // chapterOrder = posición del capítulo en la versión, para agrupar el EP en
+  // el mismo orden que la cotización.
+  chapterName         String?
+  chapterOrder        Int      @default(0)
+  // LEGACY — la clave de texto del capítulo. Reemplazada por chapterName.
+  // Ver la nota en ObraItem.chapter: se deja sin tocar como red de seguridad.
   chapter             String
   // Sub-chapter / zona (ej "COCINA", "BAÑO") — snapshot de ObraItem.subChapter.
   // Permite que el EP muestre la misma separacion por zona que el presupuesto.
@@ -229,6 +244,7 @@ model BudgetVersion {
   parentVersion BudgetVersion? @relation("VersionLineage", fields: [parentVersionId], references: [id], onDelete: SetNull)
   childVersions BudgetVersion[] @relation("VersionLineage")
   obraItems   ObraItem[]
+  obraChapters ObraChapter[]
   muebleChapters MuebleChapter[]
   muebleItems MuebleItem[]
   artefactoItems ArtefactoItem[]
@@ -239,11 +255,53 @@ model BudgetVersion {
   @@index([parentVersionId])
 }
 
+// Capítulos de obra. Un capítulo es una FILA propia de cada versión de
+// presupuesto, con nombre libre y posición arrastrable — igual que
+// MuebleChapter. Antes eran 8 claves fijas hardcodeadas en lib/utils.ts
+// (OBRA_CHAPTERS) y MJ no podía ni renombrarlos ni reordenarlos.
+//
+// El nombre es UNO SOLO y es el que se ve en TODOS lados: editor, PDF del
+// cliente, PDF del maestro, estado de pago (decisión MJ 2026-07-27 — antes
+// había un nombre corto de pantalla y otro formal para el PDF, y eso obligaba
+// a llenar dos campos por capítulo). Por eso la migración carga el nombre
+// FORMAL (el que salía en el PDF): así ningún PDF ya emitido cambia.
+//
+// La numeración (1, 2, 3…) NO se guarda: se deriva de la posición entre los
+// capítulos que tienen partidas, saltando los vacíos, igual que antes. Por eso
+// no hay `chapterNumber` como en muebles.
+model ObraChapter {
+  id              String  @id @default(cuid())
+  budgetVersionId String
+  name            String  // "TERMINACIONES", "INSTALACIONES SANITARIAS Y GASFITERIA", o lo que MJ escriba
+  sortOrder       Int     @default(0)
+
+  budgetVersion   BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)
+  items           ObraItem[]
+
+  @@index([budgetVersionId])
+}
+
 // Partidas de obra
 model ObraItem {
   id                String  @id @default(cuid())
   budgetVersionId   String
   lineageId         String  @default(cuid()) // Identidad estable de la partida a través de versiones del presupuesto. Se preserva al duplicar la versión.
+  // Capítulo al que pertenece la partida. La app SIEMPRE lo pobla; es opcional
+  // en el schema solo para que la migración pueda agregar la columna sin
+  // romper las filas que ya existían (se rellenan en el mismo paso).
+  // SetNull y NO Cascade: si un capítulo se borrara con partidas adentro, un
+  // Cascade se llevaría puestas partidas presupuestadas — plata. Con SetNull
+  // las partidas sobreviven y quedan sin capítulo, y la app las muestra en un
+  // capítulo de rescate al final (ver lib/presupuesto/chapters.ts) para que MJ
+  // las reubique. Igual la app no deja borrar un capítulo que tenga partidas;
+  // esto es la red por debajo.
+  chapterId         String?
+  chapterRel        ObraChapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  // LEGACY — la clave de texto del capítulo ("sanitarias", "terminaciones").
+  // Reemplazada por chapterId. Se deja escrita y sin tocar como red de
+  // seguridad para poder reconstruir la asignación vieja si algo saliera mal
+  // (lección del incidente #178: no soltar columnas antes de verificar en
+  // prod). Ya NO se lee en ningún lado. Se borra en un PR posterior.
   chapter           String  // demoliciones, reparaciones, electricas, sanitarias, terminaciones, limpieza
   // Sub-chapter opcional dentro del chapter (ej: "COCINA", "BAÑO PRINCIPAL"
   // dentro de "INSTALACIONES SANITARIAS"). Solo se usa como separador visual
@@ -293,6 +351,7 @@ model ObraItem {
   discardedCatalogComponents ObraItemDiscardedCatalogComponent[]
 
   @@index([budgetVersionId])
+  @@index([chapterId])
   @@index([catalogPartidaId])
   @@index([lineageId])
   @@index([maestroId])

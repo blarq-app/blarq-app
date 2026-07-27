@@ -26,7 +26,11 @@ export type ChangeRecord = {
 export type EpItemForDiff = {
   id: string;
   lineageId: string;
-  chapter: string;
+  // Nombre del capítulo. En el EP viene de su propia foto (chapterName); en el
+  // presupuesto, del nombre del ObraChapter al que apunta la partida. Antes
+  // era la clave de un enum fijo; ahora los capítulos tienen nombre libre, así
+  // que se comparan y se muestran por nombre.
+  chapterName: string | null;
   itemNumber: string;
   name: string;
   descriptionMaestro: string | null;
@@ -38,7 +42,7 @@ export type EpItemForDiff = {
 export type BudgetItemForDiff = {
   id: string;
   lineageId: string;
-  chapter: string;
+  chapterName: string;
   itemNumber: string;
   name: string;
   descriptionMaestro: string | null;
@@ -48,6 +52,8 @@ export type BudgetItemForDiff = {
   sortOrder: number;
 };
 
+// En los tipos de SALIDA, `chapter` es el NOMBRE del capítulo — es lo que
+// muestra el modal del sync.
 export type AddedItem = {
   lineageId: string;
   chapter: string;
@@ -109,7 +115,7 @@ export function computeSyncDiff(
     const base = {
       id: s.id,
       lineageId: s.lineageId,
-      chapter: s.chapter,
+      chapter: s.chapterName ?? "",
       itemNumber: s.itemNumber,
       name: s.name,
     };
@@ -131,7 +137,7 @@ export function computeSyncDiff(
     if (!existing) {
       added.push({
         lineageId: b.lineageId,
-        chapter: b.chapter,
+        chapter: b.chapterName,
         itemNumber: b.itemNumber,
         name: b.name,
         descriptionMaestro: b.descriptionMaestro,
@@ -144,8 +150,12 @@ export function computeSyncDiff(
     }
 
     const changes: ChangeRecord[] = [];
-    if (existing.chapter !== b.chapter)
-      changes.push({ field: "chapter", oldValue: existing.chapter, newValue: b.chapter });
+    if ((existing.chapterName ?? "") !== b.chapterName)
+      changes.push({
+        field: "chapter",
+        oldValue: existing.chapterName,
+        newValue: b.chapterName,
+      });
     if (existing.itemNumber !== b.itemNumber)
       changes.push({ field: "itemNumber", oldValue: existing.itemNumber, newValue: b.itemNumber });
     if (existing.name !== b.name)
@@ -173,7 +183,7 @@ export function computeSyncDiff(
       updated.push({
         id: existing.id,
         lineageId: existing.lineageId,
-        chapter: existing.chapter,
+        chapter: existing.chapterName ?? "",
         itemNumber: existing.itemNumber,
         name: existing.name,
         changes,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { formatCLP, OBRA_CHAPTERS, ObraChapter } from "@/lib/utils";
+import { formatCLP } from "@/lib/utils";
 import { Button, Modal, ModalHeader, ModalBody, ModalFooter } from "@/components/ui";
 
 type DiffField =
@@ -623,7 +623,10 @@ function ChangeLine({
   );
 }
 
+// El diff del sync muestra el NOMBRE del capítulo tal cual viaja en la
+// respuesta (el del EP para lo que ya estaba, el del presupuesto para lo que
+// entra). Antes traducía una clave de enum a su etiqueta; ahora el nombre ya
+// es el nombre.
 function chapterLabel(chapter: string): string {
-  const c = OBRA_CHAPTERS[chapter as ObraChapter];
-  return c ? `${c.index} ${c.label}` : chapter;
+  return chapter || "SIN CAPITULO";
 }

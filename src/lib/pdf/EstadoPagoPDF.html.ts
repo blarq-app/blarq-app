@@ -7,14 +7,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import { sanitizeRichTextHtml } from "@/lib/richText";
-import { OBRA_CHAPTERS } from "@/lib/utils";
+import { groupEpItemsByChapter } from "@/lib/presupuesto/chapters";
 import { annotateZones } from "@/lib/presupuesto/zones";
 
 const PROFESSIONAL = "JOSÉ TOMÁS LARRAÍN";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 export interface EPItemInput {
-  chapter: string;
+  // Foto del capítulo que guarda la partida del EP. Ver groupEpItemsByChapter.
+  chapterName: string | null;
+  chapterOrder: number;
   subChapter?: string | null;
   // Orden manual (el que arma MJ arrastrando en el editor de la cotización).
   // El EP respeta ESTE orden para que salga igual que la pantalla.
@@ -324,25 +326,18 @@ const CSS = `
 export function renderEPHtml(data: EPHTMLInput): string {
   const { project, ep, items, previousEps, totalLaborBudget, totalAmountThisEp } = data;
 
-  // Capítulos en el MISMO orden y numeración que el editor (OBRA_CHAPTERS con
-  // reflow saltando vacíos) y con el nombre formal (pdfLabel). Las partidas en
-  // orden de sortOrder (el orden manual de MJ), NO alfabético — para que el EP
-  // salga igual que la cotización en pantalla.
-  const chapterEntries = (
-    Object.entries(OBRA_CHAPTERS) as [
-      string,
-      { label: string; pdfLabel: string; index: number }
-    ][]
-  )
-    .map(([key, ch]) => ({
-      key,
-      label: ch.pdfLabel,
-      items: items
-        .filter((i) => i.chapter === key)
-        .sort((a, b) => a.sortOrder - b.sortOrder),
-    }))
-    .filter((c) => c.items.length > 0)
-    .map((c, i) => ({ ...c, index: i + 1 }));
+  // Capítulos en el MISMO orden y numeración que el editor (helper compartido,
+  // con reflow saltando vacíos). El EP agrupa por la FOTO del capítulo que
+  // guarda cada partida (chapterName + chapterOrder), no por el presupuesto
+  // vivo: una partida fuera de alcance puede apuntar a un capítulo que ya no
+  // existe. Las partidas en orden de sortOrder (el orden manual de MJ), NO
+  // alfabético — para que el EP salga igual que la cotización en pantalla.
+  const chapterEntries = groupEpItemsByChapter(items).map((g) => ({
+    key: g.chapter.id,
+    label: g.chapter.name,
+    items: g.items,
+    index: g.index ?? 0,
+  }));
 
   const totalAccumulatedPrior = previousEps.reduce((s, p) => s + p.totalPaid, 0);
 

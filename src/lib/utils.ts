@@ -86,42 +86,16 @@ export function compareCatalogCategories(a: string, b: string): number {
   return ia - ib;
 }
 
-// Capítulos de obra ordenados por flujo cronológico real de obra.
-// Algunos proyectos no usan todos los capítulos (ej: una remodelación
-// liviana sin obra gruesa) — eso está bien, no es obligatorio que el
-// presupuesto tenga partidas en todos.
+// Los capítulos de obra ya NO viven acá. Eran 8 claves fijas (OBRA_CHAPTERS,
+// hasta 2026-07-27) con nombre y orden hardcodeados: MJ no podía renombrarlos
+// ni reordenarlos, y una partida cuya clave no calzaba con ninguna de las 8
+// desaparecía del editor y del PDF sin dejar rastro.
 //
-// `label`    → nombre corto que muestra el EDITOR en pantalla ("Eléctricas").
-// `pdfLabel` → nombre formal, en mayúsculas, que va al PDF del cliente
-//              ("INSTALACIONES ELECTRICAS"). Antes el PDF tenía su PROPIA lista
-//              de capítulos (con otro orden, otros números y sin "Obra gruesa"
-//              ni "Adicionales"), por eso el PDF y el editor mostraban capítulos
-//              distintos. Ahora ambos salen de acá: mismo orden, misma
-//              numeración (reflow saltando los vacíos), y el PDF usa pdfLabel.
-export const OBRA_CHAPTERS = {
-  demoliciones: { label: "Demoliciones", pdfLabel: "DEMOLICIONES", index: 1 },
-  obra_gruesa: { label: "Obra gruesa", pdfLabel: "OBRA GRUESA", index: 2 },
-  reparaciones: { label: "Reparaciones", pdfLabel: "REPARACIONES", index: 3 },
-  sanitarias: {
-    label: "Sanitarias",
-    pdfLabel: "INSTALACIONES SANITARIAS Y GASFITERIA",
-    index: 4,
-  },
-  electricas: {
-    label: "Eléctricas",
-    pdfLabel: "INSTALACIONES ELECTRICAS",
-    index: 5,
-  },
-  terminaciones: {
-    label: "Terminaciones",
-    pdfLabel: "TERMINACIONES",
-    index: 6,
-  },
-  limpieza: { label: "Limpieza", pdfLabel: "LIMPIEZA Y ASEO", index: 7 },
-  adicionales: { label: "Adicionales", pdfLabel: "ADICIONALES", index: 8 },
-} as const;
-
-export type ObraChapter = keyof typeof OBRA_CHAPTERS;
+// Ahora un capítulo es una fila propia de cada versión de presupuesto (modelo
+// ObraChapter), con nombre libre y posición arrastrable — igual que los
+// capítulos de muebles. La regla de agrupar y numerar vive en
+// lib/presupuesto/chapters.ts, y los 8 nombres de siempre sobreviven ahí como
+// SUGERENCIAS del botón "+ Capítulo" (CAPITULOS_SUGERIDOS).
 
 export const BUDGET_STATUSES = {
   borrador: { label: "Borrador", color: "bg-gray-100 text-gray-800" },

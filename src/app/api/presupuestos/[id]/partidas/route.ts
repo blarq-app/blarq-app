@@ -14,15 +14,26 @@ export async function POST(
     const { id: budgetVersionId } = await params;
     const data = await request.json();
 
-    // Calcular número de item automáticamente
-    const existingItems = await prisma.obraItem.findMany({
-      where: { budgetVersionId, chapter: data.chapter },
-      orderBy: { sortOrder: "desc" },
+    // El capítulo destino tiene que ser uno de ESTA versión.
+    const chapterId = String(data.chapterId ?? "");
+    const chapter = await prisma.obraChapter.findFirst({
+      where: { id: chapterId, budgetVersionId },
+      select: { id: true, sortOrder: true },
     });
+    if (!chapter) {
+      return NextResponse.json(
+        { error: "Capítulo no encontrado en este presupuesto" },
+        { status: 400 }
+      );
+    }
 
-    const chapterIndex = getChapterIndex(data.chapter);
-    const itemIndex = existingItems.length + 1;
-    const itemNumber = `${chapterIndex}.${itemIndex}`;
+    // itemNumber es legacy — lo que se muestra en pantalla y en el PDF es un
+    // correlativo recalculado al vuelo (lib/presupuesto/chapters.ts). Lo
+    // seguimos escribiendo con algo coherente para no dejar el campo vacío.
+    const existingItems = await prisma.obraItem.count({
+      where: { budgetVersionId, chapterId: chapter.id },
+    });
+    const itemNumber = `${chapter.sortOrder + 1}.${existingItems + 1}`;
 
     // Calcular el siguiente sortOrder global
     const allItems = await prisma.obraItem.findMany({
@@ -41,7 +52,10 @@ export async function POST(
     const item = await prisma.obraItem.create({
       data: {
         budgetVersionId,
-        chapter: data.chapter,
+        chapterId: chapter.id,
+        // Legacy: la columna vieja de texto. Se sigue escribiendo (vacía para
+        // las partidas nuevas) hasta que se borre en un PR posterior.
+        chapter: "",
         subChapter: data.subChapter || null,
         itemNumber,
         name: data.name,
@@ -170,16 +184,4 @@ export async function PUT(
       { status: 500 }
     );
   }
-}
-
-function getChapterIndex(chapter: string): number {
-  const chapters: Record<string, number> = {
-    demoliciones: 1,
-    reparaciones: 2,
-    electricas: 3,
-    sanitarias: 4,
-    terminaciones: 5,
-    limpieza: 6,
-  };
-  return chapters[chapter] || 99;
 }

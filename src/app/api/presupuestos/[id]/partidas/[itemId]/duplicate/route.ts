@@ -46,7 +46,8 @@ export async function POST(
         budgetVersionId,
         // lineageId nuevo (default cuid): la copia es una línea separada.
         // Ver nota arriba — compartirlo rompe la creación de Estado de Pago.
-        chapter: source.chapter,
+        chapterId: source.chapterId,
+        chapter: source.chapter, // legacy, ver nota en schema.prisma
         subChapter: source.subChapter,
         itemNumber: source.itemNumber,
         name: source.name,

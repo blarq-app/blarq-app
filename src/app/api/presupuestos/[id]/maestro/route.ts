@@ -44,6 +44,7 @@ export async function GET(
       where: { id },
       include: {
         project: { include: { maestro: true } },
+        obraChapters: { orderBy: { sortOrder: "asc" } },
         obraItems: {
           where: maestroId ? { maestroId } : undefined,
           orderBy: { sortOrder: "asc" },
@@ -104,8 +105,9 @@ export async function GET(
       : budget.project.maestro
         ? { name: budget.project.maestro.name }
         : null;
+    const chaptersInput = budget.obraChapters;
     const itemsInput = visibleObraItems.map((it) => ({
-      chapter: it.chapter,
+      chapterId: it.chapterId,
       subChapter: it.subChapter,
       sortOrder: it.sortOrder,
       name: it.name,
@@ -120,6 +122,7 @@ export async function GET(
         project: projectInput,
         budget: budgetInput,
         maestro: maestroInput,
+        chapters: chaptersInput,
         items: itemsInput,
       });
       const filename = `BLARQ_Cotizacion_Maestro_${baseName}_${budget.version}.xlsx`;
@@ -139,6 +142,7 @@ export async function GET(
       project: projectInput,
       budget: budgetInput,
       maestro: maestroInput,
+      chapters: chaptersInput,
       items: itemsInput,
     });
     const footer = buildObraMaestroFooter(budget.version, budget.date);

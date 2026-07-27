@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   toYearMonth,
   shiftYearMonth,
   defaultSalaryPeriod,
 } from "@/lib/banco/salaryPeriod";
+import { useSenalGuardado, claseSenal, SenalGuardado } from "./senalGuardado";
 
 // Selector "a qué mes corresponde" para un sueldo/previred. El pago cae en el
 // banco cuando MJ transfiere, pero en el Estado de Resultados debe imputarse al
@@ -31,9 +31,9 @@ export default function SalaryPeriodSelect({
   date: string; // ISO
   salaryPeriod: string | null;
 }) {
-  const router = useRouter();
   const [value, setValue] = useState(salaryPeriod ?? "");
-  const [busy, setBusy] = useState(false);
+  const { busy, confirmado, setSaving, refrescarYConfirmar } =
+    useSenalGuardado();
 
   useEffect(() => {
     setValue(salaryPeriod ?? "");
@@ -49,7 +49,7 @@ export default function SalaryPeriodSelect({
     if (busy) return;
     const prev = value;
     setValue(next);
-    setBusy(true);
+    setSaving(true);
     try {
       const res = await fetch(`/api/banco/movimientos/${movimientoId}`, {
         method: "PATCH",
@@ -62,31 +62,37 @@ export default function SalaryPeriodSelect({
         setValue(prev);
         return;
       }
-      router.refresh();
+      refrescarYConfirmar();
     } catch {
       alert("Error de red");
       setValue(prev);
     } finally {
-      setBusy(false);
+      setSaving(false);
     }
   }
 
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={busy}
-      title="A qué mes corresponde este pago (para el Estado de Resultados)"
-      className={`text-force-10 border rounded px-1 py-0.5 outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 ${
-        value ? "border-gray-300 text-gray-700" : "border-gray-200 text-gray-400"
-      }`}
-    >
-      <option value="">Auto ({label(def)})</option>
-      {opciones.map((ym) => (
-        <option key={ym} value={ym}>
-          {label(ym)}
-        </option>
-      ))}
-    </select>
+    <span className="inline-flex items-center gap-1">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={busy}
+        title="A qué mes corresponde este pago (para el Estado de Resultados)"
+        className={`text-force-10 border rounded px-1 py-0.5 outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 ${claseSenal(
+          confirmado,
+          value
+            ? "border-gray-300 text-gray-700"
+            : "border-gray-200 text-gray-400"
+        )}`}
+      >
+        <option value="">Auto ({label(def)})</option>
+        {opciones.map((ym) => (
+          <option key={ym} value={ym}>
+            {label(ym)}
+          </option>
+        ))}
+      </select>
+      <SenalGuardado busy={busy} confirmado={confirmado} />
+    </span>
   );
 }

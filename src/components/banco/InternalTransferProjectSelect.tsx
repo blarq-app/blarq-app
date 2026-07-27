@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useSenalGuardado, claseSenal, SenalGuardado } from "./senalGuardado";
 
 // Desplegable de obra para una transferencia interna (Operativa→Sueldos).
 // MJ concilia cada transferencia a su proyecto, igual que concilia facturas.
@@ -17,9 +17,9 @@ export default function InternalTransferProjectSelect({
   projectId: string | null;
   projects: { id: string; name: string; numeroProyecto: number | null }[];
 }) {
-  const router = useRouter();
   const [value, setValue] = useState(projectId ?? "");
-  const [busy, setBusy] = useState(false);
+  const { busy, confirmado, setSaving, refrescarYConfirmar } =
+    useSenalGuardado();
 
   // Resincronizar con el prop cuando cambia desde el server. Necesario porque
   // una transferencia son DOS filas linkeadas: al asignar obra en una, el
@@ -34,7 +34,7 @@ export default function InternalTransferProjectSelect({
     if (busy) return;
     const prev = value;
     setValue(next);
-    setBusy(true);
+    setSaving(true);
     try {
       const res = await fetch(`/api/banco/movimientos/${movimientoId}`, {
         method: "PATCH",
@@ -47,32 +47,38 @@ export default function InternalTransferProjectSelect({
         setValue(prev); // revertir si falló
         return;
       }
-      router.refresh();
+      refrescarYConfirmar();
     } catch {
       alert("Error de red al asignar la obra");
       setValue(prev);
     } finally {
-      setBusy(false);
+      setSaving(false);
     }
   }
 
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={busy}
-      title="Conciliar esta transferencia interna a una obra"
-      className={`w-full max-w-[180px] text-xs border rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 ${
-        value ? "border-gray-300 text-gray-700" : "border-gray-200 text-gray-400"
-      }`}
-    >
-      <option value="">— sin obra</option>
-      {projects.map((p) => (
-        <option key={p.id} value={p.id}>
-          {p.numeroProyecto ? `${p.numeroProyecto} · ` : ""}
-          {p.name}
-        </option>
-      ))}
-    </select>
+    <span className="relative flex items-center">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={busy}
+        title="Conciliar esta transferencia interna a una obra"
+        className={`w-full max-w-[180px] text-xs border rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 ${claseSenal(
+          confirmado,
+          value
+            ? "border-gray-300 text-gray-700"
+            : "border-gray-200 text-gray-400"
+        )}`}
+      >
+        <option value="">— sin obra</option>
+        {projects.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.numeroProyecto ? `${p.numeroProyecto} · ` : ""}
+            {p.name}
+          </option>
+        ))}
+      </select>
+      <SenalGuardado busy={busy} confirmado={confirmado} flotante />
+    </span>
   );
 }

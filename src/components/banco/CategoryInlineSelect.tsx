@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useSenalGuardado, claseSenal, SenalGuardado } from "./senalGuardado";
 
 // Edición inline de la categoría de un movimiento SIN FACTURA (ej. corregir
 // uno que quedó como "Sueldo" y es "Préstamo socio"). Antes, una vez marcado
@@ -21,12 +21,7 @@ import { useRouter } from "next/navigation";
 // F22. Como mueve plata, pide confirmación. La obra/categoría del gasto se
 // asignan después en Gastos (viven en el documento, no en el movimiento).
 
-// Señal de guardado: re-categorizar mueve plata de sección en el Estado de
-// Resultados, y hasta ahora el único feedback era el parpadeo del refresh — no
-// se distinguía "quedó guardado" de "no pasó nada". Ahora el select muestra
-// "guardando…" mientras dura el PATCH + el refresh del servidor, y "✓ guardado"
-// recién cuando la pantalla ya está actualizada (por eso el refresh va dentro
-// de una transición: así sabemos cuándo terminó de verdad).
+// Señal de guardado ("guardando…" / "✓ guardado"): ver `senalGuardado.tsx`.
 
 // Valores centinela para las opciones que registran gasto (no son categorías).
 const REG_BOLETA = "__reg_boleta";
@@ -43,34 +38,13 @@ export default function CategoryInlineSelect({
   options: { value: string; label: string }[];
   enableGastoEmpresa?: boolean;
 }) {
-  const router = useRouter();
   const [value, setValue] = useState(category ?? "");
-  const [saving, setSaving] = useState(false);
-  const [pending, startTransition] = useTransition();
-  const [confirmado, setConfirmado] = useState(false);
-  // Marca que hay un refresh en curso esperando confirmación visual.
-  const esperandoRefresh = useRef(false);
-  const busy = saving || pending;
+  const { busy, confirmado, setSaving, refrescarYConfirmar } =
+    useSenalGuardado();
 
   useEffect(() => {
     setValue(category ?? "");
   }, [category]);
-
-  // El "✓ guardado" aparece cuando el refresh del servidor terminó, no apenas
-  // responde el PATCH: si se mostrara antes, MJ vería el visto y después la
-  // pantalla parpadearía, que es justo la confusión que esto viene a resolver.
-  useEffect(() => {
-    if (pending || !esperandoRefresh.current) return;
-    esperandoRefresh.current = false;
-    setConfirmado(true);
-    const t = setTimeout(() => setConfirmado(false), 2500);
-    return () => clearTimeout(t);
-  }, [pending]);
-
-  function refrescarYConfirmar() {
-    esperandoRefresh.current = true;
-    startTransition(() => router.refresh());
-  }
 
   // Registrar el movimiento como gasto de empresa (boleta / internacional).
   // Crea el documento sin obra/categoría (se catalogan en Gastos) y concilia.
@@ -150,11 +124,10 @@ export default function CategoryInlineSelect({
         onChange={(e) => onChange(e.target.value)}
         disabled={busy}
         title="Cambiar la categoría, o registrarlo como gasto de empresa (boleta / internacional)"
-        className={`max-w-[150px] text-force-10 uppercase tracking-wide border rounded px-1 py-0.5 bg-white outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 cursor-pointer ${
-          confirmado
-            ? "border-green-600 text-green-800"
-            : "border-gray-300 text-gray-700"
-        }`}
+        className={`max-w-[150px] text-force-10 uppercase tracking-wide border rounded px-1 py-0.5 bg-white outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 cursor-pointer ${claseSenal(
+          confirmado,
+          "border-gray-300 text-gray-700"
+        )}`}
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>
@@ -168,16 +141,7 @@ export default function CategoryInlineSelect({
           </optgroup>
         )}
       </select>
-      {(busy || confirmado) && (
-        <span
-          aria-live="polite"
-          className={`text-force-10 whitespace-nowrap ${
-            confirmado ? "text-green-700" : "text-gray-500"
-          }`}
-        >
-          {confirmado ? "✓ guardado" : "guardando…"}
-        </span>
-      )}
+      <SenalGuardado busy={busy} confirmado={confirmado} />
     </span>
   );
 }

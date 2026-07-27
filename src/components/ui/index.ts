@@ -9,4 +9,3 @@ export { Badge } from "./Badge";
 export { Card } from "./Card";
 export { Modal, ModalHeader, ModalBody, ModalFooter } from "./Modal";
 export { default as MoneyInput } from "./MoneyInput";
-export { NotaGastadoVsCaja } from "./NotaGastadoVsCaja";

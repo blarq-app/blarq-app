@@ -7,7 +7,6 @@ import type {
   MonthBucket,
 } from "@/lib/dashboard/estadoResultado";
 import type { EstadoResultadoCaja } from "@/lib/dashboard/estadoResultadoCaja";
-import { NotaGastadoVsCaja } from "@/components/ui/NotaGastadoVsCaja";
 
 const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const MESES_LARGO = [
@@ -57,10 +56,14 @@ export default function EstadoResultadoChart({
           <h2 className="text-base font-semibold text-gray-900">
             Estado de Resultado Anual
           </h2>
+          {/* Las dos vistas miden distinto y por eso nunca calzan. El IVA ya
+              se decía; lo que faltaba decir es que Facturación cuenta las
+              facturas ESTÉN PAGADAS O NO, y Caja solo lo que se pagó. Va acá,
+              en el subtítulo que ya existía, en vez de sumar un cartel. */}
           <p className="text-xs text-gray-500 mt-0.5">
             {vista === "facturacion"
-              ? "Solo facturas — lo que declarás al SII (F29) · montos con IVA"
-              : "Plata real del banco — flujo de caja del estudio"}
+              ? "Solo facturas, estén pagadas o no — lo que declarás al SII (F29) · montos con IVA"
+              : "Plata real del banco — solo lo que se pagó · montos con IVA"}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -99,14 +102,6 @@ export default function EstadoResultadoChart({
             ))}
           </select>
         </div>
-      </div>
-
-      {/* Las dos vistas del toggle miden con reglas distintas (facturas en neto
-          estén pagadas o no vs. plata real del banco c/IVA). Como se alternan
-          en el mismo lugar, los totales no calzan y confunde — la nota lo
-          explica sin tocar ningún cálculo. */}
-      <div className="px-5 pt-3">
-        <NotaGastadoVsCaja contexto="eerr" />
       </div>
 
       <div className={loading ? "opacity-40 transition-opacity" : "transition-opacity"}>

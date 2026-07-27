@@ -325,7 +325,9 @@ export default function ConciliarPendientesButton({
                     ? "Conciliando…"
                     : tildadasCount === 0
                       ? "Conciliar"
-                      : `Conciliar las ${tildadasCount} tildadas`}
+                      : tildadasCount === 1
+                        ? "Conciliar la tildada"
+                        : `Conciliar las ${tildadasCount} tildadas`}
                 </button>
               </div>
             </div>

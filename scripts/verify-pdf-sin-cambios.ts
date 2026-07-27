@@ -18,6 +18,12 @@
  * tocarla y ver de antemano si algún PDF de MJ cambiaría.
  *
  * Solo lectura en los dos modos.
+ *
+ * OJO al leer un "DISTINTO" donde el ANTES sale vacío: eso NO es una
+ * regresión. Las partidas creadas con el código NUEVO ya no escriben la clave
+ * vieja (`chapter` queda en ""), así que para ellas no hay un "antes" con qué
+ * comparar. Este script sirve para auditar la MIGRACIÓN de lo que ya existía;
+ * su respuesta útil es sobre las partidas que venían de antes.
  */
 import { PrismaClient } from "@prisma/client";
 import { readFileSync } from "fs";

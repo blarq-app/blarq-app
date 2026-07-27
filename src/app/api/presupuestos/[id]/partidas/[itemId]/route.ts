@@ -127,9 +127,13 @@ export async function PUT(
   }
 }
 
-// PATCH parcial: hoy solo el flag `noCobrado` (BLARQ absorbe el costo, no se
-// le cobra al cliente). Es un toggle liviano — no queremos mandar toda la
-// partida (como hace el PUT) solo para marcar/desmarcar esto.
+// PATCH parcial: flags sueltos de la partida — `noCobrado` (BLARQ absorbe el
+// costo, no se le cobra al cliente) y `revisado` (marca interna de "esto ya lo
+// miramos", solo para MJ y JT). Son toggles livianos — no queremos mandar toda
+// la partida (como hace el PUT) solo para marcar/desmarcar esto.
+//
+// A propósito NO seteamos `isCustomized` acá: ninguno de los dos flags cambia
+// precios ni cantidades, así que no deben bloquear el refresco desde catálogo.
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> }
@@ -140,15 +144,23 @@ export async function PATCH(
   try {
     const { itemId } = await params;
     const data = await request.json();
-    if (typeof data.noCobrado !== "boolean") {
+
+    // Solo escribimos los flags que vinieron en el payload. Así el toggle de
+    // "revisado" no pisa `noCobrado` (ni al revés) por mandar undefined.
+    const update: { noCobrado?: boolean; revisado?: boolean } = {};
+    if (typeof data.noCobrado === "boolean") update.noCobrado = data.noCobrado;
+    if (typeof data.revisado === "boolean") update.revisado = data.revisado;
+
+    if (Object.keys(update).length === 0) {
       return NextResponse.json(
-        { error: "noCobrado debe ser booleano" },
+        { error: "Se espera noCobrado y/o revisado como booleano" },
         { status: 400 }
       );
     }
+
     const item = await prisma.obraItem.update({
       where: { id: itemId },
-      data: { noCobrado: data.noCobrado },
+      data: update,
     });
     return NextResponse.json(item);
   } catch (error) {

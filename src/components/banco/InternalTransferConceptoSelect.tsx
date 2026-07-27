@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useSenalGuardado, claseSenal, SenalGuardado } from "./senalGuardado";
 
 // Desplegable obra/muebles para una transferencia interna (traspaso de utilidad
 // a Sueldos). MJ marca de qué utilidad es el traspaso, para que en "Me paso a
@@ -14,9 +14,9 @@ export default function InternalTransferConceptoSelect({
   movimientoId: string;
   concepto: string | null;
 }) {
-  const router = useRouter();
   const [value, setValue] = useState(concepto ?? "");
-  const [busy, setBusy] = useState(false);
+  const { busy, confirmado, setSaving, refrescarYConfirmar } =
+    useSenalGuardado();
 
   useEffect(() => {
     setValue(concepto ?? "");
@@ -26,7 +26,7 @@ export default function InternalTransferConceptoSelect({
     if (busy) return;
     const prev = value;
     setValue(next);
-    setBusy(true);
+    setSaving(true);
     try {
       const res = await fetch(`/api/banco/movimientos/${movimientoId}`, {
         method: "PATCH",
@@ -39,28 +39,34 @@ export default function InternalTransferConceptoSelect({
         setValue(prev);
         return;
       }
-      router.refresh();
+      refrescarYConfirmar();
     } catch {
       alert("Error de red");
       setValue(prev);
     } finally {
-      setBusy(false);
+      setSaving(false);
     }
   }
 
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={busy}
-      title="De qué utilidad es este traspaso (para Me paso a Sueldos)"
-      className={`w-full max-w-[120px] text-xs border rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 ${
-        value ? "border-gray-300 text-gray-700" : "border-gray-200 text-gray-400"
-      }`}
-    >
-      <option value="">— concepto</option>
-      <option value="obra">Obra</option>
-      <option value="muebles">Muebles</option>
-    </select>
+    <span className="relative flex items-center">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={busy}
+        title="De qué utilidad es este traspaso (para Me paso a Sueldos)"
+        className={`w-full max-w-[120px] text-xs border rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 ${claseSenal(
+          confirmado,
+          value
+            ? "border-gray-300 text-gray-700"
+            : "border-gray-200 text-gray-400"
+        )}`}
+      >
+        <option value="">— concepto</option>
+        <option value="obra">Obra</option>
+        <option value="muebles">Muebles</option>
+      </select>
+      <SenalGuardado busy={busy} confirmado={confirmado} flotante />
+    </span>
   );
 }

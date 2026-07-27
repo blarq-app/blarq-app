@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useSenalGuardado, claseSenal, SenalGuardado } from "./senalGuardado";
 
 // Edición inline de la categoría de un movimiento SIN FACTURA (ej. corregir
 // uno que quedó como "Sueldo" y es "Préstamo socio"). Antes, una vez marcado
@@ -21,6 +21,8 @@ import { useRouter } from "next/navigation";
 // F22. Como mueve plata, pide confirmación. La obra/categoría del gasto se
 // asignan después en Gastos (viven en el documento, no en el movimiento).
 
+// Señal de guardado ("guardando…" / "✓ guardado"): ver `senalGuardado.tsx`.
+
 // Valores centinela para las opciones que registran gasto (no son categorías).
 const REG_BOLETA = "__reg_boleta";
 const REG_INTERNACIONAL = "__reg_internacional";
@@ -36,9 +38,9 @@ export default function CategoryInlineSelect({
   options: { value: string; label: string }[];
   enableGastoEmpresa?: boolean;
 }) {
-  const router = useRouter();
   const [value, setValue] = useState(category ?? "");
-  const [busy, setBusy] = useState(false);
+  const { busy, confirmado, setSaving, refrescarYConfirmar } =
+    useSenalGuardado();
 
   useEffect(() => {
     setValue(category ?? "");
@@ -59,7 +61,7 @@ export default function CategoryInlineSelect({
       setValue(category ?? "");
       return;
     }
-    setBusy(true);
+    setSaving(true);
     try {
       const res = await fetch(`/api/banco/movimientos/bulk`, {
         method: "POST",
@@ -76,12 +78,12 @@ export default function CategoryInlineSelect({
         setValue(category ?? "");
         return;
       }
-      router.refresh();
+      refrescarYConfirmar();
     } catch {
       alert("Error de red");
       setValue(category ?? "");
     } finally {
-      setBusy(false);
+      setSaving(false);
     }
   }
 
@@ -93,7 +95,7 @@ export default function CategoryInlineSelect({
 
     const prev = value;
     setValue(next);
-    setBusy(true);
+    setSaving(true);
     try {
       const res = await fetch(`/api/banco/movimientos/${movimientoId}`, {
         method: "PATCH",
@@ -106,34 +108,40 @@ export default function CategoryInlineSelect({
         setValue(prev);
         return;
       }
-      router.refresh();
+      refrescarYConfirmar();
     } catch {
       alert("Error de red");
       setValue(prev);
     } finally {
-      setBusy(false);
+      setSaving(false);
     }
   }
 
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={busy}
-      title="Cambiar la categoría, o registrarlo como gasto de empresa (boleta / internacional)"
-      className="max-w-[150px] text-force-10 uppercase tracking-wide border border-gray-300 rounded px-1 py-0.5 text-gray-700 bg-white outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 cursor-pointer"
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-      {enableGastoEmpresa && (
-        <optgroup label="Registrar con boleta o comprobante">
-          <option value={REG_INTERNACIONAL}>Internacional…</option>
-          <option value={REG_BOLETA}>Boleta…</option>
-        </optgroup>
-      )}
-    </select>
+    <span className="inline-flex items-center gap-1">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={busy}
+        title="Cambiar la categoría, o registrarlo como gasto de empresa (boleta / internacional)"
+        className={`max-w-[150px] text-force-10 uppercase tracking-wide border rounded px-1 py-0.5 bg-white outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900 disabled:opacity-50 cursor-pointer ${claseSenal(
+          confirmado,
+          "border-gray-300 text-gray-700"
+        )}`}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+        {enableGastoEmpresa && (
+          <optgroup label="Registrar con boleta o comprobante">
+            <option value={REG_INTERNACIONAL}>Internacional…</option>
+            <option value={REG_BOLETA}>Boleta…</option>
+          </optgroup>
+        )}
+      </select>
+      <SenalGuardado busy={busy} confirmado={confirmado} />
+    </span>
   );
 }

@@ -640,6 +640,113 @@ export async function loadCandidateInvoices(): Promise<CandidateInvoice[]> {
   });
 }
 
+// Movimiento con lo mínimo que el match necesita. Se usa igual venga de la BD
+// (findUnique) o precargado por el batch.
+type MovForMatch = {
+  id: string;
+  amount: number;
+  status: string;
+  description: string;
+  counterpartyRut: string | null;
+  date: Date;
+  category?: string | null;
+  // Solo para redactar el motivo de la duda ("la plata salió a X"). El match
+  // no lo usa nunca — decide por RUT y por comercio de la glosa.
+  counterpartyName?: string | null;
+  payments: { id: string }[];
+};
+
+// Candidata con el saldo ya calculado.
+type CandidateWithRemaining = CandidateInvoice & { remaining: number };
+
+// Carga y filtra las facturas candidatas de UN movimiento: mismo lado
+// (recibida/emitida) y saldo dentro de ±$10 del monto. Extraído tal cual de
+// tryAutoMatchMovementWithInvoices para que la propuesta de solo lectura mire
+// EXACTAMENTE el mismo universo que el auto-match que escribe — si divergieran,
+// volveríamos al problema que este cambio viene a arreglar (dos opiniones
+// distintas de la misma app).
+async function buildMovementCandidates(
+  mov: MovForMatch,
+  preloaded?: {
+    invoices: CandidateInvoice[];
+    excludeInvoiceIds: Set<string>;
+  }
+): Promise<CandidateWithRemaining[]> {
+  const isCargo = mov.amount < 0;
+  const targetType = isCargo ? "recibida" : "emitida";
+  const absAmount = Math.abs(mov.amount);
+
+  let rawCandidates: CandidateInvoice[];
+  if (preloaded) {
+    rawCandidates = preloaded.invoices.filter(
+      (c) =>
+        c.type === targetType &&
+        !preloaded.excludeInvoiceIds.has(c.id) &&
+        c.totalAmount >= absAmount - 10
+    );
+  } else {
+    rawCandidates = await prisma.invoice.findMany({
+      where: {
+        type: targetType,
+        status: { in: ["pendiente", "parcial"] },
+        tipoDoc: { not: 61 },
+        totalAmount: { gte: absAmount - 10 },
+      },
+      select: {
+        id: true,
+        type: true,
+        rutIssuer: true,
+        rutReceiver: true,
+        businessName: true,
+        issueDate: true,
+        totalAmount: true,
+        tipoDoc: true,
+        payments: { select: { amountApplied: true } },
+      },
+    });
+  }
+
+  return rawCandidates
+    .map((c) => {
+      const paid = c.payments.reduce((s, p) => s + p.amountApplied, 0);
+      return { ...c, remaining: c.totalAmount - paid };
+    })
+    .filter((c) => c.remaining >= absAmount - 10 && c.remaining <= absAmount + 10);
+}
+
+/**
+ * Escribe la conciliación mov ↔ factura. Es el ÚNICO lugar donde el
+ * auto-match toca la plata, y son las mismas tres operaciones de siempre:
+ * crear el pago (marcado autoMatched), pasar el movimiento a conciliado
+ * (borrando el rótulo de pago-a-socio) y recalcular el estado de la factura.
+ *
+ * Se extrajo de tryAutoMatchMovementWithInvoices SIN cambiarle nada para que
+ * el masivo "Conciliar pendientes" —que ahora aplica los pares que MJ tildó,
+ * no los que el motor decidió solo— pase por exactamente el mismo camino.
+ * Duplicar estas tres líneas habría sido duplicar lógica contable.
+ */
+export async function applyAutoMatchPayment(
+  mov: { id: string; amount: number; category?: string | null },
+  invoiceId: string
+): Promise<void> {
+  const absAmount = Math.abs(mov.amount);
+  await prisma.invoicePayment.create({
+    data: {
+      bankMovementId: mov.id,
+      invoiceId,
+      amountApplied: absAmount,
+      autoMatched: true, // creada por el auto-match
+    },
+  });
+  await prisma.bankMovement.update({
+    where: { id: mov.id },
+    // Mismo criterio que el otro auto-match: al conciliar borramos el rótulo
+    // de pago-a-socio (reembolso, no pago a socio). Ver limpiarCategoriaSocio.
+    data: { status: "conciliado", ...limpiarCategoriaSocio(mov.category ?? null) },
+  });
+  await recomputeInvoiceStatus(invoiceId);
+}
+
 export async function tryAutoMatchMovementWithInvoices(
   movId: string,
   // Reembolsadores precargados (opcional). Cuando se procesan muchos
@@ -679,47 +786,10 @@ export async function tryAutoMatchMovementWithInvoices(
   if (mov.payments.length > 0) return { matched: false, reason: "already_has_payments" };
 
   const isCargo = mov.amount < 0;
-  const targetType = isCargo ? "recibida" : "emitida";
-  const absAmount = Math.abs(mov.amount);
 
   // Candidatas: de la lista precargada (batch) o consultando la BD (caso
   // suelto, ej. sync SII de una factura). El resultado es idéntico.
-  let rawCandidates: CandidateInvoice[];
-  if (preloaded) {
-    rawCandidates = preloaded.invoices.filter(
-      (c) =>
-        c.type === targetType &&
-        !preloaded.excludeInvoiceIds.has(c.id) &&
-        c.totalAmount >= absAmount - 10
-    );
-  } else {
-    rawCandidates = await prisma.invoice.findMany({
-      where: {
-        type: targetType,
-        status: { in: ["pendiente", "parcial"] },
-        tipoDoc: { not: 61 },
-        totalAmount: { gte: absAmount - 10 },
-      },
-      select: {
-        id: true,
-        type: true,
-        rutIssuer: true,
-        rutReceiver: true,
-        businessName: true,
-        issueDate: true,
-        totalAmount: true,
-        tipoDoc: true,
-        payments: { select: { amountApplied: true } },
-      },
-    });
-  }
-
-  const candidates = rawCandidates
-    .map((c) => {
-      const paid = c.payments.reduce((s, p) => s + p.amountApplied, 0);
-      return { ...c, remaining: c.totalAmount - paid };
-    })
-    .filter((c) => c.remaining >= absAmount - 10 && c.remaining <= absAmount + 10);
+  const candidates = await buildMovementCandidates(mov, preloaded);
 
   if (candidates.length === 0) return { matched: false, reason: "no_candidates" };
 
@@ -746,21 +816,168 @@ export async function tryAutoMatchMovementWithInvoices(
   if ("reason" in decision) return { matched: false, reason: decision.reason };
   const match = candidates.find((c) => c.id === decision.invoiceId)!;
 
-  await prisma.invoicePayment.create({
-    data: {
-      bankMovementId: mov.id,
-      invoiceId: match.id,
-      amountApplied: absAmount,
-      autoMatched: true, // creada por el auto-match
-    },
-  });
-  await prisma.bankMovement.update({
-    where: { id: mov.id },
-    // Mismo criterio que el otro auto-match: al conciliar borramos el rótulo
-    // de pago-a-socio (reembolso, no pago a socio). Ver limpiarCategoriaSocio.
-    data: { status: "conciliado", ...limpiarCategoriaSocio(mov.category ?? null) },
-  });
-  await recomputeInvoiceStatus(match.id);
+  await applyAutoMatchPayment(mov, match.id);
 
   return { matched: true, invoiceId: match.id };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// PROPUESTA DE CONCILIACIÓN (solo lectura)
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Esto es lo que la app "opina" sobre un movimiento SIN escribir nada. Nació
+// para cerrar una contradicción real: el masivo decidía con RUT+monto y la
+// sugerencia del modal con monto a secas, así que la app podía dejar un
+// movimiento pendiente por desconfiar del RUT y, para ese mismo movimiento,
+// sugerir una factura con un cartel verde que se veía seguro.
+//
+// Ahora hay un solo criterio y tres niveles de confianza:
+//   segura   → el motor la ataría solo (mismo camino que el auto-match).
+//   probable → el monto calza pero la validación fuerte falló; se muestra
+//              rotulada CON el motivo de la duda, para que MJ decida. Nunca
+//              se aplica sola.
+//   ninguna  → no hay ninguna factura con saldo parecido.
+
+export type ConfianzaMatch = "segura" | "probable" | "ninguna";
+
+export type PropuestaMatch = {
+  confianza: ConfianzaMatch;
+  invoiceId: string | null;
+  // Frase en castellano que explica por qué calza (segura) o por qué se duda
+  // (probable) / por qué no hay nada (ninguna). Va tal cual a la pantalla.
+  motivo: string;
+  // Cuántas OTRAS candidatas quedaron con el mismo saldo. Señal para MJ de
+  // que la elegida no es la única posible.
+  hermanas: number;
+  // Razón técnica del motor cuando no ató sola (para diagnóstico/estadísticas).
+  reason: MovInvoiceMatchReason | "no_candidates" | null;
+};
+
+// Traduce la razón técnica del motor a una frase que MJ pueda leer sin saber
+// cómo funciona por dentro. El sujeto siempre es la duda, no el algoritmo.
+function motivoDeLaDuda(
+  reason: MovInvoiceMatchReason,
+  ctx: { contraparte: string | null; empresa: string | null; hermanas: number; diasDeDistancia: number | null }
+): string {
+  const empresa = ctx.empresa ?? "la empresa que emite";
+  const otras =
+    ctx.hermanas > 0
+      ? ` Hay ${ctx.hermanas} factura${ctx.hermanas === 1 ? "" : "s"} más con ese mismo saldo; ésta es la más antigua sin pagar.`
+      : "";
+  switch (reason) {
+    case "no_rut_match":
+      return `El monto calza al peso, pero el RUT no: la plata salió a ${ctx.contraparte ?? "la contraparte del movimiento"} y la factura la emite ${empresa}.${otras}`;
+    case "ambiguous_multi":
+      return `Calza el RUT y el monto, pero hay ${ctx.hermanas + 1} facturas del mismo proveedor con ese saldo — no puedo saber cuál de ellas pagaste. Ésta es la más antigua.`;
+    case "no_rut_to_validate":
+      return `La cartola no trae RUT y el comercio de la glosa no lo tengo reconocido, así que esto calza solo por monto.${otras}`;
+    case "no_merchant_match":
+      return `Es una compra con tarjeta y ninguna factura con ese saldo es del comercio de la glosa. Calza solo por monto.${otras}`;
+    case "merchant_out_of_window":
+      return `Hay una factura del mismo comercio por ese monto, pero está a ${ctx.diasDeDistancia ?? "más de 31"} días del pago — puede ser otra compra parecida.${otras}`;
+    case "ambiguous_merchant":
+      return `Hay ${ctx.hermanas + 1} facturas del mismo comercio con ese saldo dentro de la ventana de fechas. Ésta es la más antigua.`;
+  }
+}
+
+/**
+ * Devuelve la propuesta de conciliación de UN movimiento. NO escribe nada.
+ *
+ * Comparte con el auto-match las dos piezas que importan: el universo de
+ * candidatas (buildMovementCandidates) y la decisión fuerte
+ * (decideMovementInvoiceMatch). Lo único propio es el desempate de las
+ * "probables", que es FIFO — la más antigua sin pagar — igual que el criterio
+ * que ya usaba la sugerencia del modal.
+ */
+export async function proposeMovementInvoiceMatch(
+  mov: MovForMatch,
+  reembolsadores?: ReembolsadorLite[],
+  preloaded?: { invoices: CandidateInvoice[]; excludeInvoiceIds: Set<string> }
+): Promise<PropuestaMatch> {
+  const nada = (motivo: string): PropuestaMatch => ({
+    confianza: "ninguna",
+    invoiceId: null,
+    motivo,
+    hermanas: 0,
+    reason: null,
+  });
+
+  if (mov.status === "interno")
+    return nada("Es una transferencia interna — no va contra ninguna factura.");
+  if (mov.payments.length > 0)
+    return nada("Este movimiento ya tiene facturas imputadas.");
+
+  const isCargo = mov.amount < 0;
+  const absAmount = Math.abs(mov.amount);
+  const candidates = await buildMovementCandidates(mov, preloaded);
+
+  if (candidates.length === 0) {
+    return {
+      ...nada(
+        `Ninguna factura pendiente tiene un saldo parecido a $${Math.round(absAmount).toLocaleString("es-CL")}. Puede que todavía no haya llegado del SII, que sea un pago sin factura, o que vaya partida entre varias.`
+      ),
+      reason: "no_candidates",
+    };
+  }
+
+  const aliasRutDigits = await aliasRutsForMovement(
+    mov.description,
+    mov.counterpartyRut,
+    reembolsadores
+  );
+  const movRutDigits = (mov.counterpartyRut ?? "").replace(/\D/g, "");
+
+  const decision = decideMovementInvoiceMatch({
+    candidates,
+    isCargo,
+    movRutDigits,
+    aliasRutDigits,
+    movDescription: mov.description,
+    movDate: mov.date,
+  });
+
+  // ── Segura: el motor la ataría solo ──────────────────────────────────
+  if (!("reason" in decision)) {
+    const elegida = candidates.find((c) => c.id === decision.invoiceId)!;
+    const porRut = movRutDigits.length > 0 || aliasRutDigits.length > 0;
+    const dias = Math.round(
+      Math.abs(new Date(mov.date).getTime() - new Date(elegida.issueDate).getTime()) / 86400000
+    );
+    return {
+      confianza: "segura",
+      invoiceId: elegida.id,
+      motivo: porRut
+        ? `Calza por RUT del ${isCargo ? "proveedor" : "cliente"} y por monto exacto. Es la única con ese saldo. Emitida ${dias === 0 ? "el mismo día" : `${dias} día${dias === 1 ? "" : "s"} ${new Date(elegida.issueDate) < new Date(mov.date) ? "antes" : "después"}`} del movimiento.`
+        : `Compra con tarjeta: la cartola no trae RUT, pero el comercio de la glosa calza con el de la factura, el monto es exacto y las fechas están a ${dias} día${dias === 1 ? "" : "s"}. Es la única así.`,
+      hermanas: 0,
+      reason: null,
+    };
+  }
+
+  // ── Probable: el monto calza pero la validación fuerte falló ─────────
+  // Desempate FIFO: la más antigua sin pagar. Da lo mismo cuál elijamos
+  // cuando son del mismo proveedor, y cuando no lo son igual la decide MJ.
+  const ordenadas = [...candidates].sort(
+    (a, b) => new Date(a.issueDate).getTime() - new Date(b.issueDate).getTime()
+  );
+  const elegida = ordenadas[0];
+  const hermanas = ordenadas.length - 1;
+  const dias = Math.round(
+    Math.abs(new Date(mov.date).getTime() - new Date(elegida.issueDate).getTime()) / 86400000
+  );
+
+  return {
+    confianza: "probable",
+    invoiceId: elegida.id,
+    motivo: motivoDeLaDuda(decision.reason, {
+      contraparte:
+        mov.counterpartyName ??
+        (mov.counterpartyRut ? `RUT ${mov.counterpartyRut}` : null),
+      empresa: elegida.businessName,
+      hermanas,
+      diasDeDistancia: dias,
+    }),
+    hermanas,
+    reason: decision.reason,
+  };
 }

@@ -224,7 +224,7 @@ export default function MovementResolveMenu({
     if (!single) return;
     if (
       !confirm(
-        '¿Deshacer la devolución neto cero?\n\nLos movimientos del grupo vuelven a "pendiente".'
+        '¿Deshacer la devolución neto cero?\n\nLos movimientos del grupo vuelven a "Sin imputar".'
       )
     )
       return;
@@ -237,7 +237,7 @@ export default function MovementResolveMenu({
       !confirm(
         `¿Marcar estos ${ids.length} movimientos como devolución (neto cero)?\n\n` +
           `Son plata que entró y volvió (se cancelan entre sí). Salen de ` +
-          `"pendiente" y NO cuentan como ingreso ni gasto. Lo podés deshacer ` +
+          `"Sin imputar" y NO cuentan como ingreso ni gasto. Lo podés deshacer ` +
           `después con "deshacer" en cualquiera de los movimientos.`
       )
     )
@@ -251,7 +251,7 @@ export default function MovementResolveMenu({
     if (
       !confirm(
         `¿Quitar las imputaciones de ${conPagos} movimiento${conPagos !== 1 ? "s" : ""}?\n\n` +
-          `Los movimientos vuelven a "Pendiente". Las facturas que pierdan ` +
+          `Los movimientos vuelven a "Sin imputar". Las facturas que pierdan ` +
           `el cobro recalculan su estado. No se borra ningún movimiento — ` +
           `solo se deshace la conciliación.`
       )

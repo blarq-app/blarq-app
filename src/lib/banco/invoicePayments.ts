@@ -7,6 +7,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { CATEGORIAS_PAGO_SOCIO } from "@/lib/banco/socios";
+import { MOV_STATUS } from "@/lib/banco/movementStatus";
 
 /**
  * Suma de las Notas de Crédito aplicadas a una factura para REDUCIR su saldo
@@ -443,7 +444,7 @@ export async function tryAutoMatchInvoiceWithExistingMovs(invoiceId: string): Pr
     // tener las dos identidades (si no, aparece en el filtro "sueldos" del
     // banco aunque tenga factura al lado). Los caminos manuales ya limpiaban
     // la categoría; el auto-match era el que la dejaba pegada.
-    data: { status: "conciliado", ...limpiarCategoriaSocio(mov.category ?? null) },
+    data: { status: MOV_STATUS.CONCILIADO, ...limpiarCategoriaSocio(mov.category ?? null) },
   });
   await recomputeInvoiceStatus(inv.id);
   return 1;
@@ -742,7 +743,7 @@ export async function applyAutoMatchPayment(
     where: { id: mov.id },
     // Mismo criterio que el otro auto-match: al conciliar borramos el rótulo
     // de pago-a-socio (reembolso, no pago a socio). Ver limpiarCategoriaSocio.
-    data: { status: "conciliado", ...limpiarCategoriaSocio(mov.category ?? null) },
+    data: { status: MOV_STATUS.CONCILIADO, ...limpiarCategoriaSocio(mov.category ?? null) },
   });
   await recomputeInvoiceStatus(invoiceId);
 }

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { recomputeInvoiceStatus, cleanupInvoicesAfterUnassign } from "@/lib/banco/invoicePayments";
+import { MOV_STATUS, recomputeMovementsStatus } from "@/lib/banco/movementStatus";
 import { requireSession } from "@/lib/apiAuth";
 
 // RUT de BLARQ — receptor de las facturas/pagos recibidos.
@@ -137,7 +138,7 @@ export async function POST(request: NextRequest) {
       const groupId = crypto.randomUUID();
       await prisma.bankMovement.updateMany({
         where: { id: { in: movs.map((m) => m.id) } },
-        data: { status: "neto_cero", netZeroGroupId: groupId, category: null },
+        data: { status: MOV_STATUS.NETO_CERO, netZeroGroupId: groupId, category: null },
       });
       return NextResponse.json({ ok: true, neteados: movs.length });
     }
@@ -159,13 +160,13 @@ export async function POST(request: NextRequest) {
         new Set(targetMovs.flatMap((m) => m.payments.map((p) => p.invoiceId)))
       );
 
-      await prisma.$transaction([
-        prisma.invoicePayment.deleteMany({ where: { bankMovementId: { in: ids } } }),
-        prisma.bankMovement.updateMany({
-          where: { id: { in: ids } },
-          data: { status: "sin_asignar" },
-        }),
-      ]);
+      await prisma.invoicePayment.deleteMany({
+        where: { bankMovementId: { in: ids } },
+      });
+      // Recompute (no un updateMany a mano): los que tenían pagos vuelven a
+      // sin_asignar; uno sin_factura que cayó en la selección se queda
+      // sin_factura (quitarle la categoría es otra acción, no esta).
+      await recomputeMovementsStatus(ids);
 
       // Para cada factura afectada: si era un "pago sin respaldo" y quedó sin
       // imputaciones, se borra (registro auto-creado, huérfano sin el
@@ -262,7 +263,9 @@ export async function POST(request: NextRequest) {
           });
           await tx.bankMovement.update({
             where: { id: m.id },
-            data: { status: "conciliado", category: null },
+            // Pago recién creado por el monto completo del mov → conciliado.
+            // (La categoría se limpia: la factura tiene la suya.)
+            data: { status: MOV_STATUS.CONCILIADO, category: null },
           });
         }
       });
@@ -372,7 +375,9 @@ export async function POST(request: NextRequest) {
           });
           await tx.bankMovement.update({
             where: { id: m.id },
-            data: { status: "conciliado", category: null },
+            // Pago recién creado por el monto completo del mov → conciliado.
+            // (La categoría se limpia: la factura tiene la suya.)
+            data: { status: MOV_STATUS.CONCILIADO, category: null },
           });
         }
       });
@@ -462,7 +467,7 @@ export async function POST(request: NextRequest) {
       // categoría (la factura tiene la suya).
       prisma.bankMovement.updateMany({
         where: { id: { in: ids } },
-        data: { status: "conciliado", category: null },
+        data: { status: MOV_STATUS.CONCILIADO, category: null },
       }),
     ]);
 

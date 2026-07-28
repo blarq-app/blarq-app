@@ -15,16 +15,21 @@
 // muestra. El pago a obra sigue contando en la obra igual que antes.
 
 // ── Estado (resolución) ────────────────────────────────────────────────────
-// sin_asignar → Pendiente · parcial → Parcial · el resto (conciliado,
-// sin_factura, interno, neto_cero) ya está resuelto → Pagado.
+// sin_asignar → Sin imputar · parcial → Parcial · el resto (conciliado,
+// sin_factura, interno, neto_cero) ya está resuelto → Imputado.
+//
+// Rótulo (decisión MJ, jul 2026): antes decía Pendiente/Pagado, pero
+// "pagado/pendiente" no calza para un movimiento del banco — un ingreso de
+// $5.000.000 no está "pendiente de pago". El eje real es la IMPUTACIÓN:
+// ¿ya se resolvió a qué corresponde esta plata, o falta?
 export function deriveEstado(status: string): { label: string; tone: string } {
   if (status === "sin_asignar") {
-    return { label: "Pendiente", tone: "bg-amber-100 text-amber-800" };
+    return { label: "Sin imputar", tone: "bg-amber-100 text-amber-800" };
   }
   if (status === "parcial") {
     return { label: "Parcial", tone: "bg-amber-100 text-amber-800" };
   }
-  return { label: "Pagado", tone: "bg-green-100 text-green-800" };
+  return { label: "Imputado", tone: "bg-green-100 text-green-800" };
 }
 
 // ── Respaldo a partir del origin de las facturas imputadas ──────────────────

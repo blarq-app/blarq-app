@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { cleanupInvoicesAfterUnassign } from "@/lib/banco/invoicePayments";
+import {
+  MOV_STATUS,
+  statusPorImputacion,
+  statusAlCategorizar,
+} from "@/lib/banco/movementStatus";
 import { upsertRuleFromMovement } from "@/lib/banco/categorizationRules";
 import { esCategoriaBancoValida } from "@/lib/banco/categorias";
 import { requireSession } from "@/lib/apiAuth";
@@ -156,7 +161,7 @@ export async function PATCH(
         : { id: mov.id };
       const r = await prisma.bankMovement.updateMany({
         where,
-        data: { status: "sin_asignar", netZeroGroupId: null },
+        data: { status: MOV_STATUS.SIN_ASIGNAR, netZeroGroupId: null },
       });
       return NextResponse.json({ ok: true, deshechos: r.count });
     }
@@ -221,17 +226,20 @@ export async function PATCH(
       await cleanupInvoicesAfterUnassign(affectedInvoiceIds);
     }
 
-    // Status del movimiento + otros campos.
-    //   sin_asignar : 0 imputado
-    //   parcial     : 0 < imputado < |amount|  (todavía hay saldo libre)
-    //   conciliado  : imputado >= |amount|     (totalmente imputado)
+    // Status del movimiento + otros campos. La derivación vive en
+    // movementStatus.ts (fuente única) — acá solo se le pasan los números.
+    // Cuánto queda imputado DESPUÉS de este PATCH: lo nuevo si se cambió la
+    // imputación, lo que ya tenía si no.
+    const absAmount = Math.abs(mov.amount);
+    const sumApplied =
+      nextPayments !== undefined
+        ? nextPayments.reduce((s, p) => s + p.amountApplied, 0)
+        : mov.payments.reduce((s, p) => s + p.amountApplied, 0);
+
     const update: Record<string, unknown> = {};
     if (nextPayments !== undefined) {
-      const sumApplied = nextPayments.reduce((s, p) => s + p.amountApplied, 0);
-      const absAmount = Math.abs(mov.amount);
-      if (sumApplied <= 0) update.status = "sin_asignar";
-      else if (sumApplied >= absAmount - 1) update.status = "conciliado";
-      else update.status = "parcial";
+      // Desasignar todo (payments=[]) vuelve a la cola: sin_asignar.
+      update.status = statusPorImputacion(sumApplied, absAmount) ?? MOV_STATUS.SIN_ASIGNAR;
       // Limpiar categoría cuando se imputa a factura (la factura tiene su propia categoría).
       if (nextPayments.length > 0) update.category = null;
     }
@@ -249,7 +257,10 @@ export async function PATCH(
         );
       }
       update.category = body.category;
-      update.status = body.category ? "sin_factura" : "sin_asignar";
+      // La imputación manda: si el mov tiene pagos, sigue parcial/conciliado
+      // aunque se le cambie la categoría (antes esto lo pisaba y quedaba la
+      // contradicción "sin_factura con plata imputada").
+      update.status = statusAlCategorizar(sumApplied, absAmount, body.category);
       // La regla de auto-categorización solo se crea si MJ lo pide explícito
       // (saveRule). El patrón se deriva de la glosa y puede quedar amplio
       // ("Transf a Juan" atraparía a cualquier Juan), por eso es opt-in.
@@ -258,14 +269,14 @@ export async function PATCH(
       }
     }
     if (body.ignore) {
-      update.status = "sin_factura";
       update.category = "otro_sin_factura";
+      update.status = statusAlCategorizar(sumApplied, absAmount, "otro_sin_factura");
     }
     if (body.markInternal) {
       // Transfer interna BLARQ↔BLARQ. Limpia categoría — se identifica por
       // el status. NO crea regla porque la detección por descripción ya la
-      // hace el parser de cartola.
-      update.status = "interno";
+      // hace el parser de cartola. Modo explícito: el recompute no lo pisa.
+      update.status = MOV_STATUS.INTERNO;
       update.category = null;
     }
     if (body.notes !== undefined) update.notes = body.notes;

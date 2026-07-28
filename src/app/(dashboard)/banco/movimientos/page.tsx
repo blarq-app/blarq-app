@@ -464,14 +464,14 @@ export default async function MovimientosPage({
           tone="default"
         />
         <StatCard
-          label={`Conciliados${totalCount > 0 ? ` · ${pctConciliado}%` : ""}`}
+          label={`Imputados${totalCount > 0 ? ` · ${pctConciliado}%` : ""}`}
           count={conciliados}
           ingresos={conciliadosIngresos}
           egresos={conciliadosEgresos}
           tone="ok"
         />
         <StatCard
-          label="Pendientes"
+          label="Sin imputar"
           count={sinAsignar}
           ingresos={pendientesIngresos}
           egresos={pendientesEgresos}
@@ -503,17 +503,19 @@ export default async function MovimientosPage({
           </div>
         </div>
 
-        {/* Estado — SOLO resolución: Pendiente / Parcial / Pagado. Los que
+        {/* Estado — SOLO resolución: Sin imputar / Parcial / Imputado. Los que
             antes eran estados por naturaleza (Sin factura / Transfer interna /
-            Neto cero) se movieron al filtro "Respaldo". "Pagado" agrupa todo lo
-            ya resuelto. */}
+            Neto cero) se movieron al filtro "Respaldo". "Imputado" agrupa todo
+            lo ya resuelto. Los VALORES de la URL (?status=pendiente/pagado) no
+            cambian — solo el rótulo visible (decisión MJ: "pagado/pendiente"
+            no calza para movimientos del banco; el eje es la imputación). */}
         <div className="flex items-center gap-2 flex-wrap">
           <FilterRowLabel>Estado</FilterRowLabel>
           <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
             <FilterLink sp={sp} field="status" value={undefined} label="Todos" />
-            <FilterLink sp={sp} field="status" value="pendiente" label={`Pendiente${countPendiente ? ` (${countPendiente})` : ""}`} />
+            <FilterLink sp={sp} field="status" value="pendiente" label={`Sin imputar${countPendiente ? ` (${countPendiente})` : ""}`} />
             <FilterLink sp={sp} field="status" value="parcial" label={`Parcial${countParcial ? ` (${countParcial})` : ""}`} />
-            <FilterLink sp={sp} field="status" value="pagado" label={`Pagado${countPagado ? ` (${countPagado})` : ""}`} />
+            <FilterLink sp={sp} field="status" value="pagado" label={`Imputado${countPagado ? ` (${countPagado})` : ""}`} />
           </div>
         </div>
 

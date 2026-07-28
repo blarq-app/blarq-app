@@ -3,6 +3,7 @@
 // Match es substring case-insensitive contra BankMovement.description.
 
 import { prisma } from "@/lib/prisma";
+import { MOV_STATUS } from "@/lib/banco/movementStatus";
 
 /**
  * Genera el patrón default para una nueva regla a partir de la descripción
@@ -33,7 +34,7 @@ export async function applyRulesToMovement(
     where: { id: movId },
     select: { id: true, description: true, status: true },
   });
-  if (!mov || mov.status !== "sin_asignar") return { applied: false };
+  if (!mov || mov.status !== MOV_STATUS.SIN_ASIGNAR) return { applied: false };
 
   const rules = await prisma.bankCategorizationRule.findMany({
     orderBy: { hits: "desc" }, // las que más matchean primero
@@ -45,7 +46,9 @@ export async function applyRulesToMovement(
     if (lowerDesc.includes(r.descriptionPattern.toLowerCase())) {
       await prisma.bankMovement.update({
         where: { id: movId },
-        data: { category: r.category, status: "sin_factura" },
+        // Solo llega acá un mov sin_asignar y sin pagos (guard de arriba):
+        // con categoría y sin imputación queda resuelto sin documento.
+        data: { category: r.category, status: MOV_STATUS.SIN_FACTURA },
       });
       await prisma.bankCategorizationRule.update({
         where: { id: r.id },

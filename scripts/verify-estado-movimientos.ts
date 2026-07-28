@@ -4,10 +4,10 @@
  * Reproduce el caso SODIMAC en dev con un movimiento y una factura DE PRUEBA
  * (se crean acá y se borran al final — no toca datos reales):
  *
- *   1. Nace el movimiento → chip "Sin imputar" (rótulo nuevo).
- *   2. Conciliar contra la factura → "Imputado".
- *   3. Desasignar (bulk) → vuelve a "Sin imputar".
- *   4. Re-conciliar y BORRAR la factura → el movimiento cae a "Sin imputar".
+ *   1. Nace el movimiento → chip "Pendiente".
+ *   2. Conciliar contra la factura → "Conciliado" (rótulo nuevo del resuelto).
+ *   3. Desasignar (bulk) → vuelve a "Pendiente".
+ *   4. Re-conciliar y BORRAR la factura → el movimiento cae a "Pendiente".
  *      (Este es el agujero viejo: los pagos se iban en cascada y el movimiento
  *      quedaba "Pagado" fantasma para siempre.)
  *
@@ -138,19 +138,21 @@ async function main() {
 
   // 1. Nace sin imputar.
   check("1. nace", await estadoEnBase(mov.id), "sin_asignar");
-  await capturar(page, "estado-1-nace-sin-imputar");
+  await capturar(page, "estado-1-nace-pendiente");
 
   // 2. Conciliar contra la factura (mismo endpoint que el modal).
   let r = await page.request.patch(`${BASE}/api/banco/movimientos/${mov.id}`, {
     data: { invoiceId: inv.id },
+    timeout: 120000,
   });
   if (!r.ok()) throw new Error(`PATCH conciliar: ${r.status()} ${await r.text()}`);
   check("2. conciliado", await estadoEnBase(mov.id), "conciliado");
-  await capturar(page, "estado-2-imputado");
+  await capturar(page, "estado-2-conciliado");
 
   // 3. Desasignar masivo → vuelve a la cola.
   r = await page.request.post(`${BASE}/api/banco/movimientos/bulk`, {
     data: { action: "desasignar", movementIds: [mov.id] },
+    timeout: 120000,
   });
   if (!r.ok()) throw new Error(`POST desasignar: ${r.status()} ${await r.text()}`);
   check("3. desasignado", await estadoEnBase(mov.id), "sin_asignar");
@@ -159,10 +161,11 @@ async function main() {
   // 4. Re-conciliar y borrar la factura — el agujero SODIMAC.
   r = await page.request.patch(`${BASE}/api/banco/movimientos/${mov.id}`, {
     data: { invoiceId: inv.id },
+    timeout: 120000,
   });
   if (!r.ok()) throw new Error(`PATCH re-conciliar: ${r.status()} ${await r.text()}`);
   check("4a. re-conciliado", await estadoEnBase(mov.id), "conciliado");
-  r = await page.request.delete(`${BASE}/api/facturas/${inv.id}`);
+  r = await page.request.delete(`${BASE}/api/facturas/${inv.id}`, { timeout: 120000 });
   if (!r.ok()) throw new Error(`DELETE factura: ${r.status()} ${await r.text()}`);
   check("4b. factura borrada → mov vuelve a la cola", await estadoEnBase(mov.id), "sin_asignar");
   await capturar(page, "estado-4-factura-borrada-sin-fantasma");

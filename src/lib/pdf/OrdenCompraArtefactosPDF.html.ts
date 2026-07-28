@@ -174,54 +174,85 @@ const CSS = `
 `;
 
 // ─── HTML render ──────────────────────────────────────────────────────────
+// Una fila dibujable de la tabla.
+interface FilaOC {
+  name: string;
+  detail: string | null;
+  imageUrl: string | null;
+  quantity: number;
+  marca: string;
+}
+
+/**
+ * Un bloque por AMBIENTE, en el orden en que vienen los items — que es el
+ * sortOrder que MJ arrastró en el editor. No se reordena por una lista fija
+ * porque los bloques tienen nombre libre (ej. "TEKA", "Baño 2 (NIÑOS)").
+ *
+ * Decisión de MJ 2026-07-28, tras ver las dos opciones renderizadas con datos
+ * reales: la hoja va por ambiente y NO consolidada por modelo. Es decir, un WC
+ * que va 1 en cada uno de los 3 baños sale en TRES líneas de cantidad 1, no en
+ * una de cantidad 3. La alternativa (una línea por modelo con la cantidad
+ * total, agrupada por marca, más una columna "va en") se descartó.
+ */
+function construirGrupos(
+  items: OrdenCompraItemInput[]
+): Array<{ label: string; filas: FilaOC[] }> {
+  const orden: string[] = [];
+  const buckets = new Map<string, OrdenCompraItemInput[]>();
+  for (const it of items) {
+    const key = it.room || "otro";
+    if (!buckets.has(key)) {
+      buckets.set(key, []);
+      orden.push(key);
+    }
+    buckets.get(key)!.push(it);
+  }
+
+  return orden.map((key) => ({
+    label: ROOM_LABELS[key] ?? key,
+    filas: buckets.get(key)!.map((it) => ({
+      name: it.name,
+      detail: it.detail,
+      imageUrl: it.imageUrl,
+      quantity: it.quantity,
+      marca: it.brand || "—",
+    })),
+  }));
+}
+
 export function renderOrdenCompraArtefactosHTML(
   input: OrdenCompraHTMLInput
 ): string {
   const { project, budget, subcategory, items } = input;
 
   const subLabel = SUBCATEGORY_LABELS[subcategory] ?? subcategory;
-
-  // Bloques (ambientes) en el ORDEN EN QUE VIENEN. Los items ya llegan
-  // ordenados por sortOrder desde el route, que es el orden que MJ arrastró
-  // en el editor — no se reordena por una lista fija, porque los bloques
-  // pueden tener nombre libre (ej. "TEKA").
-  const order: string[] = [];
-  const byRoom = new Map<string, OrdenCompraItemInput[]>();
-  for (const it of items) {
-    const key = it.room || "otro";
-    if (!byRoom.has(key)) {
-      byRoom.set(key, []);
-      order.push(key);
-    }
-    byRoom.get(key)!.push(it);
-  }
+  const grupos = construirGrupos(items);
 
   const colHeader = `<div class="ahd"><span>Foto</span><span>Ítem</span><span>Línea</span><span>Color</span><span>Detalle</span><span>Marca</span><span class="c">Cant</span></div>`;
 
-  const body = order
-    .map((rkey) => {
-      const rItems = byRoom.get(rkey)!;
-      const label = ROOM_LABELS[rkey] ?? rkey;
-      const rows = rItems
-        .map((it) => {
-          const img = it.imageUrl
-            ? `<img src="${esc(it.imageUrl)}" alt="" />`
+  const body = grupos
+    .map((g) => {
+      const rows = g.filas
+        .map((f) => {
+          const img = f.imageUrl
+            ? `<img src="${esc(f.imageUrl)}" alt="" />`
             : `<div class="ph"></div>`;
           return `<div class="ar">
             <span class="foto">${img}</span>
-            <span class="a-it">${esc(it.name)}</span>
-            <span class="a-ln">${esc(lineaDe(it.name, it.detail) || "—")}</span>
-            <span class="a-co">${esc(colorDe(it.name, it.detail) || "—")}</span>
-            <span class="a-de">${esc(it.detail || "")}</span>
-            <span class="a-ma">${esc(it.brand || "—")}</span>
-            <span class="a-ct">${it.quantity}</span>
+            <span class="a-it">${esc(f.name)}</span>
+            <span class="a-ln">${esc(lineaDe(f.name, f.detail) || "—")}</span>
+            <span class="a-co">${esc(colorDe(f.name, f.detail) || "—")}</span>
+            <span class="a-de">${esc(f.detail || "")}</span>
+            <span class="a-ma">${esc(f.marca)}</span>
+            <span class="a-ct">${f.quantity}</span>
           </div>`;
         })
         .join("");
-      return `<div class="grp"><span>${esc(label)}</span></div>${colHeader}${rows}`;
+      return `<div class="grp"><span>${esc(g.label)}</span></div>${colHeader}${rows}`;
     })
     .join("");
 
+  const totalLineas = grupos.reduce((s, g) => s + g.filas.length, 0);
   const totalUnidades = items.reduce((s, it) => s + it.quantity, 0);
   const logo = assetDataUri("blarq-logo-horizontal-ink.png") || assetDataUri("logo-blarq.png");
   const logoHtml = logo
@@ -260,7 +291,7 @@ export function renderOrdenCompraArtefactosHTML(
       ? `${body}
   <div class="cierre">
     <span class="lbl">Total ${esc(subLabel.toLowerCase())}</span>
-    <span class="val">${items.length} ${items.length === 1 ? "producto" : "productos"} · ${totalUnidades} ${totalUnidades === 1 ? "unidad" : "unidades"}</span>
+    <span class="val">${totalLineas} ${totalLineas === 1 ? "producto" : "productos"} · ${totalUnidades} ${totalUnidades === 1 ? "unidad" : "unidades"}</span>
   </div>`
       : `<div class="empty">Esta cotización no tiene ${esc(subLabel.toLowerCase())} cargados.</div>`
   }

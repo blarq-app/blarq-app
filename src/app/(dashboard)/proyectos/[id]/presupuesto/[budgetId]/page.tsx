@@ -7,6 +7,14 @@ import ArtefactosEditor from "@/components/presupuesto/ArtefactosEditor";
 import CoverFields from "@/components/presupuesto/CoverFields";
 import { getObraBaselineItems } from "@/lib/presupuesto/versionDiff";
 
+// Subcategorías de artefactos que pueden salir como orden de compra al
+// proveedor. El rótulo es el que usa MJ al hablar ("baño", no "sanitario").
+const ORDEN_COMPRA_SUBCATS = [
+  { key: "sanitario", label: "baño" },
+  { key: "cocina", label: "cocina" },
+  { key: "iluminacion", label: "iluminación" },
+];
+
 export default async function PresupuestoDetailPage({
   params,
 }: {
@@ -105,6 +113,26 @@ export default async function PresupuestoDetailPage({
                 PDF mueblista
               </a>
             )}
+          {/* Órdenes de compra al proveedor: los mismos artefactos SIN precios,
+              una por subcategoría (cada una se le compra a una empresa
+              distinta). Solo se muestra el botón de las subcategorías que la
+              cotización realmente tiene cargadas. */}
+          {budget.type === "artefactos" &&
+            ORDEN_COMPRA_SUBCATS.filter((s) =>
+              budget.artefactoItems.some(
+                (i) => (i.subcategory || "sanitario") === s.key,
+              ),
+            ).map((s) => (
+              <a
+                key={s.key}
+                href={`/api/presupuestos/${budget.id}/pdf?tipo=orden-compra&sub=${s.key}`}
+                target="_blank"
+                className="border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+                title={`Listado de artefactos de ${s.label} SIN precios, para mandarle al proveedor`}
+              >
+                Orden {s.label}
+              </a>
+            ))}
           <a
             href={`/api/presupuestos/${budget.id}/pdf`}
             target="_blank"

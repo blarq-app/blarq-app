@@ -7,6 +7,10 @@ import {
   renderArtefactosHTML,
   buildArtefactosFooter,
 } from "@/lib/pdf/ArtefactosPDF.html";
+import {
+  renderOrdenCompraArtefactosHTML,
+  ordenCompraFilename,
+} from "@/lib/pdf/OrdenCompraArtefactosPDF.html";
 import { renderPDF } from "@/lib/pdf/renderPDF";
 import {
   getObraBaselineItems,
@@ -30,7 +34,10 @@ export async function GET(
   try {
     const { id } = await params;
     // tipo=mueblista → listado de herrajes por sector SIN precios (Fase 3).
+    // tipo=orden-compra → orden de compra de artefactos SIN precios, una por
+    // subcategoría (?sub=cocina|sanitario|iluminacion), para el proveedor.
     const tipo = request.nextUrl.searchParams.get("tipo");
+    const sub = request.nextUrl.searchParams.get("sub");
 
     const budget = await prisma.budgetVersion.findUnique({
       where: { id },
@@ -162,6 +169,29 @@ export async function GET(
         })),
       });
       filename = `BLARQ_Muebles_${baseName}_${budget.version}.pdf`;
+    } else if (budget.type === "artefactos" && tipo === "orden-compra") {
+      // Orden de compra para el proveedor: los mismos productos de la
+      // cotización pero SIN precios, filtrados a UNA subcategoría (cada una se
+      // le compra a una empresa distinta: cocina → Kitchen House, baño → MK).
+      const subKey = sub ?? "";
+      if (!["sanitario", "cocina", "iluminacion"].includes(subKey)) {
+        return NextResponse.json(
+          { error: "Subcategoría inválida. Usar sub=sanitario|cocina|iluminacion" },
+          { status: 400 }
+        );
+      }
+      html = renderOrdenCompraArtefactosHTML({
+        project: budget.project,
+        budget: { version: budget.version, date: budget.date },
+        subcategory: subKey,
+        // Los items ya vienen ordenados por sortOrder (el orden que MJ arrastró
+        // en el editor). La subcategoría vacía cuenta como "sanitario", igual
+        // que en el editor y en el PDF al cliente.
+        items: budget.artefactoItems.filter(
+          (it) => (it.subcategory || "sanitario") === subKey
+        ),
+      });
+      filename = ordenCompraFilename(subKey, budget.project.name, budget.version);
     } else {
       html = renderArtefactosHTML({
         project: budget.project,
@@ -196,9 +226,12 @@ export async function GET(
     // Muebles/artefactos siguen con el formato previo hasta migrar.
     // El PDF mueblista (herrajes por sector, sin precios) sigue con el formato
     // previo; el de muebles al cliente ya usa la marca v2 como obra.
+    // La orden de compra al proveedor es un documento corrido (sin portada) y
+    // no define @page en su CSS: los márgenes se los tiene que poner la opción
+    // `margin` de Puppeteer, no el CSS. Por eso queda FUERA de isBrandObra.
     const isBrandObra =
       budget.type === "obra" ||
-      budget.type === "artefactos" ||
+      (budget.type === "artefactos" && tipo !== "orden-compra") ||
       (budget.type === "muebles" && tipo !== "mueblista");
     const pdfBuffer = await renderPDF(html, {
       format: "A4",

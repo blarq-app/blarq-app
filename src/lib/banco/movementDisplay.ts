@@ -34,21 +34,48 @@ export function deriveEstado(status: string): { label: string; tone: string } {
 //                             se ESCONDE: solo se muestra "Pago sin respaldo")
 //   gasto_boleta           → Boleta
 //   gasto_internacional    → Internacional
+//
+// `indicePago` es la posición del pago que determinó la etiqueta. Importa
+// cuando un mismo movimiento paga varias facturas de distinto tipo: la etiqueta
+// la gana el primer `sin_respaldo` (o boleta / internacional), así que el link
+// tiene que apuntar a ESA factura y no ciegamente a la primera del movimiento.
+//
+// `linkeable`: el rótulo se muestra como link al detalle de la factura. Vale
+// tanto para la factura real como para el "pago sin respaldo" — atrás de los
+// dos hay una factura de verdad (la SR- es sintética pero existe, con su obra
+// guardada), así que clickear el rótulo abre el pago y ahí se ve el proyecto.
+// Boleta e internacional quedan por ahora como texto (MJ no las pidió).
 export function derivePaymentRespaldo(
   origins: (string | null)[],
   folio: string | null
-): { label: string; esFacturaReal: boolean } {
-  if (origins.some((o) => o === "sin_respaldo")) {
-    return { label: "Pago sin respaldo", esFacturaReal: false };
+): { label: string; linkeable: boolean; indicePago: number } {
+  const iSinRespaldo = origins.findIndex((o) => o === "sin_respaldo");
+  if (iSinRespaldo >= 0) {
+    return {
+      label: "Pago sin respaldo",
+      linkeable: true,
+      indicePago: iSinRespaldo,
+    };
   }
-  if (origins.some((o) => o === "gasto_boleta")) {
-    return { label: "Boleta", esFacturaReal: false };
+  const iBoleta = origins.findIndex((o) => o === "gasto_boleta");
+  if (iBoleta >= 0) {
+    return {
+      label: "Boleta",
+      linkeable: false,
+      indicePago: iBoleta,
+    };
   }
-  if (origins.some((o) => o === "gasto_internacional")) {
-    return { label: "Internacional", esFacturaReal: false };
+  const iInternacional = origins.findIndex((o) => o === "gasto_internacional");
+  if (iInternacional >= 0) {
+    return {
+      label: "Internacional",
+      linkeable: false,
+      indicePago: iInternacional,
+    };
   }
   return {
     label: folio ? `Factura · F-${folio}` : "Factura",
-    esFacturaReal: true,
+    linkeable: true,
+    indicePago: 0,
   };
 }

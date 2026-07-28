@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -56,9 +57,32 @@ export default function Sidebar() {
         } md:translate-x-0`}
       >
         <div className="p-6 border-b border-gray-700 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">BLARQ</h1>
-            <p className="text-gray-400 text-sm mt-1">Gestión de Obras</p>
+          {/*
+            El logo maestro es tinta oscura sobre transparente, así que acá van las
+            versiones en blanco horneadas por scripts/generar-logo-assets.py.
+            El isotipo y el bloque BLARQ son dos imágenes separadas a propósito:
+            así el isotipo puede crecer sin arrastrar al texto.
+          */}
+          <div className="flex items-center gap-3">
+            <Image
+              src="/assets/blarq-isotipo-blanco.png"
+              alt=""
+              width={256}
+              height={283}
+              className="w-9 h-auto shrink-0"
+              priority
+            />
+            <div>
+              <Image
+                src="/assets/blarq-wordmark-blanco.png"
+                alt="BLARQ"
+                width={720}
+                height={136}
+                className="w-28 h-auto"
+                priority
+              />
+              <p className="text-gray-400 text-xs mt-1.5">Gestión de Obras</p>
+            </div>
           </div>
           {/* Close button — solo en mobile */}
           <button

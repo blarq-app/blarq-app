@@ -1,6 +1,7 @@
 "use client";
 
 import { signIn } from "next-auth/react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -34,11 +35,25 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white tracking-tight">
-            BLARQ
-          </h1>
-          <p className="text-gray-400 mt-2">Gestión de Obras</p>
+        {/* Mismo logo en blanco que la barra lateral, acá apilado y centrado. */}
+        <div className="flex flex-col items-center mb-8">
+          <Image
+            src="/assets/blarq-isotipo-blanco.png"
+            alt=""
+            width={256}
+            height={283}
+            className="w-12 h-auto"
+            priority
+          />
+          <Image
+            src="/assets/blarq-wordmark-blanco.png"
+            alt="BLARQ"
+            width={720}
+            height={136}
+            className="w-40 h-auto mt-4"
+            priority
+          />
+          <p className="text-gray-400 mt-3 text-sm">Gestión de Obras</p>
         </div>
 
         <form

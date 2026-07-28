@@ -291,18 +291,20 @@ export default function MovementsTable({
                             );
                             return (
                               <div className="space-y-0.5">
-                                {resp.esFacturaReal ? (
-                                  // Factura real: la etiqueta linkea a la factura
-                                  // (como antes se podía clickear el folio).
+                                {resp.linkeable ? (
+                                  // Factura real y pago sin respaldo: la etiqueta
+                                  // linkea al detalle de la factura. El pago sin
+                                  // respaldo sigue sin mostrar su folio fantasma
+                                  // SR-, pero al clickearlo se abre el pago y ahí
+                                  // se ve a qué obra está imputado.
                                   <Link
-                                    href={`/facturas?invoiceId=${m.payments[0].invoice.id}`}
+                                    href={`/facturas?invoiceId=${m.payments[resp.indicePago].invoice.id}`}
                                     className="inline-block text-[9px] uppercase tracking-wide bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded hover:bg-gray-200"
                                   >
                                     {resp.label}
                                   </Link>
                                 ) : (
-                                  // Pago sin respaldo / boleta / internacional: sin
-                                  // folio fantasma, solo la etiqueta limpia.
+                                  // Boleta / internacional: solo la etiqueta limpia.
                                   <span className="inline-block text-[9px] uppercase tracking-wide bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
                                     {resp.label}
                                   </span>

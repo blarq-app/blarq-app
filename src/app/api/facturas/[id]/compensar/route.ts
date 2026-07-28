@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { recomputeInvoiceStatus } from "@/lib/banco/invoicePayments";
+import { MOV_STATUS } from "@/lib/banco/movementStatus";
 import { requireSession } from "@/lib/apiAuth";
 
 // Compensar una NC (tipoDoc=61) de tres maneras:
@@ -123,10 +124,13 @@ export async function POST(
       updates.refundBankMovementId = movId;
       // Marcar el mov bancario como conciliado (igual que cuando se asigna
       // a una factura emitida), así no queda como "sin asignar" pendiente.
+      // Caso especial documentado en movementStatus.ts: es un conciliado SIN
+      // InvoicePayment (lo salda la NC, linkeada por refundBankMovementId).
+      // Si la NC se borra, el DELETE de facturas lo recomputa y vuelve a la cola.
       if (mov.status === "sin_asignar") {
         await prisma.bankMovement.update({
           where: { id: movId },
-          data: { status: "conciliado", category: "reembolso_proveedor" },
+          data: { status: MOV_STATUS.CONCILIADO, category: "reembolso_proveedor" },
         });
       }
     }

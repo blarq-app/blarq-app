@@ -224,7 +224,7 @@ export default function MovementResolveMenu({
     if (!single) return;
     if (
       !confirm(
-        '¿Deshacer la devolución neto cero?\n\nLos movimientos del grupo vuelven a "pendiente".'
+        '¿Deshacer la devolución neto cero?\n\nLos movimientos del grupo vuelven a "Pendiente".'
       )
     )
       return;

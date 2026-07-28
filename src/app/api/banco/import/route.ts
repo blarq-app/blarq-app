@@ -6,6 +6,7 @@ import { applyRulesToMovement } from "@/lib/banco/categorizationRules";
 import { planImportDedup } from "@/lib/banco/dedup";
 import { requireSession } from "@/lib/apiAuth";
 import { esSocio } from "@/lib/banco/socios";
+import { MOV_STATUS } from "@/lib/banco/movementStatus";
 
 // El dedup del import vive en `planImportDedup` (src/lib/banco/dedup.ts).
 // Identifica cada movimiento por una huella estable (fecha + monto +
@@ -161,7 +162,7 @@ export async function POST(request: NextRequest) {
             counterpartyName: mov.counterpartyName,
             counterpartyRut: mov.counterpartyRut,
             category: mov.suggestedCategory,
-            status: naceSinFactura ? "sin_factura" : "sin_asignar",
+            status: naceSinFactura ? MOV_STATUS.SIN_FACTURA : MOV_STATUS.SIN_ASIGNAR,
           },
         });
         insertedIds.push(created.id);
@@ -210,11 +211,11 @@ export async function POST(request: NextRequest) {
           // Linkear ambos lados
           await prisma.bankMovement.update({
             where: { id: mov.id },
-            data: { internalTransferToId: counterpart.id, status: "interno", category: "transfer_interno" },
+            data: { internalTransferToId: counterpart.id, status: MOV_STATUS.INTERNO, category: "transfer_interno" },
           });
           await prisma.bankMovement.update({
             where: { id: counterpart.id },
-            data: { internalTransferToId: mov.id, status: "interno", category: "transfer_interno" },
+            data: { internalTransferToId: mov.id, status: MOV_STATUS.INTERNO, category: "transfer_interno" },
           });
           stats.internalTransfersDetected++;
           break;

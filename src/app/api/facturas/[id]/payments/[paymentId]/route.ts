@@ -1,9 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import {
-  recomputeInvoiceStatus,
-  getMovementAppliedAmount,
-} from "@/lib/banco/invoicePayments";
+import { recomputeInvoiceStatus } from "@/lib/banco/invoicePayments";
+import { recomputeMovementStatus } from "@/lib/banco/movementStatus";
 import { requireSession } from "@/lib/apiAuth";
 
 /**
@@ -46,7 +44,6 @@ export async function DELETE(
     }
 
     const bankMovementId = payment.bankMovement.id;
-    const absAmount = Math.abs(payment.bankMovement.amount);
 
     await prisma.invoicePayment.delete({ where: { id: paymentId } });
 
@@ -54,16 +51,8 @@ export async function DELETE(
     // único pago, o quedar parcial si quedan otras imputaciones).
     await recomputeInvoiceStatus(invoiceId);
 
-    // Recalcular status del mov. Misma lógica que el endpoint del mov.
-    const sumApplied = await getMovementAppliedAmount(bankMovementId);
-    let newStatus: string;
-    if (sumApplied <= 0) newStatus = "sin_asignar";
-    else if (sumApplied >= absAmount - 1) newStatus = "conciliado";
-    else newStatus = "parcial";
-    await prisma.bankMovement.update({
-      where: { id: bankMovementId },
-      data: { status: newStatus },
-    });
+    // Recalcular status del mov con la fuente única (movementStatus.ts).
+    await recomputeMovementStatus(bankMovementId);
 
     return NextResponse.json({ ok: true });
   } catch (e) {

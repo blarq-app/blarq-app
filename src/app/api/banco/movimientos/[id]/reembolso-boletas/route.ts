@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/apiAuth";
+import { MOV_STATUS, statusPorImputacion } from "@/lib/banco/movementStatus";
 
 // Reembolso de boletas: un egreso del banco = VARIAS boletas.
 //
@@ -183,13 +184,16 @@ export async function POST(
       ids.push(inv.id);
     }
 
-    // Estado del movimiento con el mismo criterio que el resto del banco:
-    // conciliado si quedó todo imputado, parcial si sobra saldo.
+    // Estado del movimiento derivado por la fuente única (movementStatus.ts):
+    // conciliado si quedó todo imputado, parcial si sobra saldo. Acá siempre
+    // hay al menos una boleta imputada, así que nunca cae al fallback.
     const totalImputado = yaImputado + suma;
     await tx.bankMovement.update({
       where: { id: mov.id },
       data: {
-        status: totalImputado >= totalMovimiento - 1 ? "conciliado" : "parcial",
+        status:
+          statusPorImputacion(totalImputado, totalMovimiento) ??
+          MOV_STATUS.SIN_ASIGNAR,
         // La categoría del movimiento se limpia: ahora cada boleta tiene la suya.
         category: null,
       },

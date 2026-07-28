@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { upsertInvoiceRule } from "@/lib/facturas/categorizationRules";
+import { recomputeMovementsStatus } from "@/lib/banco/movementStatus";
 import { requireSession } from "@/lib/apiAuth";
 
 export async function GET(
@@ -215,7 +216,24 @@ export async function DELETE(
 
   try {
     const { id } = await params;
+    // Antes de borrar: anotar qué movimientos bancarios la pagaban. Los
+    // InvoicePayment se van en CASCADA con la factura, y sin este recompute
+    // el movimiento quedaba "conciliado" para siempre sin nada imputado (el
+    // "Pagado" fantasma — caso SODIMAC). También el movimiento de reembolso
+    // si la factura es una NC bank_refund (conciliado sin InvoicePayment).
+    const inv = await prisma.invoice.findUnique({
+      where: { id },
+      select: {
+        refundBankMovementId: true,
+        payments: { select: { bankMovementId: true } },
+      },
+    });
+    const movIds = [
+      ...(inv?.payments.map((p) => p.bankMovementId) ?? []),
+      ...(inv?.refundBankMovementId ? [inv.refundBankMovementId] : []),
+    ];
     await prisma.invoice.delete({ where: { id } });
+    await recomputeMovementsStatus(movIds);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error deleting invoice:", error);

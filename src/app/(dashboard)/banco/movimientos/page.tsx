@@ -503,17 +503,19 @@ export default async function MovimientosPage({
           </div>
         </div>
 
-        {/* Estado — SOLO resolución: Pendiente / Parcial / Pagado. Los que
+        {/* Estado — SOLO resolución: Pendiente / Parcial / Conciliado. Los que
             antes eran estados por naturaleza (Sin factura / Transfer interna /
-            Neto cero) se movieron al filtro "Respaldo". "Pagado" agrupa todo lo
-            ya resuelto. */}
+            Neto cero) se movieron al filtro "Respaldo". "Conciliado" agrupa
+            todo lo ya resuelto (antes decía "Pagado", que no calza para un
+            ingreso — decisión MJ jul 2026, mismo verbo que "Conciliar…"). Los
+            VALORES de la URL (?status=pendiente/pagado) no cambian. */}
         <div className="flex items-center gap-2 flex-wrap">
           <FilterRowLabel>Estado</FilterRowLabel>
           <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
             <FilterLink sp={sp} field="status" value={undefined} label="Todos" />
             <FilterLink sp={sp} field="status" value="pendiente" label={`Pendiente${countPendiente ? ` (${countPendiente})` : ""}`} />
             <FilterLink sp={sp} field="status" value="parcial" label={`Parcial${countParcial ? ` (${countParcial})` : ""}`} />
-            <FilterLink sp={sp} field="status" value="pagado" label={`Pagado${countPagado ? ` (${countPagado})` : ""}`} />
+            <FilterLink sp={sp} field="status" value="pagado" label={`Conciliado${countPagado ? ` (${countPagado})` : ""}`} />
           </div>
         </div>
 

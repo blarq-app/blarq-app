@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-29 — "Traer de otra cotización" (artefactos): elegir qué categorías traer
+
+- **Qué.** El modal duplicaba **todos** los artefactos del presupuesto origen; no había forma de traer solo una parte. Ahora, después de elegir la cotización origen, aparece un bloque **"Qué traer"** con tres casillas — **Baño / Cocina / Iluminación** — arrancando las tres tildadas (el caso normal sigue siendo traer todo). Cada casilla muestra cuántos artefactos de ese tipo tiene ESA cotización, y el botón dice cuántos entrarían (`Duplicar acá (27)`).
+- **El mapeo de nombres.** En pantalla dice **"Baño"**; en la base la subcategoría se llama **`sanitario`** (los otros dos sí coinciden: `cocina`, `iluminacion`). La traducción vive en la constante `SUBCATEGORIAS` del modal — si alguna vez hay que tocar los rótulos, es ahí y no en el endpoint.
+- **Endpoint.** `POST /api/presupuestos/{id}/artefactos/importar-de` acepta `subcategories?: string[]` y filtra el origen antes de copiar. **Si el campo no viene, copia todo** — el comportamiento viejo queda intacto. Valores fuera de las tres pestañas se ignoran, y un array vacío da 400 con mensaje. Un artefacto con la subcategoría vacía o rara se cuenta y se trae bajo **Baño**, igual que lo agrupa el editor: si no, filtrar haría desaparecer items que hoy sí se copian. `fuentes/route.ts` agrega el desglose `porSubcategoria` con un solo `groupBy` para alimentar los números de las casillas.
+- **Alcance / plata.** **NO toca `metrics.ts`**, ni el schema, ni datos existentes: lo único que cambia es CUÁLES filas se copian al duplicar. Verificado en pantalla contra la base de dev, en las dos direcciones: de Portofino V1 (27 baño / 5 cocina / 6 iluminación) a Casa Arrau V5, destildando cocina e iluminación entran **27, todos `sanitario`**; dejando solo Iluminación entran **6, todos `iluminacion`** y los sanitarios del destino quedan intactos. Datos de prueba borrados después.
+
 ## 2026-07-28 — Orden de compra de artefactos al proveedor (sin precios), una por categoría
 
 - **Qué.** Tercera pieza de la familia "listado sin precios para un tercero", junto al **PDF maestro** (partidas de obra) y al **PDF mueblista** (herrajes). Desde una cotización de artefactos salen hasta tres PDFs — **OC baño / OC cocina / OC iluminación** — con foto, ítem, línea, color, detalle/SKU, marca y cantidad, y **ningún precio**. Se corta por subcategoría porque cada una se le compra a una empresa distinta (cocina → Kitchen House, baño → MK). El botón de cada categoría aparece solo si la cotización tiene ítems de esa categoría.

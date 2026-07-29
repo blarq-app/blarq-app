@@ -128,9 +128,9 @@ export default async function PresupuestoDetailPage({
                 href={`/api/presupuestos/${budget.id}/pdf?tipo=orden-compra&sub=${s.key}`}
                 target="_blank"
                 className="border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
-                title={`Listado de artefactos de ${s.label} SIN precios, para mandarle al proveedor`}
+                title={`Orden de compra: listado de artefactos de ${s.label} SIN precios, para mandarle al proveedor`}
               >
-                Orden {s.label}
+                OC {s.label}
               </a>
             ))}
           <a

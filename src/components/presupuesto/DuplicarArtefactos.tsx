@@ -16,11 +16,12 @@ interface Fuente {
   porSubcategoria: Record<string, number>;
 }
 
-// Las tres pestañas que MJ puede elegir traer. El valor es el que está
-// guardado en la base; la etiqueta es como ella lo nombra: lo que en la
-// base es "sanitario", en la cabeza de MJ es "Baño".
+// Las tres pestañas que MJ puede elegir traer. Las etiquetas son las
+// MISMAS palabras que usa el editor de artefactos (SUBCATEGORY_LABELS en
+// ArtefactosEditor.tsx, sin el "Artefactos " adelante): la casilla tiene
+// que llamarse igual que la sección que va a aparecer después.
 const SUBCATEGORIAS = [
-  { valor: "sanitario", etiqueta: "Baño" },
+  { valor: "sanitario", etiqueta: "Sanitarios" },
   { valor: "cocina", etiqueta: "Cocina" },
   { valor: "iluminacion", etiqueta: "Iluminación" },
 ];

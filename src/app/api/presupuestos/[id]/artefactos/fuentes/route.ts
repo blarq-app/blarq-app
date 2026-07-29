@@ -8,8 +8,8 @@
  *   "Traer de otra cotización".
  *
  * Cada fuente trae además el desglose por pestaña (`porSubcategoria`), para
- * que el modal pueda mostrar cuántos artefactos de baño / cocina /
- * iluminación hay antes de importar, y no ofrecer tildar una pestaña vacía.
+ * que el modal pueda mostrar cuántos artefactos sanitarios / de cocina /
+ * de iluminación hay antes de importar, y no ofrecer tildar una vacía.
  */
 
 import { prisma } from "@/lib/prisma";

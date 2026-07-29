@@ -10,9 +10,9 @@
  * y el vínculo al catálogo BLARQ (catalogId).
  *
  * `subcategories` acota QUÉ se copia: es la lista de pestañas del origen
- * que MJ dejó tildadas en el modal ("sanitario" = lo que en pantalla se
- * rotula Baño). Si no viene, se copia todo — así el comportamiento viejo
- * de cualquier llamada previa queda intacto.
+ * que MJ dejó tildadas en el modal (los mismos tres valores que usa el
+ * editor: sanitario / cocina / iluminacion). Si no viene, se copia todo
+ * — así el comportamiento viejo de cualquier llamada previa queda intacto.
  *
  * Si refreshPrices = true (default), después de copiar revisa cada link
  * online y actualiza el precio lista al del momento — porque al traer una

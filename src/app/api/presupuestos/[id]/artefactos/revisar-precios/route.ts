@@ -38,6 +38,8 @@ export async function GET(
         referenceLink: true,
         listPrice: true,
         imageUrl: true,
+        // Para avisar en el modal cuáles tienen precio editado a mano.
+        priceOverridden: true,
       },
     });
 

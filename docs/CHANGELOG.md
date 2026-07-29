@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-29 — "Comparar con la tienda web" vuelve a la cotización de artefactos
+
+- **Qué.** El componente `RevisarPreciosArtefactos.tsx` y su ruta `…/artefactos/revisar-precios` estaban en el repo pero **nadie los renderizaba** desde el 2026-06-22 (ver entrada de ese día: quedaron "sin uso, no se borraron"). Se vuelven a enchufar en `ArtefactosEditor`. La lógica del scraper (Shopify + VTEX) no se tocó.
+- **Los dos botones, en espejo (decisión de MJ sobre 3 opciones dibujadas).** "Actualizar del catálogo" pasa a llamarse **"Comparar con mi catálogo"** y al lado va **"Comparar con la tienda web"**. El nombre dice contra QUÉ compara cada uno; se descartó unificarlos en un desplegable. Los dos van envueltos en su propio flex para que salten de renglón juntos, y la barra (ya de 6 botones) usa `flex-wrap` + `whitespace-nowrap` para no partir cada etiqueta en dos líneas.
+- **El modal ahora agrupa en tres**: DISTINTOS (con la diferencia en pesos, +rojo / −verde), NO SE PUDIERON LEER (con "Abrir link", para saber cuáles recargar) y COINCIDEN (al final, discretos). Antes era una sola lista donde el error convivía con los cambios.
+- **Despegados (`priceOverridden`).** El diff ahora arrastra el flag hasta la UI: la línea con precio editado a mano **se compara igual** (leer no toca nada) pero viene **sin marcar** y con el aviso "Precio editado a mano", para no pisar de corrido un precio negociado. Aplicar sigue siendo explícito, ítem por ítem.
+- **Aplicar SÍ despega** (a diferencia de "Comparar con mi catálogo"): va por `updateItem` → PUT por-ítem, así el precio pasa a venir de la tienda y una sincronización posterior del catálogo no lo pisa en silencio. Recalcula el precio a cliente con el descuento vigente. **No toca `metrics.ts` ni el schema.** Verificado e2e contra la base **dev**: 5 ítems bajados de MK/Kitchen House, precio a cliente recalculado OK, el link ilegible intacto.
+
 ## 2026-07-28 — Orden de compra de artefactos al proveedor (sin precios), una por categoría
 
 - **Qué.** Tercera pieza de la familia "listado sin precios para un tercero", junto al **PDF maestro** (partidas de obra) y al **PDF mueblista** (herrajes). Desde una cotización de artefactos salen hasta tres PDFs — **Orden baño / Orden cocina / Orden iluminación** — con foto, ítem, línea, color, detalle/SKU, marca y cantidad, y **ningún precio**. Se corta por subcategoría porque cada una se le compra a una empresa distinta (cocina → Kitchen House, baño → MK). El botón de cada categoría aparece solo si la cotización tiene ítems de esa categoría.

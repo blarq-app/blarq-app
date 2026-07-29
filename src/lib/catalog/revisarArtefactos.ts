@@ -29,6 +29,10 @@ export interface RevisableArtefacto {
   referenceLink: string | null;
   listPrice: number;
   imageUrl: string | null;
+  // "Despegado del catálogo": MJ editó el precio a mano en esta cotización.
+  // Solo viaja hasta la UI para avisar — la revisión igual lo compara.
+  // Opcional porque el flujo de duplicar (importar-de) no lo necesita.
+  priceOverridden?: boolean;
 }
 
 export interface ArtefactoOnlineDiff {
@@ -38,6 +42,8 @@ export interface ArtefactoOnlineDiff {
   referenceLink: string;
   currentListPrice: number;
   currentImageUrl: string | null;
+  // El precio de esta línea fue editado a mano (no sigue al catálogo).
+  priceOverridden: boolean;
   // Datos traídos de la tienda. null si no se pudo extraer nada.
   fetched: {
     listPrice: number | null;
@@ -104,6 +110,7 @@ export async function revisarArtefactosOnline(
       referenceLink: link,
       currentListPrice: item.listPrice,
       currentImageUrl: item.imageUrl,
+      priceOverridden: item.priceOverridden ?? false,
       fetched: null,
       error: null,
     };

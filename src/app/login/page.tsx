@@ -35,25 +35,25 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900">
       <div className="w-full max-w-sm">
-        {/* Mismo logo en blanco que la barra lateral, acá apilado y centrado. */}
+        {/* El mismo logo que la barra lateral, acá centrado y un poco más grande. */}
         <div className="flex flex-col items-center mb-8">
           <Image
-            src="/assets/blarq-isotipo-blanco.png"
-            alt=""
-            width={256}
-            height={283}
-            className="w-12 h-auto"
-            priority
-          />
-          <Image
-            src="/assets/blarq-wordmark-blanco.png"
+            src="/assets/blarq-wordmark-claro.png"
             alt="BLARQ"
             width={720}
             height={136}
-            className="w-40 h-auto mt-4"
+            className="w-48 h-auto"
             priority
           />
-          <p className="text-gray-400 mt-3 text-sm">Gestión de Obras</p>
+          <Image
+            src="/assets/blarq-bajada-claro.png"
+            alt="Blanco Larraín Arquitectos"
+            width={720}
+            height={36}
+            className="w-48 h-auto mt-3 opacity-60"
+            priority
+          />
+          <p className="text-gray-400 mt-4 text-sm">Gestión de Obras</p>
         </div>
 
         <form

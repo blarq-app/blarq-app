@@ -59,30 +59,29 @@ export default function Sidebar() {
         <div className="p-6 border-b border-gray-700 flex items-center justify-between">
           {/*
             El logo maestro es tinta oscura sobre transparente, así que acá van las
-            versiones en blanco horneadas por scripts/generar-logo-assets.py.
-            El isotipo y el bloque BLARQ son dos imágenes separadas a propósito:
-            así el isotipo puede crecer sin arrastrar al texto.
+            versiones claras horneadas por scripts/generar-logo-assets.py (en Lino,
+            no en blanco: el blanco sobre este fondo queda duro y fuera de paleta).
+            BLARQ y la bajada son dos imágenes separadas a propósito: llevan
+            jerarquía distinta, la bajada va más chica y atenuada.
           */}
-          <div className="flex items-center gap-3">
+          <div>
             <Image
-              src="/assets/blarq-isotipo-blanco.png"
-              alt=""
-              width={256}
-              height={283}
-              className="w-9 h-auto shrink-0"
+              src="/assets/blarq-wordmark-claro.png"
+              alt="BLARQ"
+              width={720}
+              height={136}
+              className="w-32 h-auto"
               priority
             />
-            <div>
-              <Image
-                src="/assets/blarq-wordmark-blanco.png"
-                alt="BLARQ"
-                width={720}
-                height={136}
-                className="w-28 h-auto"
-                priority
-              />
-              <p className="text-gray-400 text-xs mt-1.5">Gestión de Obras</p>
-            </div>
+            <Image
+              src="/assets/blarq-bajada-claro.png"
+              alt="Blanco Larraín Arquitectos"
+              width={720}
+              height={36}
+              className="w-32 h-auto mt-2 opacity-60"
+              priority
+            />
+            <p className="text-gray-400 text-xs mt-3">Gestión de Obras</p>
           </div>
           {/* Close button — solo en mobile */}
           <button

@@ -14,6 +14,24 @@ export interface RenderPDFOptions {
   // pueda sangrar a borde (margin:0) mientras las páginas de detalle mantienen
   // su margen — imposible con una sola opción `margin` de Puppeteer.
   preferCSSPageSize?: boolean;
+  // UNA SOLA HOJA de alto variable, en vez de A4 paginado: el ancho sigue
+  // siendo A4 (210mm) y el alto se calcula midiendo el contenido ya renderizado.
+  // Sirve para documentos que se leen en pantalla, donde partir en páginas solo
+  // molesta (se hace zoom y listo) — pedido de MJ para la orden de compra.
+  // Ignora `format` y es incompatible con preferCSSPageSize.
+  singlePage?: boolean;
+}
+
+// 1 px CSS = 1/96", y 1" = 25,4 mm. Se usa para pasar el alto medido en px del
+// navegador al alto en mm que espera Puppeteer.
+const MM_POR_PX = 25.4 / 96;
+const ANCHO_A4_MM = 210;
+
+function mmDe(valor: string | number | undefined): number {
+  if (valor === undefined) return 0;
+  if (typeof valor === "number") return valor;
+  const n = parseFloat(valor);
+  return Number.isFinite(n) ? n : 0;
 }
 
 // En Vercel (serverless) el bundle de chromium completo no entra ni
@@ -62,6 +80,19 @@ export async function renderPDF(
 
   try {
     const page = await browser.newPage();
+
+    // En hoja única el viewport tiene que medir EXACTAMENTE lo que va a medir
+    // el área imprimible (A4 menos los márgenes laterales); si no, el alto que
+    // midamos después corresponde a otro ancho y el corte queda mal.
+    const margenIzq = mmDe(opts.margin?.left);
+    const margenDer = mmDe(opts.margin?.right);
+    if (opts.singlePage) {
+      await page.setViewport({
+        width: Math.round((ANCHO_A4_MM - margenIzq - margenDer) / MM_POR_PX),
+        height: 1200,
+      });
+    }
+
     await page.setContent(html, { waitUntil: "networkidle0" });
 
     // Wait for webfonts and any <img> to finish loading
@@ -81,8 +112,22 @@ export async function renderPDF(
       );
     });
 
+    // El alto se mide DESPUÉS de esperar fuentes e imágenes: si se midiera antes,
+    // la tipografía de respaldo y las fotos sin cargar dan un alto más chico y la
+    // hoja corta el final.
+    let altoHojaUnicaMm = 0;
+    if (opts.singlePage) {
+      const altoPx = await page.evaluate(() =>
+        Math.ceil(document.documentElement.scrollHeight)
+      );
+      altoHojaUnicaMm =
+        altoPx * MM_POR_PX + mmDe(opts.margin?.top) + mmDe(opts.margin?.bottom);
+    }
+
     const buffer = await page.pdf({
-      format: opts.format ?? "A4",
+      ...(opts.singlePage
+        ? { width: `${ANCHO_A4_MM}mm`, height: `${altoHojaUnicaMm.toFixed(2)}mm` }
+        : { format: opts.format ?? "A4" }),
       printBackground: opts.printBackground ?? true,
       // Con preferCSSPageSize el margen/tamaño lo maneja el CSS @page (permite
       // portada full-bleed + detalle con margen). Si no, se usa la opción margin.

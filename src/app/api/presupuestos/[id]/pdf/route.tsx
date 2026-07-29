@@ -235,6 +235,10 @@ export async function GET(
       (budget.type === "muebles" && tipo !== "mueblista");
     const pdfBuffer = await renderPDF(html, {
       format: "A4",
+      // La orden de compra sale en UNA SOLA HOJA de alto variable: se lee en
+      // pantalla y ahí partirla en páginas solo estorba (decisión de MJ). El
+      // ancho sigue siendo A4 por si alguna vez se imprime.
+      singlePage: budget.type === "artefactos" && tipo === "orden-compra",
       displayHeaderFooter: !useNewFormat,
       headerTemplate: useNewFormat ? undefined : "<div></div>",
       footerTemplate: useNewFormat ? undefined : footer,

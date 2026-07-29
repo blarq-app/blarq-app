@@ -131,9 +131,13 @@ const CSS = `
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
 
+  /* Isotipo, NO el logo completo: esta hoja es una página de DETALLE (no tiene
+     portada), y en obra/muebles/artefactos el wordmark de 31mm va solo en la
+     portada — las hojas con tabla llevan el isotipo a 40px. Mismas medidas que
+     .dhead-iso de ObraPDF/ArtefactosPDF. Corrección de MJ 2026-07-29. */
+  .head-iso { width: 40px; height: auto; opacity: .55; margin-bottom: 5mm; display: block; }
   .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #36322C; padding-bottom: 5mm; margin-bottom: 3mm; }
-  .head-logo { width: 31mm; height: auto; opacity: .78; display: block; }
-  .head .kick { font-size: 5.5pt; letter-spacing: .26em; text-transform: uppercase; color: #9B9182; font-weight: 700; margin-top: 6mm; }
+  .head .kick { font-size: 5.5pt; letter-spacing: .26em; text-transform: uppercase; color: #9B9182; font-weight: 700; }
   .head .proj { font-family: 'Hanken Grotesk', sans-serif; font-weight: 200; font-size: 17pt; line-height: 1.08; letter-spacing: .05em; text-transform: uppercase; color: #36322C; margin-top: 3pt; padding-right: 8mm; }
   .head .psub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 7.5pt; color: #9B9182; margin-top: 3pt; }
   .head .right { text-align: right; }
@@ -254,10 +258,8 @@ export function renderOrdenCompraArtefactosHTML(
 
   const totalLineas = grupos.reduce((s, g) => s + g.filas.length, 0);
   const totalUnidades = items.reduce((s, it) => s + it.quantity, 0);
-  const logo = assetDataUri("blarq-logo-horizontal-ink.png") || assetDataUri("logo-blarq.png");
-  const logoHtml = logo
-    ? `<img class="head-logo" src="${logo}" alt="BLARQ" />`
-    : `<div class="head-logo" style="font-family:'Hanken Grotesk';font-size:20pt;letter-spacing:.15em;">BLARQ</div>`;
+  const iso = assetDataUri("blarq-isotipo-piedra.png");
+  const isoHtml = iso ? `<img class="head-iso" src="${iso}" alt="BLARQ" />` : "";
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -270,9 +272,9 @@ export function renderOrdenCompraArtefactosHTML(
   <style>${CSS}</style>
 </head>
 <body>
+  ${isoHtml}
   <div class="head">
     <div>
-      ${logoHtml}
       <div class="kick">Orden de compra · ${esc(subLabel)}</div>
       <div class="proj">${esc(project.name)}</div>
       <div class="psub">${esc(project.clientName)}${project.address ? " · " + esc(project.address) : ""}</div>

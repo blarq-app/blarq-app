@@ -140,7 +140,7 @@ export default function InvoicePickerModal({
             que scrollea: con la lista larga (más de cien facturas) se perdían
             de vista apenas MJ bajaba, y había que volver hasta arriba para
             cambiar el filtro. */}
-        <div className="shrink-0 px-6 pt-4 pb-3 border-b border-gray-100">
+        <div className="shrink-0 px-6 pt-4 pb-4 border-b border-gray-100">
           <div className="flex items-center gap-2 flex-wrap">
             <input
               type="text"
@@ -179,8 +179,18 @@ export default function InvoicePickerModal({
             scrollear — la lista se desborda y el max-h-[85vh] del modal la
             corta contra el borde de la pantalla, dejando las últimas facturas
             y sus botones "Elegir" fuera de alcance. */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-6">
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
+        {/* Sin padding ARRIBA a propósito: un `sticky top-0` se pega al borde
+            del padding del área que scrollea, así que con `pt` el encabezado de
+            la tabla se clavaba unos píxeles más abajo y por ese hueco se veían
+            pasar las filas. El aire de arriba lo pone el bloque de filtros. */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
+          {/* overflow-CLIP, no overflow-hidden: los dos recortan las esquinas
+              redondeadas, pero `hidden` crea un contenedor de scroll propio y
+              eso deja al encabezado sticky de más abajo pegado a una caja que
+              nunca scrollea (o sea, no se pega a nada). `clip` recorta igual
+              sin crear ese contenedor, así que el thead se ancla al área que
+              de verdad scrollea. */}
+          <div className="border border-gray-200 rounded-lg overflow-clip">
             {loading ? (
               <div className="p-4 text-center text-xs text-gray-500">Buscando…</div>
             ) : error ? (
@@ -191,8 +201,12 @@ export default function InvoicePickerModal({
               </div>
             ) : (
               <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500">
-                  <tr>
+                {/* Encabezado fijo: con más de cien facturas, al bajar quedaban
+                    columnas de números sin título. El fondo va en los `th` y no
+                    en el `thead` porque el fondo de un thead sticky no siempre
+                    se pinta y las filas se le transparentan por debajo. */}
+                <thead className="sticky top-0 z-10 text-[10px] uppercase tracking-wider text-gray-500">
+                  <tr className="[&>th]:bg-gray-50 [&>th]:border-b [&>th]:border-gray-200">
                     <th className="text-left px-3 py-2">Folio</th>
                     <th className="text-left px-3 py-2">{facturaType === "emitida" ? "Cliente" : "Proveedor"}</th>
                     <th className="text-left px-3 py-2">Proyecto</th>

@@ -2,11 +2,17 @@
  * Duplica los artefactos de otra cotización dentro de la cotización actual.
  *
  * POST /api/presupuestos/{id}/artefactos/importar-de
- *   body: { sourceBudgetId: string, refreshPrices?: boolean }
+ *   body: { sourceBudgetId: string, refreshPrices?: boolean,
+ *           subcategories?: string[] }
  *
- * Copia todos los ArtefactoItem del presupuesto origen al actual: nombre,
+ * Copia los ArtefactoItem del presupuesto origen al actual: nombre,
  * marca, detalle, recinto, subcategoría, cantidad, link, imagen, descuento
  * y el vínculo al catálogo BLARQ (catalogId).
+ *
+ * `subcategories` acota QUÉ se copia: es la lista de pestañas del origen
+ * que MJ dejó tildadas en el modal (los mismos tres valores que usa el
+ * editor: sanitario / cocina / iluminacion). Si no viene, se copia todo
+ * — así el comportamiento viejo de cualquier llamada previa queda intacto.
  *
  * Si refreshPrices = true (default), después de copiar revisa cada link
  * online y actualiza el precio lista al del momento — porque al traer una
@@ -29,6 +35,16 @@ import { requireSession } from "@/lib/apiAuth";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+// Las tres pestañas de artefactos. Un item puede tener la subcategoría
+// vacía o algo fuera de estas tres; el editor lo muestra bajo "sanitario",
+// así que acá lo tratamos igual — si no, filtrar haría desaparecer items
+// que hoy sí se copian.
+const SUBCATEGORIAS_VALIDAS = ["sanitario", "cocina", "iluminacion"];
+
+function normalizarSubcategoria(valor: string | null | undefined): string {
+  return valor && SUBCATEGORIAS_VALIDAS.includes(valor) ? valor : "sanitario";
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -41,6 +57,22 @@ export async function POST(
     const body = await request.json();
     const sourceBudgetId: string | undefined = body.sourceBudgetId;
     const refreshPrices: boolean = body.refreshPrices !== false;
+
+    // Filtro por pestaña. undefined = traer todo (comportamiento viejo);
+    // array = solo esas. Ignoramos cualquier valor que no sea una de las
+    // tres pestañas conocidas para no filtrar por basura.
+    const subcatsPedidas: string[] | null = Array.isArray(body.subcategories)
+      ? body.subcategories.filter((s: unknown) =>
+          SUBCATEGORIAS_VALIDAS.includes(s as string)
+        )
+      : null;
+
+    if (subcatsPedidas !== null && subcatsPedidas.length === 0) {
+      return NextResponse.json(
+        { error: "Elegí al menos un tipo de artefacto para traer" },
+        { status: 400 }
+      );
+    }
 
     if (!sourceBudgetId) {
       return NextResponse.json(
@@ -72,6 +104,24 @@ export async function POST(
       );
     }
 
+    // Nos quedamos solo con las pestañas tildadas.
+    const aCopiar =
+      subcatsPedidas === null
+        ? source.artefactoItems
+        : source.artefactoItems.filter((it) =>
+            subcatsPedidas.includes(normalizarSubcategoria(it.subcategory))
+          );
+
+    if (aCopiar.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "La cotización origen no tiene artefactos de los tipos que elegiste",
+        },
+        { status: 400 }
+      );
+    }
+
     // sortOrder arranca después de lo que ya tenga la cotización actual,
     // así los items duplicados se agregan al final sin pisar los existentes.
     const last = await prisma.artefactoItem.findFirst({
@@ -83,7 +133,7 @@ export async function POST(
 
     // 1. Copiar los items tal cual del origen.
     const createdItems = [];
-    for (const it of source.artefactoItems) {
+    for (const it of aCopiar) {
       const created = await prisma.artefactoItem.create({
         data: {
           budgetVersionId,

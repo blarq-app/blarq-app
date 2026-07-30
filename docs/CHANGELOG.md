@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-30 — Los modales de la barra de selección de Banco dejan de salirse de la pantalla
+
+- **El bug.** Al conciliar varios movimientos a la vez, "Asignar a factura" quedaba cortado contra el borde inferior (sin scroll ni acceso a los botones "Elegir") y "Pago a obra sin factura" dejaba su pie —Cancelar y Registrar— fuera de la ventana.
+- **La causa.** Los dos modales se renderizaban dentro de `MovementsSelectionBar`, que es un `fixed bottom-4 left-1/2 -translate-x-1/2`. En Tailwind 4 ese `-translate-x-1/2` es la propiedad CSS **`translate`**, que crea **bloque contenedor para todo `position:fixed` que cuelgue adentro**: el `inset-0` del fondo oscuro se resolvía contra la barrita (47px de alto) y no contra el viewport. Al diagnosticar algo parecido, ojo: recorrer ancestros buscando `transform !== "none"` **no lo encuentra**.
+- **El arreglo.** Portal a `<body>` en `InvoicePickerModal` y `GastoObraModal` — el patrón que el menú "Resolver" ya usaba. Además `min-h-0` en el área scrolleable (sin eso un hijo `flex-1` no se achica bajo el alto de su contenido y el `overflow-y-auto` nunca scrollea), `max-h-[85vh]` con pie fijo en `GastoObraModal`, y buscador, filtros y encabezado de tabla fijos en el picker.
+- **Dos GOTCHAs de `position: sticky`.** Un ancestro con `overflow-hidden` rompe el sticky (crea contenedor de scroll propio); `overflow-clip` recorta las esquinas igual sin crearlo. Y `sticky top-0` se pega al borde del **padding** del scroller, así que un `pt` deja un hueco por donde se ven pasar las filas.
+- **Alcance.** Solo layout: no toca `metrics.ts`, ni el schema, ni la lógica de imputación. Verificado en dev con 112 facturas (`scripts/verify-modal-picker-scroll.ts`, `scripts/verify-modal-gasto-obra.ts`).
+
 ## 2026-07-30 — Portofino V7 de obra cargada + "No cobrar al cliente" deja de sumar al total
 
 - **La carga.** Se cargó a la base viva la obra **V7 de Portofino (#60)** desde el Excel `V7_OBRA_PORTOFINO_17.06.26` y el PDF de entrega E11: 8 capítulos, **64 partidas cobrables + 13 marcadas "No cobrar" + 1 de descuento**, con `subChapter` para COCINA y BAÑOS. Nace **aprobada**, así que pasa a ser la versión vigente y reemplaza a la V6 (que queda intacta). Cada partida entra con el costo total del Excel y la **mano de obra de la hoja RESUMENES**, que es la que se le paga al maestro; lo que no es mano de obra va como material, sin desglose fino. Eso corrigió **5 partidas** cuya MO en la V6 venía de BASE DATOS y estaba mal.

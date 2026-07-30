@@ -116,7 +116,7 @@ export default function InvoicePickerModal({
         className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
+        <div className="shrink-0 px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-semibold text-gray-900">
               Asignar a factura {facturaType}
@@ -136,13 +136,11 @@ export default function InvoicePickerModal({
           </button>
         </div>
 
-        {/* min-h-0 es obligatorio: sin él, un hijo `flex-1` NO se achica por
-            debajo del alto de su contenido (el default de flexbox es
-            `min-height:auto`), así que el overflow-y-auto nunca llega a
-            scrollear — la lista se desborda y el max-h-[85vh] del modal la
-            corta contra el borde de la pantalla, dejando las últimas facturas
-            y sus botones "Elegir" fuera de alcance. */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-3">
+        {/* El buscador y los filtros quedan FIJOS acá arriba, fuera del área
+            que scrollea: con la lista larga (más de cien facturas) se perdían
+            de vista apenas MJ bajaba, y había que volver hasta arriba para
+            cambiar el filtro. */}
+        <div className="shrink-0 px-6 pt-4 pb-3 border-b border-gray-100">
           <div className="flex items-center gap-2 flex-wrap">
             <input
               type="text"
@@ -173,7 +171,15 @@ export default function InvoicePickerModal({
               Solo con saldo
             </label>
           </div>
+        </div>
 
+        {/* min-h-0 es obligatorio: sin él, un hijo `flex-1` NO se achica por
+            debajo del alto de su contenido (el default de flexbox es
+            `min-height:auto`), así que el overflow-y-auto nunca llega a
+            scrollear — la lista se desborda y el max-h-[85vh] del modal la
+            corta contra el borde de la pantalla, dejando las últimas facturas
+            y sus botones "Elegir" fuera de alcance. */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-6">
           <div className="border border-gray-200 rounded-lg overflow-hidden">
             {loading ? (
               <div className="p-4 text-center text-xs text-gray-500">Buscando…</div>

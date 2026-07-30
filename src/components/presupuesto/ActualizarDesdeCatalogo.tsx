@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatCLP } from "@/lib/utils";
+import { roomLabel } from "@/lib/presupuesto/ambientes";
 
 // Shape del diff que devuelve
 // /api/presupuestos/[id]/artefactos/actualizar-catalogo
@@ -41,14 +42,6 @@ export interface CatalogApplyPatch {
   referenceLink?: string | null;
 }
 
-const ROOM_LABELS: Record<string, string> = {
-  bano_principal: "Baño principal",
-  bano_secundario: "Baño secundario",
-  bano_visita: "Baño visita",
-  cocina: "Cocina",
-  lavadero: "Lavadero",
-  otro: "Otro",
-};
 
 // Dos montos se consideran iguales si difieren menos de 1 peso. Evita falsos
 // cambios por colita decimal (ej. clientPrice guardado como 79990.00000001).
@@ -72,7 +65,10 @@ function imageActionable(d: CatalogDiff): boolean {
 }
 
 /**
- * Modal "Actualizar del catálogo" para artefactos de una cotización.
+ * Modal "Comparar con mi catálogo" para artefactos de una cotización.
+ * (Se llamaba "Actualizar del catálogo" hasta 2026-07-29; se renombró en
+ * espejo con "Comparar con la tienda web" para que se lea contra qué
+ * compara cada uno.)
  *
  * Al abrirse compara cada artefacto con su producto del catálogo BLARQ y
  * muestra un diff de costo interno, precio a cliente y foto. MJ marca qué
@@ -217,7 +213,7 @@ export default function ActualizarDesdeCatalogo({
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
-            Actualizar del catálogo
+            Comparar con mi catálogo
           </h2>
           <p className="text-xs text-gray-500 mt-1">
             Compara cada artefacto con su producto en el catálogo BLARQ. El
@@ -295,7 +291,7 @@ export default function ActualizarDesdeCatalogo({
                             {d.name}
                           </div>
                           <div className="text-[10px] text-gray-500 uppercase tracking-wider">
-                            {ROOM_LABELS[d.room] ?? d.room}
+                            {roomLabel(d.room)}
                           </div>
                         </div>
 

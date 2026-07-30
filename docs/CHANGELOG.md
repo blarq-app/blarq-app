@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-30 — El nombre del ambiente deja de salir crudo (incluido el PDF al cliente)
+
+- **El bug.** El ambiente de un artefacto se guarda como **texto libre**: además de las seis claves históricas, MJ crea los suyos desde "+ Nuevo ambiente" y quedan con guiones bajos (`baño_2`, `baño_3_servicio`, `logia`, `baño_principal_1`). Cada pantalla y cada PDF tenía **su propia copia** del mapa de traducción y hacía `MAPA[room] ?? room`, así que todo lo que no estuviera en la lista salía crudo. Encima el mapa tiene las claves **sin ñ** (`bano_principal`) y los datos reales sí la tienen, así que fallaba hasta en los casos que decía cubrir.
+- **Dónde se veía.** En el editor de artefactos (`BAÑO_PRINCIPAL_1` como título de bloque) y — lo importante — en el **PDF que se le manda al cliente**: `BAÑO_PRINCIPAL_1` de encabezado y `TOTAL ARTEFACTOS BAÑO_2` en el subtotal. También en la orden de compra al proveedor y en los dos modales de comparar precios.
+- **El arreglo.** Módulo único `src/lib/presupuesto/ambientes.ts` (`ROOM_LABELS`, `ROOM_ORDER`, `roomLabel`), al lado de `chapters.ts`/`zones.ts`. Las **cuatro copias** del mapa se borraron y los seis lugares de uso pasan por `roomLabel()`: clave conocida → su etiqueta; texto libre → guiones bajos a espacios y primera letra en mayúscula.
+- **Es solo presentación.** No se toca el valor guardado, que sigue siendo la clave y es lo que usan el orden, el agrupado y los filtros. Verificado con antes/después del PDF real de Portofino (`BAÑO_2` → `BAÑO 2`, subtotal $813.448 idéntico) y con `scripts/test-artefactos-propagacion.ts` 10/10 antes y después.
+
 ## 2026-07-30 — Detalle de los traspasos a Sueldos por obra + filtro por obra en Banco
 
 - **Qué.** "Me paso a Sueldos" mostraba solo el total **Ya transferido**: no había forma de ver qué transferencias lo componían. Ahora un botón despliega la lista —fecha · concepto · monto, de la más nueva a la más vieja— con las que todavía no tienen obra/muebles marcados como pastilla ámbar "Sin marcar", total al pie y desglose por concepto. En Banco → Movimientos se agrega un **filtro por obra** en el encabezado de la columna Respaldo (`?proyecto=<id>`), que ofrece solo las obras con al menos un traspaso.
@@ -12,12 +19,21 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 - **GOTCHA reusable.** Los `BankMovement` se guardan a **medianoche UTC** (el día calendario de la cartola). Formatear con `getDate()`/`getMonth()` en hora de Chile corre la fecha **un día para atrás** (29-04 se veía 28-04). Hay que formatear en UTC — es lo que ya hacía la tabla de Banco, con el comentario correspondiente.
 - **Alcance / plata.** **NO toca `metrics.ts`**, ni el schema, ni datos: los dos cambios muestran y filtran movimientos que ya existían. Verificación con capturas en `scripts/verify-traspasos-detalle.ts`: el detalle cuadra con el total ($11.008.000) y el filtro del banco baja de 38 traspasos a los 7 de la obra.
 
+## 2026-07-29 — "Comparar con la tienda web" vuelve a la cotización de artefactos
+
+- **Qué.** El componente `RevisarPreciosArtefactos.tsx` y su ruta `…/artefactos/revisar-precios` estaban en el repo pero **nadie los renderizaba** desde el 2026-06-22 (ver entrada de ese día: quedaron "sin uso, no se borraron"). Se vuelven a enchufar en `ArtefactosEditor`. La lógica del scraper (Shopify + VTEX) no se tocó.
+- **Los dos botones, en espejo (decisión de MJ sobre 3 opciones dibujadas).** "Actualizar del catálogo" pasa a llamarse **"Comparar con mi catálogo"** y al lado va **"Comparar con la tienda web"**. El nombre dice contra QUÉ compara cada uno; se descartó unificarlos en un desplegable. Los dos van envueltos en su propio flex para que salten de renglón juntos, y la barra (ya de 6 botones) usa `flex-wrap` + `whitespace-nowrap` para no partir cada etiqueta en dos líneas.
+- **El modal ahora agrupa en tres**: DISTINTOS (con la diferencia en pesos, +rojo / −verde), NO SE PUDIERON LEER (con "Abrir link", para saber cuáles recargar) y COINCIDEN (al final, discretos). Antes era una sola lista donde el error convivía con los cambios.
+- **Despegados (`priceOverridden`).** El diff ahora arrastra el flag hasta la UI: la línea con precio editado a mano **se compara igual** (leer no toca nada) pero viene **sin marcar** y con el aviso "Precio editado a mano", para no pisar de corrido un precio negociado. Aplicar sigue siendo explícito, ítem por ítem.
+- **Aplicar SÍ despega** (a diferencia de "Comparar con mi catálogo"): va por `updateItem` → PUT por-ítem, así el precio pasa a venir de la tienda y una sincronización posterior del catálogo no lo pisa en silencio. Recalcula el precio a cliente con el descuento vigente. **No toca `metrics.ts` ni el schema.** Verificado e2e contra la base **dev**: 5 ítems bajados de MK/Kitchen House, precio a cliente recalculado OK, el link ilegible intacto.
+
 ## 2026-07-29 — "Traer de otra cotización" (artefactos): elegir qué categorías traer
 
 - **Qué.** El modal duplicaba **todos** los artefactos del presupuesto origen; no había forma de traer solo una parte. Ahora, después de elegir la cotización origen, aparece un bloque **"Qué traer"** con tres casillas — **Sanitarios / Cocina / Iluminación** — arrancando las tres tildadas (el caso normal sigue siendo traer todo). Cada casilla muestra cuántos artefactos de ese tipo tiene ESA cotización, y el botón dice cuántos entrarían (`Duplicar acá (27)`).
 - **Las palabras son las que ya usa la app** (decisión MJ). Las casillas se llaman igual que las secciones del editor — `SUBCATEGORY_LABELS` de `ArtefactosEditor.tsx` sin el "Artefactos " adelante — o sea **Sanitarios**, no "Baño": la casilla tiene que llamarse igual que la sección que va a aparecer después de importar. Los rótulos viven en la constante `SUBCATEGORIAS` del modal; el endpoint no sabe de rótulos, solo de los valores `sanitario`/`cocina`/`iluminacion`.
 - **Endpoint.** `POST /api/presupuestos/{id}/artefactos/importar-de` acepta `subcategories?: string[]` y filtra el origen antes de copiar. **Si el campo no viene, copia todo** — el comportamiento viejo queda intacto. Valores fuera de las tres pestañas se ignoran, y un array vacío da 400 con mensaje. Un artefacto con la subcategoría vacía o rara se cuenta y se trae bajo **Sanitarios**, igual que lo agrupa el editor: si no, filtrar haría desaparecer items que hoy sí se copian. `fuentes/route.ts` agrega el desglose `porSubcategoria` con un solo `groupBy` para alimentar los números de las casillas.
 - **Alcance / plata.** **NO toca `metrics.ts`**, ni el schema, ni datos existentes: lo único que cambia es CUÁLES filas se copian al duplicar. Verificado en pantalla contra la base de dev, en las dos direcciones: de Portofino V1 (27 baño / 5 cocina / 6 iluminación) a Casa Arrau V5, destildando Cocina e Iluminación entran **27, todos `sanitario`**; dejando solo Iluminación entran **6, todos `iluminacion`** y los sanitarios del destino quedan intactos. Datos de prueba borrados después.
+
 
 ## 2026-07-28 — Orden de compra de artefactos al proveedor (sin precios), una por categoría
 

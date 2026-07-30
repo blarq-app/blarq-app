@@ -27,6 +27,10 @@ import ActualizarDesdeCatalogo, {
   type CatalogApplyPatch,
 } from "./ActualizarDesdeCatalogo";
 import DuplicarArtefactos from "./DuplicarArtefactos";
+import RevisarPreciosArtefactos, {
+  type ArtefactoPricePatch,
+} from "./RevisarPreciosArtefactos";
+import { ROOM_ORDER, roomLabel } from "@/lib/presupuesto/ambientes";
 
 // Input numérico con separadores de miles. Sin foco muestra "5.488.460",
 // con foco muestra "5488460" para edición. onChange devuelve el número crudo.
@@ -98,24 +102,6 @@ interface Budget {
   artefactoItems: ArtefactoItem[];
   paymentTerms: PaymentTerm[];
 }
-
-const ROOM_LABELS: Record<string, string> = {
-  bano_principal: "Baño principal",
-  bano_secundario: "Baño secundario",
-  bano_visita: "Baño visita",
-  cocina: "Cocina",
-  lavadero: "Lavadero",
-  otro: "Otro",
-};
-
-const ROOM_ORDER = [
-  "bano_principal",
-  "bano_secundario",
-  "bano_visita",
-  "cocina",
-  "lavadero",
-  "otro",
-];
 
 const SUBCATEGORY_LABELS: Record<string, string> = {
   sanitario: "Artefactos sanitarios",
@@ -192,6 +178,7 @@ export default function ArtefactosEditor({
     null | { subcategory: string; room: string }
   >(null);
   const [showActualizarCat, setShowActualizarCat] = useState(false);
+  const [showRevisarWeb, setShowRevisarWeb] = useState(false);
   const [showDuplicar, setShowDuplicar] = useState(false);
   // Modal de "Agregar del catálogo" de nivel superior (sirve también cuando
   // la cotización está vacía, donde no hay rooms con su botón "+ agregar").
@@ -281,7 +268,7 @@ export default function ArtefactosEditor({
           );
           return {
             key: rkey,
-            label: ROOM_LABELS[rkey] ?? rkey,
+            label: roomLabel(rkey),
             items: rItems,
             subtotal,
             subtotalCostoBlarq,
@@ -437,7 +424,7 @@ export default function ArtefactosEditor({
     for (const it of targets) updateItem(it.id, { room: newRoom });
   }
 
-  // Aplica los cambios que vienen del modal "Actualizar del catálogo": baja
+  // Aplica los cambios que vienen del modal "Comparar con mi catálogo": baja
   // costo / precio a cliente / foto desde el producto del catálogo. Va por un
   // endpoint propio (NO el PUT por-ítem) para no disparar la heurística de
   // "despegar del catálogo" — bajar del catálogo no despega la línea. Cada
@@ -475,6 +462,24 @@ export default function ArtefactosEditor({
     setItems((prev) =>
       prev.map((it) => (byId.has(it.id) ? { ...it, ...byId.get(it.id)! } : it))
     );
+  }
+
+  // Aplica los cambios que vienen del modal "Comparar con la tienda web":
+  // baja el precio de lista y/o la foto que MJ marcó en la tienda.
+  //
+  // A diferencia de "Comparar con mi catálogo", esto SÍ va por `updateItem`
+  // (o sea, por el PUT por-ítem) y por lo tanto DESPEGA la línea del catálogo.
+  // Es lo correcto: el precio pasa a venir de la tienda, no del catálogo, así
+  // que si no se despegara, la próxima sincronización del catálogo lo pisaría
+  // en silencio. De paso `updateItem` recalcula el precio a cliente con el
+  // descuento vigente y propaga a las copias del mismo producto.
+  async function applyOnlinePatches(patches: ArtefactoPricePatch[]) {
+    for (const p of patches) {
+      const patch: Partial<ArtefactoItem> = {};
+      if (p.listPrice !== undefined) patch.listPrice = p.listPrice;
+      if (p.imageUrl !== undefined) patch.imageUrl = p.imageUrl;
+      if (Object.keys(patch).length > 0) updateItem(p.itemId, patch);
+    }
   }
 
   async function deleteItem(itemId: string) {
@@ -788,8 +793,8 @@ export default function ArtefactosEditor({
   return (
     <div className="space-y-6">
       {/* Toggle costo interno — banner editorial sutil arriba de todo */}
-      <div className="flex items-center justify-between">
-        <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+      <div className="flex items-start justify-between gap-4">
+        <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer shrink-0">
           <input
             type="checkbox"
             checked={showCost}
@@ -798,13 +803,17 @@ export default function ArtefactosEditor({
           />
           Mostrar columnas internas (costo BLARQ, utilidad) — no van al PDF cliente
         </label>
-        <div className="flex items-center gap-2">
+        {/* Con el sexto botón ("Comparar con la tienda web") la fila ya no
+            entra en pantallas angostas. `flex-wrap` + `whitespace-nowrap` hace
+            que los botones salten de renglón enteros, en vez de partirse cada
+            uno en dos líneas. */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <button
             onClick={() => {
               setAgregarInitialRoom("bano_principal");
               setShowAgregar(true);
             }}
-            className="text-sm bg-gray-900 text-white px-3 py-2 rounded-lg font-medium hover:bg-gray-800"
+            className="text-sm bg-gray-900 text-white px-3 py-2 rounded-lg font-medium hover:bg-gray-800 whitespace-nowrap"
           >
             + Agregar del catálogo
           </button>
@@ -816,26 +825,40 @@ export default function ArtefactosEditor({
               setAgregarInitialRoom("__custom__");
               setShowAgregar(true);
             }}
-            className="text-sm border border-gray-300 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-50"
+            className="text-sm border border-gray-300 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-50 whitespace-nowrap"
           >
             + Nuevo ambiente
           </button>
           <button
             onClick={() => setShowDuplicar(true)}
-            className="text-sm border border-gray-300 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-50"
+            className="text-sm border border-gray-300 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-50 whitespace-nowrap"
           >
             Traer de otra cotización
           </button>
-          <button
-            onClick={() => setShowActualizarCat(true)}
-            className="text-sm border border-gray-300 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-50"
-          >
-            Actualizar del catálogo
-          </button>
+          {/* Los dos botones de precios van en espejo ("Comparar con…") para
+              que se lea de un vistazo contra QUÉ compara cada uno: el catálogo
+              interno de BLARQ o la tienda web de hoy. Decisión de MJ.
+              Van envueltos en su propio flex para que, cuando la barra tenga
+              que saltar de renglón, salten LOS DOS JUNTOS — separados dejan de
+              leerse como par. */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowActualizarCat(true)}
+              className="text-sm border border-gray-300 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-50 whitespace-nowrap"
+            >
+              Comparar con mi catálogo
+            </button>
+            <button
+              onClick={() => setShowRevisarWeb(true)}
+              className="text-sm border border-gray-300 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-50 whitespace-nowrap"
+            >
+              Comparar con la tienda web
+            </button>
+          </div>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="text-sm bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
+            className="text-sm bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50 whitespace-nowrap"
           >
             {saving ? "Guardando…" : "Guardar"}
           </button>
@@ -1222,6 +1245,15 @@ export default function ArtefactosEditor({
         />
       )}
 
+      {/* Modal: comparar precio/foto contra la tienda web del link */}
+      {showRevisarWeb && (
+        <RevisarPreciosArtefactos
+          budgetId={initialBudget.id}
+          onApply={applyOnlinePatches}
+          onClose={() => setShowRevisarWeb(false)}
+        />
+      )}
+
       {/* Modal: traer artefactos de otra cotización */}
       {showDuplicar && (
         <DuplicarArtefactos
@@ -1369,7 +1401,7 @@ function AgregarArtefactosModal({
   const effectiveRoom = isCustomRoom ? customRoom.trim() : room;
   const effectiveRoomLabel = isCustomRoom
     ? customRoom.trim() || "nuevo ambiente"
-    : ROOM_LABELS[room] ?? room;
+    : roomLabel(room);
 
   return (
     <div
@@ -1412,7 +1444,7 @@ function AgregarArtefactosModal({
               >
                 {ROOM_ORDER.map((r) => (
                   <option key={r} value={r}>
-                    {ROOM_LABELS[r]}
+                    {roomLabel(r)}
                   </option>
                 ))}
                 <option value="__custom__">+ Otro ambiente…</option>

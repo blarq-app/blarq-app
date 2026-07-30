@@ -20,14 +20,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const ROOM_LABELS: Record<string, string> = {
-  bano_principal: "Baño principal",
-  bano_secundario: "Baño secundario",
-  bano_visita: "Baño visita",
-  cocina: "Cocina",
-  lavadero: "Lavadero",
-  otro: "Otro",
-};
+import { roomLabel } from "@/lib/presupuesto/ambientes";
 
 export const SUBCATEGORY_LABELS: Record<string, string> = {
   sanitario: "Artefactos sanitarios",
@@ -213,7 +206,7 @@ function construirGrupos(
   }
 
   return orden.map((key) => ({
-    label: ROOM_LABELS[key] ?? key,
+    label: roomLabel(key),
     filas: buckets.get(key)!.map((it) => ({
       name: it.name,
       detail: it.detail,

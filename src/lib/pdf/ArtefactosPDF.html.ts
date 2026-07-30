@@ -29,15 +29,7 @@ const DEFAULT_PAYMENT_TERMS = [
   { stage: "Saldo", percentage: 10 },
 ];
 
-const ROOM_LABELS: Record<string, string> = {
-  bano_principal: "Baño principal",
-  bano_secundario: "Baño secundario",
-  bano_visita: "Baño visita",
-  cocina: "Cocina",
-  lavadero: "Lavadero",
-  otro: "Otro",
-};
-const ROOM_ORDER = ["bano_principal", "bano_secundario", "bano_visita", "cocina", "lavadero", "otro"];
+import { ROOM_ORDER, roomLabel } from "@/lib/presupuesto/ambientes";
 
 const SUBCATEGORY_LABELS: Record<string, string> = {
   sanitario: "Artefactos sanitarios",
@@ -307,7 +299,7 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
     const rooms: RoomGroup[] = roomKeysSorted.map((rkey) => {
       const rItems = roomBuckets.get(rkey) ?? [];
       const subtotal = rItems.reduce((s, it) => s + it.clientPrice * it.quantity, 0);
-      return { key: rkey, label: ROOM_LABELS[rkey] ?? rkey, items: rItems, subtotal };
+      return { key: rkey, label: roomLabel(rkey), items: rItems, subtotal };
     });
     const subtotal = rooms.reduce((s, r) => s + r.subtotal, 0);
     return { key: subKey, label: SUBCATEGORY_LABELS[subKey] ?? subKey, rooms, subtotal };

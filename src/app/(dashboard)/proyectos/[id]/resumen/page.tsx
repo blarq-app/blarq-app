@@ -178,22 +178,21 @@ export default async function ResultadosPage({
   // el cálculo del fondo "generado" (fondoSueldos.ts).
   // Separado por concepto (obra / muebles / sin clasificar) para que "Me paso a
   // Sueldos" muestre cuánto falta transferir de cada utilidad.
-  const transferidoGroups = await prisma.bankMovement.groupBy({
-    by: ["internalConcepto"],
-    _sum: { amount: true },
+  //
+  // Traemos la LISTA (antes era un groupBy con solo las sumas) porque el
+  // bloque "Me paso a Sueldos" ahora despliega el detalle: qué transferencias
+  // componen el "Ya transferido", con su fecha. Los totales por concepto se
+  // derivan de esta misma lista dentro del componente, así el detalle y el
+  // total no pueden divergir nunca (una sola fuente).
+  const transferenciasSueldos = await prisma.bankMovement.findMany({
     where: {
       projectId: id,
       category: "transfer_interno",
       bankAccount: { role: "salary_fund" },
     },
+    select: { id: true, date: true, amount: true, internalConcepto: true },
+    orderBy: { date: "desc" }, // de la más nueva a la más vieja
   });
-  const transferido = { obra: 0, muebles: 0, sinConcepto: 0 };
-  for (const g of transferidoGroups) {
-    const v = g._sum.amount ?? 0;
-    if (g.internalConcepto === "obra") transferido.obra += v;
-    else if (g.internalConcepto === "muebles") transferido.muebles += v;
-    else transferido.sinConcepto += v;
-  }
 
   // Cuadro Resumen por concepto (fuente única): lo consume tanto la vista
   // CuadroResumen como la calculadora "Armar avance + Me paso a Sueldos".
@@ -504,7 +503,14 @@ export default async function ResultadosPage({
           "macro" del proyecto. */}
       <CuadroResumenAvance
         data={cuadroData}
-        transferido={transferido}
+        transferencias={transferenciasSueldos.map((t) => ({
+          id: t.id,
+          // Date → string ISO: el componente es client y las fechas no
+          // cruzan la frontera server/client como objeto.
+          date: t.date.toISOString(),
+          amount: t.amount,
+          concepto: t.internalConcepto,
+        }))}
         projectId={id}
         projectName={project.name}
         objetivosGuardados={

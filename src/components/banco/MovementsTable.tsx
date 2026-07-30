@@ -10,6 +10,7 @@ import InternalTransferConceptoSelect from "./InternalTransferConceptoSelect";
 import SalaryPeriodSelect from "./SalaryPeriodSelect";
 import CategoryInlineSelect from "./CategoryInlineSelect";
 import ImputacionColumnFilter from "./ImputacionColumnFilter";
+import ProyectoColumnFilter from "./ProyectoColumnFilter";
 import { deriveEstado, derivePaymentRespaldo } from "@/lib/banco/movementDisplay";
 
 type Payment = {
@@ -84,6 +85,8 @@ export default function MovementsTable({
   imputacionCategories,
   showImputacionFilter,
   imputacionFilterValue,
+  proyectosConTraspaso,
+  proyectoFilterValue,
 }: {
   movements: MovementRow[];
   categoryLabels: Record<string, string>;
@@ -95,6 +98,10 @@ export default function MovementsTable({
   // El filtro de la columna Imputación solo aparece en la cuenta "Sueldos".
   showImputacionFilter: boolean;
   imputacionFilterValue: string;
+  // Obras con al menos un traspaso — opciones del filtro por obra de la
+  // columna Respaldo. Vacío = no se muestra el filtro.
+  proyectosConTraspaso: { id: string; name: string; numeroProyecto: number | null }[];
+  proyectoFilterValue: string;
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -161,6 +168,13 @@ export default function MovementsTable({
                   <th className="text-left px-4 py-2 w-28">Estado</th>
                   <th className="text-left px-4 py-2 w-72 align-top">
                     Respaldo
+                    {/* Dos filtros de columna: por obra (traspasos de tal
+                        proyecto) y por tipo de imputación. La obra va primero
+                        porque acota más — es "de qué obra", no "de qué tipo". */}
+                    <ProyectoColumnFilter
+                      value={proyectoFilterValue}
+                      options={proyectosConTraspaso}
+                    />
                     {showImputacionFilter && (
                       <ImputacionColumnFilter
                         value={imputacionFilterValue}

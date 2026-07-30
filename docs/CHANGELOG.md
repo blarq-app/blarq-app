@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-30 — Detalle de los traspasos a Sueldos por obra + filtro por obra en Banco
+
+- **Qué.** "Me paso a Sueldos" mostraba solo el total **Ya transferido**: no había forma de ver qué transferencias lo componían. Ahora un botón despliega la lista —fecha · concepto · monto, de la más nueva a la más vieja— con las que todavía no tienen obra/muebles marcados como pastilla ámbar "Sin marcar", total al pie y desglose por concepto. En Banco → Movimientos se agrega un **filtro por obra** en el encabezado de la columna Respaldo (`?proyecto=<id>`), que ofrece solo las obras con al menos un traspaso.
+- **Decisiones de MJ (mirando las dos opciones renderizadas).** Detalle en **una sola lista por fecha**, no abierto concepto por concepto. Filtro **dentro de la columna**, no una fila más de pastillas arriba (mismo patrón que el filtro de imputación que ya existía). Filtra **solo los traspasos marcados a esa obra** — los pagos de facturas de la obra no entran, esos se ven en la ficha del proyecto.
+- **Fuente única.** El `groupBy` del server component se reemplazó por el `findMany` de la lista, y los totales por concepto se derivan de ESA lista dentro del componente: el detalle desplegable y el "Ya transferido" no pueden divergir. `CuadroResumenAvance` cambia de firma (`transferido` → `transferencias`); es su único consumidor.
+- **GOTCHA reusable.** Los `BankMovement` se guardan a **medianoche UTC** (el día calendario de la cartola). Formatear con `getDate()`/`getMonth()` en hora de Chile corre la fecha **un día para atrás** (29-04 se veía 28-04). Hay que formatear en UTC — es lo que ya hacía la tabla de Banco, con el comentario correspondiente.
+- **Alcance / plata.** **NO toca `metrics.ts`**, ni el schema, ni datos: los dos cambios muestran y filtran movimientos que ya existían. Verificación con capturas en `scripts/verify-traspasos-detalle.ts`: el detalle cuadra con el total ($11.008.000) y el filtro del banco baja de 38 traspasos a los 7 de la obra.
+
 ## 2026-07-29 — "Traer de otra cotización" (artefactos): elegir qué categorías traer
 
 - **Qué.** El modal duplicaba **todos** los artefactos del presupuesto origen; no había forma de traer solo una parte. Ahora, después de elegir la cotización origen, aparece un bloque **"Qué traer"** con tres casillas — **Sanitarios / Cocina / Iluminación** — arrancando las tres tildadas (el caso normal sigue siendo traer todo). Cada casilla muestra cuántos artefactos de ese tipo tiene ESA cotización, y el botón dice cuántos entrarían (`Duplicar acá (27)`).

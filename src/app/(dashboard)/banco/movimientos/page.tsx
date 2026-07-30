@@ -37,6 +37,12 @@ type SearchParams = {
   // Filtro por tipo de imputación (categoría sin factura), desde el encabezado
   // de la columna Imputación. Solo se ofrece en la cuenta Sueldos.
   imputacion?: string;
+  // Filtro por OBRA, desde el encabezado de la columna Respaldo. Filtra por el
+  // proyecto marcado en el movimiento (projectId), que hoy solo se usa para los
+  // traspasos Operativa→Sueldos: sirve para ver "los traspasos de tal obra".
+  // Los pagos de facturas de esa obra NO entran acá (esos se ven en la ficha
+  // del proyecto) — decisión de MJ, jul 2026.
+  proyecto?: string;
 };
 
 // Las categorías de imputación (las que MJ elige) y sus etiquetas salen de
@@ -161,6 +167,12 @@ export default async function MovimientosPage({
   if (sp.imputacion) {
     andFilters.push({ category: sp.imputacion });
   }
+  // Filtro por obra, desde el encabezado de la columna Respaldo. Va en
+  // andFilters (como el de imputación) para que también acote las tarjetas de
+  // totales: así el "Total movimientos" de arriba muestra la plata de ESA obra.
+  if (sp.proyecto) {
+    andFilters.push({ projectId: sp.proyecto });
+  }
   // Respaldo (naturaleza / documento). Reemplaza los estados "sin factura /
   // transfer interna / neto cero" que antes vivían en las pestañas de Estado, y
   // agrega el filtro por documento (factura / boleta / internacional / pago sin
@@ -219,7 +231,7 @@ export default async function MovimientosPage({
   if (q) statsWhere.OR = where.OR;
   if (andFilters.length > 0) statsWhere.AND = andFilters;
 
-  const [movements, accounts, statusCounts, ingresos, egresos, parcialMovs, projects, categories, boletaCount, internacionalCount] = await Promise.all([
+  const [movements, accounts, statusCounts, ingresos, egresos, parcialMovs, projects, categories, boletaCount, internacionalCount, proyectosConTraspaso] = await Promise.all([
     prisma.bankMovement.findMany({
       where,
       orderBy: { date: "desc" },
@@ -293,6 +305,15 @@ export default async function MovimientosPage({
     }),
     prisma.bankMovement.count({
       where: { payments: { some: { invoice: { origin: "gasto_internacional" } } } },
+    }),
+    // Obras que TIENEN al menos un traspaso marcado. El desplegable de la
+    // columna Respaldo ofrece solo estas —no las ~20 del estudio— para que no
+    // haya que buscar entre obras que igual devolverían lista vacía. Conteo
+    // GLOBAL a propósito: que las opciones no cambien según los otros filtros.
+    prisma.project.findMany({
+      where: { bankMovements: { some: { category: "transfer_interno" } } },
+      select: { id: true, name: true, numeroProyecto: true },
+      orderBy: { numeroProyecto: { sort: "asc", nulls: "last" } },
     }),
   ]);
 
@@ -595,6 +616,8 @@ export default async function MovimientosPage({
         imputacionCategories={OPCIONES_IMPUTACION}
         showImputacionFilter={showImputacionFilter}
         imputacionFilterValue={sp.imputacion ?? ""}
+        proyectosConTraspaso={proyectosConTraspaso}
+        proyectoFilterValue={sp.proyecto ?? ""}
       />
     </div>
   );

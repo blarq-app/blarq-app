@@ -21,7 +21,10 @@ import { conceptoDeFactura } from "@/lib/invoices/conceptoCobro";
 import { selectVigentes } from "@/lib/projects/selectVersion";
 
 // ── Tipos de entrada (estructuralmente compatibles con el include del resumen) ──
-type ObraItemLite = { total: number };
+// `noCobrado` es opcional en el tipo porque los callers arman el input con un
+// include amplio (`obraItems: true`) y no todos los tests lo pasan; ausente se
+// lee como false, que es el caso normal.
+type ObraItemLite = { total: number; noCobrado?: boolean };
 type MuebleItemLite = {
   quantity: number;
   costDistributor: number;
@@ -128,17 +131,29 @@ export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenDa
   const lastArtefactos = lastUpdated(artefactosVigentes);
 
   // ── Acordado por concepto ───────────────────────────────────────────────
+  //
+  // Las partidas "NO COBRADO" (BLARQ las absorbe: se le pagan al maestro pero
+  // no se le cobran al cliente) quedan FUERA del costo directo, igual que en
+  // metrics.ts y en el PDF de la cotización. Hasta el 2026-07-30 este archivo
+  // las sumaba: el Cuadro Resumen de Portofino mostraba $925.000 de más que la
+  // tarjeta "Total Acordado" de la misma página, y el GG que se traspasa a
+  // sueldos salía inflado en la parte proporcional. No se había visto antes
+  // porque Portofino V7 es el primer presupuesto de la base con partidas
+  // marcadas.
+  const costoDirectoCobrable = (b: BudgetVersionLite) =>
+    (b.obraItems ?? []).reduce((ss, it) => (it.noCobrado ? ss : ss + it.total), 0);
+
   const obraAcordado = obrasVigentes.reduce((s, b) => {
-    const cd = (b.obraItems ?? []).reduce((ss, it) => ss + it.total, 0);
+    const cd = costoDirectoCobrable(b);
     const gg = (b.ggPercentage ?? 0) / 100;
     const util = (b.utilityPercentage ?? 0) / 100;
     return s + cd * (1 + gg + util) * 1.19;
   }, 0);
   // Utilidad OBRA al 100% = GG total (lo que se traspasa a sueldos).
-  const obraUtilidad100 = obrasVigentes.reduce((s, b) => {
-    const cd = (b.obraItems ?? []).reduce((ss, it) => ss + it.total, 0);
-    return s + cd * ((b.ggPercentage ?? 0) / 100);
-  }, 0);
+  const obraUtilidad100 = obrasVigentes.reduce(
+    (s, b) => s + costoDirectoCobrable(b) * ((b.ggPercentage ?? 0) / 100),
+    0
+  );
 
   const mueblesItems = mueblesVigentes.flatMap((b) => (b.muebleChapters ?? []).flatMap((c) => c.items));
   const mueblesAcordado = mueblesItems.reduce((s, it) => s + it.clientPriceIva * it.quantity, 0);

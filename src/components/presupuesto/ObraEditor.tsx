@@ -539,7 +539,23 @@ export default function ObraEditor({
   }, []);
 
   // Calculos
-  const costoDirecto = items.reduce((sum, item) => sum + item.total, 0);
+  //
+  // Las partidas "NO COBRADO" (BLARQ absorbe el costo) NO entran en el costo
+  // directo: no se le cobran al cliente, así que no pueden alimentar ni la
+  // cascada hacia el total ni los montos de las cuotas de pago. Es el mismo
+  // criterio de metrics.ts y del PDF de la cotización. Hasta el 2026-07-30 acá
+  // se sumaban todas las partidas y este resumen mostraba un total más alto que
+  // la tarjeta "Total Acordado" del proyecto — no se notaba porque no había
+  // ningún presupuesto con partidas marcadas.
+  //
+  // La plata absorbida no desaparece de la pantalla: se muestra aparte, abajo
+  // del desglose, para que MJ vea cuánto le está poniendo BLARQ.
+  const itemsCobrables = items.filter((item) => !item.noCobrado);
+  const totalNoCobrado = items.reduce(
+    (sum, item) => (item.noCobrado ? sum + item.total : sum),
+    0
+  );
+  const costoDirecto = itemsCobrables.reduce((sum, item) => sum + item.total, 0);
   const gastosGenerales = costoDirecto * (ggPercent / 100);
   const utilidad = costoDirecto * (utilPercent / 100);
   const neto = costoDirecto + gastosGenerales + utilidad;
@@ -2663,8 +2679,9 @@ export default function ObraEditor({
             {(() => {
               // Sumar por tipo. Costo directo total = suma de items.total
               // (que ya incluye desglose interno). Cada componente es la
-              // suma de cost{X} × quantity en todos los items.
-              const sumByType = items.reduce(
+              // suma de cost{X} × quantity en todos los items COBRABLES —
+              // las "NO COBRADO" van aparte, igual que en el costo directo.
+              const sumByType = itemsCobrables.reduce(
                 (acc, it) => ({
                   material: acc.material + (it.costMaterial ?? 0) * it.quantity,
                   labor: acc.labor + (it.costLabor ?? 0) * it.quantity,
@@ -2717,6 +2734,17 @@ export default function ObraEditor({
                     <span>Costo directo</span>
                     <span className="tabular-nums">{formatCLP(costoDirecto)}</span>
                   </div>
+                  {/* Lo que BLARQ absorbe. Va DEBAJO del costo directo y con el
+                      ámbar de las partidas NO COBRADO: no suma al cliente, pero
+                      es plata que sale igual y MJ tiene que verla. */}
+                  {totalNoCobrado > 0 && (
+                    <div className="flex items-center justify-between text-sm pt-1.5">
+                      <span className="text-amber-700">No cobrado (lo absorbe BLARQ)</span>
+                      <span className="tabular-nums font-medium text-amber-700">
+                        {formatCLP(totalNoCobrado)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               );
             })()}

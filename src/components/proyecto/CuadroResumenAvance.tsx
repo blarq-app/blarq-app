@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { toPng } from "html-to-image";
 import { formatCLP } from "@/lib/utils";
 import type { CuadroResumenData, ConceptoKey } from "@/lib/projects/cuadroResumen";
@@ -21,24 +22,59 @@ function fmtDate(d: Date): string {
   return `${dd}-${mm}-${yy}`;
 }
 
+// Fecha de un movimiento bancario (dd-mm-aa). Va en UTC a propósito: los
+// movimientos se guardan a medianoche UTC (el día calendario de la cartola), y
+// leídos en hora de Chile se verían un día ANTES. Mismo criterio que la tabla
+// de Banco → Movimientos.
+function fmtFechaMovimiento(iso: string): string {
+  const d = new Date(iso);
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const yy = String(d.getUTCFullYear()).slice(2);
+  return `${dd}-${mm}-${yy}`;
+}
+
+// Una transferencia interna Operativa→Sueldos conciliada a esta obra. Es el
+// detalle de "Ya transferido": el usuario ve de qué está hecho ese total.
+export type TransferenciaSueldo = {
+  id: string;
+  date: string; // ISO — se serializa en el server component
+  amount: number;
+  concepto: string | null; // "obra" | "muebles" | null (todavía sin marcar)
+};
+
 export default function CuadroResumenAvance({
   data,
-  transferido,
+  transferencias,
   projectId,
   projectName,
   objetivosGuardados,
 }: {
   data: CuadroResumenData;
-  // Lo ya transferido a Sueldos, separado por concepto (sinConcepto = traspasos
-  // que MJ todavía no marcó obra/muebles en /banco).
-  transferido: { obra: number; muebles: number; sinConcepto: number };
+  // Las transferencias a Sueldos de esta obra, de la más nueva a la más vieja.
+  // Los totales por concepto se derivan de acá (no llegan calculados aparte):
+  // así el detalle desplegable y el "Ya transferido" no pueden divergir.
+  transferencias: TransferenciaSueldo[];
   projectId: string;
   // Nombre de la obra — encabezado de la imagen que se le manda al cliente.
   projectName: string;
   // Objetivos % guardados (borrador del avance), o null si nunca se guardó.
   objetivosGuardados: Record<string, number> | null;
 }) {
+  // Totales por concepto — misma suma NETA que antes hacía el groupBy en el
+  // server (una devolución viene con monto negativo y netea sola).
+  const transferido = useMemo(() => {
+    const acc = { obra: 0, muebles: 0, sinConcepto: 0 };
+    for (const t of transferencias) {
+      if (t.concepto === "obra") acc.obra += t.amount;
+      else if (t.concepto === "muebles") acc.muebles += t.amount;
+      else acc.sinConcepto += t.amount;
+    }
+    return acc;
+  }, [transferencias]);
   const transferidoTotal = transferido.obra + transferido.muebles + transferido.sinConcepto;
+  // El detalle arranca cerrado: el bloque se lee primero como resumen.
+  const [verDetalle, setVerDetalle] = useState(false);
   const { conceptos, pagos, totalAcordado, totalPagado, saldoTotal, avanceTotal, versionLabel } =
     data;
 
@@ -364,6 +400,76 @@ export default function CuadroResumenAvance({
             </tr>
           </tbody>
         </table>
+        {/* ── Detalle: de qué transferencias está hecho el "Ya transferido" ──
+            Una sola lista en orden de fecha (de la más nueva a la más vieja),
+            con el concepto de cada una. Antes solo se veía el total y no había
+            forma de saber qué traspasos lo componían. Arranca cerrado. */}
+        {transferencias.length > 0 && (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => setVerDetalle((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <span className="text-[9px] text-gray-500">{verDetalle ? "▾" : "▸"}</span>
+              {verDetalle ? "Ocultar" : "Ver"} {transferencias.length}{" "}
+              {transferencias.length === 1 ? "transferencia" : "transferencias"}
+            </button>
+
+            {verDetalle && (
+              <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                <table className="w-full text-xs">
+                  <thead className="text-[9px] uppercase tracking-wider text-gray-500 border-b border-gray-200">
+                    <tr>
+                      <th className="text-left pb-1.5 w-24">Fecha</th>
+                      <th className="text-left pb-1.5">Concepto</th>
+                      <th className="text-right pb-1.5">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transferencias.map((t) => {
+                      const sinMarcar = t.concepto !== "obra" && t.concepto !== "muebles";
+                      return (
+                        <tr key={t.id} className="border-b border-gray-200 last:border-0">
+                          <td className="py-1.5 text-gray-600 tabular-nums">
+                            {fmtFechaMovimiento(t.date)}
+                          </td>
+                          <td className="py-1.5">
+                            {sinMarcar ? (
+                              <span className="inline-block rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] uppercase tracking-wide text-amber-700">
+                                Sin marcar
+                              </span>
+                            ) : (
+                              <span className="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-[9px] uppercase tracking-wide text-gray-600">
+                                {t.concepto === "obra" ? "Obra" : "Muebles"}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-1.5 text-right tabular-nums text-gray-900">
+                            {formatCLP(t.amount)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="border-t border-gray-300 font-bold text-gray-900">
+                      <td className="pt-2 uppercase tracking-wider text-[10px]" colSpan={2}>
+                        Total transferido
+                      </td>
+                      <td className="pt-2 text-right tabular-nums">{formatCLP(transferidoTotal)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p className="text-[11px] text-gray-500 mt-2 tabular-nums">
+                  Obra {formatCLP(transferido.obra)} · Muebles {formatCLP(transferido.muebles)}
+                  {transferido.sinConcepto !== 0 && (
+                    <> · Sin marcar {formatCLP(transferido.sinConcepto)}</>
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-3 gap-3 mt-4">
           <Metric label="Generado" value={calc.generadoTotal} />
           <Metric label="Ya transferido" value={transferidoTotal} />
@@ -371,8 +477,21 @@ export default function CuadroResumenAvance({
         </div>
         {transferido.sinConcepto > 1000 && (
           <p className="text-[11px] text-amber-700 mt-2">
-            Hay {formatCLP(transferido.sinConcepto)} transferido sin marcar obra/muebles. Marcá el
-            concepto de esas transferencias en Banco → Movimientos para verlo separado por concepto.
+            Hay {formatCLP(transferido.sinConcepto)} transferido sin marcar obra/muebles — son las
+            filas ámbar del detalle. El concepto se marca en Banco.
+          </p>
+        )}
+        {/* Puente al banco: estás en la obra y querés ir a revisar los traspasos
+            o marcarles el concepto. Abre Banco → Movimientos ya filtrado por
+            esta obra (el filtro de obra de la columna Respaldo). */}
+        {transferencias.length > 0 && (
+          <p className="text-[11px] text-gray-500 mt-2">
+            <Link
+              href={`/banco/movimientos?respaldo=interna&proyecto=${projectId}`}
+              className="underline hover:text-gray-900"
+            >
+              Ver estos traspasos en Banco
+            </Link>
           </p>
         )}
         {calc.transferidoDeMas && (

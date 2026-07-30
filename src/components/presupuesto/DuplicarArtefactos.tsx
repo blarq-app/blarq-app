@@ -12,7 +12,19 @@ interface Fuente {
   projectName: string;
   clientName: string;
   itemCount: number;
+  // Cuántos artefactos hay de cada pestaña: { sanitario: 12, cocina: 3 }.
+  porSubcategoria: Record<string, number>;
 }
+
+// Las tres pestañas que MJ puede elegir traer. Las etiquetas son las
+// MISMAS palabras que usa el editor de artefactos (SUBCATEGORY_LABELS en
+// ArtefactosEditor.tsx, sin el "Artefactos " adelante): la casilla tiene
+// que llamarse igual que la sección que va a aparecer después.
+const SUBCATEGORIAS = [
+  { valor: "sanitario", etiqueta: "Sanitarios" },
+  { valor: "cocina", etiqueta: "Cocina" },
+  { valor: "iluminacion", etiqueta: "Iluminación" },
+];
 
 // Item de artefacto tal como lo devuelve la API — mismo shape que usa el
 // editor para su estado local.
@@ -74,6 +86,11 @@ export default function DuplicarArtefactos({
   const [query, setQuery] = useState("");
   const [refreshPrices, setRefreshPrices] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
+  // Pestañas tildadas. Arrancan todas tildadas al elegir una cotización:
+  // el caso normal es traer todo, y destildar es la excepción.
+  const [subcats, setSubcats] = useState<string[]>(
+    SUBCATEGORIAS.map((s) => s.valor)
+  );
   const [importing, setImporting] = useState(false);
   const [report, setReport] = useState<ImportReport | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
@@ -113,6 +130,36 @@ export default function DuplicarArtefactos({
     );
   }, [fuentes, query]);
 
+  const fuenteElegida = useMemo(
+    () => fuentes.find((f) => f.id === selected) ?? null,
+    [fuentes, selected]
+  );
+
+  // Cuántos artefactos entrarían con lo que hay tildado ahora mismo.
+  const aTraer = useMemo(() => {
+    if (!fuenteElegida) return 0;
+    return subcats.reduce(
+      (acc, s) => acc + (fuenteElegida.porSubcategoria[s] ?? 0),
+      0
+    );
+  }, [fuenteElegida, subcats]);
+
+  // Al cambiar de cotización origen volvemos a tildar las tres, para que
+  // destildar sea siempre una decisión sobre la cotización que se está
+  // mirando y no algo heredado de la anterior.
+  function elegirFuente(id: string) {
+    setSelected(id);
+    setSubcats(SUBCATEGORIAS.map((s) => s.valor));
+  }
+
+  function toggleSubcat(valor: string) {
+    setSubcats((prev) =>
+      prev.includes(valor)
+        ? prev.filter((v) => v !== valor)
+        : [...prev, valor]
+    );
+  }
+
   async function handleDuplicate() {
     if (!selected) return;
     setImporting(true);
@@ -126,6 +173,7 @@ export default function DuplicarArtefactos({
           body: JSON.stringify({
             sourceBudgetId: selected,
             refreshPrices,
+            subcategories: subcats,
           }),
         }
       );
@@ -231,7 +279,7 @@ export default function DuplicarArtefactos({
                     {filtered.map((f) => (
                       <button
                         key={f.id}
-                        onClick={() => setSelected(f.id)}
+                        onClick={() => elegirFuente(f.id)}
                         className={`w-full grid grid-cols-[minmax(0,1fr)_5rem_4rem_4rem] gap-3 items-center px-3 py-2.5 border-b border-gray-100 last:border-b-0 text-xs text-left hover:bg-gray-50 ${
                           selected === f.id ? "bg-gray-100" : ""
                         }`}
@@ -261,6 +309,50 @@ export default function DuplicarArtefactos({
                       </div>
                     )}
                   </div>
+
+                  {/* Qué traer. Solo tiene sentido una vez elegida la
+                      cotización origen: los números son de ESA cotización. */}
+                  {fuenteElegida && (
+                    <div className="mt-4 border-t border-gray-200 pt-3">
+                      <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                        Qué traer
+                      </div>
+                      <div className="flex flex-wrap gap-x-5 gap-y-2">
+                        {SUBCATEGORIAS.map((s) => {
+                          const cuantos =
+                            fuenteElegida.porSubcategoria[s.valor] ?? 0;
+                          const vacia = cuantos === 0;
+                          return (
+                            <label
+                              key={s.valor}
+                              className={`flex items-center gap-2 text-xs ${
+                                vacia
+                                  ? "text-gray-400 cursor-default"
+                                  : "text-gray-700 cursor-pointer"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!vacia && subcats.includes(s.valor)}
+                                disabled={vacia}
+                                onChange={() => toggleSubcat(s.valor)}
+                                className="accent-gray-900"
+                              />
+                              {s.etiqueta}
+                              <span className="tabular-nums text-gray-400">
+                                {vacia ? "—" : cuantos}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      {aTraer === 0 && (
+                        <div className="text-xs text-amber-700 mt-2">
+                          Tildá al menos un tipo para traer.
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <label className="flex items-center gap-2 text-xs text-gray-600 mt-3 cursor-pointer">
                     <input
@@ -302,14 +394,16 @@ export default function DuplicarArtefactos({
               </button>
               <button
                 onClick={handleDuplicate}
-                disabled={!selected || importing}
+                disabled={!selected || importing || aTraer === 0}
                 className="text-xs bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
               >
                 {importing
                   ? refreshPrices
                     ? "Duplicando y revisando precios…"
                     : "Duplicando…"
-                  : "Duplicar acá"}
+                  : selected && aTraer > 0
+                    ? `Duplicar acá (${aTraer})`
+                    : "Duplicar acá"}
               </button>
             </>
           )}

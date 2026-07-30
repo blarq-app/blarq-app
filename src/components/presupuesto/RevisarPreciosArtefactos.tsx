@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatCLP } from "@/lib/utils";
+import { roomLabel } from "@/lib/presupuesto/ambientes";
 
 // Shape del diff que devuelve /api/presupuestos/[id]/artefactos/revisar-precios
 interface OnlineDiff {
@@ -34,22 +35,6 @@ export interface ArtefactoPricePatch {
   imageUrl?: string;
 }
 
-const ROOM_LABELS: Record<string, string> = {
-  bano_principal: "Baño principal",
-  bano_secundario: "Baño secundario",
-  bano_visita: "Baño visita",
-  cocina: "Cocina",
-  lavadero: "Lavadero",
-  otro: "Otro",
-};
-
-// El ambiente se guarda como texto libre: además de las claves de arriba hay
-// ambientes inventados por MJ ("baño_2", "baño_3_servicio", "logia"). Para
-// esos, el mapa no alcanza — mostramos la clave con los guiones bajos
-// convertidos en espacios, así se lee "BAÑO 2" y no "BAÑO_2".
-function roomLabel(room: string): string {
-  return ROOM_LABELS[room] ?? room.replace(/_/g, " ");
-}
 
 /**
  * Modal "Comparar con la tienda web" para artefactos.

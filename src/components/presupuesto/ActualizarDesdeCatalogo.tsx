@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatCLP } from "@/lib/utils";
+import { roomLabel } from "@/lib/presupuesto/ambientes";
 
 // Shape del diff que devuelve
 // /api/presupuestos/[id]/artefactos/actualizar-catalogo
@@ -41,14 +42,6 @@ export interface CatalogApplyPatch {
   referenceLink?: string | null;
 }
 
-const ROOM_LABELS: Record<string, string> = {
-  bano_principal: "Baño principal",
-  bano_secundario: "Baño secundario",
-  bano_visita: "Baño visita",
-  cocina: "Cocina",
-  lavadero: "Lavadero",
-  otro: "Otro",
-};
 
 // Dos montos se consideran iguales si difieren menos de 1 peso. Evita falsos
 // cambios por colita decimal (ej. clientPrice guardado como 79990.00000001).
@@ -298,7 +291,7 @@ export default function ActualizarDesdeCatalogo({
                             {d.name}
                           </div>
                           <div className="text-[10px] text-gray-500 uppercase tracking-wider">
-                            {ROOM_LABELS[d.room] ?? d.room}
+                            {roomLabel(d.room)}
                           </div>
                         </div>
 

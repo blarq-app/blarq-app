@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-30 — El nombre del ambiente deja de salir crudo (incluido el PDF al cliente)
+
+- **El bug.** El ambiente de un artefacto se guarda como **texto libre**: además de las seis claves históricas, MJ crea los suyos desde "+ Nuevo ambiente" y quedan con guiones bajos (`baño_2`, `baño_3_servicio`, `logia`, `baño_principal_1`). Cada pantalla y cada PDF tenía **su propia copia** del mapa de traducción y hacía `MAPA[room] ?? room`, así que todo lo que no estuviera en la lista salía crudo. Encima el mapa tiene las claves **sin ñ** (`bano_principal`) y los datos reales sí la tienen, así que fallaba hasta en los casos que decía cubrir.
+- **Dónde se veía.** En el editor de artefactos (`BAÑO_PRINCIPAL_1` como título de bloque) y — lo importante — en el **PDF que se le manda al cliente**: `BAÑO_PRINCIPAL_1` de encabezado y `TOTAL ARTEFACTOS BAÑO_2` en el subtotal. También en la orden de compra al proveedor y en los dos modales de comparar precios.
+- **El arreglo.** Módulo único `src/lib/presupuesto/ambientes.ts` (`ROOM_LABELS`, `ROOM_ORDER`, `roomLabel`), al lado de `chapters.ts`/`zones.ts`. Las **cuatro copias** del mapa se borraron y los seis lugares de uso pasan por `roomLabel()`: clave conocida → su etiqueta; texto libre → guiones bajos a espacios y primera letra en mayúscula.
+- **Es solo presentación.** No se toca el valor guardado, que sigue siendo la clave y es lo que usan el orden, el agrupado y los filtros. Verificado con antes/después del PDF real de Portofino (`BAÑO_2` → `BAÑO 2`, subtotal $813.448 idéntico) y con `scripts/test-artefactos-propagacion.ts` 10/10 antes y después.
+
 ## 2026-07-29 — "Comparar con la tienda web" vuelve a la cotización de artefactos
 
 - **Qué.** El componente `RevisarPreciosArtefactos.tsx` y su ruta `…/artefactos/revisar-precios` estaban en el repo pero **nadie los renderizaba** desde el 2026-06-22 (ver entrada de ese día: quedaron "sin uso, no se borraron"). Se vuelven a enchufar en `ArtefactosEditor`. La lógica del scraper (Shopify + VTEX) no se tocó.

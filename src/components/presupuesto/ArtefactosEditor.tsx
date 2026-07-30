@@ -30,6 +30,7 @@ import DuplicarArtefactos from "./DuplicarArtefactos";
 import RevisarPreciosArtefactos, {
   type ArtefactoPricePatch,
 } from "./RevisarPreciosArtefactos";
+import { ROOM_ORDER, roomLabel } from "@/lib/presupuesto/ambientes";
 
 // Input numérico con separadores de miles. Sin foco muestra "5.488.460",
 // con foco muestra "5488460" para edición. onChange devuelve el número crudo.
@@ -101,24 +102,6 @@ interface Budget {
   artefactoItems: ArtefactoItem[];
   paymentTerms: PaymentTerm[];
 }
-
-const ROOM_LABELS: Record<string, string> = {
-  bano_principal: "Baño principal",
-  bano_secundario: "Baño secundario",
-  bano_visita: "Baño visita",
-  cocina: "Cocina",
-  lavadero: "Lavadero",
-  otro: "Otro",
-};
-
-const ROOM_ORDER = [
-  "bano_principal",
-  "bano_secundario",
-  "bano_visita",
-  "cocina",
-  "lavadero",
-  "otro",
-];
 
 const SUBCATEGORY_LABELS: Record<string, string> = {
   sanitario: "Artefactos sanitarios",
@@ -285,7 +268,7 @@ export default function ArtefactosEditor({
           );
           return {
             key: rkey,
-            label: ROOM_LABELS[rkey] ?? rkey,
+            label: roomLabel(rkey),
             items: rItems,
             subtotal,
             subtotalCostoBlarq,
@@ -1418,7 +1401,7 @@ function AgregarArtefactosModal({
   const effectiveRoom = isCustomRoom ? customRoom.trim() : room;
   const effectiveRoomLabel = isCustomRoom
     ? customRoom.trim() || "nuevo ambiente"
-    : ROOM_LABELS[room] ?? room;
+    : roomLabel(room);
 
   return (
     <div
@@ -1461,7 +1444,7 @@ function AgregarArtefactosModal({
               >
                 {ROOM_ORDER.map((r) => (
                   <option key={r} value={r}>
-                    {ROOM_LABELS[r]}
+                    {roomLabel(r)}
                   </option>
                 ))}
                 <option value="__custom__">+ Otro ambiente…</option>

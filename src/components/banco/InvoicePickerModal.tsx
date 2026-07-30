@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { formatCLP } from "@/lib/utils";
 
 type Factura = {
@@ -95,7 +96,18 @@ export default function InvoicePickerModal({
     return () => clearTimeout(t);
   }, [search]);
 
-  return (
+  // El modal se cuelga de <body> (portal) y NO del árbol donde se lo invoca.
+  // Motivo: quien lo abre es el menú "Resolver" de la barra de selección, que
+  // vive dentro de un `fixed bottom-4 left-1/2 -translate-x-1/2`. Ese translate
+  // convierte a la barrita en el bloque contenedor de todo `position:fixed` que
+  // cuelgue de ella, así que el `inset-0` de acá abajo se resolvía contra la
+  // barra (47px de alto, pegada abajo) en vez de contra la pantalla: el modal
+  // quedaba centrado sobre la barrita y se salía por abajo, cortado, sin manera
+  // de llegar al final de la lista. Con el portal, `inset-0` vuelve a ser la
+  // pantalla completa y el centrado + el max-h-[85vh] funcionan.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}
@@ -124,7 +136,13 @@ export default function InvoicePickerModal({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-3">
+        {/* min-h-0 es obligatorio: sin él, un hijo `flex-1` NO se achica por
+            debajo del alto de su contenido (el default de flexbox es
+            `min-height:auto`), así que el overflow-y-auto nunca llega a
+            scrollear — la lista se desborda y el max-h-[85vh] del modal la
+            corta contra el borde de la pantalla, dejando las últimas facturas
+            y sus botones "Elegir" fuera de alcance. */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
             <input
               type="text"
@@ -246,6 +264,7 @@ export default function InvoicePickerModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

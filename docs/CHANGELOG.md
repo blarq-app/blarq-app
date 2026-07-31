@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-30 — El menú "Resolver" de la barra de selección deja de flotar lejos del botón
+
+- **El bug.** Abierto desde la barra negra de selección, el desplegable aparecía muy arriba, con un hueco de **199px** entre el menú y su botón. En las filas no pasaba.
+- **La causa.** Al abrir hacia arriba, el menú se posicionaba con `top = r.top - estH`, donde `estH` es un alto **estimado fijo de 320px**. El menú de la barra tiene pocas opciones (125px reales), así que se dibujaba 320px más arriba igual y la diferencia quedaba como hueco. Hacia abajo no se notaba porque ahí se ancla al `bottom` del botón, que es exacto.
+- **El arreglo.** Abriendo hacia arriba se ancla el **borde inferior** del menú al botón (`bottom` en vez de `top`): queda pegado mida lo que mida. La estimación queda solo para decidir **hacia qué lado** abre, donde equivocarse no deja hueco. Se agregó `maxHeight` + scroll interno por si el menú es más alto que el espacio disponible.
+- **Verificación.** `scripts/verify-menu-resolver-posicion.ts` mide la separación menú↔botón: barra 199px → 4px, fila 4px → 4px (sin cambio). Solo layout.
+
 ## 2026-07-30 — Los modales de la barra de selección de Banco dejan de salirse de la pantalla
 
 - **El bug.** Al conciliar varios movimientos a la vez, "Asignar a factura" quedaba cortado contra el borde inferior (sin scroll ni acceso a los botones "Elegir") y "Pago a obra sin factura" dejaba su pie —Cancelar y Registrar— fuera de la ventana.

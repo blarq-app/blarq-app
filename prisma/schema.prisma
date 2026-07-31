@@ -950,6 +950,25 @@ model Invoice {
   artefactoCocina      Float?
   artefactoSanitario   Float?
   artefactoIluminacion Float?
+  // Desglose de una factura COMBINADA entre los conceptos grandes. Hasta el
+  // 2026-07-30 una factura emitida pertenecía a UN solo concepto
+  // (conceptoCobro / la categoría) y solo se podía partir DENTRO de artefactos
+  // con los 3 campos de arriba. Pero hay clientas que piden un solo documento
+  // por todo — Portofino (#60) es el caso: sus 4 facturas mezclan obra,
+  // muebles y artefactos, y el Cuadro Resumen las mandaba enteras a la columna
+  // Obra, dejando muebles y artefactos en 0%.
+  //
+  // Con estos dos campos + los 3 de artefactos, una factura puede repartirse
+  // entre los CINCO conceptos del Cuadro Resumen. Regla: si CUALQUIERA de los
+  // cinco está seteado, manda el desglose y los cinco se leen como 0 si son
+  // null; si los cinco son null, se cae al comportamiento de siempre
+  // (conceptoDeFactura + reparto proporcional dentro de artefactos).
+  //
+  // Van CON IVA y tienen que sumar el total de la factura. Cada pago se
+  // reparte prorrateado por la fracción que representa del total — el mismo
+  // criterio que ya usaban los 3 de artefactos.
+  montoObra            Float?
+  montoMuebles         Float?
   // Referencia a otra factura cuando este DTE la modifica.
   // Solo aplica a NC (tipoDoc=61) y ND (tipoDoc=56), que en Chile siempre
   // referencian la factura original que cancelan/ajustan.

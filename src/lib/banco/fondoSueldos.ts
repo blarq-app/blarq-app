@@ -14,7 +14,7 @@
 // pago es. Si está vacío, default = obra (lo más común).
 
 import type { Prisma } from "@prisma/client";
-import { conceptoDeFactura } from "@/lib/invoices/conceptoCobro";
+import { conceptoDeFactura, desgloseDeCobro } from "@/lib/invoices/conceptoCobro";
 import { selectVigente, selectVigentes } from "@/lib/projects/selectVersion";
 
 const projectFondoInclude = {
@@ -30,12 +30,20 @@ const projectFondoInclude = {
       // del concepto del cobro. Ver conceptoDeFactura.
       category: { select: { name: true } },
       status: true,
+      // Desglose de la factura COMBINADA entre conceptos (ver desgloseDeCobro).
+      // Cuando está cargado, el cobro se reparte con estos montos en vez de ir
+      // entero al concepto único de la factura.
+      montoObra: true,
+      montoMuebles: true,
+      artefactoCocina: true,
+      artefactoSanitario: true,
+      artefactoIluminacion: true,
       payments: { select: { amountApplied: true } },
     },
   },
   budgetVersions: {
     include: {
-      obraItems: { select: { total: true, costMaterial: true, costLabor: true, costTools: true, costSubcontract: true, costLoss: true, quantity: true } },
+      obraItems: { select: { total: true, noCobrado: true, costMaterial: true, costLabor: true, costTools: true, costSubcontract: true, costLoss: true, quantity: true } },
       muebleChapters: { include: { items: { select: { quantity: true, costDistributor: true, clientPriceNet: true, clientPriceIva: true } } } },
       artefactoItems: { select: { clientPrice: true } },
     },
@@ -84,7 +92,11 @@ export function computeFondoSueldos(p: ProjectWithFondo): FondoSueldosCalculo {
   let obraGGTotal = 0;
   let obraTotalAcordado = 0;
   for (const o of obras) {
-    const cd = o.obraItems.reduce((s, i) => s + i.total, 0);
+    // Las partidas "NO COBRADO" quedan fuera: BLARQ las absorbe, no se le
+    // cobran al cliente, así que no generan ni GG ni total acordado. Mismo
+    // criterio que metrics.ts, el PDF y el Cuadro Resumen (arreglado el
+    // 2026-07-30 junto con los otros dos lugares que las contaban).
+    const cd = o.obraItems.reduce((s, i) => (i.noCobrado ? s : s + i.total), 0);
     const ggPct = (o.ggPercentage ?? 0) / 100;
     const utilPct = (o.utilityPercentage ?? 0) / 100;
     obraGGTotal += cd * ggPct;
@@ -128,6 +140,17 @@ export function computeFondoSueldos(p: ProjectWithFondo): FondoSueldosCalculo {
           ? inv.totalAmount
           : 0;
     const signed = sign * cobradoDeFactura;
+    // Factura COMBINADA con el reparto cargado a mano: cada concepto se lleva
+    // su parte proporcional de lo cobrado. Es el caso de las clientas que
+    // piden un solo documento por obra + muebles + artefactos (Portofino).
+    // La parte de artefactos no aporta al fondo, igual que siempre.
+    const desglose = desgloseDeCobro(inv);
+    if (desglose && inv.totalAmount > 0) {
+      const frac = signed / inv.totalAmount;
+      obraCobrado += desglose.obra * frac;
+      mueblesCobrado += desglose.muebles * frac;
+      continue;
+    }
     // Concepto del cobro = categoría que asigna MJ (Obra/Muebles/Artefactos),
     // con respaldo al campo legacy conceptoCobro. Antes era `conceptoCobro ??
     // "obra"` → contaba TODO cobro sin concepto como obra (inflaba obra, dejaba

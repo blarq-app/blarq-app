@@ -137,14 +137,18 @@ export async function PATCH(
     // artefactos | mixto). Define a qué "centro" del proyecto entra el cobro,
     // y con eso cuánta utilidad se reconoce para Sueldos (ver fondoSueldos.ts).
     if ("conceptoCobro" in data) updates.conceptoCobro = data.conceptoCobro || null;
-    // Desglose del cobro de artefactos (Cocina / Sanitarios / Iluminación).
-    // Solo aplica a facturas EMITIDAS con concepto "artefactos" que agrupan los
-    // tres en un solo folio ("Diferencia Artefactos"). Los montos van CON IVA
-    // y el Cuadro Resumen los prorratea por la fracción de cada pago (ver
+    // Desglose del cobro entre los conceptos del Cuadro Resumen: Obra,
+    // Muebles y los tres de artefactos (Cocina / Sanitarios / Iluminación).
+    // Cubre la factura de artefactos que agrupa las tres sub-categorías y la
+    // factura COMBINADA, cuando la clienta pide un solo documento por obra +
+    // muebles + artefactos (caso Portofino). Los montos van CON IVA y el
+    // Cuadro Resumen los prorratea por la fracción de cada pago (ver
     // cuadroResumen.ts). Se guarda cada uno como número, o null para volver al
-    // reparto proporcional por presupuesto. Los tres deben sumar el total de la
-    // factura — el guard vive en la UI (DesgloseArtefactos), acá solo persiste.
+    // concepto único de la factura. Deben sumar el total — el guard vive en la
+    // UI (DesgloseCobro), acá solo se persiste.
     for (const campo of [
+      "montoObra",
+      "montoMuebles",
       "artefactoCocina",
       "artefactoSanitario",
       "artefactoIluminacion",

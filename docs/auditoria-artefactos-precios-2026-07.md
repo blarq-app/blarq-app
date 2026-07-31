@@ -1,12 +1,11 @@
 # Auditoría: sistema de precios de artefactos (julio 2026)
 
-> **Estado al 2026-07-31, después de la auditoría**: los arreglos 1, 2, 3 y 5 de
-> la lista final ya están hechos en la rama `fix/precios-artefactos-web-dcto`.
-> Quedan pendientes de decisión de MJ: la limpieza de los datos ya envenenados
-> en la base viva (4), qué hacer con el campo "precio a cliente" del catálogo
-> (6) y la higiene de links muertos (7). El cuerpo del informe se mantiene como
-> se escribió — describe el sistema **como estaba** — y cada hallazgo arreglado
-> lleva su nota.
+> **Estado al 2026-07-31, después de la auditoría**: los arreglos 1, 2, 3, 5 y 6
+> están hechos en la rama `fix/precios-artefactos-web-dcto` (PR #357). El 4
+> (limpiar los datos ya envenenados en la base viva) tiene el dry-run corrido y
+> espera el OK de MJ producto por producto. Queda el 7 (links muertos). El
+> cuerpo del informe se mantiene como se escribió — describe el sistema **como
+> estaba** — y cada hallazgo arreglado lleva su nota.
 
 **Fecha**: 2026-07-31 · **Alcance**: solo diagnóstico, no se cambió código ni datos.
 **Disparador**: en el presupuesto nuevo (Casa Los Algarrobos), "Comparar con la tienda web" no trajo el precio real del WC ATENAS PISO-N RIMLESS — la app muestra 30% / $160.840 y la web de MK dice 39% / $139.990.
@@ -105,7 +104,7 @@ El descuento de una tienda cambia cuando la tienda quiere; el catálogo solo se 
 
 ### H4 — El campo "precio a cliente" del catálogo existe pero nadie lo lee
 
-> **PENDIENTE de decisión de MJ** — es el arreglo 6.
+> **ARREGLADO** (2026-07-31): MJ decidió sacar el campo. Se quitó del código y del schema, y se corrigió el comentario que afirmaba lo contrario de lo que hacía el código. Los 53 valores quedaron respaldados en `backups/` antes del DROP, que se corre **después** del deploy (`scripts/sql/2026-07-31-drop-artefacto-catalog-clientprice.sql`).
 
 El rediseño de junio dejó en el catálogo un campo de precio a cliente explícito (para cuando MJ "comparte" parte del descuento), y el comentario del esquema dice que el % de descuento quedó como legacy. **En la práctica es al revés**: todo — la pantalla del catálogo, el margen, el agregar a cotización, la bajada a borradores, "Comparar con mi catálogo" — calcula lista × (1 − dcto) e **ignora** ese campo. El formulario de edición ni siquiera lo manda al guardar. Hoy hay **53 de 136 entradas** con un precio a cliente guardado distinto del calculado; ninguno tiene efecto. No rompe nada por sí solo, pero es una mina: si algún flujo futuro empieza a leerlo, 53 productos cambian de precio de golpe.
 
@@ -125,9 +124,15 @@ Cada punto es candidato a un pendiente separado. Ninguno está hecho.
 1. ~~**[H1] Que "Comparar con la tienda web" lea y aplique el descuento.**~~ **HECHO 2026-07-31.** Cambiar la ruta de la cotización para que use la misma lectura que ya usa el catálogo (APIs de MK/LED/KH con lista + descuento), mostrar la columna de descuento en el modal, y al aplicar guardar lista + dcto + precio recalculado. Arregla el caso Atenas y el riesgo de descuento doble con Kitchen House. Es el arreglo con mejor relación costo/beneficio: la lectura buena ya existe, hay que enchufarla acá.
 2. ~~**[H1b] "Traer de otra cotización" con la misma lectura buena.**~~ **HECHO 2026-07-31.** Mismo cambio de librería; hoy mete precios mal calculados sin que se vea.
 3. ~~**[H2] Que el autocompletar por link use las APIs de precio.**~~ **HECHO 2026-07-31.** Al crear producto (catálogo o cotización) con link de MK/LED/KH, traer lista + descuento reales en vez del precio del día como lista. Deja de sembrar entradas envenenadas.
-4. **[H2-datos] Limpieza puntual de las entradas ya envenenadas.** *(PENDIENTE — toca la base viva, necesita el OK de MJ.)* Corregir en la base los casos encontrados (horno 71L, grifería Urban-N, percha Atlas, WC Atenas a piso 210, downlight LED) con lista + dcto reales. Es un script corto tipo el `fix-catalogo-dcto-seguro.ts` que ya se usó en junio; se puede aprovechar de barrer las 26 candidatas completas.
+4. **[H2-datos] Limpieza puntual de las entradas ya envenenadas.** *(DRY-RUN CORRIDO, espera el OK de MJ.)* `scripts/fix-catalogo-lista-vs-oferta.ts` recorre las 26 candidatas y las separa en dos grupos según el criterio de junio (`fix-catalogo-dcto-seguro.ts`):
+
+   - **3 seguros** — el precio al cliente NO se mueve, solo se separa bien lista y descuento: HORNO EMPOTRABLE 71 L ($247.990 → lista $519.990 · 52,3%), PERCHA ATLAS SIMPLE ($10.990 → $15.790 · 30,4%), GRIFERÍA URBAN-N ANTIQUE BRONZE ($109.990 → $184.890 · 40,5%).
+   - **2 que SÍ moverían el precio al cliente** y por eso no se tocan solos: DOWNLIGHT LED STUDIO SLIM ($14.490 → $12.490, −$2.000) y WC ATENAS A PISO 210 MM ($148.540 → $144.350, −$4.190). Acá el precio de la tienda cambió desde que se cargó, así que corregirlo es una decisión de negocio, no una limpieza de datos.
+   - 18 sin cambio (la web no tiene descuento hoy) y 3 con el link roto.
+
+   El script corre en dry-run por defecto; para escribir hace falta `--aplicar --si-la-viva`.
 5. ~~**[H3] Mostrar la edad del precio.**~~ **HECHO 2026-07-31** (la marca por fila; la revisión automática periódica sigue sin hacerse). Columna o pastilla "revisado hace X días" en el catálogo (el dato ya está guardado, solo no se muestra), y quizás el mismo aviso dentro de "Comparar con mi catálogo". Alternativa más ambiciosa: revisión automática periódica — pero solo el aviso ya evita cotizar con precios de hace un mes sin saberlo.
-6. **[H4] Decidir qué hacer con el "precio a cliente" del catálogo.** *(PENDIENTE — es una decisión de MJ.)* O se borra el campo y el comentario del esquema (y queda claro que el precio va por lista × dcto), o se implementa de verdad (que la pantalla, la bajada a borradores y "Comparar con mi catálogo" lo respeten). Lo peor es el estado actual: 53 valores guardados que no hacen nada.
+6. ~~**[H4] Decidir qué hacer con el "precio a cliente" del catálogo.**~~ **HECHO 2026-07-31 — MJ eligió borrarlo.** Las dos salidas eran borrarlo (y dejar claro que el precio va por lista × dcto, que es lo que el código hace de verdad) o implementarlo en serio; lo peor era el estado intermedio, con 53 valores guardados que no hacían nada y podían activarse solos si algún flujo futuro los leía. Se quitó del código y del schema, con el comentario corregido; el DROP en la viva va después del deploy y los valores quedaron respaldados.
 7. **[H5] Higiene** *(PENDIENTE, salvo lo de las tiendas sin API, que ya quedó cubierto: ahora vienen marcadas y aplicar no les manda el descuento a 0.)*: arreglar los 3 links muertos, decidir si byp.cl merece lector propio, y evaluar un indicador visual de "línea despegada" en el editor (deuda declarada del ADR de junio que sigue pendiente).
 
 ---

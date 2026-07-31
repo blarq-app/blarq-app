@@ -60,7 +60,7 @@ async function capturar(page: Page, nombre: string) {
       x: caja!.x,
       y: caja!.y,
       width: caja!.width,
-      height: Math.min(caja!.height, 300),
+      height: Math.min(caja!.height, 520),
     },
   });
   console.log("  capturado:", ruta);

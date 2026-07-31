@@ -44,9 +44,21 @@ export default async function CotizacionesPage({
             status: { in: ["ejecucion", "terminado"] as string[] },
           };
 
+  // Orden de llegada: la más vieja arriba, la más nueva abajo.
+  //
+  // El correlativo manda cuando existe (las convertidas son C-1, C-2, C-3…, que
+  // es justamente el orden en que llegaron). Pero las cotizaciones activas hoy
+  // nacen sin numeroCotizacion, y ordenar solo por un campo que está vacío en
+  // todas deja el orden librado a lo que devuelva Postgres — que es arbitrario
+  // y cambia entre consultas. Por eso el desempate por fecha de creación: las
+  // sin número quedan al final (nulls last) y entre ellas, de la más vieja a la
+  // más nueva.
   const projects = await prisma.project.findMany({
     where,
-    orderBy: { numeroCotizacion: "asc" },
+    orderBy: [
+      { numeroCotizacion: { sort: "asc", nulls: "last" } },
+      { createdAt: "asc" },
+    ],
     include: PROJECT_METRICS_INCLUDE,
   });
 
@@ -65,6 +77,7 @@ export default async function CotizacionesPage({
       // presupuesto (lo cobrado al cliente, c/IVA). Vendido reflejará eso.
       vendido: m.totalAcordado,
       lastActivity: getLastActivity(p),
+      createdAt: p.createdAt,
       hasAlert: false,
       convertedAt: activeTab === "convertidas" ? p.updatedAt : null,
     };

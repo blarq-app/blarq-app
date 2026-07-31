@@ -21,6 +21,12 @@ export type ProjectRow = {
   gastado: number;
   vendido: number;
   lastActivity: Date;
+  // Fecha de creación real. La columna "Creada" de cotizaciones/archivadas la
+  // usa a ella, no lastActivity: hasta julio 2026 esa columna decía "Creada"
+  // pero mostraba la última actividad (una factura nueva la movía a "ayer"),
+  // así que no calzaba con el orden de la lista ni con lo que decía el rótulo.
+  // Opcional para los callers que no la necesitan (dashboard, /proyectos).
+  createdAt?: Date;
   hasAlert: boolean;
   // Solo para la tab Convertidas en /cotizaciones
   convertedAt?: Date | null;
@@ -180,8 +186,11 @@ function Row({
       ? row.convertedAt
         ? row.convertedAt.toLocaleDateString("es-CL", { month: "short", year: "numeric" })
         : "—"
-      : variant === "cotizacion" || variant === "archivado"
-        ? relativeDate(row.lastActivity)
+      : // En cotizaciones/archivadas la columna se llama "Creada" y muestra la
+        // fecha de creación, que es el orden en que están listadas. En
+        // terminado la columna es "Terminado" y sigue con la última actividad.
+        variant === "cotizacion" || variant === "archivado"
+        ? relativeDate(row.createdAt ?? row.lastActivity)
         : relativeDate(row.lastActivity);
 
   return (

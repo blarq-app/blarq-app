@@ -1,8 +1,14 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-07-30.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-07-31.
 
 ---
+
+- **Auditoría del sistema de precios de artefactos (2026-07-31, rama `audit/precios-artefactos`, worktree propio, SOLO DIAGNÓSTICO — sin cambios de código ni datos)**: MJ apretó "Comparar con la tienda web" armando Casa Los Algarrobos y el WC ATENAS PISO-N RIMLESS no trajo el precio real (app 30%/$160.840, web MK 39%/$139.990). En vez de parchear el caso, se auditó todo el sistema. Informe completo en `docs/auditoria-artefactos-precios-2026-07.md` (mapa de las 5 puertas de entrada de precios + hallazgos + 7 arreglos priorizados).
+  - **Causa del caso**: "Comparar con la tienda web" usa la librería VIEJA (`revisarArtefactos.ts`) que descarta el precio con descuento de la API de MK (solo conserva la lista) y no conoce Kitchen House. La lista del WC no cambió → el modal dijo "coincide" y el 39% fue invisible. Además, si aplicara, recalcula con el descuento VIEJO de la línea. "Traer de otra cotización" usa la misma librería (silencioso).
+  - **Otros hallazgos**: el autocompletar por link guarda el precio de OFERTA como lista con 0% (5 entradas envenenadas encontradas en la viva, ej. horno 71L guardado $247.990 vs lista real $519.990/52%); el catálogo no muestra hace cuánto no se revisa un precio (40 de 136 entradas con +30 días); el campo `clientPrice` del catálogo no lo lee ningún flujo (53 entradas con valores muertos).
+  - **Verificación**: base viva `ep-shy-morning` confirmada por host + marcador #64, solo lectura. Scripts `diag-audit-*.ts` en la rama. Captura anotada de mk.cl en `docs/auditoria-artefactos-precios-2026-07-assets/`.
+  - **Próximo paso**: MJ lee el informe y elige qué arreglos convertir en pendientes.
 
 - **La lista de cotizaciones se ordena por llegada, y la columna "Creada" dice la verdad (2026-07-30, rama `feat/cotizaciones-orden-llegada`, PR #355 MERGEADO y EN PROD 2026-07-30)**: MJ miró la lista en prod y preguntó cuál era el criterio de orden. No había ninguno entendible.
   - **La causa**: se ordenaba solo por `numeroCotizacion`, que en las **activas está vacío en todas** (nacen sin correlativo). Con el criterio empatado, el orden lo decidía Postgres — arbitrario y distinto entre consultas. Verificado creando 3 cotizaciones en desorden a propósito: salían en un tercer orden, que no era ni el de creación ni el de inserción.

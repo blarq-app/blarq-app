@@ -4,6 +4,21 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-30 — El menú "Resolver" de la barra de selección deja de flotar lejos del botón
+
+- **El bug.** Abierto desde la barra negra de selección, el desplegable aparecía muy arriba, con un hueco de **199px** entre el menú y su botón. En las filas no pasaba.
+- **La causa.** Al abrir hacia arriba, el menú se posicionaba con `top = r.top - estH`, donde `estH` es un alto **estimado fijo de 320px**. El menú de la barra tiene pocas opciones (125px reales), así que se dibujaba 320px más arriba igual y la diferencia quedaba como hueco. Hacia abajo no se notaba porque ahí se ancla al `bottom` del botón, que es exacto.
+- **El arreglo.** Abriendo hacia arriba se ancla el **borde inferior** del menú al botón (`bottom` en vez de `top`): queda pegado mida lo que mida. La estimación queda solo para decidir **hacia qué lado** abre, donde equivocarse no deja hueco. Se agregó `maxHeight` + scroll interno por si el menú es más alto que el espacio disponible.
+- **Verificación.** `scripts/verify-menu-resolver-posicion.ts` mide la separación menú↔botón: barra 199px → 4px, fila 4px → 4px (sin cambio). Solo layout.
+
+## 2026-07-30 — Los modales de la barra de selección de Banco dejan de salirse de la pantalla
+
+- **El bug.** Al conciliar varios movimientos a la vez, "Asignar a factura" quedaba cortado contra el borde inferior (sin scroll ni acceso a los botones "Elegir") y "Pago a obra sin factura" dejaba su pie —Cancelar y Registrar— fuera de la ventana.
+- **La causa.** Los dos modales se renderizaban dentro de `MovementsSelectionBar`, que es un `fixed bottom-4 left-1/2 -translate-x-1/2`. En Tailwind 4 ese `-translate-x-1/2` es la propiedad CSS **`translate`**, que crea **bloque contenedor para todo `position:fixed` que cuelgue adentro**: el `inset-0` del fondo oscuro se resolvía contra la barrita (47px de alto) y no contra el viewport. Al diagnosticar algo parecido, ojo: recorrer ancestros buscando `transform !== "none"` **no lo encuentra**.
+- **El arreglo.** Portal a `<body>` en `InvoicePickerModal` y `GastoObraModal` — el patrón que el menú "Resolver" ya usaba. Además `min-h-0` en el área scrolleable (sin eso un hijo `flex-1` no se achica bajo el alto de su contenido y el `overflow-y-auto` nunca scrollea), `max-h-[85vh]` con pie fijo en `GastoObraModal`, y buscador, filtros y encabezado de tabla fijos en el picker.
+- **Dos GOTCHAs de `position: sticky`.** Un ancestro con `overflow-hidden` rompe el sticky (crea contenedor de scroll propio); `overflow-clip` recorta las esquinas igual sin crearlo. Y `sticky top-0` se pega al borde del **padding** del scroller, así que un `pt` deja un hueco por donde se ven pasar las filas.
+- **Alcance.** Solo layout: no toca `metrics.ts`, ni el schema, ni la lógica de imputación. Verificado en dev con 112 facturas (`scripts/verify-modal-picker-scroll.ts`, `scripts/verify-modal-gasto-obra.ts`).
+
 ## 2026-07-30 — Una factura se puede repartir entre obra, muebles y artefactos
 
 - **El problema.** Una factura EMITIDA pertenecía a UN solo concepto (`conceptoCobro` / su categoría) y lo único que se podía partir era el interior de artefactos (los 3 campos `artefacto*`). Pero hay clientas que piden un solo documento por todo: las 4 facturas de Portofino mezclan obra + muebles + artefactos y estaban las 4 como "Obra", así que el Cuadro Resumen mandaba los $75.157.135 enteros a la columna Obra y dejaba muebles y artefactos en 0%, mientras MJ llevaba el reparto real a mano en un Excel aparte.

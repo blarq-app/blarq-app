@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { formatCLP } from "@/lib/utils";
 
 type Factura = {
@@ -95,7 +96,18 @@ export default function InvoicePickerModal({
     return () => clearTimeout(t);
   }, [search]);
 
-  return (
+  // El modal se cuelga de <body> (portal) y NO del árbol donde se lo invoca.
+  // Motivo: quien lo abre es el menú "Resolver" de la barra de selección, que
+  // vive dentro de un `fixed bottom-4 left-1/2 -translate-x-1/2`. Ese translate
+  // convierte a la barrita en el bloque contenedor de todo `position:fixed` que
+  // cuelgue de ella, así que el `inset-0` de acá abajo se resolvía contra la
+  // barra (47px de alto, pegada abajo) en vez de contra la pantalla: el modal
+  // quedaba centrado sobre la barrita y se salía por abajo, cortado, sin manera
+  // de llegar al final de la lista. Con el portal, `inset-0` vuelve a ser la
+  // pantalla completa y el centrado + el max-h-[85vh] funcionan.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}
@@ -104,7 +116,7 @@ export default function InvoicePickerModal({
         className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
+        <div className="shrink-0 px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-semibold text-gray-900">
               Asignar a factura {facturaType}
@@ -124,7 +136,11 @@ export default function InvoicePickerModal({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-3">
+        {/* El buscador y los filtros quedan FIJOS acá arriba, fuera del área
+            que scrollea: con la lista larga (más de cien facturas) se perdían
+            de vista apenas MJ bajaba, y había que volver hasta arriba para
+            cambiar el filtro. */}
+        <div className="shrink-0 px-6 pt-4 pb-4 border-b border-gray-100">
           <div className="flex items-center gap-2 flex-wrap">
             <input
               type="text"
@@ -155,8 +171,26 @@ export default function InvoicePickerModal({
               Solo con saldo
             </label>
           </div>
+        </div>
 
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
+        {/* min-h-0 es obligatorio: sin él, un hijo `flex-1` NO se achica por
+            debajo del alto de su contenido (el default de flexbox es
+            `min-height:auto`), así que el overflow-y-auto nunca llega a
+            scrollear — la lista se desborda y el max-h-[85vh] del modal la
+            corta contra el borde de la pantalla, dejando las últimas facturas
+            y sus botones "Elegir" fuera de alcance. */}
+        {/* Sin padding ARRIBA a propósito: un `sticky top-0` se pega al borde
+            del padding del área que scrollea, así que con `pt` el encabezado de
+            la tabla se clavaba unos píxeles más abajo y por ese hueco se veían
+            pasar las filas. El aire de arriba lo pone el bloque de filtros. */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
+          {/* overflow-CLIP, no overflow-hidden: los dos recortan las esquinas
+              redondeadas, pero `hidden` crea un contenedor de scroll propio y
+              eso deja al encabezado sticky de más abajo pegado a una caja que
+              nunca scrollea (o sea, no se pega a nada). `clip` recorta igual
+              sin crear ese contenedor, así que el thead se ancla al área que
+              de verdad scrollea. */}
+          <div className="border border-gray-200 rounded-lg overflow-clip">
             {loading ? (
               <div className="p-4 text-center text-xs text-gray-500">Buscando…</div>
             ) : error ? (
@@ -167,8 +201,12 @@ export default function InvoicePickerModal({
               </div>
             ) : (
               <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500">
-                  <tr>
+                {/* Encabezado fijo: con más de cien facturas, al bajar quedaban
+                    columnas de números sin título. El fondo va en los `th` y no
+                    en el `thead` porque el fondo de un thead sticky no siempre
+                    se pinta y las filas se le transparentan por debajo. */}
+                <thead className="sticky top-0 z-10 text-[10px] uppercase tracking-wider text-gray-500">
+                  <tr className="[&>th]:bg-gray-50 [&>th]:border-b [&>th]:border-gray-200">
                     <th className="text-left px-3 py-2">Folio</th>
                     <th className="text-left px-3 py-2">{facturaType === "emitida" ? "Cliente" : "Proveedor"}</th>
                     <th className="text-left px-3 py-2">Proyecto</th>
@@ -246,6 +284,7 @@ export default function InvoicePickerModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

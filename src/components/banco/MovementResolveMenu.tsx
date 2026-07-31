@@ -73,7 +73,14 @@ export default function MovementResolveMenu({
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  // El menú se ancla por arriba (`top`) o por abajo (`bottom`) según hacia
+  // dónde se abra — ver el useLayoutEffect de más abajo.
+  const [pos, setPos] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    maxHeight: number;
+  } | null>(null);
   // Subvista dentro del menú: la lista de categorías de "sueldo/retiro".
   const [subview, setSubview] = useState<null | "sueldo">(null);
   const [saveRule, setSaveRule] = useState(false);
@@ -103,14 +110,34 @@ export default function MovementResolveMenu({
     if (!open || !btnRef.current) return;
     const r = btnRef.current.getBoundingClientRect();
     const MENU_W = 260;
+    // Alto estimado: SOLO sirve para decidir hacia qué lado abre. La posición
+    // ya no depende de él (ver abajo).
     const estH = 320;
-    // Alinear el borde derecho del menú con el del botón; si no cabe abajo,
-    // abrir hacia arriba.
+    const MARGEN = 12;
+    // Alinear el borde derecho del menú con el del botón.
     let left = r.right - MENU_W;
     if (left < 8) left = 8;
-    const openUp = r.bottom + estH > window.innerHeight && r.top > estH;
-    const top = openUp ? r.top - 4 - estH : r.bottom + 4;
-    setPos({ top: Math.max(8, top), left });
+
+    const espacioAbajo = window.innerHeight - r.bottom - MARGEN;
+    const espacioArriba = r.top - MARGEN;
+    const openUp = espacioAbajo < estH && espacioArriba > espacioAbajo;
+
+    // Abriendo hacia arriba anclamos el borde INFERIOR del menú al botón
+    // (`bottom`), no el superior. Antes se calculaba `top = r.top - estH` con
+    // ese alto ESTIMADO de 320px: cuando el menú real era más corto —el caso
+    // típico de la barra de selección, que ofrece pocas opciones— igual se
+    // dibujaba 320px más arriba y quedaba flotando lejos del botón, con un
+    // hueco en el medio. Anclando por abajo, queda pegado al botón mida lo que
+    // mida. El maxHeight es para que un menú largo no se salga de la pantalla.
+    setPos(
+      openUp
+        ? {
+            bottom: window.innerHeight - r.top + 4,
+            left,
+            maxHeight: espacioArriba,
+          }
+        : { top: r.bottom + 4, left, maxHeight: espacioAbajo }
+    );
   }, [open]);
 
   // Cerrar al click afuera / escape / scroll / resize.
@@ -500,8 +527,15 @@ export default function MovementResolveMenu({
           <div
             ref={menuRef}
             role="menu"
-            style={{ position: "fixed", top: pos.top, left: pos.left, width: 260 }}
-            className="z-[60] bg-white border border-gray-200 rounded-xl shadow-lg py-1 text-sm"
+            style={{
+              position: "fixed",
+              top: pos.top,
+              bottom: pos.bottom,
+              left: pos.left,
+              width: 260,
+              maxHeight: pos.maxHeight,
+            }}
+            className="z-[60] bg-white border border-gray-200 rounded-xl shadow-lg py-1 text-sm overflow-y-auto"
           >
             {subview === "sueldo" ? (
               <SueldoSubmenu

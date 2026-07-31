@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { formatCLP } from "@/lib/utils";
 
@@ -86,16 +87,27 @@ export default function GastoObraModal({
     }
   }
 
-  return (
+  // Portal a <body> por la misma razón que InvoicePickerModal: este modal lo
+  // abre el menú "Resolver" de la barra de selección, que es un
+  // `fixed bottom-4 left-1/2 -translate-x-1/2`. Ese translate hace de la
+  // barrita el bloque contenedor de cualquier `position:fixed` que cuelgue
+  // adentro, así que el `inset-0` de acá se resolvía contra la barra (47px de
+  // alto) y no contra la pantalla: el modal quedaba centrado sobre la barrita
+  // y su pie —con Cancelar y Registrar— se iba abajo del borde de la ventana.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}
     >
+      {/* max-h + columna: en pantallas bajas el cuerpo scrollea solo y el pie
+          queda siempre visible, en vez de empujar los botones fuera de la caja. */}
       <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-md"
+        className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
+        <div className="shrink-0 px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-semibold text-gray-900">{titulo}</h2>
             <p className="text-xs text-gray-500 mt-1 tabular-nums">
@@ -112,7 +124,7 @@ export default function GastoObraModal({
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
           {!esPago && (
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -202,7 +214,7 @@ export default function GastoObraModal({
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-2">
+        <div className="shrink-0 px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-2">
           <button
             onClick={onClose}
             className="text-xs text-gray-600 px-3 py-2 hover:text-gray-900"
@@ -218,6 +230,7 @@ export default function GastoObraModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

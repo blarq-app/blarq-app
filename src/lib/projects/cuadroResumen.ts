@@ -17,7 +17,7 @@
 //   - Acordado ARTEFACTOS: split cocina/sanitarios/iluminación por subcategory.
 //   - Sueldo lo generan OBRA (su GG) y MUEBLES (utilidad neta). Artefactos NO.
 
-import { conceptoDeFactura } from "@/lib/invoices/conceptoCobro";
+import { conceptoDeFactura, desgloseDeCobro } from "@/lib/invoices/conceptoCobro";
 import { selectVigentes } from "@/lib/projects/selectVersion";
 
 // ── Tipos de entrada (estructuralmente compatibles con el include del resumen) ──
@@ -60,11 +60,14 @@ type InvoiceLite = {
   conceptoCobro: string | null;
   folioNumber: string | null;
   totalAmount: number;
-  // Desglose REAL del cobro de artefactos (si está cargado). Si alguno no es
-  // null, se usa en vez del reparto proporcional al presupuesto.
+  // Desglose REAL del cobro entre los 5 conceptos (si está cargado). Los tres
+  // de artefactos son los originales; montoObra y montoMuebles se agregaron
+  // para las facturas COMBINADAS (ver desgloseDeCobro en conceptoCobro.ts).
   artefactoCocina: number | null;
   artefactoSanitario: number | null;
   artefactoIluminacion: number | null;
+  montoObra?: number | null;
+  montoMuebles?: number | null;
   payments: PaymentLite[];
 };
 export type CuadroResumenInput = {
@@ -210,29 +213,32 @@ export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenDa
       : folio;
   };
   for (const inv of invoices.filter((i) => i.type === "emitida")) {
+    // Desglose cargado a mano: la factura se reparte entre los 5 conceptos y
+    // cada pago se prorratea por la fracción que representa del total. Cubre
+    // tanto la factura COMBINADA (obra + muebles + artefactos, caso Portofino)
+    // como el desglose de artefactos de siempre, que es el mismo mecanismo con
+    // obra y muebles en cero.
+    const desglose = desgloseDeCobro(inv);
     for (const p of inv.payments) {
       const date = new Date(p.bankMovement.date);
+      if (desglose && inv.totalAmount > 0) {
+        const frac = p.amountApplied / inv.totalAmount;
+        addPago(date, "obra", desglose.obra * frac, inv.folioNumber);
+        addPago(date, "muebles", desglose.muebles * frac, inv.folioNumber);
+        addPago(date, "cocina", desglose.cocina * frac, inv.folioNumber);
+        addPago(date, "sanitarios", desglose.sanitarios * frac, inv.folioNumber);
+        addPago(date, "iluminacion", desglose.iluminacion * frac, inv.folioNumber);
+        continue;
+      }
       const concepto = conceptoDeFactura(inv);
       if (concepto === "obra") addPago(date, "obra", p.amountApplied, inv.folioNumber);
       else if (concepto === "muebles") addPago(date, "muebles", p.amountApplied, inv.folioNumber);
       else if (concepto === "artefactos") {
-        // Si la factura tiene el desglose real cargado, lo usamos (prorrateado
-        // por la fracción de este pago); si no, repartimos proporcional al
-        // presupuesto de artefactos.
-        const tieneSplit =
-          inv.artefactoCocina != null ||
-          inv.artefactoSanitario != null ||
-          inv.artefactoIluminacion != null;
-        if (tieneSplit && inv.totalAmount > 0) {
-          const frac = p.amountApplied / inv.totalAmount;
-          addPago(date, "cocina", (inv.artefactoCocina ?? 0) * frac, inv.folioNumber);
-          addPago(date, "sanitarios", (inv.artefactoSanitario ?? 0) * frac, inv.folioNumber);
-          addPago(date, "iluminacion", (inv.artefactoIluminacion ?? 0) * frac, inv.folioNumber);
-        } else {
-          addPago(date, "cocina", p.amountApplied * ratioCocina, inv.folioNumber);
-          addPago(date, "sanitarios", p.amountApplied * ratioSanitarios, inv.folioNumber);
-          addPago(date, "iluminacion", p.amountApplied * ratioIluminacion, inv.folioNumber);
-        }
+        // Sin desglose cargado: se reparte proporcional al presupuesto de
+        // artefactos.
+        addPago(date, "cocina", p.amountApplied * ratioCocina, inv.folioNumber);
+        addPago(date, "sanitarios", p.amountApplied * ratioSanitarios, inv.folioNumber);
+        addPago(date, "iluminacion", p.amountApplied * ratioIluminacion, inv.folioNumber);
       }
     }
   }

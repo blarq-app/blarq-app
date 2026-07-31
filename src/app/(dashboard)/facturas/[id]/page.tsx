@@ -4,8 +4,7 @@ import Link from "next/link";
 import FacturaForm from "@/components/facturas/FacturaForm";
 import CompensacionNC from "@/components/facturas/CompensacionNC";
 import RemovePaymentButton from "@/components/facturas/RemovePaymentButton";
-import DesgloseArtefactos from "@/components/facturas/DesgloseArtefactos";
-import { conceptoDeFactura } from "@/lib/invoices/conceptoCobro";
+import DesgloseCobro from "@/components/facturas/DesgloseCobro";
 import { formatCLP } from "@/lib/utils";
 
 const DTE_LABEL: Record<number, string> = {
@@ -90,12 +89,13 @@ export default async function EditFacturaPage({
 
   if (!invoice) notFound();
 
-  // Desglose de artefactos: solo para facturas EMITIDAS cuyo concepto de cobro
-  // es "artefactos" (una sola factura que agrupa Cocina + Sanitarios +
-  // Iluminación). Sin desglose, el Cuadro Resumen reparte proporcional al
-  // presupuesto; cargándolo, usa los montos reales.
-  const mostrarDesgloseArtefactos =
-    invoice.type === "emitida" && conceptoDeFactura(invoice) === "artefactos";
+  // Desglose del cobro: para CUALQUIER factura EMITIDA. Antes se mostraba solo
+  // cuando el concepto era "artefactos", porque lo único que se podía repartir
+  // eran sus tres sub-categorías. Ahora también sirve para la factura
+  // COMBINADA — la clienta que pide un solo documento por obra + muebles +
+  // artefactos (Portofino) — así que se ofrece siempre en las emitidas.
+  // Sin desglose cargado, el Cuadro Resumen se comporta igual que antes.
+  const mostrarDesgloseCobro = invoice.type === "emitida";
 
   // Para NC (61) / ND (56): facturas candidatas a referenciar.
   // Mismo type + mismo rutIssuer (SII recibidas) o rutReceiver (emitidas)
@@ -369,11 +369,13 @@ export default async function EditFacturaPage({
         </div>
       )}
 
-      {mostrarDesgloseArtefactos && (
-        <DesgloseArtefactos
+      {mostrarDesgloseCobro && (
+        <DesgloseCobro
           invoiceId={invoice.id}
           totalAmount={Math.abs(invoice.totalAmount)}
           initial={{
+            montoObra: invoice.montoObra,
+            montoMuebles: invoice.montoMuebles,
             artefactoCocina: invoice.artefactoCocina,
             artefactoSanitario: invoice.artefactoSanitario,
             artefactoIluminacion: invoice.artefactoIluminacion,

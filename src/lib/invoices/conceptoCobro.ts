@@ -24,3 +24,55 @@ export function conceptoDeFactura(inv: {
   if (cat.includes("artefacto")) return "artefactos";
   return null;
 }
+
+// ── Facturas COMBINADAS ────────────────────────────────────────────────────
+//
+// Hay clientas que piden UN solo documento por todo (obra + muebles +
+// artefactos). Portofino (#60) es el caso que lo destapó: sus 4 facturas
+// mezclan los tres, y como una factura pertenecía a un solo concepto, el
+// Cuadro Resumen las mandaba enteras a la columna Obra y dejaba muebles y
+// artefactos en 0% aunque estuvieran cobrados.
+//
+// Ahora la factura puede traer el reparto cargado a mano en 5 montos (con
+// IVA, sumando el total del documento). Si CUALQUIERA de los cinco está
+// seteado, manda el desglose; si los cinco son null, no hay desglose y el
+// llamador sigue con el comportamiento de siempre.
+
+export type ConceptoDetalle = "obra" | "muebles" | "cocina" | "sanitarios" | "iluminacion";
+
+export type DesgloseCobro = Record<ConceptoDetalle, number>;
+
+export type FacturaConDesglose = {
+  montoObra?: number | null;
+  montoMuebles?: number | null;
+  artefactoCocina?: number | null;
+  artefactoSanitario?: number | null;
+  artefactoIluminacion?: number | null;
+};
+
+/** ¿La factura tiene el reparto entre conceptos cargado a mano? */
+export function tieneDesgloseCobro(inv: FacturaConDesglose): boolean {
+  return (
+    inv.montoObra != null ||
+    inv.montoMuebles != null ||
+    inv.artefactoCocina != null ||
+    inv.artefactoSanitario != null ||
+    inv.artefactoIluminacion != null
+  );
+}
+
+/**
+ * El reparto de la factura entre los 5 conceptos, o null si no lo tiene
+ * cargado. Los campos vacíos se leen como 0: si MJ llenó obra y muebles y dejó
+ * los de artefactos en blanco, es porque esa factura no cobra artefactos.
+ */
+export function desgloseDeCobro(inv: FacturaConDesglose): DesgloseCobro | null {
+  if (!tieneDesgloseCobro(inv)) return null;
+  return {
+    obra: inv.montoObra ?? 0,
+    muebles: inv.montoMuebles ?? 0,
+    cocina: inv.artefactoCocina ?? 0,
+    sanitarios: inv.artefactoSanitario ?? 0,
+    iluminacion: inv.artefactoIluminacion ?? 0,
+  };
+}

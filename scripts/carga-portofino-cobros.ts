@@ -161,10 +161,29 @@ async function main() {
             autoMatched: false,
           },
         });
-        // El movimiento pasa a estar imputado a este proyecto.
+        // El movimiento pasa a estar imputado a este proyecto Y hay que
+        // RECALCULAR su estado. Desde el PR #333 el `status` de un
+        // BankMovement es derivado (ver src/lib/banco/movementStatus.ts) y
+        // ningún camino puede saltarse el recálculo: crear el InvoicePayment
+        // sin esto deja el movimiento diciendo "Pendiente" aunque ya tenga su
+        // factura al lado — pasó en la primera corrida de este script.
+        // Estos pagos cubren el movimiento entero, así que quedan conciliados.
+        const mov = await tx.bankMovement.findUnique({
+          where: { id: x.movId },
+          select: { amount: true, status: true, payments: { select: { amountApplied: true } } },
+        });
+        const sum = (mov?.payments ?? []).reduce((s, y) => s + y.amountApplied, 0);
+        const explicito = mov?.status === "interno" || mov?.status === "neto_cero";
+        const nuevo = explicito
+          ? mov!.status
+          : sum >= Math.abs(mov?.amount ?? 0) - 1
+            ? "conciliado"
+            : sum > 0
+              ? "parcial"
+              : (mov?.status ?? "sin_asignar");
         await tx.bankMovement.update({
           where: { id: x.movId },
-          data: { projectId: p.id },
+          data: { projectId: p.id, status: nuevo },
         });
       }
       // La factura queda parcial (o pagada, si alcanzara).

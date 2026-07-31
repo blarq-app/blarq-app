@@ -37,7 +37,6 @@ interface CatalogItem {
   imageUrl: string | null;
   listPrice: number; // precio web / lista
   discountPercent: number | null; // legacy
-  clientPrice: number | null; // precio a cliente (null = igual al web)
   realCostBlarq: number | null; // mi costo (lo que paga BLARQ)
   isStandard: boolean;
   sortOrder: number;
@@ -326,7 +325,6 @@ export default function ArtefactosCatalogClient({
     referenceLink: "",
     imageUrl: "",
     listPrice: 0,
-    clientPrice: 0,
     realCostBlarq: 0,
     discountPercent: 0,
     isStandard: false,
@@ -754,7 +752,6 @@ export default function ArtefactosCatalogClient({
         referenceLink: "",
         imageUrl: "",
         listPrice: 0,
-        clientPrice: 0,
         realCostBlarq: 0,
         discountPercent: 0,
         isStandard: false,
@@ -783,7 +780,6 @@ export default function ArtefactosCatalogClient({
       referenceLink: "",
       imageUrl: "",
       listPrice: 0,
-      clientPrice: 0,
       realCostBlarq: 0,
       discountPercent: 0,
       isStandard: false,
@@ -824,7 +820,6 @@ export default function ArtefactosCatalogClient({
       referenceLink: item.referenceLink ?? "",
       imageUrl: item.imageUrl ?? "",
       listPrice: item.listPrice ?? 0,
-      clientPrice: item.clientPrice ?? 0,
       realCostBlarq: item.realCostBlarq ?? 0,
       discountPercent: item.discountPercent ?? 0,
       isStandard: item.isStandard,
@@ -909,12 +904,6 @@ export default function ArtefactosCatalogClient({
         // lista y 0%. Si la tienda no lo publica, `discountPercent` viene null
         // y se conserva lo que hubiera.
         discountPercent: data.discountPercent ?? prev.discountPercent,
-        // El precio a cliente arranca = lo que cobra la tienda hoy (vende al
-        // precio de internet), no la lista antes del descuento.
-        clientPrice:
-          data.clientPrice != null && !prev.clientPrice
-            ? data.clientPrice
-            : prev.clientPrice,
       }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");

@@ -97,9 +97,10 @@ export async function POST(request: NextRequest) {
         referenceLink: data.referenceLink ?? null,
         imageUrl: data.imageUrl ?? null,
         listPrice: data.listPrice ?? 0,
+        // Lo que paga el cliente = listPrice × (1 − discountPercent). No hay un
+        // campo aparte: el `clientPrice` del catálogo se sacó en 2026-07-31
+        // porque ningún flujo lo leía (ver auditoría de precios de artefactos).
         discountPercent: data.discountPercent ?? null,
-        // Precio a cliente: si no llega, arranca = precio web (listPrice).
-        clientPrice: data.clientPrice ?? data.listPrice ?? 0,
         // Mi costo real (lo que paga BLARQ): manual, puede venir vacío.
         realCostBlarq: data.realCostBlarq ?? null,
         isStandard: !!data.isStandard,

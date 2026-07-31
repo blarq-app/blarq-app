@@ -57,7 +57,6 @@ export async function GET(
         name: true,
         listPrice: true,
         discountPercent: true,
-        clientPrice: true,
         realCostBlarq: true,
         imageUrl: true,
         referenceLink: true,

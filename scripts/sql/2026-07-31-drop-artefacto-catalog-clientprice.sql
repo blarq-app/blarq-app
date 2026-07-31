@@ -1,0 +1,25 @@
+-- Saca la columna muerta `clientPrice` de ArtefactoCatalog.
+--
+-- Contexto: el rediseño de precios de junio 2026 agregó este campo pensando
+-- que el precio a cliente iría explícito, pero NINGÚN flujo lo leyó nunca: la
+-- pantalla del catálogo, el margen, el alta en cotización, la bajada a
+-- borradores y "Comparar con mi catálogo" calculan todos
+-- listPrice × (1 − discountPercent). En la base viva quedaron 53 productos con
+-- un valor guardado ahí que no hacía nada (auditoría 2026-07-31, decisión de MJ
+-- de sacarlo). No confundir con `ArtefactoItem.clientPrice`, que SÍ se usa y es
+-- el precio real de cada línea de cotización — esa columna NO se toca.
+--
+-- ORDEN DE EJECUCIÓN (importante):
+--   1. Mergear y desplegar el código que ya no usa la columna (PR #357).
+--   2. Recién entonces correr este SQL contra la viva.
+-- Al revés se rompe: el código viejo en producción todavía hace
+-- `select: { clientPrice: true }` y fallaría apenas desaparezca la columna.
+--
+-- ANTES de correrlo hay que tener el respaldo hecho:
+--   npx tsx scripts/backup-catalogo-clientprice.ts
+--   → backups/backup-catalogo-clientprice-2026-07-31.json
+--
+-- Se aplica a mano (SQL quirúrgico), NUNCA con `prisma migrate diff` completo:
+-- ese diff mezcla este cambio con DROPs de otras ramas.
+
+ALTER TABLE "ArtefactoCatalog" DROP COLUMN IF EXISTS "clientPrice";

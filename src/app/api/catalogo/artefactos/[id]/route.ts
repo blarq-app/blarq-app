@@ -40,8 +40,10 @@ export async function PUT(
         referenceLink: data.referenceLink,
         imageUrl: data.imageUrl,
         listPrice: data.listPrice,
+        // El precio a cliente sale de listPrice × (1 − discountPercent); el
+        // campo `clientPrice` del catálogo se sacó en 2026-07-31 (nadie lo
+        // leía — ver la auditoría de precios de artefactos).
         discountPercent: data.discountPercent,
-        clientPrice: data.clientPrice,
         realCostBlarq: data.realCostBlarq,
         isStandard: data.isStandard,
         ...(updateLastCheck && { lastPriceCheck: new Date() }),

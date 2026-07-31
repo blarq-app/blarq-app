@@ -55,6 +55,42 @@ export function relativeDate(date: Date | string | null | undefined): string {
   return d.toLocaleDateString("es-CL", { day: "2-digit", month: "short" });
 }
 
+/**
+ * Antigüedad de la última revisión de precio de un producto del catálogo.
+ *
+ * Por qué existe (auditoría 2026-07-31): el precio del catálogo solo se
+ * actualiza cuando alguien corre "Revisar precios" a mano, pero las tiendas
+ * cambian sus ofertas cuando quieren. En la base viva había 40 de 136 productos
+ * con más de un mes sin revisar y la pantalla no lo mostraba en ningún lado, así
+ * que no había forma de saber si el precio que se estaba cotizando era de ayer o
+ * de hace dos meses. `vencido` marca el umbral a partir del cual conviene
+ * revisar antes de mandar una cotización.
+ */
+export const DIAS_PRECIO_VENCIDO = 30;
+
+export function edadRevisionPrecio(date: Date | string | null | undefined): {
+  texto: string;
+  dias: number | null;
+  vencido: boolean;
+} {
+  if (!date) return { texto: "sin revisar", dias: null, vencido: true };
+  const d = typeof date === "string" ? new Date(date) : date;
+  const dias = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+  if (dias < 1) return { texto: "revisado hoy", dias, vencido: false };
+  if (dias === 1) return { texto: "revisado ayer", dias, vencido: false };
+  if (dias < DIAS_PRECIO_VENCIDO)
+    return { texto: `revisado hace ${dias} días`, dias, vencido: false };
+  const meses = Math.floor(dias / 30);
+  return {
+    texto:
+      meses <= 1
+        ? "revisado hace más de un mes"
+        : `revisado hace ${meses} meses`,
+    dias,
+    vencido: true,
+  };
+}
+
 // Orden cronológico/lógico de cómo se ejecuta una obra. Sirve para
 // mostrar las categorías del catálogo de partidas en el orden en que
 // realmente se trabajan, no alfabético. Categorías que no figuran en

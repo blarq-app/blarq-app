@@ -1,5 +1,13 @@
 # Auditoría: sistema de precios de artefactos (julio 2026)
 
+> **Estado al 2026-07-31, después de la auditoría**: los arreglos 1, 2, 3 y 5 de
+> la lista final ya están hechos en la rama `fix/precios-artefactos-web-dcto`.
+> Quedan pendientes de decisión de MJ: la limpieza de los datos ya envenenados
+> en la base viva (4), qué hacer con el campo "precio a cliente" del catálogo
+> (6) y la higiene de links muertos (7). El cuerpo del informe se mantiene como
+> se escribió — describe el sistema **como estaba** — y cada hallazgo arreglado
+> lleva su nota.
+
 **Fecha**: 2026-07-31 · **Alcance**: solo diagnóstico, no se cambió código ni datos.
 **Disparador**: en el presupuesto nuevo (Casa Los Algarrobos), "Comparar con la tienda web" no trajo el precio real del WC ATENAS PISO-N RIMLESS — la app muestra 30% / $160.840 y la web de MK dice 39% / $139.990.
 
@@ -55,11 +63,17 @@ Qué pasó, en orden:
 
 ![La página de MK el 2026-07-31: la app solo lee la lista tachada (azul) e ignora el precio de venta y el 39% (rojo)](auditoria-artefactos-precios-2026-07-assets/mk-wc-atenas-2026-07-31.png)
 
+Así queda el mismo caso **con el arreglo aplicado** (reproducido en la base de desarrollo con los valores exactos de la cotización real): el WC ya no cae en "coinciden" sino en "distintos", con el antes tachado arriba y el precio de la tienda abajo.
+
+![El modal "Comparar con la tienda web" después del arreglo: WC Atenas, $229.840 · 30% · $160.840 tachado, y debajo $229.840 · 39% · $139.990 con −$20.850](auditoria-artefactos-precios-2026-07-assets/modal-comparar-tienda-web-despues.png)
+
 ---
 
 ## 3. Hallazgos, del más grave al menor
 
 ### H1 — "Comparar con la tienda web" es ciego al descuento (la causa del caso Atenas)
+
+> **ARREGLADO** (2026-07-31). Toda la lectura de precios pasa ahora por un módulo único (`leerPrecioWeb`) que devuelve lista, precio de venta y descuento, y avisa si el descuento es confiable. El modal muestra los tres números y al aplicar bajan los tres. Verificado reproduciendo el caso: el WC pasa a "Distintos", muestra 30% → 39% y queda en $139.990.
 
 La ruta de la cotización usa la librería vieja de revisión (`revisarArtefactos.ts`), anterior al arreglo de descuentos de junio. Esa librería pide el precio a la API de MK, recibe lista Y precio de oferta… y **conserva solo la lista**. Además **no conoce Kitchen House** (el arreglo del PR #296 se hizo solo en la ruta del catálogo), así que para KH cae al lector genérico, que devuelve **el precio de oferta como si fuera la lista**. Consecuencias:
 
@@ -70,6 +84,8 @@ La ruta de la cotización usa la librería vieja de revisión (`revisarArtefacto
 La ruta del catálogo ("Revisar precios") NO tiene este problema: ya lee lista + descuento por la vía correcta en las tres tiendas. El arreglo es hacer que la cotización use esa misma vía.
 
 ### H2 — Crear un producto pegando un link guarda la oferta como lista (0% de descuento)
+
+> **ARREGLADO para lo que entre de acá en adelante** (2026-07-31): el autocompletar por link usa las APIs de precio y trae la lista real con su descuento. **Las entradas ya envenenadas siguen igual** — eso es el arreglo 4, que toca datos de la base viva y espera el OK de MJ.
 
 El autocompletar de "agregar producto" (catálogo y cotización) usa solo el lector genérico de páginas, nunca las APIs de precio. El lector encuentra el precio de VENTA del día. Si el producto estaba en oferta, queda guardado como lista con 0%. Casos reales encontrados en la base viva (de 26 entradas con 0% y link a tienda con API):
 
@@ -83,9 +99,13 @@ El daño es doble: el margen aparente se distorsiona, y cuando después alguien 
 
 ### H3 — El catálogo no avisa que está vencido
 
+> **ARREGLADO** (2026-07-31): cada fila con link muestra "revisado hace X" bajo el precio de lista, en ámbar a partir de 30 días.
+
 El descuento de una tienda cambia cuando la tienda quiere; el catálogo solo se actualiza cuando MJ corre "Revisar precios" a mano. Foto de hoy de las 136 entradas: **4 nunca revisadas, 18 revisadas hace ≤7 días, 74 entre 8 y 30 días, 40 hace más de 30 días**. La pantalla no muestra en ninguna parte "revisado hace X días", así que no hay forma de saber si el precio que se está cotizando es de ayer o de hace dos meses. El caso Atenas son solo 17 días de desfase.
 
 ### H4 — El campo "precio a cliente" del catálogo existe pero nadie lo lee
+
+> **PENDIENTE de decisión de MJ** — es el arreglo 6.
 
 El rediseño de junio dejó en el catálogo un campo de precio a cliente explícito (para cuando MJ "comparte" parte del descuento), y el comentario del esquema dice que el % de descuento quedó como legacy. **En la práctica es al revés**: todo — la pantalla del catálogo, el margen, el agregar a cotización, la bajada a borradores, "Comparar con mi catálogo" — calcula lista × (1 − dcto) e **ignora** ese campo. El formulario de edición ni siquiera lo manda al guardar. Hoy hay **53 de 136 entradas** con un precio a cliente guardado distinto del calculado; ninguno tiene efecto. No rompe nada por sí solo, pero es una mina: si algún flujo futuro empieza a leerlo, 53 productos cambian de precio de golpe.
 
@@ -102,13 +122,13 @@ El rediseño de junio dejó en el catálogo un campo de precio a cliente explíc
 
 Cada punto es candidato a un pendiente separado. Ninguno está hecho.
 
-1. **[H1] Que "Comparar con la tienda web" lea y aplique el descuento.** Cambiar la ruta de la cotización para que use la misma lectura que ya usa el catálogo (APIs de MK/LED/KH con lista + descuento), mostrar la columna de descuento en el modal, y al aplicar guardar lista + dcto + precio recalculado. Arregla el caso Atenas y el riesgo de descuento doble con Kitchen House. Es el arreglo con mejor relación costo/beneficio: la lectura buena ya existe, hay que enchufarla acá.
-2. **[H1b] "Traer de otra cotización" con la misma lectura buena.** Mismo cambio de librería; hoy mete precios mal calculados sin que se vea.
-3. **[H2] Que el autocompletar por link use las APIs de precio.** Al crear producto (catálogo o cotización) con link de MK/LED/KH, traer lista + descuento reales en vez del precio del día como lista. Deja de sembrar entradas envenenadas.
-4. **[H2-datos] Limpieza puntual de las entradas ya envenenadas.** Corregir en la base los casos encontrados (horno 71L, grifería Urban-N, percha Atlas, WC Atenas a piso 210, downlight LED) con lista + dcto reales. Es un script corto tipo el `fix-catalogo-dcto-seguro.ts` que ya se usó en junio; se puede aprovechar de barrer las 26 candidatas completas.
-5. **[H3] Mostrar la edad del precio.** Columna o pastilla "revisado hace X días" en el catálogo (el dato ya está guardado, solo no se muestra), y quizás el mismo aviso dentro de "Comparar con mi catálogo". Alternativa más ambiciosa: revisión automática periódica — pero solo el aviso ya evita cotizar con precios de hace un mes sin saberlo.
-6. **[H4] Decidir qué hacer con el "precio a cliente" del catálogo.** O se borra el campo y el comentario del esquema (y queda claro que el precio va por lista × dcto), o se implementa de verdad (que la pantalla, la bajada a borradores y "Comparar con mi catálogo" lo respeten). Lo peor es el estado actual: 53 valores guardados que no hacen nada.
-7. **[H5] Higiene**: arreglar los 3 links muertos, decidir si byp.cl merece lector propio, y evaluar un indicador visual de "línea despegada" en el editor (deuda declarada del ADR de junio que sigue pendiente).
+1. ~~**[H1] Que "Comparar con la tienda web" lea y aplique el descuento.**~~ **HECHO 2026-07-31.** Cambiar la ruta de la cotización para que use la misma lectura que ya usa el catálogo (APIs de MK/LED/KH con lista + descuento), mostrar la columna de descuento en el modal, y al aplicar guardar lista + dcto + precio recalculado. Arregla el caso Atenas y el riesgo de descuento doble con Kitchen House. Es el arreglo con mejor relación costo/beneficio: la lectura buena ya existe, hay que enchufarla acá.
+2. ~~**[H1b] "Traer de otra cotización" con la misma lectura buena.**~~ **HECHO 2026-07-31.** Mismo cambio de librería; hoy mete precios mal calculados sin que se vea.
+3. ~~**[H2] Que el autocompletar por link use las APIs de precio.**~~ **HECHO 2026-07-31.** Al crear producto (catálogo o cotización) con link de MK/LED/KH, traer lista + descuento reales en vez del precio del día como lista. Deja de sembrar entradas envenenadas.
+4. **[H2-datos] Limpieza puntual de las entradas ya envenenadas.** *(PENDIENTE — toca la base viva, necesita el OK de MJ.)* Corregir en la base los casos encontrados (horno 71L, grifería Urban-N, percha Atlas, WC Atenas a piso 210, downlight LED) con lista + dcto reales. Es un script corto tipo el `fix-catalogo-dcto-seguro.ts` que ya se usó en junio; se puede aprovechar de barrer las 26 candidatas completas.
+5. ~~**[H3] Mostrar la edad del precio.**~~ **HECHO 2026-07-31** (la marca por fila; la revisión automática periódica sigue sin hacerse). Columna o pastilla "revisado hace X días" en el catálogo (el dato ya está guardado, solo no se muestra), y quizás el mismo aviso dentro de "Comparar con mi catálogo". Alternativa más ambiciosa: revisión automática periódica — pero solo el aviso ya evita cotizar con precios de hace un mes sin saberlo.
+6. **[H4] Decidir qué hacer con el "precio a cliente" del catálogo.** *(PENDIENTE — es una decisión de MJ.)* O se borra el campo y el comentario del esquema (y queda claro que el precio va por lista × dcto), o se implementa de verdad (que la pantalla, la bajada a borradores y "Comparar con mi catálogo" lo respeten). Lo peor es el estado actual: 53 valores guardados que no hacen nada.
+7. **[H5] Higiene** *(PENDIENTE, salvo lo de las tiendas sin API, que ya quedó cubierto: ahora vienen marcadas y aplicar no les manda el descuento a 0.)*: arreglar los 3 links muertos, decidir si byp.cl merece lector propio, y evaluar un indicador visual de "línea despegada" en el editor (deuda declarada del ADR de junio que sigue pendiente).
 
 ---
 

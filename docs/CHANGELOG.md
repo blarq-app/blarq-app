@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-07-31 — Los precios de artefactos leen el descuento de la tienda (una sola lectura para todos los caminos)
+
+- **El bug que lo destapó.** MJ armó un presupuesto, apretó "Comparar con la tienda web" y el botón dijo "coincide" mientras la tienda cobraba $20.850 menos por unidad. El WC Atenas de mk.cl había pasado de 30% a **39%** sin mover el precio de lista ($229.840), y el modal comparaba **solo la lista**.
+- **La causa de fondo: tres lecturas distintas.** La ruta del catálogo leía lista + descuento por la API de la tienda (bien). La de la cotización (`revisarArtefactos.ts`) pedía lo mismo y **descartaba el precio de venta**, además de no conocer Kitchen House (Shopify) — ahí leía la oferta como si fuera lista, con riesgo de descuento doble al aplicar. Y el autocompletar por link usaba solo el scraper, que ve UN precio: un producto en oferta entraba con el precio rebajado como lista y 0% de descuento (así quedó el horno de $247.990 cuya lista real es $519.990).
+- **El arreglo.** Módulo único `src/lib/catalog/leerPrecioWeb.ts` — VTEX, Shopify y scraper genérico entran por el mismo lugar y devuelven lista, precio de venta, descuento y **`discountKnown`**. Lo usan los cuatro caminos: "Comparar con la tienda web" (compara y aplica los tres números), "Traer de otra cotización" (refresca también el descuento, antes arrastraba el del origen), el autocompletar por link (`extraerArtefacto.ts`) y "Revisar precios" del catálogo.
+- **`discountKnown` es la pieza que evita repetir el problema.** En una tienda sin API no se puede saber si el número es lista u oferta: esas filas quedan marcadas y aplicar **no pisa** el descuento guardado. Antes lo mandaba a 0 en silencio. Se agregó además "revisado hace X" bajo cada precio del catálogo (ámbar pasados 30 días): 40 de 136 productos llevaban más de un mes sin revisar y no se veía en ningún lado.
+- **Alcance y verificación.** No toca `metrics.ts` ni el schema. Verificado contra dev sembrando el caso real y borrándolo después: el WC pasa a "Distintos", muestra 30% → 39% y al aplicar queda en $139.990. `test-artefactos-propagacion` 10/10. Informe completo en [`auditoria-artefactos-precios-2026-07.md`](auditoria-artefactos-precios-2026-07.md); quedan pendientes la limpieza de los datos ya envenenados y el campo `clientPrice` del catálogo, que nadie lee.
+
 ## 2026-07-30 — El menú "Resolver" de la barra de selección deja de flotar lejos del botón
 
 - **El bug.** Abierto desde la barra negra de selección, el desplegable aparecía muy arriba, con un hueco de **199px** entre el menú y su botón. En las filas no pasaba.

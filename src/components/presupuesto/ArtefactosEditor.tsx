@@ -465,18 +465,28 @@ export default function ArtefactosEditor({
   }
 
   // Aplica los cambios que vienen del modal "Comparar con la tienda web":
-  // baja el precio de lista y/o la foto que MJ marcó en la tienda.
+  // baja el precio de lista, el DESCUENTO vigente en la tienda y/o la foto que
+  // MJ marcó.
+  //
+  // El descuento viaja desde el arreglo 2026-07-31 (auditoría de precios):
+  // antes solo bajaba la lista y el precio a cliente se recalculaba con el
+  // descuento VIEJO de la línea, así que una oferta nueva nunca llegaba. Si la
+  // tienda no publica descuento (no es VTEX ni Shopify), el modal no lo manda
+  // y acá se conserva el guardado.
   //
   // A diferencia de "Comparar con mi catálogo", esto SÍ va por `updateItem`
   // (o sea, por el PUT por-ítem) y por lo tanto DESPEGA la línea del catálogo.
   // Es lo correcto: el precio pasa a venir de la tienda, no del catálogo, así
   // que si no se despegara, la próxima sincronización del catálogo lo pisaría
-  // en silencio. De paso `updateItem` recalcula el precio a cliente con el
-  // descuento vigente y propaga a las copias del mismo producto.
+  // en silencio. De paso `updateItem` recalcula el precio a cliente y propaga
+  // a las copias del mismo producto.
   async function applyOnlinePatches(patches: ArtefactoPricePatch[]) {
     for (const p of patches) {
       const patch: Partial<ArtefactoItem> = {};
       if (p.listPrice !== undefined) patch.listPrice = p.listPrice;
+      if (p.discountPercent !== undefined) {
+        patch.discountPercent = p.discountPercent;
+      }
       if (p.imageUrl !== undefined) patch.imageUrl = p.imageUrl;
       if (Object.keys(patch).length > 0) updateItem(p.itemId, patch);
     }
@@ -1746,6 +1756,13 @@ function ItemImageCell({
       if (data.brand && !item.brand) patch.brand = data.brand;
       if (data.listPrice && data.listPrice > 0 && !item.listPrice) {
         patch.listPrice = data.listPrice;
+        // Junto con la lista entra el descuento vigente en la tienda (arreglo
+        // 2026-07-31). Sin él, un producto en oferta quedaba con el precio
+        // rebajado como lista y 0% — cobrándole al cliente el precio de oferta
+        // como si fuera el de catálogo.
+        if (data.discountPercent != null && !item.discountPercent) {
+          patch.discountPercent = data.discountPercent;
+        }
       }
       onUpdate(patch);
     } catch (e) {

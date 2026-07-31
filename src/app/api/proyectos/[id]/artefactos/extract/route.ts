@@ -3,8 +3,12 @@
  *
  * GET /api/proyectos/{id}/artefactos/extract?url=https://...
  *
- * Llama al scraper de lib/catalog/fetchArtefactoData y devuelve
- * { source, imageUrl, name, brand, listPrice } o null si no se pudo.
+ * Devuelve { source, imageUrl, name, brand, listPrice, discountPercent,
+ * clientPrice, discountKnown } o null si no se pudo.
+ *
+ * El precio sale de la API de la tienda cuando existe (arreglo 2026-07-31):
+ * el scraper solo ve el precio del día, así que un producto en oferta entraba
+ * con el precio rebajado como si fuera la lista y 0% de descuento.
  *
  * Es un GET (no POST) intencionalmente para que sea cacheable a futuro
  * y para que el editor pueda dispararlo onBlur de un input sin pensar
@@ -12,7 +16,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { fetchArtefactoData } from "@/lib/catalog/fetchArtefactoData";
+import { extraerArtefactoDeLink } from "@/lib/catalog/extraerArtefacto";
 import { requireSession } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
@@ -29,7 +33,7 @@ export async function GET(request: NextRequest) {
     );
   }
   try {
-    const data = await fetchArtefactoData(url);
+    const data = await extraerArtefactoDeLink(url);
     if (!data) {
       return NextResponse.json(
         {

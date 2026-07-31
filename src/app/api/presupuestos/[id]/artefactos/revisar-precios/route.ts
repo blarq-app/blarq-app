@@ -3,8 +3,9 @@
  *
  * GET /api/presupuestos/{id}/artefactos/revisar-precios
  *   Recorre los artefactos del presupuesto que tienen referenceLink, baja
- *   cada página de producto y devuelve un diff (precio/imagen actual vs.
- *   en línea). NO escribe nada — la UI decide qué aplicar.
+ *   cada página de producto y devuelve un diff (precio lista, DESCUENTO,
+ *   precio a cliente e imagen: actual vs. en línea). NO escribe nada — la UI
+ *   decide qué aplicar.
  *
  * Es un GET porque es idempotente (solo lee). Puede tardar varios segundos
  * con presupuestos grandes — el scraper procesa de a 5 links en paralelo.
@@ -37,6 +38,11 @@ export async function GET(
         room: true,
         referenceLink: true,
         listPrice: true,
+        // El descuento y el precio a cliente entran a la comparación desde el
+        // arreglo 2026-07-31: sin ellos no se podía ver que la tienda cambió
+        // solo el descuento (caso WC Atenas, 30% → 39% con la misma lista).
+        discountPercent: true,
+        clientPrice: true,
         imageUrl: true,
         // Para avisar en el modal cuáles tienen precio editado a mano.
         priceOverridden: true,

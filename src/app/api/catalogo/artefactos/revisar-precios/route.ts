@@ -10,21 +10,18 @@
  *       vienen ids).
  *   Sin body (o sin ninguno de los dos): revisa TODOS los que tengan link.
  *
- * Para cada artefacto CON link trae el precio de hoy de la web:
- *   - tiendas VTEX (mk.cl, ledstudio.cl): vía API de catálogo → ListPrice
- *     (lista) + Price (con dcto). De ahí sale el descuento del web solo.
- *   - tiendas Shopify (kitchenhouse.cl): vía <producto>.js → compare_at_price
- *     (lista) + price (con dcto). Mismo criterio que VTEX.
- *   - otras tiendas: scraping liviano (fetchArtefactoData) → solo precio, dcto 0.
+ * Para cada artefacto CON link trae el precio de hoy de la web con la lectura
+ * ÚNICA de `leerPrecioWeb` (VTEX / Shopify / scraper genérico — ver ese
+ * archivo). En las tiendas sin API el descuento no se puede saber: esas filas
+ * vienen con `discountKnown: false` y al aplicar NO pisan el descuento
+ * guardado (antes lo mandaban a 0 en silencio).
  *
  * NO pisa nada: devuelve la comparación guardado-vs-web (lista, dcto y total)
  * para que MJ decida cuáles aplicar. La aplicación se hace con el PUT por id.
  */
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import { fetchArtefactoData } from "@/lib/catalog/fetchArtefactoData";
-import { fetchVtexPrice, isVtexStoreUrl } from "@/lib/catalog/fetchVtexPrice";
-import { fetchShopifyPrice, isShopifyStoreUrl } from "@/lib/catalog/fetchShopifyPrice";
+import { leerPrecioWeb } from "@/lib/catalog/leerPrecioWeb";
 import { requireSession } from "@/lib/apiAuth";
 
 // Vercel: el fetch a la web puede tardar; subimos el límite de la función
@@ -47,6 +44,10 @@ interface RevisionRow {
   webDiscount: number | null; // descuento del web (decimal 0..1)
   webTotal: number | null; // lo que pagaría el cliente con el web de hoy
   delta: number | null; // webTotal - storedTotal
+  // ¿La tienda publica lista Y precio de venta? false = tienda sin API (el
+  // número leído puede ser una oferta disfrazada de lista): al aplicar NO se
+  // pisa el descuento ya guardado. Ver leerPrecioWeb.ts.
+  discountKnown: boolean;
   // ¿Hay algo que aplicar? Verdadero si la web difiere de lo guardado en
   // lista, descuento O total. OJO: NO alcanza con mirar el total — un producto
   // que la web pone en oferta (lista $53.290 −25% = $39.990) puede tener el
@@ -111,51 +112,33 @@ export async function POST(request: NextRequest) {
           storedTotal: total(it.listPrice, storedDiscount),
         };
         try {
-          let webListPrice: number | null = null;
-          let webPrice: number | null = null; // precio de venta (con dcto)
-          if (isVtexStoreUrl(link)) {
-            const vtex = await fetchVtexPrice(link);
-            if (vtex) {
-              webListPrice = vtex.listPrice;
-              webPrice = vtex.price;
-            }
-          } else if (isShopifyStoreUrl(link)) {
-            // Shopify (Kitchen House): compare_at_price = lista, price = venta.
-            const sh = await fetchShopifyPrice(link);
-            if (sh) {
-              webListPrice = sh.listPrice;
-              webPrice = sh.price;
-            }
-          } else {
-            const data = await fetchArtefactoData(link);
-            if (data?.listPrice != null) {
-              // Sin API de descuento: tomamos el precio como lista, dcto 0.
-              webListPrice = data.listPrice;
-              webPrice = data.listPrice;
-            }
+          // Lectura única para todas las tiendas (ver leerPrecioWeb.ts).
+          const web = await leerPrecioWeb(link);
+          if (!web) {
+            return { ...base, webListPrice: null, webDiscount: null, webTotal: null, delta: null, discountKnown: false, changed: false, status: "sin-precio" };
           }
-          if (webListPrice == null || webPrice == null) {
-            return { ...base, webListPrice: null, webDiscount: null, webTotal: null, delta: null, changed: false, status: "sin-precio" };
-          }
-          const webDiscount =
-            webListPrice > 0 ? Math.max(0, 1 - webPrice / webListPrice) : 0;
+          const { listPrice: webListPrice, salePrice: webPrice, discount: webDiscount } = web;
           // Cambió si difiere la lista, el descuento O el total (no solo el
           // total — ver comentario en RevisionRow.changed).
-          const changed =
-            Math.abs(webListPrice - base.storedListPrice) > EPS_PESO ||
-            Math.abs(webDiscount - base.storedDiscount) > EPS_DCTO ||
-            Math.abs(webPrice - base.storedTotal) > EPS_PESO;
+          // Si el descuento no es confiable (tienda sin API), no lo usamos
+          // como señal de cambio ni se aplicará: solo miramos la lista.
+          const changed = web.discountKnown
+            ? Math.abs(webListPrice - base.storedListPrice) > EPS_PESO ||
+              Math.abs(webDiscount - base.storedDiscount) > EPS_DCTO ||
+              Math.abs(webPrice - base.storedTotal) > EPS_PESO
+            : Math.abs(webListPrice - base.storedListPrice) > EPS_PESO;
           return {
             ...base,
             webListPrice,
             webDiscount,
             webTotal: webPrice,
             delta: webPrice - base.storedTotal,
+            discountKnown: web.discountKnown,
             changed,
             status: "ok",
           };
         } catch {
-          return { ...base, webListPrice: null, webDiscount: null, webTotal: null, delta: null, changed: false, status: "error" };
+          return { ...base, webListPrice: null, webDiscount: null, webTotal: null, delta: null, discountKnown: false, changed: false, status: "error" };
         }
       })
     );

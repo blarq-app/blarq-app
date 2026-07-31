@@ -713,8 +713,13 @@ export default function HerrajesCatalogClient({
         detail: data.name ?? prev.detail,
         brand: data.brand ?? prev.brand,
         // El precio extraído lo cargamos como costo si todavía no había uno.
-        costNet:
-          data.listPrice != null && !prev.costNet ? data.listPrice : prev.costNet,
+        // Va el precio de VENTA de hoy (`clientPrice`), no la lista antes del
+        // descuento: el costo del herraje es lo que se paga de verdad. Desde el
+        // arreglo 2026-07-31 el endpoint distingue los dos; en las tiendas sin
+        // API vienen iguales, así que el comportamiento no cambia.
+        costNet: prev.costNet
+          ? prev.costNet
+          : (data.clientPrice ?? data.listPrice ?? prev.costNet),
       }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");

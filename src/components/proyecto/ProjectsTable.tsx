@@ -2,6 +2,7 @@ import { formatCLP, relativeDate } from "@/lib/utils";
 import EditableCell from "@/components/proyecto/EditableCell";
 import ProjectStatusMenu from "@/components/proyecto/ProjectStatusMenu";
 import BorrarCotizacionButton from "@/components/proyecto/BorrarCotizacionButton";
+import ArchivarCotizacionButton from "@/components/proyecto/ArchivarCotizacionButton";
 
 // Tabla densa compartida entre Dashboard, /proyectos y /cotizaciones.
 // El "preset" decide qué columnas se muestran; el resto del estilo es
@@ -102,11 +103,19 @@ export default function ProjectsTable({
                     : "Creada"}
               </th>
             )}
-            {/* Columna de acciones (menú "..."). Solo en variants donde
-                hay acción de estado disponible: ejecucion → terminado,
-                terminado → ejecucion. En cotización/convertida/archivado
-                se renderiza vacía para mantener el ancho consistente. */}
-            <th className="px-2 py-2 w-10" aria-label="Acciones"></th>
+            {/* Columna de acciones. En ejecucion/terminado es el menú "..."
+                (ejecucion → terminado, terminado → ejecucion). En
+                cotización/archivado son dos íconos: archivar/desarchivar y
+                eliminar. En convertida se renderiza vacía para mantener el
+                ancho consistente. */}
+            <th
+              className={
+                variant === "cotizacion" || variant === "archivado"
+                  ? "px-2 py-2 w-20"
+                  : "px-2 py-2 w-10"
+              }
+              aria-label="Acciones"
+            ></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -240,10 +249,20 @@ function Row({
             status={row.status}
           />
         )}
-        {/* Crucecita para eliminar — solo en cotizaciones sin convertir
-            (activas/archivadas). En convertidas no se ofrece: son obra viva. */}
+        {/* Acciones de cotización, agrupadas para que no se amontonen:
+            archivar (neutro, reversible) y eliminar (destructivo). Solo en
+            cotizaciones sin convertir (activas/archivadas) — en convertidas
+            no se ofrecen: son obra viva. */}
         {(variant === "cotizacion" || variant === "archivado") && (
-          <BorrarCotizacionButton projectId={row.id} projectName={row.name} />
+          <span className="inline-flex items-center justify-end gap-0.5">
+            <ArchivarCotizacionButton
+              projectId={row.id}
+              projectName={row.name}
+              archivada={variant === "archivado"}
+              numeroProyecto={row.numeroProyecto}
+            />
+            <BorrarCotizacionButton projectId={row.id} projectName={row.name} />
+          </span>
         )}
       </td>
     </tr>

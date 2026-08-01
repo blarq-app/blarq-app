@@ -88,7 +88,9 @@ Los dos bugs se potencian: H2 sembraba el catálogo con la oferta guardada como 
 
 **$148.990 de más** en una sola cotización. La firma es reconocible y se puede volver a buscar con `scripts/diag-audit-lineas-despegadas.ts`: línea despegada, 0% de descuento guardado, y precio al cliente exactamente igual a la LISTA de la web mientras la web sí tiene descuento. Ese precio de lista ($235.340) solo lo pudo escribir este botón — es un dato que únicamente entrega la API de la tienda, no el scraper.
 
-Con el arreglo, aplicar baja lista + descuento juntos, así que el precio al cliente termina siendo el de la tienda. Las tres líneas dañadas se corrigen abriendo el modal y marcándolas.
+Con el arreglo, aplicar baja lista + descuento juntos, así que el precio al cliente termina siendo el de la tienda.
+
+> **CORREGIDO EN LA BASE VIVA el 2026-07-31, con OK de MJ.** `scripts/fix-lineas-despegadas-precio-inflado.ts` dejó las tres líneas con lista + descuento + precio de la tienda de hoy — el estado exacto en que habrían quedado con el botón arreglado. El total de artefactos de Casa Los Algarrobos V1 bajó de **$1.517.517 a $1.368.527**. Estado previo respaldado en `backups/backup-lineas-precio-inflado-2026-07-31.json`; re-corrido después: **0 líneas con la firma**. El script detecta por firma, no por ids escritos a mano, así que es re-corrible y no toca ninguna línea editada de verdad.
 
 **De paso**: el aviso de esas filas decía *"Precio editado a mano"*, que es justo lo que hizo dudar a MJ. La app no puede saber por qué una línea se despegó (¿la editó ella?, ¿la despegó este botón?), así que el texto ahora describe el estado — "Este precio no sigue al catálogo" — en vez de afirmar una causa.
 

@@ -70,6 +70,28 @@ Así queda el mismo caso **con el arreglo aplicado** (reproducido en la base de 
 
 ## 3. Hallazgos, del más grave al menor
 
+### H0 — El botón roto no solo no detectaba: al aplicar SUBÍA el precio al cliente
+
+> **Descubierto el 2026-07-31, después del arreglo**, porque MJ preguntó por qué había líneas marcadas como "editadas a mano" que ella nunca editó. Es el hallazgo más grave de la auditoría y explica el daño concreto que quedó en una cotización viva.
+
+Cuando "Comparar con la tienda web" encontraba una diferencia de LISTA y MJ aplicaba, el botón guardaba la lista nueva y recalculaba lo que paga el cliente **con el descuento viejo de la línea**. Si esa línea tenía 0% (lo normal en los productos que habían entrado por link, ver H2), el cliente pasaba a pagar **la lista completa, sin descuento** — más caro que antes de apretar el botón. Y como el guardado va por el PUT por-ítem, la línea quedaba además **despegada**: el catálogo no la volvía a corregir nunca.
+
+Los dos bugs se potencian: H2 sembraba el catálogo con la oferta guardada como lista (precio bajo, 0%), la web tenía la lista real (precio alto), el botón veía "la lista cambió", ofrecía el cambio, y al aplicarlo dejaba al cliente pagando el precio alto sin el descuento.
+
+**Daño real encontrado en la base viva**, todo en Casa Los Algarrobos V1 (la cotización que MJ estaba armando):
+
+| Artefacto | Quedó en | La tienda cobra | De más |
+|---|---|---|---|
+| WC ATENAS A PISO 210 MM | $235.340 | $144.350 (38,7% off) | **$90.990** |
+| LAVAMANOS TRANI ORGÁNICO 40 CM | $308.190 | $254.990 (17,3% off) | **$53.200** |
+| PERCHA ATLAS SIMPLE | $15.790 | $10.990 (30,4% off) | **$4.800** |
+
+**$148.990 de más** en una sola cotización. La firma es reconocible y se puede volver a buscar con `scripts/diag-audit-lineas-despegadas.ts`: línea despegada, 0% de descuento guardado, y precio al cliente exactamente igual a la LISTA de la web mientras la web sí tiene descuento. Ese precio de lista ($235.340) solo lo pudo escribir este botón — es un dato que únicamente entrega la API de la tienda, no el scraper.
+
+Con el arreglo, aplicar baja lista + descuento juntos, así que el precio al cliente termina siendo el de la tienda. Las tres líneas dañadas se corrigen abriendo el modal y marcándolas.
+
+**De paso**: el aviso de esas filas decía *"Precio editado a mano"*, que es justo lo que hizo dudar a MJ. La app no puede saber por qué una línea se despegó (¿la editó ella?, ¿la despegó este botón?), así que el texto ahora describe el estado — "Este precio no sigue al catálogo" — en vez de afirmar una causa.
+
 ### H1 — "Comparar con la tienda web" es ciego al descuento (la causa del caso Atenas)
 
 > **ARREGLADO** (2026-07-31). Toda la lectura de precios pasa ahora por un módulo único (`leerPrecioWeb`) que devuelve lista, precio de venta y descuento, y avisa si el descuento es confiable. El modal muestra los tres números y al aplicar bajan los tres. Verificado reproduciendo el caso: el WC pasa a "Distintos", muestra 30% → 39% y queda en $139.990.

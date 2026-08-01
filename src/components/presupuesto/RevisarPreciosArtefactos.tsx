@@ -14,7 +14,9 @@ interface OnlineDiff {
   currentDiscount: number; // decimal 0..1
   currentClientPrice: number;
   currentImageUrl: string | null;
-  // La línea tiene el precio editado a mano: no sigue al catálogo.
+  // La línea no sigue al catálogo. OJO: NO siempre es porque MJ la editó a
+  // mano — aplicar desde este mismo modal también despega, así que el aviso en
+  // pantalla no puede afirmar "editado a mano" (ver el comentario de abajo).
   priceOverridden: boolean;
   fetched: {
     listPrice: number | null;
@@ -62,9 +64,16 @@ function pct(d: number): string {
  * sepa cuáles tiene que recargar a mano.
  *
  * Leer no toca nada. Aplicar es explícito: MJ marca fila por fila y recién
- * ahí se escribe. Los ítems con precio editado a mano ("despegados") se
+ * ahí se escribe. Los ítems "despegados" (que no siguen al catálogo) se
  * comparan igual, pero vienen SIN marcar y con aviso, para no pisar de
  * corrido un precio negociado (decisión de MJ, 2026-07-29).
+ *
+ * OJO con el rótulo de esas filas: hasta el 2026-07-31 decía "Precio editado a
+ * mano", y era engañoso. Aplicar desde ACÁ también despega la línea, así que
+ * varias de las que mostraban ese cartel no las había editado nadie — las había
+ * dejado así este mismo modal en su versión rota, que subía el precio a la
+ * lista sin descuento. MJ lo reportó ("yo no escribí ese precio") y el texto
+ * pasó a describir el estado, no una causa que la app no puede conocer.
  *
  * ── Arreglo 2026-07-31 (auditoría de precios) ──────────────────────────────
  * Antes este modal comparaba SOLO el precio de lista. Cuando una tienda cambia
@@ -373,7 +382,8 @@ export default function RevisarPreciosArtefactos({
                                 )}
                                 {d.priceOverridden && (
                                   <div className="text-[10px] text-amber-700 mt-1 pl-6">
-                                    Precio editado a mano — no viene marcado
+                                    Este precio no sigue al catálogo — marcalo
+                                    si querés el de la tienda
                                   </div>
                                 )}
                               </>

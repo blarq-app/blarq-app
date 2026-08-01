@@ -155,6 +155,16 @@ Cada punto es candidato a un pendiente separado. Ninguno está hecho.
    - 18 sin cambio (la web no tiene descuento hoy) y 3 con el link roto.
 
    El script corre en dry-run por defecto; para escribir hace falta `--aplicar --si-la-viva`.
+
+   **Cómo se ve el cambio.** Las dos fotos son de la misma pantalla del catálogo, con los 5 productos sembrados en la base de desarrollo con los valores exactos que hoy tiene la viva. Fijate en las columnas LISTA · DCTO · TOTAL:
+
+   Antes — todos con 0% de descuento, la lista igual al total:
+
+   ![Catálogo antes de la limpieza: los 5 productos con DCTO en 0% y la lista igual al total](auditoria-artefactos-precios-2026-07-assets/catalogo-limpieza-antes.png)
+
+   Después — aparece el descuento real de la tienda. En los **3 seguros** (grifería Urban-N, horno, percha) el **TOTAL no se mueve**: lo que cambia es que ahora se ve de dónde sale. En los **2 restantes** (downlight y WC Atenas a piso) el total sí baja, porque la tienda cambió el precio desde que se cargaron:
+
+   ![Catálogo después de la limpieza: aparece el descuento real y el total solo se mueve en dos productos](auditoria-artefactos-precios-2026-07-assets/catalogo-limpieza-despues.png)
 5. ~~**[H3] Mostrar la edad del precio.**~~ **HECHO 2026-07-31** (la marca por fila; la revisión automática periódica sigue sin hacerse). Columna o pastilla "revisado hace X días" en el catálogo (el dato ya está guardado, solo no se muestra), y quizás el mismo aviso dentro de "Comparar con mi catálogo". Alternativa más ambiciosa: revisión automática periódica — pero solo el aviso ya evita cotizar con precios de hace un mes sin saberlo.
 6. ~~**[H4] Decidir qué hacer con el "precio a cliente" del catálogo.**~~ **HECHO 2026-07-31 — MJ eligió borrarlo.** Las dos salidas eran borrarlo (y dejar claro que el precio va por lista × dcto, que es lo que el código hace de verdad) o implementarlo en serio; lo peor era el estado intermedio, con 53 valores guardados que no hacían nada y podían activarse solos si algún flujo futuro los leía. Se quitó del código y del schema, con el comentario corregido; el DROP en la viva va después del deploy y los valores quedaron respaldados.
 7. **[H5] Higiene** *(PENDIENTE, salvo lo de las tiendas sin API, que ya quedó cubierto: ahora vienen marcadas y aplicar no les manda el descuento a 0.)*: arreglar los 3 links muertos, decidir si byp.cl merece lector propio, y evaluar un indicador visual de "línea despegada" en el editor (deuda declarada del ADR de junio que sigue pendiente).

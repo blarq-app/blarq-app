@@ -156,6 +156,10 @@ Cada punto es candidato a un pendiente separado. Ninguno está hecho.
 
    El script corre en dry-run por defecto; para escribir hace falta `--aplicar --si-la-viva`.
 
+   > **APLICADO EL 2026-08-01, con OK de MJ ("cambiá todo"): los 5**, incluidos los dos que bajan el precio. Se agregaron los flags `--todos` (incluye el grupo que mueve el precio al cliente) y `--propagar`. Los precios además bajaron a las cotizaciones en borrador con `scripts/propagar-catalogo-a-borradores.ts`: **Paseo del Sena V3 pasó de $6.537.962 a $6.519.772** (−$18.190: 7 downlights a −$2.000 y un WC a −$4.190); Casa Los Algarrobos V1 quedó igual ($1.368.527) porque sus dos productos mantienen el total. La V1 enviada y la V2 aprobada de Paseo del Sena **no se tocaron** (congeladas por estado).
+   >
+   > **GOTCHA que apareció y costó una corrida**: importar `propagateCatalogToBorradores` desde un script que apunta a la viva **propaga contra la base de desarrollo**. Ese módulo usa el `prisma` global de `src/lib/prisma.ts`, que se construye sin datasource explícito y lee el `DATABASE_URL` del `.env`. El catálogo se actualizó en la viva, la propagación corrió en dev y devolvió **0 líneas sin ningún error**: parecía que no había nada que actualizar. En scripts contra la viva hay que replicar la lógica con el cliente propio (está hecho así en los dos scripts, con el comentario correspondiente).
+
    **Cómo se ve el cambio.** Las dos fotos son de la misma pantalla del catálogo, con los 5 productos sembrados en la base de desarrollo con los valores exactos que hoy tiene la viva. Fijate en las columnas LISTA · DCTO · TOTAL:
 
    Antes — todos con 0% de descuento, la lista igual al total:

@@ -23,6 +23,18 @@
  *
  *   npx tsx scripts/fix-catalogo-lista-vs-oferta.ts                  # dry-run viva
  *   npx tsx scripts/fix-catalogo-lista-vs-oferta.ts --aplicar --si-la-viva
+ *
+ * Dos flags más, para el pedido de MJ del 2026-08-01 ("cambiá todo"):
+ *
+ *   --todos      incluye también el grupo REVISAR, o sea los productos donde
+ *                el precio al cliente SÍ baja porque la tienda lo cambió desde
+ *                que se cargaron. Sin este flag, esos no se tocan.
+ *   --propagar   después de tocar el catálogo, baja los precios nuevos a las
+ *                cotizaciones en BORRADOR cuyas líneas no estén despegadas —
+ *                exactamente lo que hace la app sola cuando MJ edita un
+ *                producto desde la pantalla del catálogo (misma función,
+ *                propagateCatalogToBorradores). Sin este flag el cambio queda
+ *                solo en el catálogo y las cotizaciones no se enteran.
  */
 import { readFileSync } from "fs";
 import { PrismaClient } from "@prisma/client";
@@ -30,6 +42,8 @@ import { leerPrecioWeb } from "../src/lib/catalog/leerPrecioWeb";
 
 const APLICAR = process.argv.includes("--aplicar");
 const OK_VIVA = process.argv.includes("--si-la-viva");
+const TODOS = process.argv.includes("--todos");
+const PROPAGAR = process.argv.includes("--propagar");
 
 // Se lee el DATABASE_URL directo del archivo (NO con dotenv, que carga el .env
 // de desarrollo) y se imprime el host, como manda el §4.9 del CLAUDE.md.
@@ -85,7 +99,15 @@ async function main() {
     listPrice: number;
     discount: number;
   }> = [];
-  const revisar: string[] = [];
+  const revisar: Array<{
+    id: string;
+    name: string;
+    antes: string;
+    despues: string;
+    listPrice: number;
+    discount: number;
+    deltaCliente: number;
+  }> = [];
   const sinCambio: string[] = [];
   const ilegibles: string[] = [];
 
@@ -112,11 +134,15 @@ async function main() {
         discount: web.discount,
       });
     } else {
-      revisar.push(
-        `${c.name}\n      guardado: lista ${CLP(c.listPrice)} · 0% · cliente ${CLP(totalHoy)}` +
-          `\n      web hoy:  lista ${CLP(web.listPrice)} · ${PCT(web.discount)} · cliente ${CLP(web.salePrice)}` +
-          `\n      → el precio al cliente se movería ${CLP(web.salePrice - totalHoy)}`
-      );
+      revisar.push({
+        id: c.id,
+        name: c.name,
+        antes: `lista ${CLP(c.listPrice)} · ${PCT(c.discountPercent ?? 0)} · cliente ${CLP(totalHoy)}`,
+        despues: `lista ${CLP(web.listPrice)} · ${PCT(web.discount)} · cliente ${CLP(totalNuevo)}`,
+        listPrice: web.listPrice,
+        discount: web.discount,
+        deltaCliente: totalNuevo - totalHoy,
+      });
     }
   }
 
@@ -128,9 +154,18 @@ async function main() {
     console.log(`      después: ${s.despues}`);
   }
 
-  console.log("\n\n═══ A REVISAR: acá el precio al cliente SÍ cambiaría — NO se tocan ═══");
+  console.log(
+    TODOS
+      ? "\n\n═══ TAMBIÉN SE APLICAN (--todos): acá el precio al cliente SÍ cambia ═══"
+      : "\n\n═══ A REVISAR: acá el precio al cliente SÍ cambiaría — NO se tocan ═══"
+  );
   if (revisar.length === 0) console.log("  (ninguno)");
-  for (const r of revisar) console.log(`\n  ${r}`);
+  for (const r of revisar) {
+    console.log(`\n  ${r.name}`);
+    console.log(`      antes:   ${r.antes}`);
+    console.log(`      después: ${r.despues}`);
+    console.log(`      el cliente paga ${CLP(r.deltaCliente)}`);
+  }
 
   console.log(`\n\n═══ Sin cambios (${sinCambio.length}) — la web no tiene descuento hoy ═══`);
   for (const s of sinCambio) console.log(`  ${s}`);
@@ -168,18 +203,117 @@ async function main() {
     return;
   }
 
-  for (const s of seguros) {
-    await prisma.artefactoCatalog.update({
+  const aAplicar = TODOS ? [...seguros, ...revisar] : seguros;
+
+  // Foto de los totales de las cotizaciones que podrían moverse, ANTES.
+  const idsCat = aAplicar.map((x) => x.id);
+  const versionesAfectadas = await prisma.artefactoItem.findMany({
+    where: {
+      catalogId: { in: idsCat },
+      priceOverridden: false,
+      budgetVersion: { status: "borrador" },
+    },
+    select: { budgetVersionId: true },
+    distinct: ["budgetVersionId"],
+  });
+  const totalDe = async (bvId: string) => {
+    const items = await prisma.artefactoItem.findMany({
+      where: { budgetVersionId: bvId },
+      select: { clientPrice: true, quantity: true },
+    });
+    return items.reduce((acc, i) => acc + i.clientPrice * i.quantity, 0);
+  };
+  const antesTotales = new Map<string, number>();
+  for (const v of versionesAfectadas) {
+    antesTotales.set(v.budgetVersionId, await totalDe(v.budgetVersionId));
+  }
+
+  for (const s of aAplicar) {
+    const actualizado = await prisma.artefactoCatalog.update({
       where: { id: s.id },
       data: {
         listPrice: s.listPrice,
         discountPercent: s.discount,
         lastPriceCheck: new Date(),
       },
+      select: {
+        name: true, detail: true, brand: true, listPrice: true,
+        discountPercent: true, referenceLink: true, imageUrl: true,
+      },
     });
-    console.log(`  aplicado: ${s.name}`);
+    let lineas = 0;
+    if (PROPAGAR) {
+      lineas = await propagarABorradores(s.id, actualizado);
+    }
+    console.log(
+      `  aplicado: ${s.name}${PROPAGAR ? ` (bajó a ${lineas} línea${lineas === 1 ? "" : "s"} de cotización)` : ""}`
+    );
   }
-  console.log(`\nAPLICADO a ${seguros.length} productos del catálogo.`);
+  console.log(`\nAPLICADO a ${aAplicar.length} productos del catálogo.`);
+
+  if (PROPAGAR && versionesAfectadas.length > 0) {
+    console.log("\n═══ TOTAL DE ARTEFACTOS DE LAS COTIZACIONES TOCADAS ═══");
+    for (const v of versionesAfectadas) {
+      const bv = await prisma.budgetVersion.findUnique({
+        where: { id: v.budgetVersionId },
+        select: { version: true, project: { select: { name: true } } },
+      });
+      const antes = antesTotales.get(v.budgetVersionId)!;
+      const ahora = await totalDe(v.budgetVersionId);
+      console.log(
+        `  ${bv?.project?.name} ${bv?.version}: ${CLP(antes)} → ${CLP(ahora)}` +
+          (Math.abs(ahora - antes) < 1 ? "  (sin cambio)" : `  (${CLP(ahora - antes)})`)
+      );
+    }
+  }
+}
+
+/**
+ * Baja los datos del producto a las líneas de cotización que lo siguen: solo
+ * BORRADORES y solo líneas NO despegadas. Es la misma regla y los mismos campos
+ * que `propagateCatalogToBorradores` (src/lib/catalog/syncArtefactos.ts), que es
+ * lo que la app corre sola al editar un producto desde la pantalla del catálogo.
+ *
+ * GOTCHA por el que está duplicada acá en vez de importarse: ese módulo importa
+ * el `prisma` global de `src/lib/prisma.ts`, que se construye SIN datasource
+ * explícito y por lo tanto lee el DATABASE_URL del `.env` — la base de
+ * DESARROLLO. Importarla desde un script que apunta a la viva hace que el
+ * catálogo se actualice en la viva y la propagación se ejecute contra dev, sin
+ * ningún error visible: devuelve 0 líneas y parece que no había nada que
+ * actualizar. Pasó en la primera corrida de este script (2026-08-01).
+ */
+async function propagarABorradores(
+  catalogId: string,
+  cat: {
+    name: string;
+    detail: string | null;
+    brand: string | null;
+    listPrice: number;
+    discountPercent: number | null;
+    referenceLink: string | null;
+    imageUrl: string | null;
+  }
+): Promise<number> {
+  const descuento = cat.discountPercent ?? null;
+  const clientPrice = cat.listPrice * (1 - (descuento ?? 0));
+  const res = await prisma.artefactoItem.updateMany({
+    where: {
+      catalogId,
+      priceOverridden: false,
+      budgetVersion: { status: "borrador" },
+    },
+    data: {
+      name: cat.name,
+      detail: cat.detail,
+      brand: cat.brand,
+      listPrice: cat.listPrice,
+      discountPercent: descuento,
+      clientPrice,
+      referenceLink: cat.referenceLink,
+      imageUrl: cat.imageUrl,
+    },
+  });
+  return res.count;
 }
 
 main()

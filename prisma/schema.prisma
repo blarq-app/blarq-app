@@ -616,11 +616,17 @@ model ArtefactoCatalog {
   referenceLink     String?  // URL del producto en la tienda
   imageUrl          String?  // URL de la imagen
   listPrice         Float    @default(0) // Precio web / lista: lo que el cliente pagaría comprando online (con IVA). Lo refresca "Revisar precios".
-  discountPercent   Float?   // Legacy. Dejó de ser el driver del precio (rediseño precios 2026-06): ahora el precio a cliente y el costo van como montos explícitos abajo. Se conserva por compat.
-  // Precio que MJ le cobra al cliente. Por defecto = listPrice (vende al
-  // precio de internet); editable cuando le "comparte" algo de descuento.
-  // Si queda null, se interpreta como = listPrice.
-  clientPrice       Float?
+  // Descuento vigente en la tienda (decimal 0..1). ES el driver del precio:
+  // lo que paga el cliente = listPrice × (1 − discountPercent), y así lo
+  // calculan la pantalla del catálogo, el margen, el alta en cotización y la
+  // bajada a borradores. Lo refresca "Revisar precios" leyendo la web.
+  //
+  // OJO con el historial: el rediseño de junio 2026 dejó acá un comentario que
+  // decía que este campo era "legacy" y que el precio iba por un `clientPrice`
+  // explícito. Era al revés — ese campo no lo leía NINGÚN flujo y se sacó el
+  // 2026-07-31 (auditoría de precios de artefactos; los 53 valores que tenía
+  // guardados quedaron respaldados en backups/ antes del DROP).
+  discountPercent   Float?
   // Lo que realmente paga BLARQ: la vendedora le cotiza con un descuento
   // variable por producto (no hay nada fijo). Interno, NO visible al
   // cliente, y se carga a mano. La ganancia = clientPrice − realCostBlarq.

@@ -15,10 +15,13 @@
  * — así el comportamiento viejo de cualquier llamada previa queda intacto.
  *
  * Si refreshPrices = true (default), después de copiar revisa cada link
- * online y actualiza el precio lista al del momento — porque al traer una
- * cotización vieja los precios casi siempre cambiaron. El descuento se
- * mantiene (es lo pactado con el proveedor, no está en la web) y el
- * clientPrice se recalcula con el precio fresco.
+ * online y actualiza el precio al del momento — porque al traer una cotización
+ * vieja los precios casi siempre cambiaron. Desde el arreglo 2026-07-31
+ * (auditoría de precios) se refresca la lista Y el DESCUENTO vigente en la
+ * tienda: antes se conservaba el descuento de la cotización origen, así que
+ * una copia de hace meses arrastraba una oferta ya vencida. En las tiendas que
+ * no publican descuento (no VTEX ni Shopify) se conserva el del origen, igual
+ * que antes. El clientPrice se recalcula siempre con lista × (1 − dcto).
  *
  * Los items que no tengan link, o cuyo link no responda, quedan con el
  * precio viejo y se reportan en `pendientes` para que MJ los revise.
@@ -174,6 +177,8 @@ export async function POST(
           room: i.room,
           referenceLink: i.referenceLink,
           listPrice: i.listPrice,
+          discountPercent: i.discountPercent,
+          clientPrice: i.clientPrice,
           imageUrl: i.imageUrl,
         }))
       );
@@ -204,17 +209,32 @@ export async function POST(
 
         const updateData: {
           listPrice?: number;
+          discountPercent?: number;
           clientPrice?: number;
           imageUrl?: string;
         } = {};
 
         const newPrice = diff.fetched.listPrice;
-        if (newPrice && newPrice > 0 && newPrice !== item.listPrice) {
-          updateData.listPrice = newPrice;
-          // clientPrice unitario = lista × (1 - descuento). El descuento
-          // se mantiene del origen.
-          updateData.clientPrice =
-            newPrice * (1 - (item.discountPercent ?? 0));
+        // El DESCUENTO también se refresca cuando la tienda lo publica
+        // (arreglo 2026-07-31): antes se conservaba el del presupuesto origen,
+        // así que una cotización copiada de hace meses arrastraba un descuento
+        // vencido aunque el precio de lista se actualizara. Si la tienda no lo
+        // publica (`discountKnown` en false), se conserva el del origen.
+        const webDiscount =
+          diff.fetched.discountKnown && diff.fetched.discount != null
+            ? diff.fetched.discount
+            : null;
+        const oldDiscount = item.discountPercent ?? 0;
+        const listaCambio = !!newPrice && newPrice > 0 && newPrice !== item.listPrice;
+        const dctoCambio =
+          webDiscount != null && Math.abs(webDiscount - oldDiscount) > 0.005;
+        if (listaCambio || dctoCambio) {
+          const lista = newPrice && newPrice > 0 ? newPrice : item.listPrice;
+          const dcto = webDiscount ?? oldDiscount;
+          updateData.listPrice = lista;
+          updateData.discountPercent = dcto;
+          // clientPrice unitario = lista × (1 − descuento).
+          updateData.clientPrice = lista * (1 - dcto);
           report.priceUpdated++;
         }
 

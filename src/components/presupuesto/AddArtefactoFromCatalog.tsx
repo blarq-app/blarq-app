@@ -205,6 +205,12 @@ export default function AddArtefactoFromCatalog({
       if (!manualDetail.trim() && data.name) setManualDetail(data.name);
       if (!manualBrand.trim() && data.brand) setManualBrand(data.brand);
       if (!manualListPrice && data.listPrice) setManualListPrice(data.listPrice);
+      // El descuento vigente en la tienda (arreglo 2026-07-31): antes el
+      // producto en oferta entraba con el precio rebajado como lista y 0% de
+      // descuento. Viene null en tiendas que no lo publican.
+      if (!manualDiscount && data.discountPercent) {
+        setManualDiscount(data.discountPercent);
+      }
       if (data.imageUrl) setManualImageUrl(data.imageUrl);
     } catch {
       setManualError("No se pudo extraer del link.");

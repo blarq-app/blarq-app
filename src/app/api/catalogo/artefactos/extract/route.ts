@@ -4,10 +4,15 @@
  * Mismo contrato que /api/proyectos/[id]/artefactos/extract pero sin la
  * envoltura de proyecto. Usado desde la página del catálogo cuando MJ
  * crea un item nuevo y quiere autocompletar pegando un link.
+ *
+ * Devuelve foto/nombre/marca + precio LISTA, descuento vigente y precio de
+ * venta. Desde el arreglo 2026-07-31 el precio sale de la API de la tienda
+ * (cuando existe) y no del scraper: antes, un producto en oferta se guardaba
+ * con el precio rebajado como si fuera la lista, con 0% de descuento.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { fetchArtefactoData } from "@/lib/catalog/fetchArtefactoData";
+import { extraerArtefactoDeLink } from "@/lib/catalog/extraerArtefacto";
 import { requireSession } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
@@ -24,7 +29,7 @@ export async function GET(request: NextRequest) {
     );
   }
   try {
-    const data = await fetchArtefactoData(url);
+    const data = await extraerArtefactoDeLink(url);
     if (!data) {
       return NextResponse.json(
         {

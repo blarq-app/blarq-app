@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatCLP, formatNumber } from "@/lib/utils";
+import { formatCLP, formatNumber, edadRevisionPrecio } from "@/lib/utils";
 import { fileToThumbnailDataUrl } from "@/lib/imageThumbnail";
 import {
   DndContext,
@@ -37,7 +37,6 @@ interface CatalogItem {
   imageUrl: string | null;
   listPrice: number; // precio web / lista
   discountPercent: number | null; // legacy
-  clientPrice: number | null; // precio a cliente (null = igual al web)
   realCostBlarq: number | null; // mi costo (lo que paga BLARQ)
   isStandard: boolean;
   sortOrder: number;
@@ -78,6 +77,9 @@ interface PriceReviewRow {
   webDiscount: number | null; // decimal 0..1
   webTotal: number | null; // lo que pagaría el cliente con el web de hoy
   delta: number | null; // webTotal - storedTotal
+  // La tienda publica lista Y precio de venta (VTEX/Shopify). Si es false, el
+  // descuento leído no es confiable y NO se pisa el que ya está guardado.
+  discountKnown?: boolean;
   changed?: boolean; // hay algo que aplicar (lista, dcto o total difieren)
   status: "ok" | "sin-precio" | "error";
   applied?: boolean; // marcada como aplicada en esta sesión
@@ -323,7 +325,6 @@ export default function ArtefactosCatalogClient({
     referenceLink: "",
     imageUrl: "",
     listPrice: 0,
-    clientPrice: 0,
     realCostBlarq: 0,
     discountPercent: 0,
     isStandard: false,
@@ -751,7 +752,6 @@ export default function ArtefactosCatalogClient({
         referenceLink: "",
         imageUrl: "",
         listPrice: 0,
-        clientPrice: 0,
         realCostBlarq: 0,
         discountPercent: 0,
         isStandard: false,
@@ -780,7 +780,6 @@ export default function ArtefactosCatalogClient({
       referenceLink: "",
       imageUrl: "",
       listPrice: 0,
-      clientPrice: 0,
       realCostBlarq: 0,
       discountPercent: 0,
       isStandard: false,
@@ -821,7 +820,6 @@ export default function ArtefactosCatalogClient({
       referenceLink: item.referenceLink ?? "",
       imageUrl: item.imageUrl ?? "",
       listPrice: item.listPrice ?? 0,
-      clientPrice: item.clientPrice ?? 0,
       realCostBlarq: item.realCostBlarq ?? 0,
       discountPercent: item.discountPercent ?? 0,
       isStandard: item.isStandard,
@@ -901,11 +899,11 @@ export default function ArtefactosCatalogClient({
         detail: data.name ?? prev.detail,
         brand: data.brand ?? prev.brand,
         listPrice: data.listPrice ?? prev.listPrice,
-        // El precio a cliente arranca = precio web (vende al precio internet).
-        clientPrice:
-          data.listPrice != null && !prev.clientPrice
-            ? data.listPrice
-            : prev.clientPrice,
+        // El DESCUENTO vigente en la tienda entra desde el arreglo 2026-07-31:
+        // antes el producto en oferta se guardaba con el precio rebajado como
+        // lista y 0%. Si la tienda no lo publica, `discountPercent` viene null
+        // y se conserva lo que hubiera.
+        discountPercent: data.discountPercent ?? prev.discountPercent,
       }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");
@@ -948,11 +946,20 @@ export default function ArtefactosCatalogClient({
   // Aplica el precio del web a un artefacto: actualiza el precio lista y el
   // descuento (los dos vienen del web). El Total se recalcula solo. El costo
   // (realCostBlarq) NO se toca — es cotización aparte.
+  //
+  // Excepción (auditoría 2026-07-31): si la tienda NO publica lista y precio de
+  // venta por separado (`discountKnown === false`), el descuento leído no vale
+  // nada — se actualiza SOLO la lista y se conserva el descuento guardado. Antes
+  // se mandaba a 0 en silencio.
   function applyReviewRow(row: PriceReviewRow) {
     if (row.webListPrice == null) return;
+    const dctoConfiable = row.discountKnown !== false;
     updateItem(row.id, {
       listPrice: row.webListPrice,
-      discountPercent: row.webDiscount && row.webDiscount > 0 ? row.webDiscount : null,
+      ...(dctoConfiable && {
+        discountPercent:
+          row.webDiscount && row.webDiscount > 0 ? row.webDiscount : null,
+      }),
     });
     setReviewRows((prev) =>
       prev.map((r) => (r.id === row.id ? { ...r, applied: true } : r))
@@ -2187,6 +2194,9 @@ function CatalogItemRow({
     background: sortable.isDragging ? "#FAFAFA" : undefined,
   };
 
+  // Hace cuánto se revisó este precio contra la web (auditoría 2026-07-31).
+  const edadPrecio = edadRevisionPrecio(item.lastPriceCheck);
+
   return (
     <div
       ref={sortable.setNodeRef}
@@ -2326,7 +2336,7 @@ function CatalogItemRow({
         )}
       </div>
 
-      {/* Precio lista (sin descuento) */}
+      {/* Precio lista (sin descuento) + hace cuánto se revisó contra la web */}
       <div>
         <ThousandsInput
           value={item.listPrice}
@@ -2334,6 +2344,22 @@ function CatalogItemRow({
           placeholder="0"
           className="w-full bg-transparent border-0 p-0 text-right tabular-nums text-gray-700 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
         />
+        {/* Solo tiene sentido en los que se pueden revisar (con link): en los
+            cargados a mano el aviso sería ruido permanente sin acción posible. */}
+        {item.referenceLink && (
+          <div
+            className={`text-[10px] text-right leading-tight ${
+              edadPrecio.vencido ? "text-amber-700" : "text-gray-400"
+            }`}
+            title={
+              edadPrecio.vencido
+                ? "Las tiendas cambian sus ofertas: conviene correr Revisar precios antes de cotizar."
+                : undefined
+            }
+          >
+            {edadPrecio.texto}
+          </div>
+        )}
       </div>
 
       {/* Descuento al cliente (auto del web cuando lo haya; editable) */}

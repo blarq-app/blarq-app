@@ -53,6 +53,12 @@ function clientTotal(it: {
   return Math.round(it.listPrice * (1 - (it.discountPercent ?? 0)));
 }
 
+// "2026-07-14" → "14-07". Para los avisos de la revisión de precios.
+function fechaCorta(iso: string | Date): string {
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  return `${String(d.getUTCDate()).padStart(2, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 // Src a usar para mostrar una imagen. Las externas (mk.cl / CDN de la tienda)
 // se sirven a través de NUESTRO proxy, para que ningún bloqueador del
 // navegador las frene. Las subidas (data:) y las relativas van directo.
@@ -82,6 +88,11 @@ interface PriceReviewRow {
   discountKnown?: boolean;
   changed?: boolean; // hay algo que aplicar (lista, dcto o total difieren)
   status: "ok" | "sin-precio" | "error";
+  // Cuando no se puede leer: qué decía la tienda la última vez que sí se pudo,
+  // y desde cuándo está así. MK da de baja los productos sin stock y los
+  // repone, así que esto NO es un link roto que MJ tenga que arreglar.
+  ultimaLecturaBuena?: { listPrice: number | null; salePrice: number | null; cuando: string } | null;
+  sinLeerDesde?: string | null;
   applied?: boolean; // marcada como aplicada en esta sesión
 }
 
@@ -2581,8 +2592,22 @@ function PriceReviewPanel({
                   </div>
                   <div className="text-right tabular-nums">
                     {r.status !== "ok" || r.webTotal == null ? (
-                      <span className="text-gray-300">
-                        {r.status === "error" ? "no se pudo leer" : "sin precio"}
+                      <span className="text-gray-400 text-[11px] leading-tight inline-block text-right">
+                        {r.ultimaLecturaBuena?.salePrice != null ? (
+                          <>
+                            <span className="block">
+                              no está en la tienda ahora
+                            </span>
+                            <span className="block tabular-nums">
+                              el {fechaCorta(r.ultimaLecturaBuena.cuando)} estaba a{" "}
+                              {formatCLP(r.ultimaLecturaBuena.salePrice)}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-amber-700">
+                            nunca se pudo leer — revisá el link
+                          </span>
+                        )}
                       </span>
                     ) : (
                       <span>

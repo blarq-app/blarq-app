@@ -637,6 +637,27 @@ model ArtefactoCatalog {
   // existentes empatan y caen al orden por nombre hasta que ella arrastre.
   sortOrder         Int      @default(0)
   lastPriceCheck    DateTime? // Última vez que se verificó el precio
+  // ── Última lectura de la tienda, guardada aparte (2026-08-02) ──────────
+  //
+  // MJ: "no quiero que se me descuelguen de internet". Estos campos guardan lo
+  // que decía la web la última vez que se pudo leer, con su fecha, aunque hoy
+  // el producto esté de baja. Son SOLO REFERENCIA: no entran en ningún cálculo
+  // de precio — lo que se le cobra al cliente sigue saliendo de listPrice y
+  // discountPercent.
+  //
+  // Por qué hacía falta: MK da de baja los productos sin stock y los repone un
+  // mes después. Cuando eso pasa, "Revisar precios" no puede leer nada y hasta
+  // ahora el producto quedaba sin ninguna referencia, indistinguible de uno con
+  // el link mal cargado. De los 26 productos ilegibles de la base viva, 15
+  // tenían el link caído y los 15 habían funcionado antes.
+  webListPrice      Float?    // precio lista que tenía la tienda esa vez
+  webSalePrice      Float?    // lo que cobraba la tienda esa vez (con su dcto)
+  webCheckedAt      DateTime? // cuándo fue esa lectura BUENA
+  // Desde cuándo el link no responde. Null = se leyó bien la última vez. Con
+  // webCheckedAt permite decir "sin stock desde el 28-07; el 14-07 estaba a $X"
+  // en vez de "revisá el link", que es pedirle a MJ que arregle algo que no
+  // está roto.
+  webUnreadableSince DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

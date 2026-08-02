@@ -15,19 +15,35 @@
  *
  * Mira las cotizaciones en BORRADOR: son las únicas donde estar pegada cambia
  * algo, porque las enviadas y aprobadas están congeladas por estado.
+ *
+ * Con --aplicar vuelve a pegar las del primer grupo (las del error). Es seguro:
+ * como su precio ya es idéntico al del catálogo, pegarlas NO mueve ni un peso
+ * hoy — lo único que cambia es que vuelven a recibir las actualizaciones. Las
+ * del segundo grupo NUNCA se tocan: ahí puede haber una decisión de MJ.
+ *
+ *   npx tsx scripts/diag-despegadas-sin-razon.ts                  # solo mira
+ *   npx tsx scripts/diag-despegadas-sin-razon.ts --aplicar --si-la-viva
  */
 import { readFileSync } from "fs";
 import { PrismaClient } from "@prisma/client";
 
+const APLICAR = process.argv.includes("--aplicar");
+const OK_VIVA = process.argv.includes("--si-la-viva");
+
 const url = readFileSync("/Users/mjblanco/Desktop/blarq-app/.env.prod", "utf8")
   .match(/DATABASE_URL\s*=\s*"?([^"\n]+)"?/)![1];
-console.log("HOST:", url.match(/@([^/]+)/)![1]);
+const HOST = url.match(/@([^/]+)/)![1];
+console.log("HOST:", HOST);
+console.log("MODO:", APLICAR ? "APLICAR (pega las del error)" : "solo mira");
 const prisma = new PrismaClient({ datasources: { db: { url } } });
 
 const CLP = (n: number) => "$" + Math.round(n).toLocaleString("es-CL");
 const PCT = (d: number | null) => `${Math.round((d ?? 0) * 100)}%`;
 
 async function main() {
+  if (APLICAR && /shy-morning/.test(HOST) && !OK_VIVA) {
+    throw new Error("Es la base VIVA y no se pasó --si-la-viva. Abortado.");
+  }
   const p64 = await prisma.project.findFirst({
     where: { numeroProyecto: 64 },
     select: { name: true },
@@ -107,6 +123,56 @@ async function main() {
 
   console.log(
     `\n\nRESUMEN de las cotizaciones en borrador: ${sinRazon.length} despegadas por error · ${conRazon.length} con precio propio · ${sinCatalogo.length} sin catálogo`
+  );
+
+  if (!APLICAR || sinRazon.length === 0) {
+    if (!APLICAR) console.log("\n(solo lectura: no se escribió nada)");
+    return;
+  }
+
+  // Foto de los totales antes de tocar: pegar no debe mover ni un peso.
+  const versiones = [
+    ...new Set(
+      (
+        await prisma.artefactoItem.findMany({
+          where: { id: { in: sinRazon.map((i) => i.id) } },
+          select: { budgetVersionId: true },
+        })
+      ).map((x) => x.budgetVersionId)
+    ),
+  ];
+  const totalDe = async (bvId: string) => {
+    const items = await prisma.artefactoItem.findMany({
+      where: { budgetVersionId: bvId },
+      select: { clientPrice: true, quantity: true },
+    });
+    return items.reduce((a, i) => a + i.clientPrice * i.quantity, 0);
+  };
+  const antes = new Map<string, number>();
+  for (const v of versiones) antes.set(v, await totalDe(v));
+
+  const res = await prisma.artefactoItem.updateMany({
+    where: { id: { in: sinRazon.map((i) => i.id) } },
+    data: { priceOverridden: false },
+  });
+  console.log(`\nPegadas de nuevo: ${res.count} líneas.`);
+
+  console.log("\n═══ TOTALES ANTES Y DESPUÉS ═══");
+  let algoSeMovio = false;
+  for (const v of versiones) {
+    const bv = await prisma.budgetVersion.findUnique({
+      where: { id: v },
+      select: { version: true, project: { select: { name: true } } },
+    });
+    const ahora = await totalDe(v);
+    const ant = antes.get(v)!;
+    if (Math.abs(ahora - ant) > 1) algoSeMovio = true;
+    console.log(
+      `  ${bv?.project?.name} ${bv?.version}: ${CLP(ant)} → ${CLP(ahora)}${Math.abs(ahora - ant) <= 1 ? "  (sin cambio)" : "  OJO"}`
+    );
+  }
+  console.log(
+    algoSeMovio ? "\nOJO: algún total se movió, revisar." : "\nOK — no se movió ni un peso."
   );
 }
 

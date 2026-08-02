@@ -41,6 +41,11 @@ interface Propuesta {
   invoiceId: string;
   folioNumber: string | null;
   businessName: string | null;
+  // Fecha de emisión de la factura. Ya la teníamos a mano (es la misma que usa
+  // el motor para decir "está a N días del pago"), pero no se mostraba: MJ
+  // podía cruzar la propuesta solo por monto. Con las dos fechas en la fila
+  // —emisión arriba, movimiento abajo— el cruce es doble.
+  invoiceDate: string | null; // ISO
   invoiceTotal: number;
   invoiceRemaining: number;
   projectName: string | null;
@@ -120,6 +125,7 @@ export async function GET() {
       // también lo usa el camino que escribe.
       folioNumber: null,
       businessName: inv?.businessName ?? null,
+      invoiceDate: inv ? new Date(inv.issueDate).toISOString() : null,
       invoiceTotal: inv?.totalAmount ?? 0,
       invoiceRemaining: inv ? inv.totalAmount - pagado : 0,
       projectName: null,

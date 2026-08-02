@@ -16,8 +16,17 @@
  * vienen con `discountKnown: false` y al aplicar NO pisan el descuento
  * guardado (antes lo mandaban a 0 en silencio).
  *
- * NO pisa nada: devuelve la comparación guardado-vs-web (lista, dcto y total)
- * para que MJ decida cuáles aplicar. La aplicación se hace con el PUT por id.
+ * NO pisa el precio: devuelve la comparación guardado-vs-web (lista, dcto y
+ * total) para que MJ decida cuáles aplicar. La aplicación se hace con el PUT
+ * por id.
+ *
+ * Lo único que SÍ escribe (desde 2026-08-02) son los campos de REFERENCIA
+ * `web*`: qué decía la tienda y cuándo. No entran en ningún cálculo de precio;
+ * existen para que un producto nunca se quede sin dato de internet. Se guardan
+ * al MIRAR, no al aplicar, porque si no el dato se perdería justo cuando MJ
+ * decide no aplicar nada. Cuando el link no responde se registra desde cuándo,
+ * conservando la última lectura buena: MK da de baja los productos sin stock y
+ * los repone, así que "no se pudo leer" no significa "link roto".
  */
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
@@ -56,6 +65,11 @@ interface RevisionRow {
   // descuento sí, y eso es justo lo que hay que bajar para que se vea el dcto.
   changed: boolean;
   status: "ok" | "sin-precio" | "error";
+  // Cuando no se pudo leer: qué decía la tienda la última vez que sí se pudo, y
+  // desde cuándo está ilegible. Sirve para no dejar al producto sin ninguna
+  // referencia de internet mientras está de baja.
+  ultimaLecturaBuena?: { listPrice: number | null; salePrice: number | null; cuando: Date } | null;
+  sinLeerDesde?: Date | null;
 }
 
 function total(listPrice: number, discount: number): number {
@@ -94,6 +108,10 @@ export async function POST(request: NextRequest) {
         referenceLink: true,
         listPrice: true,
         discountPercent: true,
+        webListPrice: true,
+        webSalePrice: true,
+        webCheckedAt: true,
+        webUnreadableSince: true,
       },
     });
 
@@ -115,8 +133,36 @@ export async function POST(request: NextRequest) {
           // Lectura única para todas las tiendas (ver leerPrecioWeb.ts).
           const web = await leerPrecioWeb(link);
           if (!web) {
-            return { ...base, webListPrice: null, webDiscount: null, webTotal: null, delta: null, discountKnown: false, changed: false, status: "sin-precio" };
+            // No se pudo leer: se anota desde cuándo (si no estaba anotado ya)
+            // y se conserva la última lectura buena.
+            if (!it.webUnreadableSince) {
+              await prisma.artefactoCatalog
+                .update({ where: { id: it.id }, data: { webUnreadableSince: new Date() } })
+                .catch(() => {});
+            }
+            return {
+              ...base,
+              webListPrice: null, webDiscount: null, webTotal: null, delta: null,
+              discountKnown: false, changed: false, status: "sin-precio",
+              ultimaLecturaBuena: it.webCheckedAt
+                ? { listPrice: it.webListPrice, salePrice: it.webSalePrice, cuando: it.webCheckedAt }
+                : null,
+              sinLeerDesde: it.webUnreadableSince ?? new Date(),
+            };
           }
+          // Lectura buena: se guarda como referencia y se limpia la marca de
+          // ilegible (el producto volvió).
+          await prisma.artefactoCatalog
+            .update({
+              where: { id: it.id },
+              data: {
+                webListPrice: web.listPrice,
+                webSalePrice: web.salePrice,
+                webCheckedAt: new Date(),
+                webUnreadableSince: null,
+              },
+            })
+            .catch(() => {});
           const { listPrice: webListPrice, salePrice: webPrice, discount: webDiscount } = web;
           // Cambió si difiere la lista, el descuento O el total (no solo el
           // total — ver comentario en RevisionRow.changed).
@@ -138,7 +184,15 @@ export async function POST(request: NextRequest) {
             status: "ok",
           };
         } catch {
-          return { ...base, webListPrice: null, webDiscount: null, webTotal: null, delta: null, discountKnown: false, changed: false, status: "error" };
+          return {
+            ...base,
+            webListPrice: null, webDiscount: null, webTotal: null, delta: null,
+            discountKnown: false, changed: false, status: "error",
+            ultimaLecturaBuena: it.webCheckedAt
+              ? { listPrice: it.webListPrice, salePrice: it.webSalePrice, cuando: it.webCheckedAt }
+              : null,
+            sinLeerDesde: it.webUnreadableSince,
+          };
         }
       })
     );

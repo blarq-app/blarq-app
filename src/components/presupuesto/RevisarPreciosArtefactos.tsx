@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatCLP } from "@/lib/utils";
 import { roomLabel } from "@/lib/presupuesto/ambientes";
+import { esLaMismaImagen } from "@/lib/catalog/mismaImagen";
 
 // Shape del diff que devuelve /api/presupuestos/[id]/artefactos/revisar-precios
 interface OnlineDiff {
@@ -563,6 +564,11 @@ function clasificar(d: OnlineDiff): {
   return {
     // Sin lista legible no hay nada que aplicar, por más que el resto difiera.
     priceChanged: listaOk && (listaDif || dctoDif || clienteDif),
-    imageActionable: !!f.imageUrl && f.imageUrl !== d.currentImageUrl,
+    // La foto solo es accionable si de verdad es OTRA. MK y LED Studio
+    // migraron su CDN (vteximg.com.br → vtexassets.com) y la misma imagen tiene
+    // dos URLs: comparándolas como texto, el modal ofrecía "actualizar" fotos
+    // idénticas y aplicar eso DESPEGABA la línea del catálogo para siempre.
+    imageActionable:
+      !!f.imageUrl && !esLaMismaImagen(f.imageUrl, d.currentImageUrl),
   };
 }

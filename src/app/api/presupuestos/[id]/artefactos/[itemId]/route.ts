@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
-import { editoCampoDeCatalogo } from "@/lib/catalog/syncArtefactos";
+import { editoCampoDeCatalogo, editoElDescuento } from "@/lib/catalog/syncArtefactos";
 
 export async function PUT(
   request: NextRequest,
@@ -25,19 +25,29 @@ export async function PUT(
         ? data.clientPrice
         : listPrice * (1 - discountPct);
 
-    // ── "Despegar" del catálogo (rediseño precios artefactos 2026-06-18) ──
+    // ── Quién manda sobre el precio de esta línea ────────────────────────
     //
-    // Si MJ edita a mano alguno de los campos que vienen del catálogo (precio,
-    // descuento, precio cliente, nombre, detalle, marca, link, foto), la línea
-    // queda DESPEGADA: priceOverridden=true y el catálogo no la vuelve a pisar.
-    // Cambiar solo cantidad / ambiente / orden NO despega (no vienen del
-    // catálogo). Comparamos contra el valor guardado para decidirlo, porque el
-    // editor manda la fila completa en cada guardado y no sabríamos qué cambió.
-    // Una vez despegada, queda despegada (no se "vuelve a pegar" sola).
+    // Dos marcas distintas, separadas el 2026-08-02:
+    //
+    //   priceOverridden    → MJ fijó un PRECIO a mano (la lista, o el precio al
+    //                        cliente por fuera del descuento). El catálogo no
+    //                        vuelve a tocar esta línea. Es definitivo.
+    //   discountOverridden → MJ decidió el DESCUENTO. El catálogo sigue
+    //                        actualizando el precio de lista y los datos del
+    //                        producto, pero respeta ese porcentaje.
+    //
+    // Antes había una sola marca y el descuento caía adentro, así que "le doy
+    // 45% a esta clienta" congelaba la línea y esa cotización no se enteraba
+    // nunca más de los cambios de precio. Tampoco despegan ya el nombre, el
+    // detalle, la marca, el link ni la foto: no tienen nada que ver con plata.
+    //
+    // Comparamos contra el valor guardado porque el editor manda la fila
+    // completa en cada guardado y no sabríamos qué cambió.
     const prev = await prisma.artefactoItem.findUnique({
       where: { id: itemId },
       select: {
         priceOverridden: true,
+        discountOverridden: true,
         listPrice: true,
         discountPercent: true,
         clientPrice: true,
@@ -48,20 +58,42 @@ export async function PUT(
         imageUrl: true,
       },
     });
-    const editoCampoCatalogo =
-      !!prev &&
-      editoCampoDeCatalogo(prev, {
-        listPrice,
-        discountPercent: discountPct,
-        clientPrice,
-        name: data.name ?? null,
-        detail: data.detail ?? null,
-        brand: data.brand ?? null,
-        referenceLink: data.referenceLink ?? null,
-        imageUrl: data.imageUrl ?? null,
-      });
+    const entrante = {
+      listPrice,
+      discountPercent: discountPct,
+      clientPrice,
+      name: data.name ?? null,
+      detail: data.detail ?? null,
+      brand: data.brand ?? null,
+      referenceLink: data.referenceLink ?? null,
+      imageUrl: data.imageUrl ?? null,
+    };
+    const editoCampoCatalogo = !!prev && editoCampoDeCatalogo(prev, entrante);
     const despego = !!prev && !prev.priceOverridden && editoCampoCatalogo;
     const priceOverridden = prev?.priceOverridden || editoCampoCatalogo;
+    // El cliente puede pedir explícitamente volver al descuento de la tienda
+    // (el botón de la columna DCTO): manda discountOverridden=false y ahí se
+    // respeta, sin importar que el número haya cambiado en ese mismo guardado.
+    const vuelveAlDeLaTienda = data.discountOverridden === false;
+    const discountOverridden = vuelveAlDeLaTienda
+      ? false
+      : !!prev && (prev.discountOverridden || editoElDescuento(prev, entrante));
+
+    // Al volver al descuento de la tienda hay que ir a buscarlo: el editor no
+    // lo tiene en la línea (guarda el efectivo). Si el producto ya no está en
+    // el catálogo, se conserva el que había — mejor eso que ponerlo en 0.
+    let dctoFinal = discountPct;
+    let clientFinal = clientPrice;
+    if (vuelveAlDeLaTienda && data.catalogId) {
+      const cat = await prisma.artefactoCatalog.findUnique({
+        where: { id: data.catalogId },
+        select: { discountPercent: true },
+      });
+      if (cat) {
+        dctoFinal = cat.discountPercent ?? 0;
+        clientFinal = listPrice * (1 - dctoFinal);
+      }
+    }
 
     const item = await prisma.artefactoItem.update({
       where: { id: itemId },
@@ -73,13 +105,14 @@ export async function PUT(
         brand: data.brand,
         quantity,
         listPrice,
-        discountPercent: discountPct,
-        clientPrice,
+        discountPercent: dctoFinal,
+        clientPrice: clientFinal,
         realCostBlarq: data.realCostBlarq ?? null,
         referenceLink: data.referenceLink ?? null,
         imageUrl: data.imageUrl ?? null,
         catalogId: data.catalogId ?? null,
         priceOverridden,
+        discountOverridden,
         sortOrder: data.sortOrder,
       },
     });
@@ -120,6 +153,7 @@ export async function PUT(
           referenceLink: item.referenceLink,
           imageUrl: item.imageUrl,
           realCostBlarq: item.realCostBlarq,
+          discountOverridden: item.discountOverridden,
           ...(despego && { priceOverridden: true }),
         },
       });
@@ -153,6 +187,7 @@ export async function PUT(
           clientPrice: item.clientPrice,
           referenceLink: item.referenceLink,
           imageUrl: item.imageUrl,
+          discountOverridden: item.discountOverridden,
           // Si la edición despegó la línea, las gemelas por nombre también: ya
           // tienen el valor manual y el catálogo no debe volver a pisarlas.
           ...(despego && { priceOverridden: true }),

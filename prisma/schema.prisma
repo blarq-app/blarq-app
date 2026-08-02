@@ -678,6 +678,22 @@ model ArtefactoItem {
   // ObraItem.isCustomized. Las cotizaciones enviadas quedan congeladas por
   // estado (el catálogo solo toca borradores), igual que en obra.
   priceOverridden   Boolean @default(false)
+  // "El descuento lo puso MJ, no la tienda" (2026-08-02).
+  //
+  // `discountPercent` guarda SIEMPRE el descuento efectivo — el que se aplica a
+  // la lista y el que ve el cliente —, así que todo lo que ya lo leía (PDF,
+  // cuadros, totales) sigue igual. Este flag dice de dónde salió ese número:
+  //   false → vino de la tienda vía catálogo. Se refresca solo.
+  //   true  → lo decidió MJ. El catálogo puede actualizar el precio de LISTA,
+  //           pero este porcentaje no se toca y el precio a cliente se
+  //           recalcula con él.
+  //
+  // Por qué existe: antes había un solo número sin dueño, así que mover el
+  // descuento despegaba la línea entera (priceOverridden) y esa cotización
+  // dejaba de enterarse de los cambios de precio de la tienda para siempre.
+  // Había que elegir entre "sigo al catálogo" o "decido yo"; ahora se puede
+  // decidir el descuento Y seguir recibiendo los precios.
+  discountOverridden Boolean @default(false)
   sortOrder         Int     @default(0)
 
   budgetVersion     BudgetVersion @relation(fields: [budgetVersionId], references: [id], onDelete: Cascade)

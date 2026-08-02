@@ -3,6 +3,7 @@ import { prisma } from "../src/lib/prisma";
 import {
   propagateCatalogToBorradores,
   editoCampoDeCatalogo,
+  editoElDescuento,
 } from "../src/lib/catalog/syncArtefactos";
 import {
   buildBudgetSnapshot,
@@ -43,7 +44,6 @@ async function main() {
       subcategory: "sanitario",
       listPrice: 100000,
       discountPercent: 0,
-      clientPrice: 100000,
     },
   });
 
@@ -120,18 +120,57 @@ async function main() {
     }) === false
   );
   check(
-    "bajar el precio SÍ despega",
+    "cambiar el precio de LISTA a mano SÍ despega",
     editoCampoDeCatalogo(prevBase, {
-      listPrice: 100000, discountPercent: 0.1, clientPrice: 90000,
+      listPrice: 120000, discountPercent: 0, clientPrice: 120000,
       name: "WC TEST", detail: null, brand: null, referenceLink: null, imageUrl: null,
     }) === true
   );
   check(
-    "cambiar el nombre SÍ despega",
+    "escribir el precio al CLIENTE a mano SÍ despega",
+    editoCampoDeCatalogo(prevBase, {
+      listPrice: 100000, discountPercent: 0, clientPrice: 85000,
+      name: "WC TEST", detail: null, brand: null, referenceLink: null, imageUrl: null,
+    }) === true
+  );
+
+  // ── Lo que dejó de despegar el 2026-08-02 ────────────────────────────
+  // El descuento pasó a tener marca propia (discountOverridden) y los datos
+  // del producto no tienen nada que ver con el precio. Antes cualquiera de
+  // estos congelaba la línea y la dejaba sin recibir precios nunca más.
+  const conDcto = {
+    listPrice: 100000, discountPercent: 0.1, clientPrice: 90000,
+    name: "WC TEST", detail: null, brand: null, referenceLink: null, imageUrl: null,
+  };
+  check(
+    "mover el DESCUENTO ya NO despega la línea",
+    editoCampoDeCatalogo(prevBase, conDcto) === false
+  );
+  check(
+    "...pero SÍ marca que el descuento es de MJ",
+    editoElDescuento(prevBase, conDcto) === true
+  );
+  check(
+    "cambiar el NOMBRE ya no despega",
     editoCampoDeCatalogo(prevBase, {
       listPrice: 100000, discountPercent: 0, clientPrice: 100000,
       name: "WC OTRO", detail: null, brand: null, referenceLink: null, imageUrl: null,
-    }) === true
+    }) === false
+  );
+  check(
+    "aceptar otra FOTO ya no despega (el caso del mezclador)",
+    editoCampoDeCatalogo(prevBase, {
+      listPrice: 100000, discountPercent: 0, clientPrice: 100000,
+      name: "WC TEST", detail: null, brand: null, referenceLink: null,
+      imageUrl: "https://mkchile.vtexassets.com/arquivos/ids/1/a.jpg",
+    }) === false
+  );
+  check(
+    "no tocar nada tampoco marca el descuento",
+    editoElDescuento(prevBase, {
+      listPrice: 100000, discountPercent: 0, clientPrice: 100000,
+      name: "WC TEST", detail: null, brand: null, referenceLink: null, imageUrl: null,
+    }) === false
   );
 
   // ── Volver a lo enviado (artefactos) ──────────────────────────────────

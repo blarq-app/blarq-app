@@ -85,6 +85,9 @@ interface ArtefactoItem {
   referenceLink: string | null; // URL del producto en la tienda (mk.cl, sodimac, easy)
   imageUrl: string | null; // URL de imagen (auto-extraída o pegada manual)
   catalogId: string | null; // si fue agregado desde el catálogo BLARQ
+  // El descuento de esta línea lo puso MJ, no la tienda: el catálogo actualiza
+  // el precio de lista pero respeta este porcentaje (ver schema.prisma).
+  discountOverridden: boolean;
   sortOrder: number;
 }
 
@@ -489,6 +492,31 @@ export default function ArtefactosEditor({
       }
       if (p.imageUrl !== undefined) patch.imageUrl = p.imageUrl;
       if (Object.keys(patch).length > 0) updateItem(p.itemId, patch);
+    }
+  }
+
+  // Devuelve una línea al descuento de la tienda: el backend va a buscar el
+  // porcentaje al catálogo y recalcula el precio a cliente. A partir de ahí la
+  // línea vuelve a refrescarse sola cuando cambie el catálogo.
+  async function volverAlDctoDeLaTienda(itemId: string) {
+    const actual = items.find((i) => i.id === itemId);
+    if (!actual) return;
+    try {
+      const res = await fetch(
+        `/api/presupuestos/${initialBudget.id}/artefactos/${itemId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...actual, discountOverridden: false }),
+        }
+      );
+      if (!res.ok) throw new Error("Error");
+      const actualizado: ArtefactoItem = await res.json();
+      setItems((prev) =>
+        prev.map((i) => (i.id === itemId ? { ...i, ...actualizado } : i))
+      );
+    } catch {
+      alert("No se pudo volver al descuento de la tienda.");
     }
   }
 
@@ -1026,6 +1054,9 @@ export default function ArtefactosEditor({
                               showCost={showCost}
                               gridCls={gridCls}
                               onUpdate={(patch) => updateItem(item.id, patch)}
+                              onVolverAlDctoDeLaTienda={() =>
+                                volverAlDctoDeLaTienda(item.id)
+                              }
                               onDelete={() => deleteItem(item.id)}
                               onDuplicate={() => duplicateItem(item)}
                             />
@@ -1525,6 +1556,7 @@ function SortableArtefactoRow({
   showCost,
   gridCls,
   onUpdate,
+  onVolverAlDctoDeLaTienda,
   onDelete,
   onDuplicate,
 }: {
@@ -1533,6 +1565,7 @@ function SortableArtefactoRow({
   showCost: boolean;
   gridCls: string;
   onUpdate: (patch: Partial<ArtefactoItem>) => void;
+  onVolverAlDctoDeLaTienda?: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
 }) {
@@ -1627,6 +1660,9 @@ function SortableArtefactoRow({
         placeholder="0"
         className="w-full bg-transparent border-0 p-0 text-right tabular-nums text-gray-900 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
       />
+      {/* DCTO. Un solo casillero, como siempre, pero ahora se ve de quién es
+          el número: si lo puso MJ queda resaltado y aparece la vuelta al de la
+          tienda. Mientras sea de la tienda, el catálogo lo sigue refrescando. */}
       <div className="flex items-center justify-end gap-0.5">
         <input
           type="number"
@@ -1637,14 +1673,38 @@ function SortableArtefactoRow({
               : ""
           }
           placeholder="0"
+          title={
+            item.discountOverridden
+              ? "Este descuento lo pusiste vos. El catálogo actualiza el precio de lista pero no lo toca."
+              : "Descuento de la tienda. Se actualiza solo desde el catálogo."
+          }
           onChange={(e) =>
             onUpdate({
               discountPercent: (parseFloat(e.target.value) || 0) / 100,
             })
           }
-          className="w-8 bg-transparent border-0 p-0 text-right tabular-nums text-gray-600 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
+          className={`w-8 bg-transparent border-0 p-0 text-right tabular-nums outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5 ${
+            item.discountOverridden
+              ? "font-semibold text-gray-900"
+              : "text-gray-600"
+          }`}
         />
-        <span className="text-gray-400">%</span>
+        <span className={item.discountOverridden ? "text-gray-900" : "text-gray-400"}>
+          %
+        </span>
+        {item.discountOverridden && (
+          <button
+            type="button"
+            onClick={() => onVolverAlDctoDeLaTienda?.()}
+            title="Volver al descuento de la tienda"
+            className="text-gray-300 hover:text-gray-700 leading-none"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
+              <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+              <path d="M3 3v5h5" />
+            </svg>
+          </button>
+        )}
       </div>
       <div className="text-right tabular-nums font-semibold text-gray-900">
         {formatCLP(totalCliente)}

@@ -1,8 +1,16 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-07-31.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-02.
 
 ---
+
+- **El descuento de la tienda y el descuento de MJ dejan de ser el mismo número (2026-08-02, rama `fix/precios-artefactos-web-dcto`)**: MJ pidió "poder mover el % que le doy de dcto" sin que eso rompa nada. Hasta ahora un solo campo guardaba dos cosas de dueños distintos — lo que descuenta la tienda (dato) y lo que decide ella —, así que moverlo despegaba la línea y esa cotización dejaba de recibir precios del catálogo **para siempre**. Había que elegir entre seguir al catálogo o decidir el precio.
+  - **Campo nuevo `ArtefactoItem.discountOverridden`**. `discountPercent` sigue guardando el descuento EFECTIVO, así que el PDF, los cuadros y los totales no cambian; el flag solo dice de dónde salió. La propagación actualiza la lista en las dos y recalcula el precio a cliente con el % de cada una.
+  - **Lo que YA NO despega**: el descuento (tiene marca propia), el nombre, el detalle, la marca, el link y la foto. Solo el precio de lista o un precio al cliente escrito a mano. Había **14 líneas congeladas** por estos campos.
+  - **UI elegida por MJ entre dos alternativas dibujadas**: una sola columna DCTO (no dos), con el % resaltado cuando es suyo y una flechita para volver al de la tienda.
+  - **Migración conservadora**: todas las líneas nacen en `false`. No hay forma de saber cuáles ajustó MJ, así que no se adivina. **ALTER aditivo aplicado a la viva ANTES del deploy** (`scripts/sql/2026-08-02-artefacto-item-discount-overridden.sql`): 307 líneas, suma de precios idéntica antes y después, 0 marcadas.
+  - **Verificado**: `test-artefactos-propagacion` 15/15 y `test-descuento-propio` 8/8 — una línea con 45% propio recibe la lista nueva de $130.000 y queda en $71.500 conservando su 45%; antes se congelaba en $55.000.
+  - **GOTCHA del worktree**: para regenerar el cliente de Prisma sin romper las otras sesiones hay que reemplazar el symlink de `node_modules` por una copia (`cp -cR`, clonado APFS: instantáneo y sin ocupar espacio). Correr `prisma generate` sobre el symlink regenera el cliente COMPARTIDO con el schema de esta rama.
 
 - **Arreglo de fondo de los precios de artefactos (2026-07-31/08-01, rama `fix/precios-artefactos-web-dcto`, worktree propio, PR #357 MERGEADO y EN PROD 2026-08-01)**: implementación de los arreglos 1, 2, 3 y 5 de la auditoría de abajo. MJ pidió arreglar la causa, no el caso.
   - **Una sola lectura de precios**: módulo nuevo `src/lib/catalog/leerPrecioWeb.ts` (VTEX + Shopify + scraper genérico) que devuelve lista, precio de venta, descuento y **`discountKnown`** — el flag que distingue "la tienda publica el descuento" de "solo veo un número y no sé si es oferta". Antes había TRES lecturas distintas y solo la del catálogo estaba bien.

@@ -43,6 +43,10 @@ export interface ImportedArtefacto {
   referenceLink: string | null;
   imageUrl: string | null;
   catalogId: string | null;
+  // Las líneas duplicadas nacen siguiendo el descuento de la tienda: el que
+  // trae la copia sale del catálogo, no de una decisión de MJ sobre ESTA
+  // cotización (ver ArtefactoItem.discountOverridden en el schema).
+  discountOverridden: boolean;
   sortOrder: number;
 }
 

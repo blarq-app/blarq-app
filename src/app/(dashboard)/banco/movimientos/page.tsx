@@ -245,7 +245,16 @@ export default async function MovimientosPage({
               // manual = factura real; sin_respaldo = pago a obra sin documento;
               // gasto_boleta / gasto_internacional = gasto registrado. Se usa
               // para derivar la columna "Respaldo".
-              select: { id: true, folioNumber: true, businessName: true, totalAmount: true, origin: true },
+              // `project` es solo para el desplegable que lista todas las
+              // facturas cuando un movimiento se reparte entre varias.
+              select: {
+                id: true,
+                folioNumber: true,
+                businessName: true,
+                totalAmount: true,
+                origin: true,
+                project: { select: { name: true, numeroProyecto: true } },
+              },
             },
           },
         },
@@ -427,6 +436,8 @@ export default async function MovimientosPage({
         businessName: p.invoice.businessName,
         totalAmount: p.invoice.totalAmount,
         origin: p.invoice.origin,
+        projectName: p.invoice.project?.name ?? null,
+        projectNumero: p.invoice.project?.numeroProyecto ?? null,
       },
     })),
   }));

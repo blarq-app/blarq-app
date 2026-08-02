@@ -55,6 +55,33 @@ function parsearMonto(txt: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+// ¿Esto parece una foto? No alcanza con mirar el MIME type: arrastrando desde
+// algunas apps (o desde un pendrive) el archivo llega con `type` vacío, y así
+// se descartaban fotos perfectamente buenas sin decir nada. Si el tipo no
+// ayuda, se mira la extensión.
+const EXTENSIONES_FOTO = /\.(jpe?g|png|webp|gif|heic|heif|bmp|tiff?)$/i;
+function pareceFoto(file: File): boolean {
+  if (file.type.startsWith("image/")) return true;
+  if (file.type) return false;
+  return EXTENSIONES_FOTO.test(file.name);
+}
+
+// Techo del data URL que acepta el servidor que lee la foto (5 MB). Se deja un
+// margen para el resto del JSON.
+const TECHO_FOTO = 4.5 * 1024 * 1024;
+
+// Lee el archivo tal cual, sin comprimir. Es el plan B cuando el navegador no
+// sabe decodificar la imagen (típico: un HEIC de iPhone en Chrome). La foto no
+// se puede achicar, pero al menos queda adjunta y la fila aparece.
+function leerCrudo(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result));
+    fr.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    fr.readAsDataURL(file);
+  });
+}
+
 export default function ReembolsoBoletasModal({
   movementId,
   contraparte,
@@ -84,6 +111,10 @@ export default function ReembolsoBoletasModal({
   const [categoryId, setCategoryId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Avisos que no son errores (archivos ignorados, fotos que no se pudieron
+  // achicar): van en ámbar, no en rojo.
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [arrastrando, setArrastrando] = useState(false);
 
   const libre = montoMovimiento - yaImputado;
   const suma = filas.reduce((s, f) => s + (parsearMonto(f.monto) ?? 0), 0);
@@ -97,52 +128,104 @@ export default function ReembolsoBoletasModal({
     setFilas((prev) => prev.map((f) => (f.key === key ? { ...f, ...campos } : f)));
   }
 
-  // Carga de fotos: cada archivo entra como una fila y se manda a leer. La
-  // lectura corre por foto para que las filas se vayan completando solas.
-  async function agregarFotos(files: FileList | null) {
-    if (!files || files.length === 0) return;
+  // Manda una foto a leer. Es una PROPUESTA: si falla por lo que sea (no está
+  // la llave, la foto es ilegible, se cayó la red), la fila NO desaparece —
+  // queda para cargar a mano con el motivo a la vista.
+  async function leerFoto(fila: Fila) {
+    if (!fila.foto) return;
+    try {
+      const res = await fetch("/api/contabilidad/gastos/leer-boleta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imagen: fila.foto }),
+      });
+      if (!res.ok) {
+        const cuerpo = await res.json().catch(() => null);
+        throw new Error(cuerpo?.error || `La lectura falló (${res.status})`);
+      }
+      const d = await res.json();
+      actualizar(fila.key, {
+        numeroDoc: d.numeroDoc ?? "",
+        fecha: d.fecha ?? "",
+        comercio: d.comercio ?? "",
+        monto: d.monto != null ? String(d.monto) : "",
+        estado: d.confianza === "alta" ? "leida" : "revisar",
+        nota: d.nota ?? (d.confianza === "alta" ? null : "Revisá los datos."),
+      });
+    } catch (e) {
+      actualizar(fila.key, {
+        estado: "manual",
+        nota:
+          e instanceof Error && e.message
+            ? e.message
+            : "No se pudo leer la foto: completá los datos a mano.",
+      });
+    }
+  }
+
+  // Carga de fotos, tanto del selector como de arrastrar y soltar.
+  //
+  // Primero entran TODAS las filas y recién después se manda a leer. Antes era
+  // archivo por archivo (comprimir → leer → siguiente): la segunda foto no
+  // aparecía hasta que terminaba la lectura de la primera y parecía colgado.
+  async function agregarFotos(lista: FileList | File[] | null) {
+    const todos = lista ? Array.from(lista) : [];
+    if (todos.length === 0) return;
     setError(null);
-    const archivos = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    setAviso(null);
+
+    const archivos = todos.filter(pareceFoto);
     if (archivos.length === 0) {
-      setError("Los archivos tienen que ser fotos");
+      setError(
+        todos.length === 1
+          ? "Ese archivo no es una foto. Subí una imagen de la boleta (JPG, PNG o HEIC)."
+          : "Ninguno de los archivos es una foto. Subí imágenes de las boletas (JPG, PNG o HEIC)."
+      );
       return;
     }
+    const ignorados = todos.length - archivos.length;
 
+    const nuevas: Fila[] = [];
     for (const file of archivos) {
-      let foto: string;
+      let foto: string | null = null;
+      let nota: string | null = null;
+      let legible = false;
       try {
         foto = await comprimirImagen(file);
+        legible = true;
       } catch {
-        setError("No se pudo procesar una de las fotos");
-        continue;
+        // El navegador no supo decodificarla (típico: un HEIC de iPhone en
+        // Chrome). Se adjunta cruda si entra, así al menos queda el respaldo;
+        // leerla automáticamente ya no se puede.
+        try {
+          const crudo = await leerCrudo(file);
+          if (crudo.length <= TECHO_FOTO) {
+            foto = crudo;
+            nota = `"${file.name}": no se pudo achicar, queda tal cual. Completá los datos a mano.`;
+          } else {
+            nota = `"${file.name}" pesa demasiado y el navegador no la pudo achicar. Sacá la foto de nuevo o cargá los datos a mano.`;
+          }
+        } catch {
+          nota = `No se pudo abrir "${file.name}". Cargá los datos a mano.`;
+        }
       }
-      const fila = nuevaFila(foto, "leyendo");
-      setFilas((prev) => [...prev, fila]);
-
-      // La lectura es una propuesta: si falla, la fila queda para cargar a mano.
-      try {
-        const res = await fetch("/api/contabilidad/gastos/leer-boleta", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imagen: foto }),
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const d = await res.json();
-        actualizar(fila.key, {
-          numeroDoc: d.numeroDoc ?? "",
-          fecha: d.fecha ?? "",
-          comercio: d.comercio ?? "",
-          monto: d.monto != null ? String(d.monto) : "",
-          estado: d.confianza === "alta" ? "leida" : "revisar",
-          nota: d.nota ?? null,
-        });
-      } catch {
-        actualizar(fila.key, {
-          estado: "manual",
-          nota: "No se pudo leer la foto: completá los datos a mano.",
-        });
-      }
+      nuevas.push({ ...nuevaFila(foto, legible ? "leyendo" : "manual"), nota });
     }
+
+    setFilas((prev) => [...prev, ...nuevas]);
+    if (ignorados > 0) {
+      setAviso(
+        ignorados === 1
+          ? "Se ignoró 1 archivo que no es una foto."
+          : `Se ignoraron ${ignorados} archivos que no son fotos.`
+      );
+    }
+
+    // Las lecturas van en paralelo: las filas ya están en pantalla y cada una
+    // se completa sola cuando vuelve la suya.
+    await Promise.all(
+      nuevas.filter((f) => f.estado === "leyendo").map((f) => leerFoto(f))
+    );
   }
 
   async function guardar() {
@@ -183,7 +266,29 @@ export default function ReembolsoBoletasModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 p-6">
-      <div className="w-full max-w-4xl bg-white border border-gray-200 rounded-xl shadow-sm my-4">
+      {/* El arrastrar-y-soltar se escucha en TODO el modal, no solo en el
+          recuadro: si la foto se suelta un centímetro al lado, el navegador la
+          abriría en la pestaña y se perdería lo cargado. */}
+      <div
+        className="w-full max-w-4xl bg-white border border-gray-200 rounded-xl shadow-sm my-4"
+        onDragOver={(e) => {
+          // Sin preventDefault el navegador no deja soltar nada acá.
+          e.preventDefault();
+          if (!arrastrando) setArrastrando(true);
+        }}
+        onDragLeave={(e) => {
+          // Solo cuando el puntero sale del modal entero, no al pasar de un
+          // hijo a otro (dragleave se dispara en cada cambio de elemento).
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+            setArrastrando(false);
+          }
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setArrastrando(false);
+          void agregarFotos(e.dataTransfer.files);
+        }}
+      >
         <div className="px-6 py-4 border-b border-gray-100">
           <h2 className="text-base font-semibold text-gray-900">
             Reembolso de boletas
@@ -205,10 +310,16 @@ export default function ReembolsoBoletasModal({
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="w-full border border-dashed border-gray-300 rounded-lg py-4 px-4 text-center hover:bg-gray-50"
+            className={`w-full border border-dashed rounded-lg py-4 px-4 text-center transition-colors ${
+              arrastrando
+                ? "border-gray-900 bg-gray-50"
+                : "border-gray-300 hover:bg-gray-50"
+            }`}
           >
             <span className="block text-sm text-gray-700">
-              Elegí las fotos de las boletas
+              {arrastrando
+                ? "Soltá las fotos acá"
+                : "Arrastrá las fotos de las boletas, o hacé clic para elegirlas"}
             </span>
             <span className="block text-xs text-gray-400 mt-1">
               Una foto por boleta. La app lee el número, la fecha y el monto; vos
@@ -222,9 +333,14 @@ export default function ReembolsoBoletasModal({
             multiple
             className="hidden"
             onChange={(e) => {
-              const files = e.target.files;
+              // OJO: hay que copiar los archivos ANTES de limpiar el input.
+              // `e.target.files` es una lista VIVA — al poner value = "" el
+              // navegador la vacía y `agregarFotos` recibía cero archivos: no
+              // aparecía ninguna fila ni ningún error. Ese era el bug por el
+              // que "no pasaba nada" al elegir una foto.
+              const archivos = Array.from(e.target.files ?? []);
               e.target.value = "";
-              void agregarFotos(files);
+              void agregarFotos(archivos);
             }}
           />
 
@@ -422,6 +538,7 @@ export default function ReembolsoBoletasModal({
             </>
           )}
 
+          {aviso && <p className="text-xs text-amber-700 mt-3">{aviso}</p>}
           {error && <p className="text-sm text-red-700 mt-3">{error}</p>}
         </div>
 

@@ -199,7 +199,10 @@ export async function POST(
       },
     });
     return ids;
-  });
+    // Cada boleta son dos escrituras (el gasto y su imputación) y las fotos van
+    // adentro del registro: con varias boletas la transacción se pasa del tope
+    // de 5 segundos que trae Prisma por default y se caía entera.
+  }, { timeout: 30_000 });
 
   const pendiente = Math.max(0, totalMovimiento - yaImputado - suma);
   return NextResponse.json({

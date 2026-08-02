@@ -94,6 +94,24 @@ Con el arreglo, aplicar baja lista + descuento juntos, así que el precio al cli
 
 **De paso**: el aviso de esas filas decía *"Precio editado a mano"*, que es justo lo que hizo dudar a MJ. La app no puede saber por qué una línea se despegó (¿la editó ella?, ¿la despegó este botón?), así que el texto ahora describe el estado — "Este precio no sigue al catálogo" — en vez de afirmar una causa.
 
+### H0b — Aceptar una foto despega la línea, y varias fotos "nuevas" son la misma
+
+> **Encontrado el 2026-08-02** porque MJ insistió: "yo no he despegado nada, no he metido mano en ningún precio de esta cotización". Tenía razón.
+
+Probado gesto por gesto contra el PUT real (`scripts/diag-que-despega-una-linea.ts`): cambiar la cantidad, reordenar, cambiar el ambiente y guardar el popover de link/foto **no** despegan. Aplicar la **imagen** desde el modal **sí**, aunque el precio no se mueva — el PUT trata la foto como un campo del catálogo editado (regla del ADR 2026-06-18).
+
+Y la foto que ofrecía cambiar era **la misma**: MK y LED Studio migraron su CDN de `<tienda>.vteximg.com.br` a `<tienda>.vtexassets.com`, con el mismo id y el mismo archivo. Comparadas como texto parecen distintas. Le pasó al MEZCLADOR URBAN CROMO de Casa Los Algarrobos: quedó despegado por aceptar una foto idéntica, y desde entonces no recibía los precios del catálogo. En el catálogo quedan **23 productos con el dominio viejo**, así que se repetiría en cada revisión.
+
+**ARREGLADO** (helper `esLaMismaImagen`, 9/9 en `scripts/test-misma-imagen.ts`): el modal ya no ofrece cambiar una foto que es la misma en otro CDN de la misma tienda.
+
+**Lo que queda de fondo**: de las 34 líneas despegadas de la base, **14 tienen exactamente el mismo precio que el catálogo** — están congeladas por foto, nombre o link, no por plata. Ver la decisión pendiente sobre separar "el descuento de la tienda" de "el descuento que da MJ".
+
+### H6 — 28 líneas con el descuento corrupto (el precio guardado en el campo del %)
+
+Aparecido al medir cuántas líneas tienen descuento propio. En **24 de 28**, el valor guardado en `discountPercent` **es el mismo número que el precio de lista** (ej. lista $158.291 y descuento "15.829.100%"): una carga vieja escribió el precio en el campo del porcentaje. Reparto: JNC-Vitacura V5 (24), JNC-Vitacura V6 (2), Paseo del Sena V2 (2).
+
+**Los totales NO están afectados**: en las 24 el `clientPrice` quedó igual a la lista, y es ese campo el que suma. Las tres versiones están enviadas o aprobadas, o sea congeladas — el catálogo no las toca. El riesgo es a futuro: si alguien edita el precio de lista de una de esas líneas, el recálculo `lista × (1 − dcto)` daría un número negativo enorme. Pendiente de limpiar; no urge.
+
 ### H1 — "Comparar con la tienda web" es ciego al descuento (la causa del caso Atenas)
 
 > **ARREGLADO** (2026-07-31). Toda la lectura de precios pasa ahora por un módulo único (`leerPrecioWeb`) que devuelve lista, precio de venta y descuento, y avisa si el descuento es confiable. El modal muestra los tres números y al aplicar bajan los tres. Verificado reproduciendo el caso: el WC pasa a "Distintos", muestra 30% → 39% y queda en $139.990.

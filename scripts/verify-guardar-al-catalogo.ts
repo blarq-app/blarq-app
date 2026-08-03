@@ -29,8 +29,11 @@ import { PrismaClient } from "@prisma/client";
 const BASE = process.argv[2] ?? "http://localhost:3061";
 const OUT = "scripts/_capturas";
 
-// Nombre bien reconocible: si algo queda vivo por un corte, se encuentra.
-const NOMBRE = "PRUEBA GUARDAR AL CATALOGO";
+// Nombre de partida REALISTA a propósito: las capturas se las mira MJ, y un
+// nombre tipo "PRUEBA GUARDAR AL CATALOGO" se lee como un rótulo de la app en
+// vez de como el nombre de la partida. "(prueba)" alcanza para reconocerlo si
+// algo queda vivo por un corte.
+const NOMBRE = "PINTURA MURO INTERIOR (prueba)";
 const CAPITULO = "INSTALACIONES ELECTRICAS"; // homologa a "INSTALACIONES ELECT."
 
 const prisma = new PrismaClient();

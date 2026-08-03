@@ -293,8 +293,16 @@ export default function ArtefactosEditor({
 
   // ── Mutaciones ───────────────────────────────────────────────────────
   async function persistItem(item: ArtefactoItem) {
+    await guardarItem(item);
+  }
+
+  // Guarda una línea y dice si lo logró. Separado de `persistItem` porque hay
+  // un caso donde el resultado IMPORTA: aplicar precios desde un modal. Ahí no
+  // alcanza con disparar el guardado y seguir — hay que esperarlo y avisar si
+  // falló (ver applyOnlinePatches).
+  async function guardarItem(item: ArtefactoItem): Promise<boolean> {
     try {
-      await fetch(
+      const res = await fetch(
         `/api/presupuestos/${initialBudget.id}/artefactos/${item.id}`,
         {
           method: "PUT",
@@ -302,8 +310,9 @@ export default function ArtefactosEditor({
           body: JSON.stringify(item),
         }
       );
+      return res.ok;
     } catch {
-      /* silent — se reintenta al guardar todo */
+      return false;
     }
   }
 
@@ -484,14 +493,52 @@ export default function ArtefactosEditor({
   // en silencio. De paso `updateItem` recalcula el precio a cliente y propaga
   // a las copias del mismo producto.
   async function applyOnlinePatches(patches: ArtefactoPricePatch[]) {
+    if (patches.length === 0) return;
+
+    // OJO con el patrón que había acá (arreglado 2026-08-02): esto llamaba a
+    // `updateItem`, que dispara el guardado DENTRO del updater de setItems y no
+    // lo espera. Dos problemas: (1) el modal se cerraba antes de que los PUT
+    // terminaran — cada uno tarda unos segundos, y con diez marcados eso es
+    // bastante rato en el que cerrar la página o navegar los deja a medias; y
+    // (2) hacer un fetch adentro de un updater de estado es un efecto en una
+    // función que React espera pura, así que puede ejecutarse dos veces o
+    // ninguna. En los dos casos MJ ve el modal cerrarse como si hubiera
+    // funcionado y los precios siguen viejos.
+    //
+    // Ahora: se arman las filas nuevas, se guardan ESPERANDO cada respuesta, y
+    // recién después se refresca la pantalla y se avisa si algo falló.
+    const porId = new Map(items.map((i) => [i.id, i]));
+    const nuevos: ArtefactoItem[] = [];
     for (const p of patches) {
-      const patch: Partial<ArtefactoItem> = {};
-      if (p.listPrice !== undefined) patch.listPrice = p.listPrice;
-      if (p.discountPercent !== undefined) {
-        patch.discountPercent = p.discountPercent;
+      const base = porId.get(p.itemId);
+      if (!base) continue;
+      const merged: ArtefactoItem = { ...base };
+      if (p.listPrice !== undefined) merged.listPrice = p.listPrice;
+      if (p.discountPercent !== undefined) merged.discountPercent = p.discountPercent;
+      if (p.imageUrl !== undefined) merged.imageUrl = p.imageUrl;
+      if (p.listPrice !== undefined || p.discountPercent !== undefined) {
+        merged.clientPrice = calcClientPrice(merged.listPrice, merged.discountPercent);
       }
-      if (p.imageUrl !== undefined) patch.imageUrl = p.imageUrl;
-      if (Object.keys(patch).length > 0) updateItem(p.itemId, patch);
+      nuevos.push(merged);
+    }
+
+    const fallaron: string[] = [];
+    const guardados: ArtefactoItem[] = [];
+    for (const item of nuevos) {
+      const ok = await guardarItem(item);
+      if (ok) guardados.push(item);
+      else fallaron.push(item.name);
+    }
+
+    // Solo se refleja en pantalla lo que de verdad quedó guardado.
+    if (guardados.length > 0) {
+      const byId = new Map(guardados.map((i) => [i.id, i]));
+      setItems((prev) => prev.map((i) => byId.get(i.id) ?? i));
+    }
+    if (fallaron.length > 0) {
+      alert(
+        `No se pudieron guardar ${fallaron.length} de ${nuevos.length}:\n\n${fallaron.join("\n")}\n\nEl resto sí quedó. Probá de nuevo con estos.`
+      );
     }
   }
 
@@ -507,7 +554,10 @@ export default function ArtefactosEditor({
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...actual, discountOverridden: false }),
+          // Campo propio de la ACCIÓN: no alcanza con mandar
+          // discountOverridden en false, porque ese valor viaja en todos los
+          // guardados normales (ver el comentario del PUT).
+          body: JSON.stringify({ ...actual, volverAlDescuentoDeLaTienda: true }),
         }
       );
       if (!res.ok) throw new Error("Error");

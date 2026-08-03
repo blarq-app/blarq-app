@@ -71,10 +71,16 @@ export async function PUT(
     const editoCampoCatalogo = !!prev && editoCampoDeCatalogo(prev, entrante);
     const despego = !!prev && !prev.priceOverridden && editoCampoCatalogo;
     const priceOverridden = prev?.priceOverridden || editoCampoCatalogo;
-    // El cliente puede pedir explícitamente volver al descuento de la tienda
-    // (el botón de la columna DCTO): manda discountOverridden=false y ahí se
-    // respeta, sin importar que el número haya cambiado en ese mismo guardado.
-    const vuelveAlDeLaTienda = data.discountOverridden === false;
+    // Volver al descuento de la tienda es una ACCIÓN explícita (la flechita de
+    // la columna DCTO), y por eso viaja en su propio campo.
+    //
+    // OJO, error que estuvo unas horas acá: se miraba `data.discountOverridden
+    // === false`. Pero el editor manda la FILA COMPLETA en cada guardado, con
+    // el valor que la línea tenía antes — así que cualquier guardado normal de
+    // una línea sin descuento propio parecía un "volvé al de la tienda", y el
+    // porcentaje que MJ acababa de escribir se pisaba con el del catálogo. O
+    // sea: rompía exactamente lo que este cambio venía a habilitar.
+    const vuelveAlDeLaTienda = data.volverAlDescuentoDeLaTienda === true;
     const discountOverridden = vuelveAlDeLaTienda
       ? false
       : !!prev && (prev.discountOverridden || editoElDescuento(prev, entrante));

@@ -187,11 +187,12 @@ async function main() {
         discountPercent: true,
         clientPrice: true,
         priceOverridden: true,
+        discountOverridden: true,
       },
     });
     console.log("\nCómo quedó la línea en la base:");
     console.log(
-      `   lista ${despues?.listPrice} · dcto ${((despues?.discountPercent ?? 0) * 100).toFixed(1)}% · cliente ${Math.round(despues?.clientPrice ?? 0)} · despegada ${despues?.priceOverridden}`
+      `   lista ${despues?.listPrice} · dcto ${((despues?.discountPercent ?? 0) * 100).toFixed(1)}% · cliente ${Math.round(despues?.clientPrice ?? 0)} · despegada ${despues?.priceOverridden} · dcto propio ${despues?.discountOverridden}`
     );
     const okCliente = Math.abs((despues?.clientPrice ?? 0) - 139990) <= 1;
     const okDcto = Math.abs((despues?.discountPercent ?? 0) - 0.3909) < 0.01;

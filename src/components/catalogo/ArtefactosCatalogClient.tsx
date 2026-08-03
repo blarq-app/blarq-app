@@ -698,26 +698,54 @@ export default function ArtefactosCatalogClient({
   }
 
   // ── Mutaciones ────────────────────────────────────────────────────────
-  async function persistItem(item: CatalogItem) {
+  // Guarda y devuelve lo que respondió el servidor (o null si falló), para
+  // poder refrescar los campos que él calcula.
+  async function guardarItem(
+    item: CatalogItem
+  ): Promise<{ lastPriceCheck?: string | null } | null> {
     try {
-      await fetch(`/api/catalogo/artefactos/${item.id}`, {
+      const res = await fetch(`/api/catalogo/artefactos/${item.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(item),
       });
+      if (!res.ok) return null;
+      return await res.json();
     } catch {
-      /* silent */
+      return null;
     }
   }
 
-  function updateItem(id: string, patch: Partial<CatalogItem>) {
+  // Guarda un cambio y refresca lo que el SERVIDOR calcula.
+  //
+  // Antes esto disparaba el guardado dentro del updater de setItems y se
+  // quedaba con el objeto mergeado en el cliente. El problema: hay campos que
+  // el cliente no sabe calcular — `lastPriceCheck` lo pone el backend cuando
+  // llega un precio nuevo — así que la fila seguía mostrando el valor viejo
+  // hasta recargar la página. MJ le puso el link al portarrollo, el precio
+  // quedó bien guardado, y la pantalla igual decía "revisado hace más de un
+  // mes" en ámbar (2026-08-03).
+  //
+  // Ahora se pinta el cambio enseguida (para que se sienta instantáneo) y
+  // cuando responde el servidor se traen SOLO los campos que él calcula — no
+  // el resto, para no pisar lo que MJ haya seguido escribiendo mientras tanto.
+  async function updateItem(id: string, patch: Partial<CatalogItem>) {
+    const actual = items.find((it) => it.id === id);
+    if (!actual) return;
+    const merged = { ...actual, ...patch };
+    setItems((prev) => prev.map((it) => (it.id === id ? merged : it)));
+
+    const devuelto = await guardarItem(merged);
+    if (!devuelto) return;
     setItems((prev) =>
-      prev.map((it) => {
-        if (it.id !== id) return it;
-        const merged = { ...it, ...patch };
-        persistItem(merged);
-        return merged;
-      })
+      prev.map((it) =>
+        it.id === id
+          ? {
+              ...it,
+              lastPriceCheck: devuelto.lastPriceCheck ?? it.lastPriceCheck,
+            }
+          : it
+      )
     );
   }
 
@@ -871,8 +899,17 @@ export default function ArtefactosCatalogClient({
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "Error al guardar");
       }
+      // Se toma lo que devuelve el servidor, no solo el patch: `lastPriceCheck`
+      // lo calcula él al recibir un precio nuevo, y quedarse con el valor viejo
+      // hacía que la fila siguiera diciendo "revisado hace más de un mes"
+      // después de actualizarla (le pasó a MJ con el portarrollo, 2026-08-03).
+      const guardado = await res.json().catch(() => null);
       setItems((prev) =>
-        prev.map((it) => (it.id === editingId ? { ...it, ...patch } : it))
+        prev.map((it) =>
+          it.id === editingId
+            ? { ...it, ...patch, ...(guardado?.lastPriceCheck ? { lastPriceCheck: guardado.lastPriceCheck } : {}) }
+            : it
+        )
       );
       setActiveTab(newItem.subcategory);
       closeForm();

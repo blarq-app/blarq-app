@@ -84,7 +84,19 @@ async function main() {
     check("el 45% sigue ahí (no lo pisó el del catálogo)", Math.abs((d?.discountPercent ?? 0) - 0.45) < 0.001, `${((d?.discountPercent ?? 0) * 100).toFixed(0)}%`);
     check("sigue marcado como de MJ", d?.discountOverridden === true);
 
-    console.log("\n3. MJ aprieta la flechita de volver al de la tienda:");
+    console.log("\n3. Aplica un precio desde 'Comparar con la tienda web':");
+    // El modal manda descuentoDeLaTienda: ese porcentaje no es una decisión de
+    // MJ, así que la línea NO debe quedar marcada como suya.
+    await guardar({ discountPercent: 0.32, clientPrice: 68000, descuentoDeLaTienda: true });
+    d = await prisma.artefactoItem.findUnique({ where: { id: item.id } });
+    check("toma el 32% de la tienda", Math.abs((d?.discountPercent ?? 0) - 0.32) < 0.001, `${((d?.discountPercent ?? 0) * 100).toFixed(0)}%`);
+    check("NO queda marcado como descuento de MJ", d?.discountOverridden === false);
+    check("y tampoco despega la línea", d?.priceOverridden === false);
+
+    // Se vuelve a poner uno propio para probar el paso 4.
+    await guardar({ discountPercent: 0.45, clientPrice: 55000 });
+
+    console.log("\n4. MJ aprieta la flechita de volver al de la tienda:");
     await guardar({ volverAlDescuentoDeLaTienda: true });
     d = await prisma.artefactoItem.findUnique({ where: { id: item.id } });
     check("toma el 20% del catálogo", Math.abs((d?.discountPercent ?? 0) - 0.2) < 0.001, `${((d?.discountPercent ?? 0) * 100).toFixed(0)}%`);

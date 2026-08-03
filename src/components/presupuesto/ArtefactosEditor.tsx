@@ -300,14 +300,17 @@ export default function ArtefactosEditor({
   // un caso donde el resultado IMPORTA: aplicar precios desde un modal. Ahí no
   // alcanza con disparar el guardado y seguir — hay que esperarlo y avisar si
   // falló (ver applyOnlinePatches).
-  async function guardarItem(item: ArtefactoItem): Promise<boolean> {
+  async function guardarItem(
+    item: ArtefactoItem,
+    extra?: Record<string, unknown>
+  ): Promise<boolean> {
     try {
       const res = await fetch(
         `/api/presupuestos/${initialBudget.id}/artefactos/${item.id}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(item),
+          body: JSON.stringify(extra ? { ...item, ...extra } : item),
         }
       );
       return res.ok;
@@ -525,7 +528,10 @@ export default function ArtefactosEditor({
     const fallaron: string[] = [];
     const guardados: ArtefactoItem[] = [];
     for (const item of nuevos) {
-      const ok = await guardarItem(item);
+      // El descuento que se aplica acá viene de la TIENDA, no es una decisión
+      // de MJ: se avisa para que la línea no quede marcada como "descuento
+      // propio" y siga recibiendo los del catálogo.
+      const ok = await guardarItem(item, { descuentoDeLaTienda: true });
       if (ok) guardados.push(item);
       else fallaron.push(item.name);
     }

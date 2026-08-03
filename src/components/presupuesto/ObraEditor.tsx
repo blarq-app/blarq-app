@@ -968,10 +968,13 @@ export default function ObraEditor({
       const created = await res.json();
       setItems([...items, created]);
 
-      // Si es manual y no existe en catalogo, guardar al catalogo
-      if (!selectedCatalog && newItem.name) {
-        saveToCatalog(chapterId, newItem);
-      }
+      // Antes acá se mandaba, EN SILENCIO, un molde vacío al catálogo con solo
+      // el nombre, la unidad y el precio de la partida recién creada. Ese molde
+      // nacía sin desglose (todavía no existe al crear la partida) y sin quedar
+      // enganchado al ObraItem, así que ensuciaba el catálogo sin servir de
+      // nada — y encima chocaba por nombre con el guardado de verdad. Sacado
+      // 2026-08-03: al catálogo se sube a conciencia, con el botón "Guardar al
+      // catálogo" del panel de la partida, ya con el desglose adentro.
 
       resetAddForm();
     } catch {
@@ -979,33 +982,13 @@ export default function ObraEditor({
     }
   }
 
-  async function saveToCatalog(
-    chapterId: string,
-    item: { name: string; unit: string; unitPrice: number }
-  ) {
-    try {
-      // La categoría del catálogo sale del NOMBRE del capítulo. El catálogo
-      // tiene su propia lista de categorías (CATALOG_CATEGORY_ORDER, 12
-      // nombres que no calzan 1:1 con los capítulos) — son cosas separadas y
-      // siguen siéndolo; esto es solo el default al guardar.
-      const categoryName = (
-        chapters.find((c) => c.id === chapterId)?.name ?? ""
-      ).toUpperCase();
-      if (!categoryName) return;
-
-      await fetch("/api/catalogo/partidas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          category: categoryName,
-          name: item.name,
-          unit: item.unit,
-          unitPrice: item.unitPrice,
-        }),
-      });
-    } catch {
-      // silently fail - catalog save is best-effort
-    }
+  // Deja la partida marcada como "ya tiene molde" sin recargar la página,
+  // después de guardarla al catálogo desde el panel. Con esto los botones del
+  // panel pasan solos a los de las partidas que vienen del catálogo.
+  function marcarConMolde(itemId: string, catalogPartidaId: string) {
+    setItems((curr) =>
+      curr.map((it) => (it.id === itemId ? { ...it, catalogPartidaId } : it))
+    );
   }
 
   async function handleDeleteItem(itemId: string) {
@@ -2160,6 +2143,9 @@ export default function ObraEditor({
                               handleUpdateCatalogDescription(item)
                             }
                             onComponentsChanged={() => refreshItemTotals(item.id)}
+                            onSavedToCatalog={(catalogPartidaId) =>
+                              marcarConMolde(item.id, catalogPartidaId)
+                            }
                           />
                         </td>
                       </tr>
@@ -2448,8 +2434,13 @@ export default function ObraEditor({
                     <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded font-medium">
                       Nueva partida
                     </span>
+                    {/* Antes decía "Se guardara automaticamente en el catalogo".
+                        Era mentira a medias: mandaba al catálogo un molde VACÍO,
+                        sin el desglose (que todavía no existe al crear) y sin
+                        quedar enganchado a esta partida. Ahora al catálogo se
+                        sube a conciencia, ya con el desglose armado. */}
                     <span className="text-xs text-gray-400">
-                      Se guardara automaticamente en el catalogo
+                      Después la podés guardar al catálogo, con su desglose
                     </span>
                     <button
                       onClick={() => {

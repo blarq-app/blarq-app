@@ -81,9 +81,16 @@ export async function PUT(
     // porcentaje que MJ acababa de escribir se pisaba con el del catálogo. O
     // sea: rompía exactamente lo que este cambio venía a habilitar.
     const vuelveAlDeLaTienda = data.volverAlDescuentoDeLaTienda === true;
-    const discountOverridden = vuelveAlDeLaTienda
-      ? false
-      : !!prev && (prev.discountOverridden || editoElDescuento(prev, entrante));
+    // El descuento que llega NO lo decidió MJ: lo trae la tienda. Lo manda
+    // "Comparar con la tienda web" al aplicar. Sin esto, aceptar el precio de
+    // internet marcaba la línea como si el porcentaje fuera una decisión suya
+    // y esa línea dejaba de recibir los descuentos nuevos del catálogo — el
+    // mismo congelamiento que veníamos arreglando, con otro nombre.
+    const dctoVieneDeLaTienda = data.descuentoDeLaTienda === true;
+    const discountOverridden =
+      vuelveAlDeLaTienda || dctoVieneDeLaTienda
+        ? false
+        : !!prev && (prev.discountOverridden || editoElDescuento(prev, entrante));
 
     // Al volver al descuento de la tienda hay que ir a buscarlo: el editor no
     // lo tiene en la línea (guarda el efectivo). Si el producto ya no está en

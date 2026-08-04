@@ -7,6 +7,7 @@ import MovementsSearch from "@/components/banco/MovementsSearch";
 import MovementsMontoSearch from "@/components/banco/MovementsMontoSearch";
 import MovementsAdvancedFilters from "@/components/banco/MovementsAdvancedFilters";
 import MovementsTable from "@/components/banco/MovementsTable";
+import LimpiarFiltrosButton from "@/components/banco/LimpiarFiltrosButton";
 import { SOCIO_RUTS, SOCIO_GLOSA_HINTS } from "@/lib/banco/socios";
 import { OPCIONES_IMPUTACION, ETIQUETA_CATEGORIA } from "@/lib/banco/categorias";
 
@@ -458,6 +459,16 @@ export default async function MovimientosPage({
     selectedAccount?.role === "operating" || // Operativa
     selectedAccount?.role === "salary_fund"; // Sueldos
 
+  // ¿Hay algo filtrado? Sirve para mostrar el botón "Limpiar" SOLO cuando hace
+  // falta — si la pantalla ya está en su default, el botón no ensucia la barra.
+  // Se mira la URL entera (cualquier param de SearchParams, incluidos los que
+  // se prenden desde los encabezados de columna: imputación y obra), así que un
+  // filtro nuevo queda cubierto sin tocar esta lista. "all" no cuenta: es el
+  // alias explícito de "sin filtro" que usan los links de drill-down.
+  const hayFiltrosActivos = Object.entries(sp).some(
+    ([, v]) => !!v && v !== "all"
+  );
+
   return (
     <div>
       <div className="flex flex-col items-start sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
@@ -477,12 +488,7 @@ export default async function MovimientosPage({
           y volver a la lista completa. Sin texto explicativo — MJ ya lo sabe. */}
       {sp.id && (
         <div className="mb-4 text-xs">
-          <Link
-            href="/banco/movimientos?status=all"
-            className="text-gray-500 hover:text-gray-900 underline"
-          >
-            limpiar
-          </Link>
+          <LimpiarFiltrosButton />
         </div>
       )}
 
@@ -597,6 +603,13 @@ export default async function MovimientosPage({
           <div className="flex items-center gap-2 flex-1 min-w-[240px]">
             <MovementsSearch defaultQ={q} sp={sp} />
             <MovementsMontoSearch defaultMonto={sp.monto ?? ""} sp={sp} />
+            {/* "Limpiar" al final de la última fila de filtros: cierra la barra
+                y queda lejos de las pastillas para que no se lea como una más.
+                Solo aparece cuando hay algo puesto. En el drill-down por `id`
+                se omite: ahí el mismo botón ya está arriba, junto al aviso. */}
+            {hayFiltrosActivos && !sp.id && (
+              <LimpiarFiltrosButton className="ml-auto shrink-0 whitespace-nowrap" />
+            )}
           </div>
         </div>
       </div>

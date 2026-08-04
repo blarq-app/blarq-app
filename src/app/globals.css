@@ -165,6 +165,30 @@ input[type="number"] {
   appearance: textfield;
 }
 
+/* ── Campos de formulario en el celular ────────────────────────────────────
+   Safari en iPhone hace ZOOM automático al enfocar cualquier campo con letra
+   menor a 16px, y NO vuelve solo al ancho original: quedás con la pantalla
+   corrida y hay que pellizcar para salir. Como la regla de arriba fija TODOS
+   los inputs de la app en 12px con !important, hasta ahora eso pasaba en cada
+   campo de cada pantalla en el celular.
+
+   Abajo de 768px (celular) los campos suben a 16px, que es el umbral exacto
+   que apaga el zoom. En desktop no cambia nada: la regla vive dentro del
+   media query y la densidad de 12px queda igual que siempre.
+
+   Los dos `:not()` no son decorativos: suben la especificidad lo justo para
+   ganarle a `.text-sm` / `.text-base` (que son !important y de clase, o sea
+   más específicos que un selector de elemento pelado), y de paso respetan las
+   utilidades text-force-* de las tablas densas, donde el tamaño chico es una
+   decisión explícita. */
+@media (max-width: 767px) {
+  input:not(.text-force-11):not(.text-force-10),
+  select:not(.text-force-11):not(.text-force-10),
+  textarea:not(.text-force-11):not(.text-force-10) {
+    font-size: 16px !important;
+  }
+}
+
 /* Force-size utilities that beat the global `input { font-size: … !important }` rule */
 input.text-force-11,
 textarea.text-force-11,

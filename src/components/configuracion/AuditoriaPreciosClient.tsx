@@ -106,7 +106,10 @@ export default function AuditoriaPreciosClient() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+      {/* El banner apila en mobile: el texto es largo y con el botón al lado
+          quedaban dos columnas de ~140px cada una, con el título cortado en
+          cinco renglones. Abajo de 640px el botón pasa a ancho completo. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
         <div>
           <div className="text-sm font-medium text-amber-900">
             {data.totalStaleComponents} componente{data.totalStaleComponents === 1 ? "" : "s"} desactualizado{data.totalStaleComponents === 1 ? "" : "s"} en {data.budgetsAffected} presupuesto{data.budgetsAffected === 1 ? "" : "s"} borrador
@@ -118,7 +121,7 @@ export default function AuditoriaPreciosClient() {
         <button
           onClick={syncAll}
           disabled={syncing !== null}
-          className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 disabled:cursor-wait"
+          className="w-full sm:w-auto shrink-0 min-h-11 sm:min-h-0 rounded bg-gray-900 px-4 py-2.5 sm:py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 disabled:cursor-wait"
         >
           {syncing === "all" ? "Actualizando…" : "Actualizar todos"}
         </button>
@@ -129,8 +132,8 @@ export default function AuditoriaPreciosClient() {
           key={g.budgetId}
           className="rounded-xl border border-gray-200 bg-white"
         >
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-            <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-b border-gray-200">
+            <div className="min-w-0">
               <Link
                 href={`/proyectos/${g.projectId}/presupuesto/${g.budgetId}`}
                 className="text-sm font-medium text-gray-900 hover:underline"
@@ -145,12 +148,63 @@ export default function AuditoriaPreciosClient() {
             <button
               onClick={() => syncBudget(g.budgetId)}
               disabled={syncing !== null}
-              className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait"
+              className="w-full sm:w-auto shrink-0 min-h-11 sm:min-h-0 rounded border border-gray-300 px-3 py-2.5 sm:py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait"
             >
               {syncing === g.budgetId ? "Actualizando…" : "Actualizar este"}
             </button>
           </div>
-          <table className="w-full text-xs">
+
+          {/* ── Mobile: una tarjeta por componente ───────────────────────
+              La tabla tiene 4 columnas y dos de ellas son texto largo (nombre
+              de la partida y la descripción vieja → nueva). En un celular las
+              columnas de plata quedaban en 40px y los montos se partían en dos
+              renglones, que es justo lo que hay que poder comparar de un
+              vistazo. Acá el antes → ahora va en una sola línea alineada a la
+              derecha, con tabular-nums. */}
+          <div className="sm:hidden divide-y divide-gray-100">
+            {g.components.map((c) => {
+              const priceChanged = Math.abs(c.oldUnitCost - c.newUnitCost) > 0.01;
+              const descChanged = c.oldDescription !== c.newDescription;
+              return (
+                <div key={c.componentId} className="px-4 py-3">
+                  <div className="text-[11px] text-gray-500">
+                    {c.itemNumber} {c.itemName}
+                  </div>
+                  <div className="text-xs text-gray-900 mt-0.5 leading-snug">
+                    {descChanged ? (
+                      <>
+                        <span className="text-gray-400 line-through">
+                          {c.oldDescription}
+                        </span>{" "}
+                        → <span>{c.newDescription}</span>
+                      </>
+                    ) : (
+                      c.newDescription
+                    )}
+                  </div>
+                  <div className="flex items-baseline justify-end gap-2 mt-1.5 text-xs tabular-nums">
+                    <span className="text-gray-400">
+                      {fmtCLP(c.oldUnitCost)}
+                    </span>
+                    <span className="text-gray-300">→</span>
+                    <span
+                      className={`font-medium ${
+                        priceChanged
+                          ? c.newUnitCost > c.oldUnitCost
+                            ? "text-red-700"
+                            : "text-green-700"
+                          : "text-gray-900"
+                      }`}
+                    >
+                      {fmtCLP(c.newUnitCost)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <table className="hidden sm:table w-full text-xs">
             <thead>
               <tr className="text-gray-500 uppercase tracking-wider text-[10px] border-b border-gray-200">
                 <th className="text-left py-2 px-4 font-medium">Partida</th>

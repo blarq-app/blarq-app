@@ -1,8 +1,17 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-03.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-04.
 
 ---
+
+- **Configuración de la app, pensada para el celular (2026-08-04, rama `claude/mobile-settings-design-3fkdek`)**: MJ pidió "diseñar mejor la configuración de la app en el celular". Se tomó como alcance la SECCIÓN de Configuración (Reembolsadores, Auditoría de precios, Mi cuenta) más el camino para llegar a ella.
+  - **No existía pantalla de Configuración.** Los ajustes colgaban sueltos al final del menú lateral y "Mi cuenta" estaba detrás del nombre de usuario en el header. Ahora hay hub en `/configuracion` con contadores en vivo. Las reglas de Facturas y Banco se **linkean** desde ahí; sus rutas no se movieron.
+  - **HALLAZGO GRANDE, más allá de Configuración**: `globals.css` forzaba TODOS los inputs de la app a 12px con `!important`, y Safari en iPhone hace zoom automático abajo de 16px sin volver solo. O sea que **cada formulario de la app** hacía eso en el celular. Arreglado con un media query de `max-width: 767px`; desktop verificado sin cambios (12px antes y después). Es el único cambio de este trabajo que toca pantallas fuera de Configuración — **vale la pena mirarlo en el celular en otras pantallas** (facturas, banco, presupuesto) para confirmar que no aprieta ningún layout.
+  - **Emojis del menú lateral reemplazados** por SVG monocromáticos (`ui/Glyph.tsx`). Estaban prohibidos por `docs/principles.md` desde siempre. El menú quedó agrupado en tres bloques (trabajo · Catálogo · Ajustes) y con scroll propio.
+  - **Tablas → tarjetas en el celular** en Reembolsadores y Auditoría de precios. Desktop sin cambios.
+  - **Bug de texto corregido** que hoy se ve en la app en vivo: "glosa**de** un reembolsador" (JSX se comía el espacio tras `</span>`). Mismo caso en Auditoría de precios.
+  - **Verificado con capturas a 390px y 1440px** y un chequeo automático (0 campos < 16px, 0 desborde horizontal, 0 botones < 40px). No toca `metrics.ts`, ni el schema, ni cálculos.
+  - **PENDIENTE**: el resto de la app sigue sin adaptar para celular (las tablas de facturas, banco, presupuesto y catálogo se salen de pantalla). Esto arregló Configuración y el zoom global, no eso.
 
 - **Un solo vocabulario: capítulos del presupuesto = categorías del catálogo (2026-08-03, rama `feat/homologar-capitulos-categorias`, worktree propio, PR #372 MERGEADO y EN PROD, migración APLICADA en la viva 2026-08-03)**: continuación directa del botón "Guardar al catálogo". MJ pidió "deberíamos homologar los nombres de los capítulos" y acá se hizo de verdad, también en los datos.
   - **La causa eran DOS listas escritas a mano** en archivos distintos: `CAPITULOS_SUGERIDOS` (chapters.ts, 8 nombres) y `CATALOG_CATEGORY_ORDER` (utils.ts, 12). Nadie las mantuvo iguales. Ahora hay una sola, `CAPITULOS`, y las otras dos se derivan.

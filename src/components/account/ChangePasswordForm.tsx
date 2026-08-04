@@ -2,6 +2,15 @@
 
 import { useState } from "react";
 
+/**
+ * Clases del input. `rounded` y `ring-1` para alinear con el resto de la app
+ * (docs/principles.md pide `rounded` en inputs, no `rounded-lg`). El tamaño de
+ * letra en el celular lo sube a 16px una regla de globals.css, para que Safari
+ * no haga zoom al enfocar — acá eran tres campos seguidos, o sea tres zooms.
+ */
+const INPUT =
+  "w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900";
+
 export default function ChangePasswordForm() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -58,7 +67,7 @@ export default function ChangePasswordForm() {
           onChange={(e) => setCurrentPassword(e.target.value)}
           required
           autoComplete="current-password"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
+          className={INPUT}
         />
       </div>
 
@@ -73,7 +82,7 @@ export default function ChangePasswordForm() {
           required
           minLength={8}
           autoComplete="new-password"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
+          className={INPUT}
         />
         <p className="text-[11px] text-gray-400 mt-1">Mínimo 8 caracteres.</p>
       </div>
@@ -88,13 +97,13 @@ export default function ChangePasswordForm() {
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
           autoComplete="new-password"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
+          className={INPUT}
         />
       </div>
 
       {message && (
         <div
-          className={`text-sm rounded-lg px-3 py-2 ${
+          className={`text-sm rounded px-3 py-2 ${
             message.type === "ok"
               ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
               : "bg-red-50 text-red-800 border border-red-200"
@@ -107,7 +116,7 @@ export default function ChangePasswordForm() {
       <button
         type="submit"
         disabled={busy}
-        className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+        className="w-full sm:w-auto min-h-11 sm:min-h-0 bg-gray-900 text-white px-4 py-2 rounded text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
       >
         {busy ? "Guardando…" : "Cambiar contraseña"}
       </button>

@@ -1,8 +1,17 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-03.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-04.
 
 ---
+
+- **Cierre de la auditoría de precios de artefactos (2026-08-04, rama `fix/precios-artefactos-web-dcto`)**: MJ cierra el tema — "cuando vaya usando los artefactos iré revisando". Todo el CÓDIGO está mergeado y en prod (PRs #357, #358, #359, #360, #364, #366, #368, #369); lo último de la rama son scripts de diagnóstico y docs.
+  - **Estado del catálogo**: 137 productos · 122 con link · 15 sin. De esos 15: 7 que ya venían así, 6 a los que MJ pidió sacarles el link porque MK declara otro acabado, y 2 cuyos links se perdieron al sobrescribirlos (ver la regla más abajo).
+  - **Verificación completa de descripciones** (`scripts/diag-verificar-descripciones.ts`): ningún link apunta a otro producto salvo los 6 del conflicto de acabado. Compara el DETALLE del catálogo —no el nombre corto, que es donde estuvo el error original— contra el nombre real en la tienda: vías, tina/ducha, medidas, color y línea.
+  - **DOS CORRECCIONES DE MJ que cambiaron el criterio, las dos por conocimiento del negocio:**
+    1. *"Los brushed y los cromados son productos diferentes"* — yo había silenciado las diferencias de acabado cuando el slug del link las respaldaba, tratándolas como un renombre de MK. Son acabados distintos con precios distintos. El color ya no se descarta nunca; el slug se usa solo para medidas, donde "25 cm" y "250 mm" sí son notación.
+    2. *"¿No será que como ya estaba linkeado de antes tiene el mismo precio?"* — yo argumenté que el precio idéntico probaba que el link era correcto. Es **circular**: el precio SALIÓ de ese link al correr "Revisar precios". La consecuencia real es la inversa — **si el link es del producto equivocado, el precio guardado también lo es**. Los 4 Atlas gun grey tienen precios del 14-07 tomados de esos links y están en Paseo del Sena V3.
+  - **PENDIENTE, lo mira MJ a medida que use los artefactos**: los 4 Atlas gun grey (cotizados en Sena V3), los 2 Home brushed, los dos toalleros Atlas brushed sin link y los 7 que nunca tuvieron.
+  - **REGLA APRENDIDA A LA MALA**: antes de sobrescribir o borrar un link, RESPALDARLO. El 03-08 se pisaron los del mezclador Stellar y la grifería Brizo —estaban caídos pero eran correctos— y no hubo forma de recuperarlos. Desde entonces los scripts guardan en `backups/` antes de tocar.
 
 - **Un solo vocabulario: capítulos del presupuesto = categorías del catálogo (2026-08-03, rama `feat/homologar-capitulos-categorias`, worktree propio, PR #372 MERGEADO y EN PROD, migración APLICADA en la viva 2026-08-03)**: continuación directa del botón "Guardar al catálogo". MJ pidió "deberíamos homologar los nombres de los capítulos" y acá se hizo de verdad, también en los datos.
   - **La causa eran DOS listas escritas a mano** en archivos distintos: `CAPITULOS_SUGERIDOS` (chapters.ts, 8 nombres) y `CATALOG_CATEGORY_ORDER` (utils.ts, 12). Nadie las mantuvo iguales. Ahora hay una sola, `CAPITULOS`, y las otras dos se derivan.

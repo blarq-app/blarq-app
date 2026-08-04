@@ -60,7 +60,28 @@ export default function ProjectsTable({
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <table className="w-full text-sm">
+      {/* ── Celular: una tarjeta por obra ─────────────────────────────────
+          La tabla tiene hasta 7 columnas y en un celular se cortaba justo en
+          Gastado/Vendido, que es lo que se viene a mirar. Acá el número y el
+          nombre mandan arriba, y la plata va abajo con su rótulo. */}
+      <div className="md:hidden divide-y divide-gray-100">
+        {main.map((r) => (
+          <TarjetaProyecto key={r.id} row={r} variant={variant} hrefBase={hrefBase} />
+        ))}
+        {otros.length > 0 && (
+          <>
+            <div className="bg-gray-50 px-4 py-1.5 text-[10px] uppercase tracking-wider text-gray-500">
+              Otros (centros de costo internos)
+            </div>
+            {otros.map((r) => (
+              <TarjetaProyecto key={r.id} row={r} variant={variant} hrefBase={hrefBase} />
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* ── Escritorio: la tabla densa de siempre, sin cambios ───────────── */}
+      <table className="hidden md:table w-full text-sm">
         <thead className="text-[10px] uppercase tracking-wider text-gray-500 bg-gray-50">
           <tr>
             <th className="text-right pl-4 pr-2 py-2 w-14">Nº</th>
@@ -148,6 +169,127 @@ export default function ProjectsTable({
           )}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/**
+ * Versión en tarjeta de una fila, para el celular.
+ *
+ * Deriva los mismos valores que `Row` (número, cliente, montos, fecha) con la
+ * misma lógica — está a propósito al lado suyo para que se vean juntas si
+ * alguna regla cambia.
+ */
+function TarjetaProyecto({
+  row,
+  variant,
+  hrefBase,
+}: {
+  row: ProjectRow;
+  variant: Variant;
+  hrefBase: string;
+}) {
+  const esCotizacion =
+    variant === "cotizacion" || variant === "archivado" || variant === "convertida";
+  const numero = esCotizacion
+    ? row.numeroCotizacion != null
+      ? `C-${row.numeroCotizacion}`
+      : "—"
+    : row.numeroProyecto != null
+      ? String(row.numeroProyecto)
+      : "—";
+
+  const monto = (n: number) =>
+    n > 0 ? formatCLP(n) : <span className="text-gray-300">—</span>;
+
+  const dateLabel =
+    variant === "convertida"
+      ? row.convertedAt
+        ? row.convertedAt.toLocaleDateString("es-CL", { month: "short", year: "numeric" })
+        : "—"
+      : variant === "cotizacion" || variant === "archivado"
+        ? relativeDate(row.createdAt ?? row.lastActivity)
+        : relativeDate(row.lastActivity);
+
+  return (
+    <div className="px-4 py-3">
+      <div className="flex items-start gap-3">
+        <span className="flex items-center gap-1.5 shrink-0 pt-0.5 tabular-nums text-sm font-medium text-gray-700">
+          {row.hasAlert && (
+            <span
+              aria-label="Alerta activa"
+              title="Tiene alerta activa"
+              className="w-1.5 h-1.5 rounded-full bg-red-500"
+            />
+          )}
+          {numero}
+        </span>
+        <div className="min-w-0 flex-1">
+          <EditableCell
+            value={row.name}
+            projectId={row.id}
+            field="name"
+            href={`${hrefBase}/${row.id}`}
+            textClassName="text-gray-900 font-medium"
+          />
+          {row.clientName !== row.name && (
+            <p className="text-xs text-gray-500 mt-0.5 truncate">
+              {row.clientName}
+            </p>
+          )}
+        </div>
+        <div className="shrink-0 -mr-1">
+          {!row.isInternal && (variant === "ejecucion" || variant === "terminado") && (
+            <ProjectStatusMenu
+              projectId={row.id}
+              projectName={row.name}
+              status={row.status}
+            />
+          )}
+          {(variant === "cotizacion" || variant === "archivado") && (
+            <span className="inline-flex items-center justify-end gap-0.5">
+              <ArchivarCotizacionButton
+                projectId={row.id}
+                projectName={row.name}
+                archivada={variant === "archivado"}
+                numeroProyecto={row.numeroProyecto}
+              />
+              <BorrarCotizacionButton projectId={row.id} projectName={row.name} />
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Los montos abajo, con su rótulo al lado: en el celular no hay
+          encabezado de columna que explique qué es cada número. */}
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-2 text-xs">
+        {(variant === "ejecucion" || variant === "terminado") && (
+          <>
+            <span className="text-gray-400">
+              Gastado{" "}
+              <span className="text-gray-900 tabular-nums">{monto(row.gastado)}</span>
+            </span>
+            <span className="text-gray-400">
+              Vendido{" "}
+              <span className="text-gray-900 tabular-nums">{monto(row.vendido)}</span>
+            </span>
+          </>
+        )}
+        {(variant === "cotizacion" || variant === "archivado" || variant === "convertida") && (
+          <span className="text-gray-400">
+            Monto{" "}
+            <span className="text-gray-900 tabular-nums">{monto(row.vendido)}</span>
+          </span>
+        )}
+        {variant === "convertida" && row.numeroProyecto != null && (
+          <span className="text-gray-400 tabular-nums">
+            → Proyecto {row.numeroProyecto}
+          </span>
+        )}
+        {variant !== "ejecucion" && (
+          <span className="text-gray-400 ml-auto">{dateLabel}</span>
+        )}
+      </div>
     </div>
   );
 }

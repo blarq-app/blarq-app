@@ -697,33 +697,37 @@ export default function PartidaSearch({ categories }: { categories: string[] }) 
 
   return (
     <div className="space-y-6">
-      {/* Search bar */}
-      <div className="flex gap-3">
+      {/* Search bar — en el celular los tres controles se apilan. Antes iban en
+          una sola fila y el `min-w-[200px]` del select más el botón empujaban la
+          barra 163px fuera de pantalla, arrastrando toda la página de costado. */}
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Buscar partida..."
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-gray-900 focus:border-transparent outline-none"
+          className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-gray-900 focus:border-transparent outline-none"
         />
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-1 focus:ring-gray-900 focus:border-transparent outline-none min-w-[200px]"
-        >
-          <option value="">Todas las categorías</option>
-          {allCategories.map((cat) => (
-            <option key={cat} value={cat}>
-              {cat}
-            </option>
-          ))}
-        </select>
-        <button
-          onClick={() => setCreating((v) => !v)}
-          className="px-3 py-2 bg-gray-900 text-white rounded-lg text-sm hover:bg-gray-700 whitespace-nowrap"
-        >
-          + Nueva partida
-        </button>
+        <div className="flex gap-2 sm:gap-3">
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="flex-1 min-w-0 sm:flex-none px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-1 focus:ring-gray-900 focus:border-transparent outline-none sm:min-w-[200px]"
+          >
+            <option value="">Todas las categorías</option>
+            {allCategories.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => setCreating((v) => !v)}
+            className="shrink-0 px-3 py-2 bg-gray-900 text-white rounded-lg text-sm hover:bg-gray-700 whitespace-nowrap"
+          >
+            + Nueva partida
+          </button>
+        </div>
       </div>
 
       {/* Formulario de creación rápida — abre la partida en modo edición */}

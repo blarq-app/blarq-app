@@ -132,9 +132,11 @@ export default function ListaCompraClient({
 
   return (
     <div className="space-y-4">
-      {/* Selector de versión + toolbar */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex items-center gap-4">
+      {/* Selector de versión + toolbar. En el celular todo esto se apila y las
+          acciones pasan a una fila que scrollea sola: en una sola línea la barra
+          se iba 405px fuera de pantalla y arrastraba la página entera. */}
+      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3 bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-500">Presupuesto:</label>
             <select
@@ -180,23 +182,25 @@ export default function ListaCompraClient({
             ))}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto -mx-1 px-1 xl:mx-0 xl:px-0 xl:overflow-visible">
           <button
             onClick={() => setShowCarrito(true)}
-            className="text-sm bg-[#e8131a] text-white px-3 py-2 rounded hover:bg-[#c00] transition-colors font-medium"
+            className="shrink-0 text-sm bg-[#e8131a] text-white px-3 py-2 rounded hover:bg-[#c00] transition-colors font-medium"
           >
-            🛒 Sodimac
+            {/* Sin el emoji 🛒 que había acá: docs/principles.md los prohíbe
+                en la UI. El botón se distingue igual por el rojo de Sodimac. */}
+            Carro Sodimac
           </button>
           <a
             href={`/api/proyectos/${projectId}/lista-compra/pdf?v=${selectedBudgetId || ""}&filter=${filter}`}
             target="_blank"
-            className="text-sm bg-gray-900 text-white px-3 py-2 rounded hover:bg-gray-700 transition-colors"
+            className="shrink-0 text-sm bg-gray-900 text-white px-3 py-2 rounded hover:bg-gray-700 transition-colors"
           >
             ↓ PDF
           </a>
           <button
             onClick={() => setShowNew((v) => !v)}
-            className="text-sm border border-gray-300 px-3 py-2 rounded hover:bg-gray-50"
+            className="shrink-0 text-sm border border-gray-300 px-3 py-2 rounded hover:bg-gray-50 whitespace-nowrap"
           >
             + Agregar manual
           </button>
@@ -213,8 +217,8 @@ export default function ListaCompraClient({
       )}
 
       {showNew && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-end gap-3">
-          <div className="flex-1">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col sm:flex-row sm:items-end gap-3">
+          <div className="flex-1 min-w-0">
             <label className="text-xs text-gray-500">Material</label>
             <input
               value={newItem.name}
@@ -296,7 +300,146 @@ export default function ListaCompraClient({
       })()}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
+        {/* ── Celular: una tarjeta por material ──────────────────────────
+            Esta es la pantalla que MJ mira PARADA EN LA FERRETERÍA, así que
+            en el teléfono importa que se lea el pendiente y que el campo
+            "comprado" sea fácil de tocar. La tabla tiene 10 columnas y en el
+            celular se cortaba en "Necesario". */}
+        <div className="lg:hidden divide-y divide-gray-100">
+          {filtered.length === 0 && (
+            <p className="px-3 py-8 text-center text-gray-500 text-sm">
+              No hay materiales. El presupuesto no tiene partidas con
+              componentes en el catálogo, o agrega uno manual.
+            </p>
+          )}
+          {filtered.map((i) => {
+            const pend = i.qtyNeeded - i.qtyBought;
+            const done = pend <= 0.001 && i.qtyNeeded > 0;
+            const excess =
+              i.source === "excess" || (i.qtyNeeded === 0 && i.qtyBought > 0);
+            const totalRow = i.unitPrice != null ? i.qtyNeeded * i.unitPrice : null;
+            return (
+              <div
+                key={i.key}
+                className={`px-3 py-3 ${
+                  done ? "bg-green-50/40" : excess ? "bg-amber-50/40" : ""
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-900 leading-snug">{i.name}</p>
+                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                      <span className="text-[11px] text-gray-500">{i.unit}</span>
+                      {i.source === "manual" && (
+                        <span className="text-[10px] text-gray-500">manual</span>
+                      )}
+                      {i.source === "excess" && (
+                        <span className="text-[10px] text-amber-700">
+                          excedente
+                        </span>
+                      )}
+                      {i.isProvision && (
+                        <span className="text-[10px] uppercase tracking-wide text-gray-500 border border-gray-300 rounded-full px-1.5">
+                          provisión
+                        </span>
+                      )}
+                      {done ? (
+                        <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-[10px]">
+                          completo
+                        </span>
+                      ) : i.qtyBought > 0 ? (
+                        <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-[10px]">
+                          parcial
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-[10px]">
+                          pendiente
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {i.shoppingItemId && (
+                    <button
+                      onClick={() => deleteRow(i)}
+                      className="shrink-0 w-9 h-9 -mr-1 flex items-center justify-center text-gray-400 hover:text-red-600"
+                      title={i.source === "budget" ? "Limpiar compras" : "Eliminar"}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
+                  <div>
+                    <span className="block text-[10px] uppercase tracking-wider text-gray-400">
+                      Necesario
+                    </span>
+                    <span className="tabular-nums text-gray-700">
+                      {formatNum(i.qtyNeeded)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] uppercase tracking-wider text-gray-400">
+                      Comprado
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={i.qtyBought}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onChange={(e) =>
+                        saveTracking(i, { qtyBought: Number(e.target.value) })
+                      }
+                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-right tabular-nums"
+                    />
+                  </div>
+                  <div>
+                    <span className="block text-[10px] uppercase tracking-wider text-gray-400">
+                      Pendiente
+                    </span>
+                    <span
+                      className={`tabular-nums font-medium ${
+                        pend > 0.001 ? "text-orange-700" : "text-gray-400"
+                      }`}
+                    >
+                      {formatNum(Math.max(0, pend))}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-2 mt-2 text-xs">
+                  <span className="text-gray-400">
+                    {i.unitPrice != null ? (
+                      <>
+                        <span className="tabular-nums text-gray-700">
+                          {formatClp(i.unitPrice)}
+                        </span>{" "}
+                        c/u neto
+                      </>
+                    ) : (
+                      "sin precio"
+                    )}
+                  </span>
+                  {totalRow != null && (
+                    <span className="font-medium text-gray-800 tabular-nums">
+                      {formatClp(totalRow)}
+                    </span>
+                  )}
+                </div>
+
+                <input
+                  value={i.notes || ""}
+                  onChange={(e) => saveTracking(i, { notes: e.target.value })}
+                  placeholder="Notas"
+                  className="w-full mt-2 border border-gray-200 rounded px-2 py-1.5 text-sm"
+                />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── Escritorio: la tabla densa de siempre, sin cambios ─────────── */}
+        <table className="hidden lg:table w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500">
             <tr>
               <th className="px-3 py-2 text-left">Material</th>

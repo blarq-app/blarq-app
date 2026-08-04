@@ -243,7 +243,101 @@ export default async function GastosPage({
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto border border-gray-200 rounded-xl">
+        <>
+        {/* ── Celular: una tarjeta por gasto ─────────────────────────────
+            La tabla mide 720px de mínimo y en el teléfono se veía hasta
+            "Tipo": el monto, la categoría y la obra —lo único que se hace
+            acá— quedaban fuera. */}
+        <div className="lg:hidden border border-gray-200 rounded-xl divide-y divide-gray-100 overflow-hidden">
+          {gastos.map((g) => {
+            const esBoleta = g.origin === "gasto_boleta";
+            const categoryName = g.category
+              ? g.category.parent
+                ? `${g.category.parent.name} / ${g.category.name}`
+                : g.category.name
+              : null;
+            const projectName = g.project
+              ? g.project.numeroProyecto != null
+                ? `${g.project.numeroProyecto} · ${g.project.name}`
+                : g.project.name
+              : null;
+            return (
+              <div key={g.id} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="min-w-0 text-sm text-gray-900 leading-snug">
+                    {g.businessName ?? (
+                      <span className="text-gray-400 italic">sin nombre</span>
+                    )}
+                  </p>
+                  <span className="shrink-0 text-sm font-medium text-gray-900 tabular-nums">
+                    {formatCLP(g.totalAmount)}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-[11px] text-gray-500">
+                  <span className="tabular-nums">
+                    {g.issueDate.toLocaleDateString("es-CL", { timeZone: "UTC" })}
+                  </span>
+                  <span className="text-gray-300">·</span>
+                  <span>{esBoleta ? "Boleta" : "Internacional"}</span>
+                  <span
+                    className={`text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded-full ${
+                      esBoleta
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-gray-100 text-gray-500"
+                    }`}
+                  >
+                    {esBoleta ? "Con IVA" : "Sin IVA"}
+                  </span>
+                </div>
+
+                <div className="mt-2 space-y-1 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-20 shrink-0 text-[11px] text-gray-400">
+                      Categoría
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <EditableCategoryCell
+                        invoiceId={g.id}
+                        invoiceType="recibida"
+                        currentCategoryId={g.categoryId}
+                        currentCategoryName={categoryName}
+                        options={categoryOptions}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-20 shrink-0 text-[11px] text-gray-400">
+                      Obra
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <EditableProjectCell
+                        invoiceId={g.id}
+                        currentProjectId={g.projectId}
+                        currentProjectName={projectName}
+                        options={projectOptions}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-20 shrink-0 text-[11px] text-gray-400">
+                      Comprobante
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <GastoAttachmentCell
+                        invoiceId={g.id}
+                        attachmentUrl={g.attachmentUrl}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── Escritorio: la tabla densa de siempre ───────────────────────── */}
+        <div className="hidden lg:block overflow-x-auto border border-gray-200 rounded-xl">
           <table className="w-full text-sm min-w-[720px]">
             <thead>
               <tr className="border-b border-gray-200">
@@ -289,8 +383,8 @@ export default async function GastosPage({
                       <span
                         className={`inline-block text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded-full ${
                           esBoleta
-                            ? "bg-slate-100 text-slate-700"
-                            : "bg-indigo-50 text-indigo-700"
+                            ? "bg-gray-100 text-gray-700"
+                            : "bg-gray-50 text-gray-500 border border-gray-200"
                         }`}
                       >
                         {esBoleta ? "Boleta" : "Internacional"}
@@ -339,6 +433,7 @@ export default async function GastosPage({
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       <p className="text-xs text-gray-400 mt-4 leading-relaxed">

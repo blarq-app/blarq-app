@@ -232,7 +232,7 @@ export default function CuadroResumenAvance({
         {/* Mismo formato que antes (Fecha/Monto/Factura por concepto), pero con
             letra y padding chicos para que entre completo. */}
         <div className="overflow-x-auto">
-          <table className="w-full text-[10px] border-collapse tabular-nums">
+          <table className="w-full text-[10px] border-collapse tabular-nums min-w-[700px]">
             <thead>
               <tr className="uppercase tracking-wide text-gray-600">
                 <th className="pb-0.5 pr-1 text-left"></th>

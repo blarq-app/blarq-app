@@ -122,7 +122,204 @@ export default function FacturasTable({
 
   return (
     <>
-      <div className="overflow-x-auto">
+      {/* ── Celular: una tarjeta por factura ──────────────────────────────
+          La tabla mide 800px de mínimo y en un celular de 390px se veía hasta
+          la columna Fecha: el TOTAL, que es el dato por el que se entra a esta
+          pantalla, quedaba fuera y había que arrastrar de costado para leerlo.
+          La tarjeta pone arriba lo que identifica la factura (emisor y monto) y
+          deja abajo lo que se edita (obra y categoría), que es lo que MJ hace
+          acá cuando cataloga desde el teléfono. */}
+      <div className="lg:hidden divide-y divide-gray-100 border-t border-gray-100">
+        {/* El "seleccionar todas" vive en el <thead> de la tabla, que en el
+            celular no se muestra. Sin esto no habría forma de hacer una
+            asignación masiva desde el teléfono. */}
+        {invoices.length > 0 && (
+          <label className="flex items-center gap-3 px-1 py-2 text-xs text-gray-500 cursor-pointer">
+            <span className="flex items-center justify-center w-9 h-9 -ml-1">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = someSelected;
+                }}
+                onChange={toggleAll}
+              />
+            </span>
+            {selected.size > 0
+              ? `${selected.size} seleccionada${selected.size === 1 ? "" : "s"}`
+              : "Seleccionar todas"}
+          </label>
+        )}
+        {invoices.map((inv) => {
+          const isSelected = selected.has(inv.id);
+          const badge = invoiceStatusBadge(inv.status, {
+            isCompensatedNc: inv.tipoDoc === 61 && !!inv.compensationType,
+          });
+          return (
+            <div
+              key={inv.id}
+              className={`px-1 py-3 ${isSelected ? "bg-blue-50" : ""}`}
+            >
+              <div className="flex items-start gap-3">
+                <label className="flex items-center justify-center w-9 h-9 -ml-1 shrink-0 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleOne(inv.id)}
+                    aria-label={`Seleccionar factura ${inv.folioNumber}`}
+                  />
+                </label>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <Link
+                      href={`/facturas/${inv.id}?from=${encodeURIComponent(returnTo)}`}
+                      className="min-w-0 text-sm font-medium text-gray-900 leading-snug hover:underline"
+                    >
+                      {inv.businessName || inv.rutIssuer || "—"}
+                    </Link>
+                    <div className="text-right shrink-0">
+                      <div className="text-sm font-medium text-gray-900 tabular-nums">
+                        {formatCLP(inv.totalAmount)}
+                      </div>
+                      {inv.remaining > 0 ? (
+                        <div
+                          className={`text-[11px] tabular-nums ${
+                            inv.status === "parcial"
+                              ? "text-blue-700"
+                              : "text-gray-500"
+                          }`}
+                        >
+                          saldo {formatCLP(inv.remaining)}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-[11px] text-gray-500">
+                    <span className="tabular-nums">
+                      {inv.tipoDoc === 1043
+                        ? inv.origin === "gasto_boleta"
+                          ? "boleta"
+                          : inv.origin === "gasto_internacional"
+                            ? "internacional"
+                            : "pago s/factura"
+                        : inv.folioNumber || "—"}
+                    </span>
+                    {inv.tipoDoc === 61 && (
+                      <span className="text-[9px] uppercase tracking-wider bg-rose-50 text-rose-700 px-1 py-0.5 rounded">
+                        NC
+                      </span>
+                    )}
+                    {inv.tipoDoc === 56 && (
+                      <span className="text-[9px] uppercase tracking-wider bg-amber-50 text-amber-700 px-1 py-0.5 rounded">
+                        ND
+                      </span>
+                    )}
+                    <span className="text-gray-300">·</span>
+                    <span>{formatDate(inv.issueDate)}</span>
+                    <span className="text-gray-300">·</span>
+                    <span
+                      className={`text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.tone}`}
+                    >
+                      {badge.label}
+                    </span>
+                    {inv.origin === "sii_automatica" && (
+                      <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
+                        SII
+                      </span>
+                    )}
+                    {inv.autoMatched && (
+                      <span
+                        className="text-[9px] lowercase text-gray-400"
+                        title="Conciliada automáticamente — revisá si tenés dudas"
+                      >
+                        auto
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Referencias a otras facturas (NC/ND). Fuera del renglón de
+                      arriba porque son links y necesitan alto propio. */}
+                  {inv.referenceFolioNumber &&
+                    (inv.referencedInvoiceId ? (
+                      <Link
+                        href={`/facturas/${inv.referencedInvoiceId}?from=${encodeURIComponent(returnTo)}`}
+                        className="block text-[11px] text-gray-500 hover:text-gray-900 mt-1"
+                      >
+                        ↩ ref F-{inv.referenceFolioNumber}
+                      </Link>
+                    ) : (
+                      <div className="text-[11px] text-gray-400 mt-1">
+                        ↩ ref F-{inv.referenceFolioNumber}
+                      </div>
+                    ))}
+                  {inv.ncApplied.map((nc) => (
+                    <Link
+                      key={nc.id}
+                      href={`/facturas/${nc.id}?from=${encodeURIComponent(returnTo)}`}
+                      className="block text-[11px] text-rose-600 mt-1"
+                    >
+                      ↳ NC F-{nc.folio} ({formatCLP(nc.amount)})
+                    </Link>
+                  ))}
+
+                  <div className="mt-2 space-y-1">
+                    <div className="flex items-baseline gap-2 min-w-0">
+                      <span className="w-16 shrink-0 text-[11px] text-gray-400">
+                        Obra
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <EditableProjectCell
+                          invoiceId={inv.id}
+                          currentProjectId={inv.project?.id ?? null}
+                          currentProjectName={inv.project?.name ?? null}
+                          options={projectOptions}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-baseline gap-2 min-w-0">
+                      <span className="w-16 shrink-0 text-[11px] text-gray-400">
+                        Categoría
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <EditableCategoryCell
+                          invoiceId={inv.id}
+                          invoiceType={inv.type as "emitida" | "recibida"}
+                          currentCategoryId={inv.category?.id ?? null}
+                          currentCategoryName={inv.category?.name ?? null}
+                          options={categoryOptions}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <a
+                  href={`/api/facturas/${inv.id}/pdf`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex items-center justify-center w-9 h-9 shrink-0 ${
+                    inv.siiCodigo
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }`}
+                  title={
+                    inv.siiCodigo
+                      ? "PDF oficial del SII"
+                      : "PDF resumen interno (los oficiales se bajan vía sync local)"
+                  }
+                >
+                  {inv.siiCodigo ? "↓✓" : "↓"}
+                </a>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Escritorio: la tabla densa de siempre, sin cambios ───────────── */}
+      <div className="hidden lg:block overflow-x-auto">
       <table className="w-full text-sm min-w-[800px]">
         <thead className="text-[10px] uppercase tracking-wider text-gray-500 bg-gray-50">
           <tr>

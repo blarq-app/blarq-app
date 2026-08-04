@@ -112,7 +112,138 @@ export default function InvoiceRulesTable({
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-      <table className="w-full text-sm">
+      {/* ── Celular: una tarjeta por regla ────────────────────────────────
+          La tabla tiene 7 columnas y ~830px de ancho: en el teléfono se veía
+          Proveedor y RUT, y quedaban fuera justo Categoría y Centro de costo,
+          que es lo que la regla decide. */}
+      <div className="lg:hidden divide-y divide-gray-100">
+        {rules.map((r) => {
+          const isEditing = editingId === r.id;
+          return (
+            <div key={r.id} className="px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm text-gray-900 leading-snug">
+                    {r.businessName ?? (
+                      <span className="text-gray-400 italic">sin nombre</span>
+                    )}
+                  </p>
+                  <p className="text-[11px] tabular-nums text-gray-500 mt-0.5">
+                    {r.rutIssuer ?? (
+                      <span className="italic tracking-normal">internacional</span>
+                    )}
+                    {" · "}
+                    aplicada {r.hits}×
+                  </p>
+                </div>
+                <span className="shrink-0 text-[11px] text-gray-400 tabular-nums">
+                  {new Date(r.createdAt).toLocaleDateString("es-CL", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "2-digit",
+                  })}
+                </span>
+              </div>
+
+              <dl className="mt-2 space-y-1.5 text-xs">
+                <div className="flex items-center gap-2">
+                  <dt className="w-28 shrink-0 text-gray-400">Categoría</dt>
+                  <dd className="min-w-0 flex-1 text-gray-700">
+                    {isEditing ? (
+                      <select
+                        value={editingCategoryId}
+                        onChange={(e) => setEditingCategoryId(e.target.value)}
+                        className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 bg-white"
+                      >
+                        <option value="">— sin categoría —</option>
+                        {parentNames.map((parent) => (
+                          <optgroup key={parent} label={parent}>
+                            {grouped[parent].map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.parent ? c.name : `${c.name} (top)`}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    ) : (
+                      r.categoryLabel ?? <span className="text-gray-400 italic">—</span>
+                    )}
+                  </dd>
+                </div>
+                <div className="flex items-center gap-2">
+                  <dt className="w-28 shrink-0 text-gray-400">Centro de costo</dt>
+                  <dd className="min-w-0 flex-1 text-gray-700">
+                    {isEditing ? (
+                      <select
+                        value={editingProjectId}
+                        onChange={(e) => setEditingProjectId(e.target.value)}
+                        className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 bg-white"
+                      >
+                        <option value="">— sin proyecto —</option>
+                        {projects.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      r.projectLabel ?? <span className="text-gray-400 italic">—</span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="flex items-center gap-2 mt-3">
+                {isEditing ? (
+                  <>
+                    <button
+                      onClick={() => saveEdit(r.id)}
+                      disabled={busy || (!editingCategoryId && !editingProjectId)}
+                      className="min-h-10 px-4 text-xs bg-gray-900 text-white rounded disabled:opacity-50"
+                    >
+                      Guardar
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingId(null);
+                        setEditingCategoryId("");
+                        setEditingProjectId("");
+                      }}
+                      className="min-h-10 px-3 text-xs text-gray-500"
+                    >
+                      Cancelar
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        setEditingId(r.id);
+                        setEditingCategoryId(r.categoryId ?? "");
+                        setEditingProjectId(r.projectId ?? "");
+                      }}
+                      className="min-h-10 px-4 text-xs border border-gray-300 rounded text-gray-700"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => deleteRule(r.id, r.businessName)}
+                      disabled={busy}
+                      className="ml-auto min-h-10 px-3 text-xs text-gray-400 hover:text-rose-600 disabled:opacity-50"
+                    >
+                      Eliminar
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Escritorio: la tabla densa de siempre, sin cambios ───────────── */}
+      <table className="hidden lg:table w-full text-sm">
         <thead className="text-[10px] uppercase tracking-wider text-gray-500 bg-gray-50">
           <tr>
             <th className="text-left px-4 py-2">Proveedor</th>

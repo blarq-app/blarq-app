@@ -13,7 +13,7 @@ export default async function CatalogoMaterialesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
             Catalogo de Materiales

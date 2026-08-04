@@ -298,7 +298,9 @@ export default async function ProyectoFacturasPage({
 
       {/* Tabs por tipo + acciones */}
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
+        {/* max-w-full + scroll propio: las tres solapas con su contador no
+            entran en 358px y empujaban la página 27px fuera de pantalla. */}
+        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 max-w-full overflow-x-auto">
           <TabLink projectId={project.id} sp={sp} type={undefined} label="Todas" count={totalProjectInvoices} />
           <TabLink
             projectId={project.id}
@@ -362,7 +364,122 @@ export default async function ProyectoFacturasPage({
             </Link>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <>
+          {/* ── Celular: una tarjeta por factura ───────────────────────────
+              La tabla tiene 9 columnas (~980px) y en el teléfono se cortaba
+              antes del Total. Misma información, apilada: arriba emisor y
+              monto, abajo categoría (que se edita desde acá) y el pie con el
+              total de lo mostrado. */}
+          <div className="lg:hidden divide-y divide-gray-100">
+            {invoices.map((inv) => {
+              const badge = invoiceStatusBadge(inv.status, {
+                isCompensatedNc: inv.tipoDoc === 61 && !!inv.compensationType,
+              });
+              return (
+                <div key={inv.id} className="px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <Link
+                      href={`/facturas/${inv.id}?from=${encodeURIComponent(returnTo)}`}
+                      className="min-w-0 text-sm font-medium text-gray-900 leading-snug hover:underline"
+                    >
+                      {inv.businessName || inv.rutIssuer || "—"}
+                    </Link>
+                    <div className="text-right shrink-0">
+                      <div className="text-sm font-medium text-gray-900 tabular-nums">
+                        {formatCLP(inv.totalAmount)}
+                      </div>
+                      {inv.status === "parcial" && (
+                        <div className="text-[10px] text-blue-700">
+                          {formatCLP(paidOf(inv))} cobrado
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-[11px] text-gray-500">
+                    <span className="tabular-nums">
+                      {inv.origin === "maxxa_sin_respaldo"
+                        ? "Mov sin respaldo"
+                        : inv.folioNumber || "—"}
+                    </span>
+                    {inv.tipoDoc === 61 && (
+                      <span className="text-[9px] uppercase tracking-wider bg-rose-50 text-rose-700 px-1 py-0.5 rounded">
+                        NC
+                      </span>
+                    )}
+                    {inv.tipoDoc === 56 && (
+                      <span className="text-[9px] uppercase tracking-wider bg-amber-50 text-amber-700 px-1 py-0.5 rounded">
+                        ND
+                      </span>
+                    )}
+                    <span className="text-gray-300">·</span>
+                    <span>{formatDate(inv.issueDate)}</span>
+                    <span
+                      className={`text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.tone}`}
+                    >
+                      {badge.label}
+                    </span>
+                    {inv.origin === "sii_automatica" && (
+                      <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
+                        SII
+                      </span>
+                    )}
+                  </div>
+
+                  {(ncAppliedByInvoice.get(inv.id) ?? []).map((nc) => (
+                    <Link
+                      key={nc.id}
+                      href={`/facturas/${nc.id}?from=${encodeURIComponent(returnTo)}`}
+                      className="block text-[11px] text-rose-600 mt-1"
+                    >
+                      ↳ NC F-{nc.folio} ({formatCLP(nc.amount)})
+                    </Link>
+                  ))}
+
+                  <div className="flex items-center gap-2 mt-2 text-xs">
+                    <span className="w-20 shrink-0 text-[11px] text-gray-400">
+                      Categoría
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <EditableCategoryCell
+                        invoiceId={inv.id}
+                        invoiceType={inv.type as "emitida" | "recibida"}
+                        currentCategoryId={inv.category?.id ?? null}
+                        currentCategoryName={inv.category?.name ?? null}
+                        options={categoryOptions}
+                      />
+                    </div>
+                    <a
+                      href={`/api/facturas/${inv.id}/pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`flex items-center justify-center w-9 h-9 shrink-0 ${
+                        inv.siiCodigo ? "text-green-600" : "text-gray-400"
+                      }`}
+                      title={
+                        inv.siiCodigo
+                          ? "PDF oficial del SII"
+                          : "PDF resumen interno (los oficiales se bajan vía sync local)"
+                      }
+                    >
+                      {inv.siiCodigo ? "↓✓" : "↓"}
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+            <div className="flex items-center justify-between gap-3 bg-gray-50 px-4 py-2.5 font-bold">
+              <span className="text-xs uppercase tracking-wider text-gray-700">
+                Total · {invoices.length} factura{invoices.length !== 1 ? "s" : ""}
+              </span>
+              <span className="tabular-nums text-gray-900">
+                {formatCLP(invoices.reduce((s, i) => s + sign(i) * i.totalAmount, 0))}
+              </span>
+            </div>
+          </div>
+
+          {/* ── Escritorio: la tabla densa de siempre, sin cambios ────────── */}
+          <table className="hidden lg:table w-full text-sm">
             <thead className="text-[10px] uppercase tracking-wider text-gray-500 bg-gray-50">
               <tr>
                 <th className="text-left px-4 py-2">Tipo</th>
@@ -537,6 +654,7 @@ export default async function ProyectoFacturasPage({
               </tr>
             </tbody>
           </table>
+          </>
         )}
       </div>
     </div>

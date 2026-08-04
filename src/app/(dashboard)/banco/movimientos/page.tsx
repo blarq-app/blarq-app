@@ -460,7 +460,7 @@ export default async function MovimientosPage({
 
   return (
     <div>
-      <div className="flex items-end justify-between mb-6">
+      <div className="flex flex-col items-start sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
         <div>
           <Link href="/banco" className="text-xs text-gray-500 hover:text-gray-700 underline">
             ← Volver a cuentas
@@ -487,7 +487,10 @@ export default async function MovimientosPage({
       )}
 
       {/* Stats arriba — conteo + desglose ingresos/egresos por estado */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+      {/* En el celular van las tres en una fila y sin el desglose de
+          ingresos/egresos: apiladas y completas median ~330px de alto y no
+          se veia ni un movimiento sin scrollear. */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4">
         <StatCard
           label="Total movimientos"
           count={totalCount}
@@ -519,9 +522,9 @@ export default async function MovimientosPage({
           que además vivía en "Filtros avanzados". */}
       <div className="space-y-2 mb-4">
         {/* Cuenta — la decisión primaria: primero elegí dónde mirás. */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-nowrap overflow-x-auto sm:flex-wrap sm:overflow-visible">
           <FilterRowLabel>Cuenta</FilterRowLabel>
-          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 shrink-0">
             <FilterLink sp={sp} field="accountId" value={undefined} label="Todas las cuentas" />
             {accounts.map((a) => (
               <FilterLink
@@ -541,9 +544,9 @@ export default async function MovimientosPage({
             todo lo ya resuelto (antes decía "Pagado", que no calza para un
             ingreso — decisión MJ jul 2026, mismo verbo que "Conciliar…"). Los
             VALORES de la URL (?status=pendiente/pagado) no cambian. */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-nowrap overflow-x-auto sm:flex-wrap sm:overflow-visible">
           <FilterRowLabel>Estado</FilterRowLabel>
-          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 shrink-0">
             <FilterLink sp={sp} field="status" value={undefined} label="Todos" />
             <FilterLink sp={sp} field="status" value="pendiente" label={`Pendiente${countPendiente ? ` (${countPendiente})` : ""}`} />
             <FilterLink sp={sp} field="status" value="parcial" label={`Parcial${countParcial ? ` (${countParcial})` : ""}`} />
@@ -559,9 +562,9 @@ export default async function MovimientosPage({
             solo se muestran cuando existe al menos un gasto de ese tipo (hoy 0;
             se llenan al usar "Registrar gasto"). Los valores de la URL siguen
             siendo los mismos (?respaldo=…), el switch de arriba los mapea igual. */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-nowrap overflow-x-auto sm:flex-wrap sm:overflow-visible">
           <FilterRowLabel>Respaldo</FilterRowLabel>
-          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 flex-wrap">
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 flex-nowrap sm:flex-wrap shrink-0">
             <FilterLink sp={sp} field="respaldo" value={undefined} label="Todos" />
             <FilterLink sp={sp} field="respaldo" value="factura" label="Factura" />
             {boletaCount > 0 && (
@@ -577,9 +580,9 @@ export default async function MovimientosPage({
         </div>
 
         {/* Tipo (ingreso/egreso) + filtro de revisión "transferencias a socios". */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-nowrap overflow-x-auto sm:flex-wrap sm:overflow-visible">
           <FilterRowLabel>Tipo</FilterRowLabel>
-          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 shrink-0">
             <FilterLink sp={sp} field="tipo" value={undefined} label="Todos" />
             <FilterLink sp={sp} field="tipo" value="ingreso" label="↗ Ingresos" />
             <FilterLink sp={sp} field="tipo" value="egreso" label="↘ Egresos" />
@@ -589,9 +592,9 @@ export default async function MovimientosPage({
 
         {/* Buscar — texto libre + monto exacto, a mano en la barra (MJ los usa
             seguido para conciliar). */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-nowrap overflow-x-auto sm:flex-wrap sm:overflow-visible">
           <FilterRowLabel>Buscar</FilterRowLabel>
-          <div className="flex items-center gap-2 flex-1 min-w-[260px]">
+          <div className="flex items-center gap-2 flex-1 min-w-[240px]">
             <MovementsSearch defaultQ={q} sp={sp} />
             <MovementsMontoSearch defaultMonto={sp.monto ?? ""} sp={sp} />
           </div>
@@ -727,15 +730,15 @@ function StatCard({
         ? "text-amber-700"
         : "text-gray-900";
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
       <p className="text-[10px] uppercase tracking-wider text-gray-500">{label}</p>
-      <p className={`text-xl font-semibold tabular-nums mt-0.5 ${amountColor}`}>
+      <p className={`text-sm sm:text-xl font-semibold tabular-nums mt-0.5 break-words ${amountColor}`}>
         {formatCLP(neto)}
       </p>
-      <p className="text-[11px] text-gray-400 tabular-nums mt-0.5">
-        {count} {count === 1 ? "movimiento" : "movimientos"}
+      <p className="text-[10px] sm:text-[11px] text-gray-400 tabular-nums mt-0.5">
+        {count} {count === 1 ? "mov." : "movs."}
       </p>
-      <div className="mt-2 grid grid-cols-2 gap-1 text-[11px]">
+      <div className="hidden sm:grid mt-2 grid-cols-2 gap-1 text-[11px]">
         <div>
           <span className="text-gray-400">↗ ingresos</span>
           <p className="tabular-nums text-emerald-700">{formatCLP(ingresos)}</p>

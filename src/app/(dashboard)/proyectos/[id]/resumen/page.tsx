@@ -523,8 +523,13 @@ export default async function ResultadosPage({
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
           Presupuesto vs Real — Por Categoría
         </h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        {/* min-w: la tabla era `w-full` DENTRO de un scroll horizontal, o sea
+            que nunca llegaba a scrollear — se achicaba hasta que los
+            encabezados se pisaban entre sí ("REAL" encima de "DIFERENCIA").
+            Con un ancho mínimo real, en el celular scrollea y cada columna se
+            lee entera. */}
+        <div className="overflow-x-auto -mx-6 px-6 md:mx-0 md:px-0">
+          <table className="w-full text-sm min-w-[780px]">
             <thead className="text-xs uppercase text-gray-500 border-b border-gray-200">
               <tr>
                 <th className="text-left pb-2">Concepto</th>

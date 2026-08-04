@@ -19,7 +19,7 @@ export default async function ReglasPage() {
 
   return (
     <div>
-      <div className="flex items-end justify-between mb-6">
+      <div className="flex flex-col items-start sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
         <div>
           <Link href="/banco" className="text-xs text-gray-500 hover:text-gray-700 underline">
             ← Volver a cuentas
@@ -33,7 +33,10 @@ export default async function ReglasPage() {
         {rules.length > 0 && <ApplyRulesButton unassignedCount={unassignedCount} />}
       </div>
 
-      <div className="bg-blue-50/40 border border-blue-100 rounded-lg p-3 mb-4 text-xs text-gray-700">
+      {/* Gris, no celeste: docs/principles.md deja el color solo para los
+          semánticos (rojo excedido, verde confirmado, ámbar atención) y el
+          resto de los avisos de la app ya usan este mismo gris neutro. */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4 text-xs text-gray-700">
         Cada vez que categorizás un movimiento manualmente (sueldo, Previred, etc.), se
         guarda una regla automática. Las cartolas siguientes aplican esa regla a los movimientos
         con descripción similar — sin que tengas que hacer nada.
@@ -52,7 +55,36 @@ export default async function ReglasPage() {
             </p>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <>
+          {/* Celular: una tarjeta por regla. La tabla mide ~500px y se cortaba
+              justo en "Aplicada", que es el dato que dice si la regla sirve. */}
+          <div className="sm:hidden divide-y divide-gray-100">
+            {rules.map((r) => (
+              <div key={r.id} className="px-4 py-3 flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="font-mono text-xs text-gray-900 break-all">
+                    {r.descriptionPattern}
+                  </p>
+                  <p className="text-sm text-gray-700 mt-1">
+                    {ETIQUETA_CATEGORIA[r.category] ?? r.category}
+                  </p>
+                  <p className="text-[11px] text-gray-500 tabular-nums mt-1">
+                    aplicada {r.hits}× · creada{" "}
+                    {new Date(r.createdAt).toLocaleDateString("es-CL", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "2-digit",
+                    })}
+                  </p>
+                </div>
+                <div className="shrink-0 -mr-1">
+                  <DeleteRuleButton ruleId={r.id} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <table className="hidden sm:table w-full text-sm">
             <thead className="text-[10px] uppercase tracking-wider text-gray-500 bg-gray-50">
               <tr>
                 <th className="text-left px-4 py-2">Patrón (descripción contiene)</th>
@@ -88,6 +120,7 @@ export default async function ReglasPage() {
               ))}
             </tbody>
           </table>
+          </>
         )}
       </div>
     </div>

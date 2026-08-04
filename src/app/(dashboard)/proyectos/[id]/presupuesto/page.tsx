@@ -110,7 +110,7 @@ export default async function PresupuestoPage({
     <div>
       {/* Obra */}
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h2 className="text-lg font-semibold text-gray-900">
             Presupuesto Obra
           </h2>
@@ -231,7 +231,7 @@ export default async function PresupuestoPage({
 
       {/* Muebles */}
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h2 className="text-lg font-semibold text-gray-900">
             Presupuesto Muebles
           </h2>
@@ -356,7 +356,7 @@ export default async function PresupuestoPage({
 
       {/* Artefactos */}
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h2 className="text-lg font-semibold text-gray-900">
             Presupuesto Artefactos
           </h2>

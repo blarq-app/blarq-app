@@ -4,6 +4,14 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
+- **La app entera se puede usar en el celular (2026-08-04, misma rama, segunda parte)**: MJ dijo "hagamos todo" después de la Configuración. Se adaptaron las 24 pantallas.
+  - **Se midió, no se estimó.** Se levantó postgres local en el contenedor, se sembró con datos verosímiles y se recorrió la app real con un auditor en pantalla de 390px. Punto de partida: **8 pantallas se arrastraban de costado**; final: **0 a 390px y 0 a 1440px**.
+  - **Un solo bug rompía 6 pantallas**: el header sticky del proyecto usaba `-mx-6` contra el `p-4` real del `<main>` en celular. Ahora los márgenes negativos calzan por breakpoint.
+  - **Siete listas pasan a tarjetas en el celular** (Facturas, Movimientos, Facturas del proyecto, las dos de reglas, Gastos, Lista de compra). **En escritorio la tabla queda idéntica** — verificado en el barrido: cada pantalla muestra exactamente UNA tabla visible y las mismas filas.
+  - **Tablas `w-full` dentro de `overflow-x-auto` nunca scrolleaban**, solo aplastaban columnas hasta que los encabezados se pisaban. Se les puso ancho mínimo.
+  - **PENDIENTE a propósito**: los editores densos (ObraEditor 2989 líneas, MueblesEditor 2234, PartidaSearch 1895, EditorEP) NO se rediseñaron para celular — se armó que la página no se rompa y que la tabla scrollee, pero armar un presupuesto se sigue haciendo en el computador. Si MJ quiere editar presupuestos desde el teléfono, es otro trabajo y hay que hablarlo.
+  - **Para volver a medir**: los scripts de auditoría fueron andamio y NO se commitearon. Si hace falta rehacerlo, el patrón es postgres local + sembrado + Playwright a 390px midiendo `scrollWidth > clientWidth`.
+
 - **Configuración de la app, pensada para el celular (2026-08-04, rama `claude/mobile-settings-design-3fkdek`)**: MJ pidió "diseñar mejor la configuración de la app en el celular". Se tomó como alcance la SECCIÓN de Configuración (Reembolsadores, Auditoría de precios, Mi cuenta) más el camino para llegar a ella.
   - **No existía pantalla de Configuración.** Los ajustes colgaban sueltos al final del menú lateral y "Mi cuenta" estaba detrás del nombre de usuario en el header. Ahora hay hub en `/configuracion` con contadores en vivo. Las reglas de Facturas y Banco se **linkean** desde ahí; sus rutas no se movieron.
   - **HALLAZGO GRANDE, más allá de Configuración**: `globals.css` forzaba TODOS los inputs de la app a 12px con `!important`, y Safari en iPhone hace zoom automático abajo de 16px sin volver solo. O sea que **cada formulario de la app** hacía eso en el celular. Arreglado con un media query de `max-width: 767px`; desktop verificado sin cambios (12px antes y después). Es el único cambio de este trabajo que toca pantallas fuera de Configuración — **vale la pena mirarlo en el celular en otras pantallas** (facturas, banco, presupuesto) para confirmar que no aprieta ningún layout.

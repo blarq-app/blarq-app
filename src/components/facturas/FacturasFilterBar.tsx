@@ -59,6 +59,10 @@ export default function FacturasFilterBar({
   const router = useRouter();
   const sp = useSearchParams();
   const [v, setV] = useState(initial);
+  // En el celular los 9 filtros apilados ocupaban casi una pantalla entera antes
+  // de que apareciera la primera factura. Acá quedan detrás de un botón; la
+  // búsqueda libre, que es lo que más se usa, sigue siempre a la vista.
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
 
   function applyFilter(next: FilterValues) {
     setV(next);
@@ -84,10 +88,13 @@ export default function FacturasFilterBar({
   const parentNames = Object.keys(grouped).sort();
 
   const isAnyActive = FILTER_KEYS.some((k) => !!v[k]);
+  // "q" no cuenta: su campo está siempre visible, así que no es un filtro
+  // "escondido" que haya que anunciar en el botón.
+  const activosOcultos = FILTER_KEYS.filter((k) => k !== "q" && !!v[k]).length;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-2">
-      {/* Fila 1: búsqueda libre + tipo + estado + origen */}
+      {/* Fila 1: búsqueda libre (siempre visible) + botón de filtros en mobile */}
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="text"
@@ -98,9 +105,22 @@ export default function FacturasFilterBar({
           onKeyDown={(e) => {
             if (e.key === "Enter") applyFilter(v);
           }}
-          className="flex-1 min-w-[200px] px-3 py-1.5 border border-gray-300 rounded text-sm bg-white focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
+          className="flex-1 min-w-0 md:min-w-[200px] px-3 py-1.5 border border-gray-300 rounded text-sm bg-white focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none"
         />
 
+        <button
+          type="button"
+          onClick={() => setFiltrosAbiertos((x) => !x)}
+          aria-expanded={filtrosAbiertos}
+          className="md:hidden shrink-0 min-h-9 px-3 border border-gray-300 rounded text-sm text-gray-700 whitespace-nowrap"
+        >
+          Filtros{activosOcultos > 0 ? ` (${activosOcultos})` : ""}
+        </button>
+      </div>
+
+      {/* Filtros — plegados en el celular, siempre abiertos en md+ */}
+      <div className={`${filtrosAbiertos ? "block" : "hidden"} md:block space-y-2`}>
+      <div className="flex flex-wrap items-center gap-2">
         <Select
           value={v.type}
           onChange={(val) => set("type", val)}
@@ -233,6 +253,7 @@ export default function FacturasFilterBar({
             Limpiar
           </button>
         )}
+      </div>
       </div>
     </div>
   );

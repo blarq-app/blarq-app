@@ -176,15 +176,21 @@ input[type="number"] {
    que apaga el zoom. En desktop no cambia nada: la regla vive dentro del
    media query y la densidad de 12px queda igual que siempre.
 
-   Los dos `:not()` no son decorativos: suben la especificidad lo justo para
-   ganarle a `.text-sm` / `.text-base` (que son !important y de clase, o sea
-   más específicos que un selector de elemento pelado), y de paso respetan las
-   utilidades text-force-* de las tablas densas, donde el tamaño chico es una
-   decisión explícita. */
+   Los `:not(:root)` no son decorativos: suben la especificidad lo justo para
+   ganarle a `.text-sm` / `.text-base` y a las utilidades `.text-force-*`, que
+   son !important y de clase — o sea más específicas que un selector de
+   elemento pelado. `:root` nunca matchea un input, así que el filtro no saca
+   ninguno: está solo por la especificidad.
+
+   Las utilidades text-force-10 / text-force-11 TAMBIÉN entran acá. En el
+   escritorio 10px es una decisión deliberada de las tablas densas y se
+   respeta; en el celular esas tablas ya no se muestran (se reemplazaron por
+   tarjetas), y un <select> de 10px en un teléfono no se puede ni leer ni
+   apuntar, además de disparar el mismo zoom. */
 @media (max-width: 767px) {
-  input:not(.text-force-11):not(.text-force-10),
-  select:not(.text-force-11):not(.text-force-10),
-  textarea:not(.text-force-11):not(.text-force-10) {
+  input:not(:root):not(:root),
+  select:not(:root):not(:root),
+  textarea:not(:root):not(:root) {
     font-size: 16px !important;
   }
 }

@@ -489,8 +489,12 @@ export default function MaterialSearch({
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-4">
-        <div className="flex-1">
+      {/* Barra de búsqueda y acciones. En el celular se apila y los tres
+          botones pasan a una fila propia que puede scrollear sola: iban los
+          cinco controles en una línea y empujaban la página 251px fuera de
+          pantalla, así que TODA la vista se arrastraba de costado. */}
+      <div className="flex flex-col lg:flex-row gap-3 lg:gap-4">
+        <div className="flex-1 min-w-0">
           <input
             type="text"
             value={query}
@@ -502,7 +506,7 @@ export default function MaterialSearch({
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="px-4 py-3 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
+          className="w-full lg:w-auto px-4 py-3 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
         >
           <option value="">Todas las categorias</option>
           {allCategories.map((cat) => (
@@ -511,29 +515,31 @@ export default function MaterialSearch({
             </option>
           ))}
         </select>
-        <button
-          onClick={() => setBulkOpen(true)}
-          className="px-4 py-3 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
-          title="Revisar el precio actual en la web de todos los materiales con link de Sodimac/Easy/mK"
-        >
-          ↻ Actualizar precios
-        </button>
-        <button
-          onClick={() => setShowNewCategory(true)}
-          className="px-4 py-3 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
-        >
-          + Categoria
-        </button>
-        <button
-          onClick={() => {
-            setShowAddTop(true);
-            setShowNewCategory(false);
-          }}
-          className="px-4 py-3 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors whitespace-nowrap"
-          title="Pegá el link del producto: trae nombre, precio y categoría"
-        >
-          + Material
-        </button>
+        <div className="flex gap-2 lg:gap-4 overflow-x-auto -mx-1 px-1 lg:mx-0 lg:px-0 lg:overflow-visible">
+          <button
+            onClick={() => setBulkOpen(true)}
+            className="shrink-0 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
+            title="Revisar el precio actual en la web de todos los materiales con link de Sodimac/Easy/mK"
+          >
+            ↻ Actualizar precios
+          </button>
+          <button
+            onClick={() => setShowNewCategory(true)}
+            className="shrink-0 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
+          >
+            + Categoria
+          </button>
+          <button
+            onClick={() => {
+              setShowAddTop(true);
+              setShowNewCategory(false);
+            }}
+            className="shrink-0 px-4 py-3 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors whitespace-nowrap"
+            title="Pegá el link del producto: trae nombre, precio y categoría"
+          >
+            + Material
+          </button>
+        </div>
       </div>
 
       {/* Alta de material desde arriba: pegás el link, trae nombre + precio y
@@ -744,7 +750,11 @@ export default function MaterialSearch({
           </div>
 
           {group.items.length > 0 && (
-            <table className="w-full text-sm">
+            /* Scroll propio con ancho minimo: sin esto la tabla se achicaba
+               hasta que el nombre del material y el precio quedaban ilegibles
+               en el celular. */
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="text-left px-4 py-2 text-xs text-gray-500">
@@ -986,6 +996,7 @@ export default function MaterialSearch({
                 )}
               </tbody>
             </table>
+            </div>
           )}
 
           {/* Add material form. Pensado "link primero": MJ pega el link del

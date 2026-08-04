@@ -64,7 +64,7 @@ export default async function PresupuestoDetailPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div className="flex items-center gap-2 text-sm">
           <Link
             href={`/proyectos/${project.id}/presupuesto`}

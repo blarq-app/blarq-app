@@ -283,7 +283,7 @@ export default function CostoDirectoDetalle({ items }: { items: ItemLite[] }) {
               </summary>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-[11px] leading-tight">
+                <table className="w-full text-[11px] leading-tight min-w-[640px]">
                   <thead className="text-[10px] uppercase tracking-wider text-gray-500 border-t border-gray-100">
                     <tr>
                       <th className="text-left px-3 py-1 font-medium">Descripción</th>
@@ -340,7 +340,7 @@ export default function CostoDirectoDetalle({ items }: { items: ItemLite[] }) {
                                 </div>
                               </summary>
                               <div className="px-3 pb-1.5 pt-0.5 bg-gray-50">
-                                <table className="w-full text-[11px] leading-tight">
+                                <table className="w-full text-[11px] leading-tight min-w-[640px]">
                                   <thead className="text-[10px] uppercase tracking-wider text-gray-400">
                                     <tr>
                                       <th className="text-left py-0.5 font-medium">

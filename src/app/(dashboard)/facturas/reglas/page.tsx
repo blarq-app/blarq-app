@@ -27,7 +27,7 @@ export default async function FacturasReglasPage() {
 
   return (
     <div>
-      <div className="flex items-end justify-between mb-6">
+      <div className="flex flex-col items-start sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
         <div>
           <Link href="/facturas" className="text-xs text-gray-500 hover:text-gray-700 underline">
             ← Volver a facturas

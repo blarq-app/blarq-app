@@ -283,7 +283,7 @@ export default async function FacturasPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Facturas</h1>
         <div className="flex items-center gap-3">
           <Link
@@ -342,7 +342,10 @@ export default async function FacturasPage({
         </Link>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      {/* En el celular los tres totales van en una fila compacta. Apilados
+          ocupaban tres tarjetas altas antes de que apareciera la primera
+          factura, que es a lo que se entra. */}
+      <div className="grid grid-cols-3 gap-2 md:gap-4 mb-6">
         <Stat label="Total" value={invoices.length.toString()} sub="facturas" />
         <Stat
           label="Emitido"
@@ -429,10 +432,14 @@ function Stat({
   sub: string;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="text-xl font-bold text-gray-900 mt-1 tabular-nums">{value}</p>
-      <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
+    <div className="bg-white rounded-xl border border-gray-200 p-3 md:p-4">
+      <p className="text-[10px] md:text-xs uppercase tracking-wider text-gray-500">
+        {label}
+      </p>
+      <p className="text-base md:text-xl font-bold text-gray-900 mt-1 tabular-nums break-words">
+        {value}
+      </p>
+      <p className="text-[10px] md:text-xs text-gray-400 mt-0.5 break-words">{sub}</p>
     </div>
   );
 }

@@ -119,21 +119,24 @@ export default function ProjectFacturasFilters({
         <option value="manual">Manual</option>
       </select>
 
-      {/* Rango de fechas */}
-      <div className="flex items-center gap-1">
+      {/* Rango de fechas. `flex-wrap` + `w-full sm:w-auto`: los dos campos de
+          fecha con sus rótulos son un solo bloque, y en el celular ese bloque
+          medía más que la pantalla — como no podía partirse, empujaba la página
+          27px de costado. Ahora parte adentro y ocupa su propio renglón. */}
+      <div className="flex flex-wrap items-center gap-1 w-full sm:w-auto">
         <span className="text-xs text-gray-500">Desde</span>
         <input
           type="date"
           value={v.dateFrom}
           onChange={(e) => set("dateFrom", e.target.value)}
-          className="px-2 py-1.5 border border-gray-300 rounded bg-white text-xs"
+          className="min-w-0 flex-1 sm:flex-none px-2 py-1.5 border border-gray-300 rounded bg-white text-xs"
         />
         <span className="text-xs text-gray-500">hasta</span>
         <input
           type="date"
           value={v.dateTo}
           onChange={(e) => set("dateTo", e.target.value)}
-          className="px-2 py-1.5 border border-gray-300 rounded bg-white text-xs"
+          className="min-w-0 flex-1 sm:flex-none px-2 py-1.5 border border-gray-300 rounded bg-white text-xs"
         />
       </div>
 

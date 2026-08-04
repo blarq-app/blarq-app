@@ -97,7 +97,7 @@ export default async function MaestroEstadosPagoPage({
         </Link>
       </div>
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h2 className="text-xl font-medium text-gray-900">{maestro.name}</h2>
           <p className="text-sm text-gray-500 mt-0.5">

@@ -44,9 +44,21 @@ export default async function ProjectLayout({
 
   return (
     <div>
-      {/* Header sticky del proyecto */}
-      <div className="sticky top-0 z-30 -mx-6 px-6 -mt-6 pt-6 pb-3 bg-gray-50 border-b border-gray-200">
-        <div className="flex items-start justify-between mb-3">
+      {/*
+        Header sticky del proyecto.
+
+        Los márgenes negativos existen para que la banda llegue de borde a borde
+        pisando el padding del <main>. Tienen que valer EXACTAMENTE ese padding,
+        y el <main> usa p-4 en mobile y p-8 en desktop — antes acá decía `-mx-6`
+        fijo, o sea 24px contra los 16px reales del celular: la banda sobresalía
+        8px por cada lado y hacía que TODA la pantalla del proyecto (resumen,
+        presupuesto, EPs, facturas, lista de compra) se pudiera arrastrar de
+        costado. En desktop tampoco calzaba: dejaba 8px de aire a cada lado.
+      */}
+      <div className="sticky top-0 z-30 -mx-4 px-4 -mt-4 pt-4 md:-mx-8 md:px-8 md:-mt-8 md:pt-8 pb-3 bg-gray-50 border-b border-gray-200">
+        {/* Apila en el celular: con el título y los dos botones en una fila, el
+            nombre de la obra quedaba en una columna de ~150px. */}
+        <div className="flex flex-col items-start sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
               <Link
@@ -75,7 +87,7 @@ export default async function ProjectLayout({
           <div className="flex items-center gap-2 flex-shrink-0">
             <Link
               href={`/proyectos/${project.id}/editar`}
-              className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-700 hover:bg-white hover:border-gray-400 transition-colors"
+              className="inline-flex items-center min-h-9 text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-700 hover:bg-white hover:border-gray-400 transition-colors"
             >
               Editar datos
             </Link>

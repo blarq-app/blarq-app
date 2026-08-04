@@ -53,11 +53,21 @@ export default function PartidaAssigner({
     return false;
   }, [selected, initial]);
 
+  // Solo mostramos las partidas DISPONIBLES para este maestro: las libres (sin
+  // dueño) y las que ya son de él (para poder destildarlas). Las que ya están
+  // asignadas a OTRO maestro se esconden — así el reparto de cada maestro no se
+  // pisa con el de los demás y "Seleccionar todo" no se las roba.
+  const disponibles = useMemo(
+    () => items.filter((i) => i.assignedToThis || !i.otherMaestroName),
+    [items]
+  );
+  const ocupadasPorOtros = items.length - disponibles.length;
+
   // Agrupar por capítulo, en el orden de la versión (helper compartido con el
   // editor y el PDF).
   const grouped = useMemo(
-    () => groupByChapter(chapters, items),
-    [chapters, items]
+    () => groupByChapter(chapters, disponibles),
+    [chapters, disponibles]
   );
 
   function toggle(id: string) {
@@ -69,7 +79,8 @@ export default function PartidaAssigner({
     });
   }
   function selectAll() {
-    setSelected(new Set(items.map((i) => i.id)));
+    // Solo las disponibles — nunca las que ya son de otro maestro.
+    setSelected(new Set(disponibles.map((i) => i.id)));
   }
   function selectNone() {
     setSelected(new Set());
@@ -112,7 +123,7 @@ export default function PartidaAssigner({
           <span className="text-xs text-gray-500 tabular-nums">
             {collapsed
               ? `${selected.size} asignada${selected.size !== 1 ? "s" : ""}`
-              : `${selected.size} de ${items.length} tildadas`}
+              : `${selected.size} de ${disponibles.length} disponibles tildadas`}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -161,6 +172,16 @@ export default function PartidaAssigner({
         <div className="px-4 py-8 text-center text-sm text-gray-500">
           Esta obra no tiene partidas de presupuesto todavía.
         </div>
+      ) : disponibles.length === 0 ? (
+        <div className="px-4 py-8 text-center text-sm text-gray-500">
+          Todas las partidas de la obra ya están repartidas a otros maestros.
+          {ocupadasPorOtros > 0 && (
+            <span className="block mt-1 text-xs text-gray-400">
+              ({ocupadasPorOtros} partida{ocupadasPorOtros !== 1 ? "s" : ""} asignada
+              {ocupadasPorOtros !== 1 ? "s" : ""} a otros)
+            </span>
+          )}
+        </div>
       ) : (
         <div className="divide-y divide-gray-100">
           {grouped.map(({ chapter, items: arr }) => (
@@ -186,11 +207,6 @@ export default function PartidaAssigner({
                     </span>
                     <span className="flex-1 text-sm text-gray-800">
                       {it.name}
-                      {!isSel && it.otherMaestroName && (
-                        <span className="ml-2 text-xs text-gray-400">
-                          · de {it.otherMaestroName}
-                        </span>
-                      )}
                     </span>
                     <span className="text-xs text-gray-500 tabular-nums shrink-0">
                       {it.quantity} {it.unit}
@@ -200,6 +216,13 @@ export default function PartidaAssigner({
               })}
             </div>
           ))}
+          {ocupadasPorOtros > 0 && (
+            <div className="px-4 py-2 bg-gray-50/60 text-xs text-gray-400">
+              {ocupadasPorOtros} partida{ocupadasPorOtros !== 1 ? "s" : ""} más ya
+              {ocupadasPorOtros !== 1 ? " están" : " está"} asignada
+              {ocupadasPorOtros !== 1 ? "s" : ""} a otros maestros (no se muestran acá).
+            </div>
+          )}
         </div>
       )}
     </div>

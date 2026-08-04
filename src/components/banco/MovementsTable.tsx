@@ -9,6 +9,7 @@ import InternalTransferProjectSelect from "./InternalTransferProjectSelect";
 import InternalTransferConceptoSelect from "./InternalTransferConceptoSelect";
 import SalaryPeriodSelect from "./SalaryPeriodSelect";
 import CategoryInlineSelect from "./CategoryInlineSelect";
+import PaymentsDetailPopover from "./PaymentsDetailPopover";
 import ImputacionColumnFilter from "./ImputacionColumnFilter";
 import ProyectoColumnFilter from "./ProyectoColumnFilter";
 import { deriveEstado, derivePaymentRespaldo } from "@/lib/banco/movementDisplay";
@@ -25,6 +26,9 @@ type Payment = {
     // Distingue factura real (sii_automatica/manual) de pago sin respaldo /
     // boleta / internacional. Se usa para derivar la columna "Respaldo".
     origin: string | null;
+    // Obra imputada — solo se muestra en el desplegable de "N pagos".
+    projectName: string | null;
+    projectNumero: number | null;
   };
 };
 
@@ -323,10 +327,15 @@ export default function MovementsTable({
                                     {resp.label}
                                   </span>
                                 )}
+                                {/* Repartido entre varias facturas: el resumen
+                                    se mantiene igual pero ahora se despliega y
+                                    muestra la lista completa (folio · obra ·
+                                    monto imputado), cada una linkeable. */}
                                 {m.payments.length > 1 && (
-                                  <span className="block text-[10px] text-gray-400 tabular-nums">
-                                    {m.payments.length} pagos · {formatCLP(sumApplied)}
-                                  </span>
+                                  <PaymentsDetailPopover
+                                    payments={m.payments}
+                                    sumApplied={sumApplied}
+                                  />
                                 )}
                                 {overImputed && (
                                   <span

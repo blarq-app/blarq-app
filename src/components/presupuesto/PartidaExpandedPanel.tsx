@@ -14,6 +14,7 @@ import { formatCLP } from "@/lib/utils";
 import MoneyInput from "@/components/ui/MoneyInput";
 import RichTextEditor from "@/components/presupuesto/RichTextEditor";
 import ObraItemComponentsEditor from "@/components/presupuesto/ObraItemComponentsEditor";
+import GuardarAlCatalogoButton from "@/components/presupuesto/GuardarAlCatalogoButton";
 
 // Solo los campos que el panel necesita de la partida.
 export interface PanelItem {
@@ -44,6 +45,9 @@ interface Props {
   onUpdateCatalog: () => void;
   onUpdateCatalogDescription: () => void;
   onComponentsChanged: () => void;
+  // Tras guardar una partida nueva al catálogo: el editor recarga la partida
+  // para que quede con su catalogPartidaId y aparezcan los botones de siempre.
+  onSavedToCatalog: (catalogPartidaId: string) => void;
 }
 
 // Los 6 rubros del desglose de costo de la partida (por unidad).
@@ -173,7 +177,20 @@ function DescBlock({
 }
 
 function CatalogButtons(p: Props) {
-  if (!p.item.catalogPartidaId) return null;
+  // Partida armada de cero en esta cotización: todavía no tiene molde. Lo único
+  // que se ofrece es CREARLO. Los botones de abajo actualizan un molde que
+  // existe, así que acá no aplican.
+  if (!p.item.catalogPartidaId) {
+    return (
+      <GuardarAlCatalogoButton
+        budgetId={p.budgetId}
+        itemId={p.item.id}
+        itemName={p.item.name}
+        canEdit={p.canEdit}
+        onSaved={p.onSavedToCatalog}
+      />
+    );
+  }
   return (
     <div className="flex justify-end gap-2">
       {/* Abrir ESTA partida en el Catálogo de Partidas, en pestaña nueva, para

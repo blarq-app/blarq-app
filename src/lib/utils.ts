@@ -1,3 +1,6 @@
+import { CAPITULOS } from "@/lib/presupuesto/chapters";
+import { homologarCategoria } from "@/lib/catalog/homologarCategoria";
+
 const clpFormatter = new Intl.NumberFormat("es-CL", {
   minimumFractionDigits: 0,
   maximumFractionDigits: 0,
@@ -91,31 +94,27 @@ export function edadRevisionPrecio(date: Date | string | null | undefined): {
   };
 }
 
-// Orden cronológico/lógico de cómo se ejecuta una obra. Sirve para
-// mostrar las categorías del catálogo de partidas en el orden en que
-// realmente se trabajan, no alfabético. Categorías que no figuran en
-// esta lista quedan al final, ordenadas por nombre.
-export const CATALOG_CATEGORY_ORDER = [
-  "OBRAS PRELIMINARES",
-  "DEMOLICIONES",
-  "REPARACIONES",
-  "OBRA GRUESA",
-  "AISLACION E IMPERMEABILIZACION",
-  "INSTALACIONES ELECT.",
-  "INSTALACIONES SANITARIAS",
-  "INSTALACIONES GAS",
-  "CLIMATIZACION",
-  "TERMINACIONES",
-  "MUEBLES",
-  "ASEO Y LIMPIEZA",
-] as const;
+// Orden cronológico/lógico de cómo se ejecuta una obra: sirve para mostrar las
+// categorías del catálogo de partidas en el orden en que realmente se trabajan,
+// no alfabético. Las que no figuran quedan al final, ordenadas por nombre.
+//
+// Hasta 2026-08-03 esta era una lista propia, escrita a mano, DISTINTA de la de
+// capítulos del presupuesto (CAPITULOS_SUGERIDOS). Nadie las mantuvo iguales y
+// divergieron. Ahora hay UNA sola lista y vive del lado del presupuesto, porque
+// esos nombres son los que salen en el PDF del cliente. Se re-exporta con el
+// nombre viejo para no romper a quien la importe.
+export const CATALOG_CATEGORY_ORDER = CAPITULOS;
 
-// Compara dos categorías según su posición en CATALOG_CATEGORY_ORDER.
-// Las desconocidas van al final, alfabéticas entre sí.
+// Compara dos categorías por su posición en la lista única.
+//
+// Los nombres se resuelven ANTES de comparar (homologarCategoria): mientras
+// convivan en la base un nombre viejo y su reemplazo —entre el deploy y la
+// migración de datos— los dos caen en la MISMA posición, en vez de que el viejo
+// se vaya suelto al final de la pantalla.
 export function compareCatalogCategories(a: string, b: string): number {
-  const order = CATALOG_CATEGORY_ORDER as readonly string[];
-  const ia = order.indexOf(a);
-  const ib = order.indexOf(b);
+  const order = CAPITULOS as readonly string[];
+  const ia = order.indexOf(homologarCategoria(a).categoria);
+  const ib = order.indexOf(homologarCategoria(b).categoria);
   if (ia === -1 && ib === -1) return a.localeCompare(b);
   if (ia === -1) return 1;
   if (ib === -1) return -1;

@@ -24,6 +24,46 @@
 export const SIN_CAPITULO_ID = "__sin_capitulo__";
 
 /**
+ * LA LISTA. Un solo vocabulario para los capítulos del presupuesto de obra y
+ * las categorías del Catálogo de Partidas, en orden cronológico de obra.
+ *
+ * Hasta 2026-08-03 esto eran DOS listas escritas a mano en archivos distintos
+ * —`CAPITULOS_SUGERIDOS` acá y `CATALOG_CATEGORY_ORDER` en lib/utils.ts— que
+ * nadie mantuvo iguales. Divergieron: el capítulo "INSTALACIONES ELECTRICAS"
+ * contra la categoría "INSTALACIONES ELECT.", "INSTALACIONES SANITARIAS Y
+ * GASFITERIA" contra "INSTALACIONES SANITARIAS", "LIMPIEZA Y ASEO" contra
+ * "ASEO Y LIMPIEZA". Guardar una partida al catálogo tenía que adivinar a cuál
+ * de las dos listas hacerle caso.
+ *
+ * GANARON LOS NOMBRES DEL PRESUPUESTO, y el motivo importa: el nombre del
+ * capítulo **sale en el PDF que ve el cliente** y hay decenas en versiones ya
+ * enviadas o aprobadas — renombrarlos cambiaría documentos ya emitidos. Las
+ * categorías del catálogo, en cambio, las ve solo BLARQ. Así que el catálogo se
+ * adapta al presupuesto y no al revés.
+ *
+ * "INSTALACIONES GAS" ya no está: sus partidas viven en "INSTALACIONES
+ * SANITARIAS Y GASFITERIA", que es como MJ nombra el capítulo (decisión
+ * 2026-08-03; nunca había usado "INSTALACIONES GAS" como capítulo en ninguna
+ * obra).
+ *
+ * Esto NO limita lo que MJ puede escribir: el nombre del capítulo sigue siendo
+ * texto libre desde el PR #331. Esta lista son las SUGERENCIAS y el ORDEN.
+ */
+export const CAPITULOS = [
+  "OBRAS PRELIMINARES",
+  "DEMOLICIONES",
+  "REPARACIONES",
+  "OBRA GRUESA",
+  "AISLACION E IMPERMEABILIZACION",
+  "INSTALACIONES ELECTRICAS",
+  "INSTALACIONES SANITARIAS Y GASFITERIA",
+  "CLIMATIZACION",
+  "TERMINACIONES",
+  "MUEBLES",
+  "LIMPIEZA Y ASEO",
+] as const;
+
+/**
  * Los 8 capítulos de siempre, en su orden de siempre. Ya NO son la ley: son
  * las SUGERENCIAS que ofrece el botón "+ Capítulo" para no tener que escribir
  * los nombres a mano. Un presupuesto nuevo arranca SIN capítulos (decisión MJ
@@ -32,14 +72,16 @@ export const SIN_CAPITULO_ID = "__sin_capitulo__";
  * Los nombres son los FORMALES — los que salían en el PDF del cliente. Desde
  * 2026-07-27 hay un solo nombre por capítulo y es el que se ve en todos lados.
  */
+// Las que ofrece el botón "+ Capítulo" en el editor de OBRA. Salen de LA LISTA
+// de arriba, con dos ajustes:
+//   - MUEBLES no se ofrece: los muebles tienen su propio presupuesto, no son un
+//     capítulo de la obra. Sigue existiendo como categoría del catálogo.
+//   - ADICIONALES sí se ofrece aunque NO sea categoría del catálogo (decisión
+//     MJ 2026-08-03). Es un cajón por proyecto, no un tipo de trabajo: un molde
+//     reusable es "pintura de muro", no "adicional", y guardarlo bajo
+//     ADICIONALES lo haría imposible de encontrar después.
 export const CAPITULOS_SUGERIDOS = [
-  "DEMOLICIONES",
-  "OBRA GRUESA",
-  "REPARACIONES",
-  "INSTALACIONES SANITARIAS Y GASFITERIA",
-  "INSTALACIONES ELECTRICAS",
-  "TERMINACIONES",
-  "LIMPIEZA Y ASEO",
+  ...CAPITULOS.filter((c) => c !== "MUEBLES"),
   "ADICIONALES",
 ] as const;
 

@@ -15,6 +15,7 @@ interface Propuesta {
   invoiceId: string;
   folioNumber: string | null;
   businessName: string | null;
+  invoiceDate: string | null;
   invoiceTotal: number;
   invoiceRemaining: number;
   projectName: string | null;
@@ -257,6 +258,17 @@ export default function ConciliarPendientesButton({
                             <span className="text-xs tabular-nums text-gray-700">
                               {formatCLP(p.invoiceRemaining)}
                             </span>
+                            {/* Fecha de emisión de la factura. Va acá arriba, y
+                                la del movimiento abajo, para que la propuesta se
+                                pueda cruzar por monto Y por fecha — con solo el
+                                monto, dos compras parecidas del mismo comercio
+                                son indistinguibles. Dice "Emitida" porque si no
+                                las dos fechas de la fila se confunden. */}
+                            {p.invoiceDate && (
+                              <span className="text-[11px] tabular-nums text-gray-500">
+                                Emitida {fmtFecha(p.invoiceDate)}
+                              </span>
+                            )}
                             {p.projectName && (
                               <span className="text-[11px] text-gray-400">
                                 {p.projectName}

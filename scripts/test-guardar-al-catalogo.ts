@@ -9,8 +9,8 @@
  *      P.U. Es la trampa del feature: copiar el desglose de una partida vacía
  *      dispararía el recálculo desde componentes y dejaría el molde en $0.
  *   3. Nombre repetido       → responde 409 y NO crea un segundo molde.
- *   4. Homologación          → el capítulo "INSTALACIONES ELECTRICAS" cae en la
- *      categoría "INSTALACIONES ELECT." del catálogo, sin inventar una nueva.
+ *   4. Homologación          → capítulos y categorías son UN solo vocabulario;
+ *      los nombres viejos del catálogo caen en el canónico y ordenan igual.
  *
  * Corre contra el servidor de dev levantado (por HTTP, o sea prueba el endpoint
  * de verdad) y contra la base de DESARROLLO. Aborta si la base es la viva.
@@ -23,6 +23,7 @@ import { readFileSync } from "fs";
 import hkdf from "@panva/hkdf";
 import { PrismaClient } from "@prisma/client";
 import { homologarCategoria } from "../src/lib/catalog/homologarCategoria";
+import { compareCatalogCategories } from "../src/lib/utils";
 
 const BASE = process.argv[2] ?? "http://localhost:3061";
 const MARCA = "__TEST_GUARDAR_AL_CATALOGO__";
@@ -88,23 +89,57 @@ async function main() {
   const ck = await cookie();
 
   // ── Homologación (puro, sin base) ──────────────────────────────────────
-  console.log("\nHOMOLOGACIÓN de capítulo → categoría del catálogo");
+  console.log("\nHOMOLOGACIÓN — los nombres del PRESUPUESTO son los canónicos");
   check(
-    homologarCategoria("INSTALACIONES ELECTRICAS").categoria === "INSTALACIONES ELECT.",
-    "INSTALACIONES ELECTRICAS → INSTALACIONES ELECT."
+    homologarCategoria("INSTALACIONES ELECTRICAS").categoria === "INSTALACIONES ELECTRICAS",
+    "INSTALACIONES ELECTRICAS se queda como está (es el canónico)"
   );
   check(
     homologarCategoria("INSTALACIONES SANITARIAS Y GASFITERIA").categoria ===
-      "INSTALACIONES SANITARIAS",
-    "INSTALACIONES SANITARIAS Y GASFITERIA → INSTALACIONES SANITARIAS"
+      "INSTALACIONES SANITARIAS Y GASFITERIA",
+    "INSTALACIONES SANITARIAS Y GASFITERIA se queda como está"
   );
   check(
-    homologarCategoria("LIMPIEZA Y ASEO").categoria === "ASEO Y LIMPIEZA",
-    "LIMPIEZA Y ASEO → ASEO Y LIMPIEZA"
+    homologarCategoria("LIMPIEZA Y ASEO").categoria === "LIMPIEZA Y ASEO",
+    "LIMPIEZA Y ASEO se queda como está"
+  );
+
+  console.log("\n  …y los nombres VIEJOS del catálogo caen en el canónico:");
+  check(
+    homologarCategoria("INSTALACIONES ELECT.").categoria === "INSTALACIONES ELECTRICAS",
+    "INSTALACIONES ELECT. → INSTALACIONES ELECTRICAS"
   );
   check(
-    homologarCategoria("Instalaciones Eléctricas").categoria === "INSTALACIONES ELECT.",
+    homologarCategoria("INSTALACIONES SANITARIAS").categoria ===
+      "INSTALACIONES SANITARIAS Y GASFITERIA",
+    "INSTALACIONES SANITARIAS → INSTALACIONES SANITARIAS Y GASFITERIA"
+  );
+  check(
+    homologarCategoria("INSTALACIONES GAS").categoria ===
+      "INSTALACIONES SANITARIAS Y GASFITERIA",
+    "INSTALACIONES GAS → INSTALACIONES SANITARIAS Y GASFITERIA"
+  );
+  check(
+    homologarCategoria("ASEO Y LIMPIEZA").categoria === "LIMPIEZA Y ASEO",
+    "ASEO Y LIMPIEZA → LIMPIEZA Y ASEO"
+  );
+  check(
+    homologarCategoria("Instalaciones Eléctricas").categoria === "INSTALACIONES ELECTRICAS",
     "aguanta minúsculas y tildes"
+  );
+  // El orden del catálogo tiene que tolerar los dos nombres a la vez: entre el
+  // deploy y la migración de datos conviven, y el viejo NO puede irse al final.
+  check(
+    compareCatalogCategories("INSTALACIONES ELECT.", "INSTALACIONES ELECTRICAS") === 0,
+    "el nombre viejo y el nuevo ordenan en la MISMA posición"
+  );
+  check(
+    compareCatalogCategories("DEMOLICIONES", "TERMINACIONES") < 0,
+    "el orden de obra se mantiene (DEMOLICIONES antes que TERMINACIONES)"
+  );
+  check(
+    compareCatalogCategories("ADICIONALES", "TERMINACIONES") > 0,
+    "una categoría desconocida sigue yendo al final"
   );
   check(
     homologarCategoria("TERMINACIONES").esNueva === false,
@@ -196,8 +231,8 @@ async function main() {
   });
   check(!!molde1, "el molde existe en el catálogo");
   check(
-    molde1?.category === "INSTALACIONES ELECT.",
-    `queda en INSTALACIONES ELECT. (quedó en ${molde1?.category})`
+    molde1?.category === "INSTALACIONES ELECTRICAS",
+    `queda en INSTALACIONES ELECTRICAS (quedó en ${molde1?.category})`
   );
   check(molde1?.unit === "M2", "conserva la unidad de la partida");
   check(molde1?.components.length === 2, `copió las 2 líneas (copió ${molde1?.components.length})`);

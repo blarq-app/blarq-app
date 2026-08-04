@@ -1,35 +1,39 @@
 /**
- * Traduce el nombre de un CAPÍTULO del presupuesto de obra a la CATEGORÍA
- * equivalente del Catálogo de Partidas.
+ * Resuelve un nombre de capítulo (o de categoría) al nombre CANÓNICO de LA
+ * LISTA única — `CAPITULOS` en lib/presupuesto/chapters.ts.
  *
- * Por qué hace falta: son dos vocabularios distintos que nunca se homologaron.
- * Los capítulos del presupuesto son texto libre desde el PR #331 (MJ los
- * escribe como quiere, y su nombre sale en el PDF del cliente); las categorías
- * del catálogo son una lista de 12 con orden cronológico de obra
- * (CATALOG_CATEGORY_ORDER en lib/utils.ts). Se parecen pero no son iguales:
+ * Desde 2026-08-03 los capítulos del presupuesto y las categorías del catálogo
+ * son un solo vocabulario, y los nombres del presupuesto son los que mandan
+ * (salen en el PDF del cliente; los del catálogo los ve solo BLARQ). Este
+ * módulo dejó de ser un puente entre dos listas y pasó a ser la RED: traduce
+ * los nombres viejos que quedaron escritos en datos históricos, y aguanta que
+ * MJ escriba un capítulo a mano con tildes, minúsculas o un sinónimo.
  *
- *   capítulo                                  →  categoría del catálogo
- *   INSTALACIONES ELECTRICAS                  →  INSTALACIONES ELECT.
- *   INSTALACIONES SANITARIAS Y GASFITERIA     →  INSTALACIONES SANITARIAS
- *   LIMPIEZA Y ASEO                           →  ASEO Y LIMPIEZA
+ *   nombre viejo / escrito a mano   →  canónico
+ *   INSTALACIONES ELECT.            →  INSTALACIONES ELECTRICAS
+ *   INSTALACIONES SANITARIAS        →  INSTALACIONES SANITARIAS Y GASFITERIA
+ *   INSTALACIONES GAS               →  INSTALACIONES SANITARIAS Y GASFITERIA
+ *   ASEO Y LIMPIEZA                 →  LIMPIEZA Y ASEO
  *
- * Sin esta traducción, guardar una partida al catálogo crearía categorías
- * NUEVAS casi idénticas a las que ya existen ("INSTALACIONES ELECTRICAS" al
- * lado de "INSTALACIONES ELECT."), que además caen sueltas al final del
- * catálogo porque compareCatalogCategories manda las desconocidas al fondo.
+ * Sirve para dos cosas:
+ *   1. Guardar una partida al catálogo: decide en qué categoría cae, sin crear
+ *      categorías nuevas casi idénticas a las que ya existen.
+ *   2. Ordenar el catálogo (`compareCatalogCategories`): mientras convivan un
+ *      nombre viejo y su reemplazo —entre el deploy y la migración de datos—
+ *      los dos caen en la MISMA posición y no aparece una categoría suelta al
+ *      final de la pantalla.
  *
- * Cuando el capítulo no se parece a ninguna de las 12 (caso real: ADICIONALES),
- * se devuelve su propio nombre en mayúsculas: es una categoría genuinamente
- * nueva, no un duplicado, y se crea así. NO se adivina un calce parecido: es
- * peor mandar una partida a la categoría equivocada que crear una nueva.
+ * Un capítulo sin equivalente (caso real: ADICIONALES, que a propósito no es
+ * categoría del catálogo) devuelve su propio nombre en mayúsculas, marcado como
+ * nuevo. NO se adivina un calce parecido: es peor mandar una partida a la
+ * categoría equivocada que crear una categoría nueva.
  *
- * Esto NO renombra datos: los capítulos del presupuesto siguen llamándose como
- * MJ los escribió (el PDF del cliente no cambia). Es solo el puente al guardar.
+ * Esto NO renombra datos. Es solo lectura.
  */
 
-import { CATALOG_CATEGORY_ORDER } from "@/lib/utils";
+import { CAPITULOS } from "@/lib/presupuesto/chapters";
 
-// Mayúsculas, sin acentos, sin puntos finales, espacios colapsados. Así
+// Mayúsculas, sin acentos, sin puntos, espacios colapsados. Así
 // "Instalaciones Eléctricas" y "INSTALACIONES ELECTRICAS " son lo mismo.
 function normalizar(s: string): string {
   return s
@@ -41,28 +45,29 @@ function normalizar(s: string): string {
     .trim();
 }
 
-// Sinónimos conocidos: nombre de capítulo (normalizado) → categoría exacta del
-// catálogo. Solo los que MJ ya usa o son evidentes; no se inventan calces.
+// Sinónimos → nombre canónico. Los cuatro primeros son los nombres VIEJOS de
+// las categorías del catálogo: quedan acá para que los datos históricos —y
+// cualquier base que todavía no se haya migrado— sigan cayendo bien.
 const SINONIMOS: Record<string, string> = {
-  "INSTALACIONES ELECTRICAS": "INSTALACIONES ELECT.",
-  "INSTALACIONES ELECTRICA": "INSTALACIONES ELECT.",
-  "INSTALACION ELECTRICA": "INSTALACIONES ELECT.",
-  ELECTRICAS: "INSTALACIONES ELECT.",
-  ELECTRICIDAD: "INSTALACIONES ELECT.",
+  "INSTALACIONES ELECT": "INSTALACIONES ELECTRICAS",
+  "INSTALACIONES SANITARIAS": "INSTALACIONES SANITARIAS Y GASFITERIA",
+  "INSTALACIONES GAS": "INSTALACIONES SANITARIAS Y GASFITERIA",
+  "ASEO Y LIMPIEZA": "LIMPIEZA Y ASEO",
 
-  "INSTALACIONES SANITARIAS Y GASFITERIA": "INSTALACIONES SANITARIAS",
-  "INSTALACIONES SANITARIAS Y GAS": "INSTALACIONES SANITARIAS",
-  "INSTALACION SANITARIA": "INSTALACIONES SANITARIAS",
-  SANITARIAS: "INSTALACIONES SANITARIAS",
-  GASFITERIA: "INSTALACIONES SANITARIAS",
+  "INSTALACIONES ELECTRICA": "INSTALACIONES ELECTRICAS",
+  "INSTALACION ELECTRICA": "INSTALACIONES ELECTRICAS",
+  ELECTRICAS: "INSTALACIONES ELECTRICAS",
+  ELECTRICIDAD: "INSTALACIONES ELECTRICAS",
 
-  "INSTALACIONES DE GAS": "INSTALACIONES GAS",
-  "INSTALACION DE GAS": "INSTALACIONES GAS",
-  GAS: "INSTALACIONES GAS",
+  "INSTALACIONES SANITARIAS Y GAS": "INSTALACIONES SANITARIAS Y GASFITERIA",
+  "INSTALACION SANITARIA": "INSTALACIONES SANITARIAS Y GASFITERIA",
+  SANITARIAS: "INSTALACIONES SANITARIAS Y GASFITERIA",
+  GASFITERIA: "INSTALACIONES SANITARIAS Y GASFITERIA",
+  "INSTALACIONES DE GAS": "INSTALACIONES SANITARIAS Y GASFITERIA",
+  GAS: "INSTALACIONES SANITARIAS Y GASFITERIA",
 
-  "LIMPIEZA Y ASEO": "ASEO Y LIMPIEZA",
-  ASEO: "ASEO Y LIMPIEZA",
-  LIMPIEZA: "ASEO Y LIMPIEZA",
+  ASEO: "LIMPIEZA Y ASEO",
+  LIMPIEZA: "LIMPIEZA Y ASEO",
 
   PRELIMINARES: "OBRAS PRELIMINARES",
   "OBRA PRELIMINAR": "OBRAS PRELIMINARES",
@@ -78,27 +83,25 @@ const SINONIMOS: Record<string, string> = {
 };
 
 /**
- * @param nombreCapitulo  nombre del capítulo tal como está en el presupuesto.
- * @returns categoría del catálogo donde debe ir la partida, y si esa categoría
- *          es una de las 12 conocidas o una nueva (para poder avisarlo).
+ * @param nombre  capítulo del presupuesto, o categoría del catálogo.
+ * @returns el nombre canónico de LA LISTA, y si es uno que la lista no conoce.
  */
-export function homologarCategoria(nombreCapitulo: string): {
+export function homologarCategoria(nombre: string): {
   categoria: string;
   esNueva: boolean;
 } {
-  const norm = normalizar(nombreCapitulo || "");
+  const norm = normalizar(nombre || "");
   if (!norm) return { categoria: "", esNueva: false };
 
-  // 1) ¿Calza exacto (normalizado) con una de las 12 del catálogo?
-  const conocidas = CATALOG_CATEGORY_ORDER as readonly string[];
+  // 1) ¿Calza exacto (normalizado) con una de LA LISTA?
+  const conocidas = CAPITULOS as readonly string[];
   const exacta = conocidas.find((c) => normalizar(c) === norm);
   if (exacta) return { categoria: exacta, esNueva: false };
 
-  // 2) ¿Es un sinónimo conocido?
+  // 2) ¿Es un nombre viejo o un sinónimo conocido?
   const sinonimo = SINONIMOS[norm];
   if (sinonimo) return { categoria: sinonimo, esNueva: false };
 
-  // 3) Categoría genuinamente nueva. Se usa el nombre del capítulo tal cual
-  //    (en mayúsculas, que es la convención del catálogo).
+  // 3) Nombre genuinamente nuevo (ADICIONALES, o lo que MJ escriba).
   return { categoria: norm, esNueva: true };
 }

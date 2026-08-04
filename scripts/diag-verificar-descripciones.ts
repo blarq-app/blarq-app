@@ -156,10 +156,20 @@ async function main() {
       } catch { return ""; }
     })();
     const s2 = rasgos(slug);
-    const respaldaColor = [...a.colores].some((x) => s2.colores.has(x));
+    // OJO con el color: NO se descarta nunca, aunque el slug lo respalde.
+    //
+    // Primero se hizo al revés y MJ lo corrigió: "a algunos brushed les pone
+    // cromado, y eso está mal, porque son productos diferentes los brushed y
+    // los cromados". Tiene razón — son acabados distintos, con precios
+    // distintos. Si el slug dice "brushed" y el producto que HOY vive en esa
+    // URL se llama "Cromado", lo que importa es lo segundo: es el precio que la
+    // app va a traer. Puede ser que MK haya reutilizado la dirección para otro
+    // producto, y eso hay que mirarlo, no silenciarlo.
+    //
+    // Con las MEDIDAS sí vale el slug: "25 cm" y "250 mm" son notación, no
+    // productos distintos.
     const respaldaMedida = [...a.medidas].some((m) => s2.medidas.has(m));
     const sobrevivientes = problemas.filter((p) => {
-      if (p.startsWith("color") && respaldaColor) return false;
       if (p.startsWith("medidas") && respaldaMedida) return false;
       return true;
     });

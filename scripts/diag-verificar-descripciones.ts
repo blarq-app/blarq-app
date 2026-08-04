@@ -128,7 +128,11 @@ async function main() {
     if (a.ducha && !b.ducha && b.tina) problemas.push("el tuyo es de DUCHA y el de la tienda de TINA");
     const medidasA = [...a.medidas].filter((m) => m.length <= 3);
     const medidasB = [...b.medidas].filter((m) => m.length <= 3);
-    if (medidasA.length && medidasB.length && !medidasA.some((m) => medidasB.includes(m)))
+    // "25 cm" y "250 mm" son la misma medida: antes de comparar se normaliza
+    // multiplicando por 10 las que puedan estar en centímetros.
+    const enMm = (ms: string[]) => new Set(ms.flatMap((m) => [m, String(Number(m) * 10), String(Number(m) / 10)]));
+    const mmA = enMm(medidasA);
+    if (medidasA.length && medidasB.length && !medidasB.some((m) => mmA.has(m)))
       problemas.push(`medidas: tuyo ${medidasA.join("/")}, la tienda ${medidasB.join("/")}`);
     const colA = [...a.colores], colB = [...b.colores];
     if (colA.length && colB.length && !colA.some((x) => colB.includes(x)))
@@ -136,6 +140,31 @@ async function main() {
     const linA = [...a.lineas], linB = [...b.lineas];
     if (linA.length && linB.length && !linA.some((x) => linB.includes(x)))
       problemas.push(`línea: tuyo ${linA.join("/")}, la tienda ${linB.join("/")}`);
+
+    // El SLUG del link es la mejor evidencia de qué producto se eligió: lo
+    // escribió la tienda cuando se creó la página y no cambia aunque después
+    // renombren el producto. MK viene renombrando sus acabados —a los "gun
+    // grey" ahora les dice "Latón Grey Mate"—, así que comparar solo contra el
+    // nombre actual marcaba como equivocados links que están bien. Si el slug
+    // respalda lo que dice el catálogo, el link es correcto.
+    const slug = (() => {
+      try {
+        return norm(
+          new URL(c.referenceLink!).pathname
+            .replace(/\/p$/i, "").split("/").filter(Boolean).pop()!.replace(/-/g, " ")
+        );
+      } catch { return ""; }
+    })();
+    const s2 = rasgos(slug);
+    const respaldaColor = [...a.colores].some((x) => s2.colores.has(x));
+    const respaldaMedida = [...a.medidas].some((m) => s2.medidas.has(m));
+    const sobrevivientes = problemas.filter((p) => {
+      if (p.startsWith("color") && respaldaColor) return false;
+      if (p.startsWith("medidas") && respaldaMedida) return false;
+      return true;
+    });
+    problemas.length = 0;
+    problemas.push(...sobrevivientes);
 
     if (problemas.length) {
       chocan.push(`${c.name}\n      tu detalle:  ${c.detail || "(vacío)"}\n      en la tienda: ${real}\n      → ${problemas.join(" · ")}\n      ${c.referenceLink}`);

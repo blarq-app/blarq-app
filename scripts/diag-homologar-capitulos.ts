@@ -15,26 +15,15 @@
  */
 import { readFileSync } from "fs";
 import { PrismaClient } from "@prisma/client";
+// La lista ÚNICA, importada y NO copiada: una copia acá se desactualiza y el
+// diagnóstico pasa a mentir sobre qué calza y qué no (pasó el 2026-08-03).
+import { CAPITULOS } from "../src/lib/presupuesto/chapters";
 
 const envProd = readFileSync("/Users/mjblanco/Desktop/blarq-app/.env.prod", "utf8");
 const URL_VIVA = envProd.match(/DATABASE_URL\s*=\s*"?([^"\n]+)"?/)![1].trim();
 
 const prisma = new PrismaClient({ datasources: { db: { url: URL_VIVA } } });
 
-const CATEGORIAS_CATALOGO = [
-  "OBRAS PRELIMINARES",
-  "DEMOLICIONES",
-  "REPARACIONES",
-  "OBRA GRUESA",
-  "AISLACION E IMPERMEABILIZACION",
-  "INSTALACIONES ELECT.",
-  "INSTALACIONES SANITARIAS",
-  "INSTALACIONES GAS",
-  "CLIMATIZACION",
-  "TERMINACIONES",
-  "MUEBLES",
-  "ASEO Y LIMPIEZA",
-];
 
 async function main() {
   const host = URL_VIVA.match(/@([^/:]+)/)?.[1] ?? "?";
@@ -75,7 +64,7 @@ async function main() {
   console.log(`CAPÍTULOS DE OBRA — ${porNombre.size} nombres distintos en ${capitulos.length} capítulos\n`);
   const orden = [...porNombre.entries()].sort((a, b) => b[1].partidas - a[1].partidas);
   for (const [nombre, e] of orden) {
-    const calza = CATEGORIAS_CATALOGO.includes(nombre) ? "=" : " ";
+    const calza = (CAPITULOS as readonly string[]).includes(nombre) ? "=" : " ";
     console.log(
       `${calza} ${nombre.padEnd(42)} ${String(e.veces).padStart(3)} versiones · ${String(e.partidas).padStart(4)} partidas · ${String(e.cerrados).padStart(3)} en enviadas/aprobadas · ${e.obras.size} obras`
     );
@@ -90,7 +79,7 @@ async function main() {
 
   console.log(`\nCATEGORÍAS DEL CATÁLOGO — ${porCat.size} distintas en ${partidas.length} partidas\n`);
   for (const [cat, n] of [...porCat.entries()].sort((a, b) => b[1] - a[1])) {
-    const conocida = CATEGORIAS_CATALOGO.includes(cat) ? " " : "!";
+    const conocida = (CAPITULOS as readonly string[]).includes(cat) ? " " : "!";
     console.log(`${conocida} ${cat.padEnd(42)} ${String(n).padStart(4)} partidas`);
   }
 

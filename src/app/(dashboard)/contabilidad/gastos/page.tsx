@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { PROYECTOS_ASIGNABLES_WHERE } from "@/lib/projects/asignables";
 import { formatCLP } from "@/lib/utils";
 import {
   EditableCategoryCell,
@@ -93,10 +94,10 @@ export default async function GastosPage({
         },
       },
     }),
-    // Proyectos asignables (mismo criterio que banco/facturas: se esconden las
-    // cotizaciones no ganadas; los centros internos como BLARQ se mantienen).
+    // Proyectos asignables (criterio único en asignables.ts, mismo que
+    // banco/facturas).
     prisma.project.findMany({
-      where: { NOT: { status: "cotizacion", isInternal: false } },
+      where: PROYECTOS_ASIGNABLES_WHERE,
       select: { id: true, name: true, numeroProyecto: true },
       orderBy: { numeroProyecto: { sort: "asc", nulls: "last" } },
     }),

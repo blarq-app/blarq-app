@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { PROYECTOS_ASIGNABLES_WHERE } from "@/lib/projects/asignables";
 import Link from "next/link";
 import FacturasFilterBar from "@/components/facturas/FacturasFilterBar";
 import FacturasTable from "@/components/facturas/FacturasTable";
@@ -113,10 +114,9 @@ export default async function FacturasPage({
       take: 500,
     }),
     prisma.project.findMany({
-      // Solo proyectos asignables al conciliar: se esconden las cotizaciones
-      // no ganadas (status="cotizacion"). Los centros internos (BLARQ) se
-      // mantienen siempre, aunque no sean obras numeradas.
-      where: { NOT: { status: "cotizacion", isInternal: false } },
+      // Solo proyectos asignables al conciliar (criterio único en asignables.ts:
+      // se esconden cotizaciones no ganadas y archivadas sin facturas).
+      where: PROYECTOS_ASIGNABLES_WHERE,
       orderBy: [{ numeroProyecto: "asc" }, { numeroCotizacion: "asc" }, { name: "asc" }],
       select: {
         id: true,

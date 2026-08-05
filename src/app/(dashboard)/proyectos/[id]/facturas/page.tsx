@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { PROYECTOS_ASIGNABLES_WHERE } from "@/lib/projects/asignables";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { formatCLP, formatDate } from "@/lib/utils";
@@ -199,10 +200,10 @@ export default async function ProyectoFacturasPage({
     appliesTo: c.appliesTo,
   }));
   const allProjects = await prisma.project.findMany({
-    // Solo proyectos asignables al reasignar una factura: se esconden las
-    // cotizaciones no ganadas (status="cotizacion"). Internos (BLARQ) se
-    // mantienen siempre.
-    where: { NOT: { status: "cotizacion", isInternal: false } },
+    // Solo proyectos asignables al reasignar una factura (criterio único en
+    // asignables.ts: se esconden cotizaciones no ganadas y archivadas sin
+    // facturas).
+    where: PROYECTOS_ASIGNABLES_WHERE,
     select: { id: true, name: true, numeroProyecto: true, numeroCotizacion: true },
     // Ordenado por número (con los sin número — internos — al final), igual que
     // el resto de los desplegables de proyecto de la app.

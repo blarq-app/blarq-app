@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { PROYECTOS_ASIGNABLES_WHERE } from "@/lib/projects/asignables";
 import Link from "next/link";
 import { formatCLP } from "@/lib/utils";
 import ConciliarPendientesButton from "@/components/banco/ConciliarPendientesButton";
@@ -288,9 +289,9 @@ export default async function MovimientosPage({
     // Proyectos y categorías para el modal "pago sin factura" (asignar un
     // movimiento a un costo de proyecto sin que exista factura).
     prisma.project.findMany({
-      // Solo proyectos asignables: se esconden las cotizaciones no ganadas
-      // (status="cotizacion"). Los centros internos (BLARQ) se mantienen.
-      where: { NOT: { status: "cotizacion", isInternal: false } },
+      // Solo proyectos asignables (criterio único en asignables.ts: se esconden
+      // cotizaciones no ganadas y archivadas sin facturas).
+      where: PROYECTOS_ASIGNABLES_WHERE,
       select: { id: true, name: true, numeroProyecto: true },
       // Ordenado por número de proyecto (el desplegable muestra "46 · …"), con
       // los proyectos sin número (BLARQ, CASA, internos) al final. Antes salía

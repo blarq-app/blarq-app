@@ -1,8 +1,16 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-04.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-05.
 
 ---
+
+- **Fotos rotas del catálogo de artefactos (2026-08-05, rama `fix/catalogo-fotos-rotas`, pendiente 132)**: MJ vio el TOALLERO 30CM CROMO con el recuadro de foto vacío aunque tenía link. **La causa**: el catálogo no guarda la foto, guarda el LINK a la foto que vive en el servidor del proveedor (`mkchile.vtexassets.com`, `byp.vtexassets.com`). Cuando MK o BYP reemplazan la imagen cambia el id del archivo y el link viejo queda en 404: el campo `imageUrl` sigue lleno pero la pantalla muestra el cuadrito vacío.
+  - **Por qué no se arreglaba solo**: "Revisar precios" solo leía precios y nunca tocaba `imageUrl`. La foto entraba por un único camino — el botón "Extraer" AL CREAR el artefacto — así que una foto rota quedaba rota para siempre.
+  - **Corrida en la viva (`ep-shy-morning`), aplicada con OK de MJ**: de 140 entradas había **9 fotos en 404 + 2 sin foto pero con link**. Se recuperaron **10**. Verificado con `scripts/diag-132-fotos-rotas-catalogo.ts` antes (9 rotas) y después (**1**). La que queda es **LAVAPLATOS ASTORIA-N 762 SIMPLE**: MK ya no publica ese producto (su API responde con un arreglo vacío), así que **hay que subirle la foto a mano**. Se le dejó la foto vieja para no borrar el rastro.
+  - **Para que no vuelva a pasar**: "Revisar precios", que ya visita el producto, prueba la foto guardada con un HEAD y **solo si no carga** pide la de hoy. Si la guardada carga, no se toca — así no se pisan las fotos que MJ subió a mano (las embebidas `data:` se dan por vivas siempre). Es reparación, no sincronización.
+  - **Medido, no estimado**: el chequeo de fotos tarda **0,4s sobre los 125 productos con link** y corre en paralelo con la lectura del precio, así que la revisión completa no se alarga (1,5s solo precio → 0,6s los dos juntos). No hizo falta esconderlo detrás de una opción.
+  - **Alcance**: toca UN campo, `imageUrl`. **No toca plata, ni precios, ni descuentos, ni links, ni `metrics.ts`, ni el schema.**
+  - **Ojo para el futuro**: la API de VTEX todavía entrega el CDN viejo (`vteximg.com.br`); se normaliza al actual (`vtexassets.com`), mismo id de archivo — verificado contra mkchile y byp.
 
 - **La app entera se puede usar en el celular (2026-08-04, misma rama, segunda parte)**: MJ dijo "hagamos todo" después de la Configuración. Se adaptaron las 24 pantallas.
   - **Se midió, no se estimó.** Se levantó postgres local en el contenedor, se sembró con datos verosímiles y se recorrió la app real con un auditor en pantalla de 390px. Punto de partida: **8 pantallas se arrastraban de costado**; final: **0 a 390px y 0 a 1440px**.

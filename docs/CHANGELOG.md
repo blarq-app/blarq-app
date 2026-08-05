@@ -4,6 +4,15 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-08-05 — El catálogo de artefactos deja de perder fotos cuando el proveedor las reemplaza
+
+- **La causa: el catálogo no guarda la foto, guarda el link a la foto del proveedor.** `imageUrl` apunta a `mkchile.vtexassets.com` / `byp.vtexassets.com`, y cuando MK o BYP reemplazan la imagen cambia el id del archivo: el link viejo queda en 404, el campo sigue lleno y la pantalla dibuja el recuadro vacío. En la base viva eran **9 de 129** (el caso que lo destapó: TOALLERO 30CM CROMO), más 2 entradas con link pero sin foto.
+- **No se arreglaba solo porque la foto tenía un único camino de entrada**: el botón "Extraer" del link AL CREAR el artefacto (`fetchArtefactoData`). "Revisar precios" visitaba el producto todos los meses pero solo escribía los campos `web*` de precio — nunca `imageUrl`. Una foto rota quedaba rota para siempre.
+- **Ahora "Revisar precios" repara la foto de paso.** Prueba la guardada con un HEAD (exigiendo `content-type: image/*`, porque VTEX contesta el 404 con un JSON) y **solo si no carga** pide la que la tienda publica hoy. Si carga, no la toca: las fotos que MJ subió a mano no se pisan, y las embebidas `data:` se dan por vivas siempre. Ante un timeout o un 403 se deja la guardada — "no la pude ver" no es "está muerta".
+- **`leerFotoWeb.ts` es la lectura única de la foto**, con la misma cascada y por la misma razón que `leerPrecioWeb`: en VTEX y Shopify el dato bueno está en su API, no en el HTML. La foto sale de la MISMA respuesta que ya se pide para el precio (`fetchVtexImage` / `fetchShopifyImage`), y la elegida se verifica antes de guardarla. La de VTEX se normaliza del CDN viejo (`vteximg.com.br`) al actual (`vtexassets.com`) — mismo id, verificado contra mkchile y byp.
+- **Costo medido**: 0,4s el chequeo de las 125 fotos, y en paralelo con el precio la revisión completa no se alarga (1,5s solo precio → 0,6s las dos cosas juntas). El pedido de la foto nueva ocurre solo para las rotas.
+- **Corrida de datos en la viva (con OK de MJ)**: 10 fotos repuestas, verificado antes (9 rotas) y después (1). La que queda es LAVAPLATOS ASTORIA-N 762 SIMPLE — MK dio de baja el producto y su API responde vacío: hay que subirle la foto a mano. **Toca un solo campo, `imageUrl`; no toca precios, descuentos, links, `metrics.ts` ni el schema.**
+
 ## 2026-08-04 — Toda la app se puede usar en el celular (segunda parte: el resto de las pantallas)
 
 - **Punto de partida medido, no estimado.** Se levantó la app entera contra una base local sembrada y se recorrieron las 24 pantallas en un celular de 390px con un auditor automático: **8 se arrastraban de costado** (la página completa, no una tabla), y en las que no, la tabla se cortaba dejando fuera justo la columna del monto.

@@ -351,6 +351,9 @@ export default function ArtefactosCatalogClient({
     conLink: number;
     cambiaron: number;
     noLeidos: number;
+    // Fotos que se repusieron solas en esta pasada porque el link a la foto del
+    // proveedor ya no cargaba. No hay nada que aplicar: ya quedaron guardadas.
+    fotosReparadas?: number;
   } | null>(null);
 
   // ── Conteo por pestaña (sobre el universo completo, sin filtros) ──────
@@ -2507,7 +2510,12 @@ function PriceReviewPanel({
 }: {
   loading: boolean;
   rows: PriceReviewRow[];
-  resumen: { conLink: number; cambiaron: number; noLeidos: number } | null;
+  resumen: {
+    conLink: number;
+    cambiaron: number;
+    noLeidos: number;
+    fotosReparadas?: number;
+  } | null;
   onApply: (row: PriceReviewRow) => void;
   onApplyAll: () => void;
   onClose: () => void;
@@ -2551,6 +2559,11 @@ function PriceReviewPanel({
                 </span>
                 {resumen.noLeidos > 0
                   ? ` · ${resumen.noLeidos} no se pudieron leer`
+                  : ""}
+                {resumen.fotosReparadas
+                  ? ` · ${resumen.fotosReparadas} ${
+                      resumen.fotosReparadas === 1 ? "foto repuesta" : "fotos repuestas"
+                    }`
                   : ""}
               </span>
               <div className="flex items-center gap-3 shrink-0">

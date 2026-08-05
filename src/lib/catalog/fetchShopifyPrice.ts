@@ -63,7 +63,9 @@ function productJsonUrl(url: string): string | null {
   }
 }
 
-export async function fetchShopifyPrice(url: string): Promise<ShopifyPrice | null> {
+// Pega al .js del producto y devuelve el JSON, o null. La misma respuesta trae
+// el precio Y las fotos, por eso la comparten precio e imagen.
+async function fetchShopifyProduct(url: string): Promise<Record<string, unknown> | null> {
   if (!isShopifyStoreUrl(url)) return null;
   const api = productJsonUrl(url);
   if (!api) return null;
@@ -73,21 +75,49 @@ export async function fetchShopifyPrice(url: string): Promise<ShopifyPrice | nul
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as Record<string, unknown>;
-    // Top-level = variante activa; si no viene, caemos a la primera variante.
-    const variant = (data["variants"] as Array<Record<string, unknown>> | undefined)?.[0];
-    const priceCents = Number(data["price"] ?? variant?.["price"]);
-    const compareCents = Number(data["compare_at_price"] ?? variant?.["compare_at_price"]);
-    if (!isFinite(priceCents) || priceCents <= 0) return null;
-    const price = Math.round(priceCents / 100);
-    // Si compare_at no viene (null → NaN) o es menor al price, no hay descuento:
-    // usamos el price como lista (mismo criterio que fetchVtexPrice).
-    const listPrice =
-      isFinite(compareCents) && compareCents >= priceCents
-        ? Math.round(compareCents / 100)
-        : price;
-    return { price, listPrice };
+    return (await res.json()) as Record<string, unknown>;
   } catch {
     return null;
   }
+}
+
+/**
+ * Foto principal del producto según el .js de Shopify (`featured_image`, o la
+ * primera de `images`). Shopify devuelve las rutas sin protocolo (`//cdn...`),
+ * así que se completan a https.
+ *
+ * Existe por lo mismo que fetchVtexImage: el catálogo guarda un LINK a la foto
+ * del proveedor y ese link muere cuando la tienda reemplaza la imagen.
+ */
+export async function fetchShopifyImage(url: string): Promise<string | null> {
+  const data = await fetchShopifyProduct(url);
+  if (!data) return null;
+  const featured = data["featured_image"];
+  const images = data["images"] as unknown[] | undefined;
+  const raw =
+    typeof featured === "string" && featured.length > 0
+      ? featured
+      : typeof images?.[0] === "string"
+        ? (images[0] as string)
+        : null;
+  if (!raw) return null;
+  return raw.startsWith("//") ? `https:${raw}` : raw;
+}
+
+export async function fetchShopifyPrice(url: string): Promise<ShopifyPrice | null> {
+  const data = await fetchShopifyProduct(url);
+  if (!data) return null;
+  // Top-level = variante activa; si no viene, caemos a la primera variante.
+  const variant = (data["variants"] as Array<Record<string, unknown>> | undefined)?.[0];
+  const priceCents = Number(data["price"] ?? variant?.["price"]);
+  const compareCents = Number(data["compare_at_price"] ?? variant?.["compare_at_price"]);
+  if (!isFinite(priceCents) || priceCents <= 0) return null;
+  const price = Math.round(priceCents / 100);
+  // Si compare_at no viene (null → NaN) o es menor al price, no hay descuento:
+  // usamos el price como lista (mismo criterio que fetchVtexPrice).
+  const listPrice =
+    isFinite(compareCents) && compareCents >= priceCents
+      ? Math.round(compareCents / 100)
+      : price;
+  return { price, listPrice };
 }

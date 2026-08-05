@@ -27,10 +27,22 @@
  * decide no aplicar nada. Cuando el link no responde se registra desde cuándo,
  * conservando la última lectura buena: MK da de baja los productos sin stock y
  * los repone, así que "no se pudo leer" no significa "link roto".
+ *
+ * Desde 2026-08-05 también REPARA LA FOTO (pendiente 132). El catálogo guarda
+ * el link a la foto que vive en el servidor del proveedor, y ese link muere
+ * cuando la tienda reemplaza la imagen: queda el recuadro vacío aunque el campo
+ * tenga dato. Como acá ya estamos visitando el producto, se aprovecha el viaje:
+ *   - se prueba la foto guardada (HEAD, en paralelo con el precio: no alarga la
+ *     revisión),
+ *   - SOLO si no carga (o no hay ninguna) se pide la que la tienda publica hoy.
+ * Si la foto guardada carga, no se toca: así no se pisan las fotos que MJ subió
+ * a mano (las embebidas `data:` se dan por vivas siempre). Es una reparación,
+ * no una sincronización.
  */
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { leerPrecioWeb } from "@/lib/catalog/leerPrecioWeb";
+import { leerFotoWeb, fotoSigueViva } from "@/lib/catalog/leerFotoWeb";
 import { requireSession } from "@/lib/apiAuth";
 
 // Vercel: el fetch a la web puede tardar; subimos el límite de la función
@@ -70,6 +82,36 @@ interface RevisionRow {
   // referencia de internet mientras está de baja.
   ultimaLecturaBuena?: { listPrice: number | null; salePrice: number | null; cuando: Date } | null;
   sinLeerDesde?: Date | null;
+  // ¿Se repuso la foto en esta pasada porque la guardada ya no cargaba? Es
+  // informativo: la foto se arregla sola, no hay nada que "aplicar".
+  fotoReparada?: boolean;
+}
+
+/**
+ * Repone la foto del artefacto si la que tiene guardada ya no carga.
+ *
+ * Se hace acá y no en un botón aparte porque "Revisar precios" ya está yendo a
+ * la página del producto. El chequeo es un HEAD (no baja la imagen) y corre en
+ * paralelo con la lectura del precio, así que no alarga la revisión; el pedido
+ * de la foto nueva solo ocurre para las que están rotas, que son unas pocas.
+ *
+ * Devuelve la foto nueva si la repuso, o null si no hizo falta (o si la tienda
+ * tampoco publica una que cargue: en ese caso se deja la guardada como está,
+ * para que quede el rastro de que alguna vez tuvo).
+ */
+async function repararFoto(it: {
+  id: string;
+  imageUrl: string | null;
+  referenceLink: string | null;
+}): Promise<string | null> {
+  if (!it.referenceLink) return null;
+  if (await fotoSigueViva(it.imageUrl)) return null;
+  const nueva = await leerFotoWeb(it.referenceLink);
+  if (!nueva || nueva === it.imageUrl) return null;
+  await prisma.artefactoCatalog
+    .update({ where: { id: it.id }, data: { imageUrl: nueva } })
+    .catch(() => {});
+  return nueva;
 }
 
 function total(listPrice: number, discount: number): number {
@@ -108,6 +150,7 @@ export async function POST(request: NextRequest) {
         referenceLink: true,
         listPrice: true,
         discountPercent: true,
+        imageUrl: true,
         webListPrice: true,
         webSalePrice: true,
         webCheckedAt: true,
@@ -117,83 +160,11 @@ export async function POST(request: NextRequest) {
 
     const rows: RevisionRow[] = await Promise.all(
       items.map(async (it): Promise<RevisionRow> => {
-        const link = it.referenceLink as string;
-        const storedDiscount = it.discountPercent ?? 0;
-        const base = {
-          id: it.id,
-          name: it.name,
-          detail: it.detail,
-          brand: it.brand,
-          referenceLink: link,
-          storedListPrice: it.listPrice,
-          storedDiscount,
-          storedTotal: total(it.listPrice, storedDiscount),
-        };
-        try {
-          // Lectura única para todas las tiendas (ver leerPrecioWeb.ts).
-          const web = await leerPrecioWeb(link);
-          if (!web) {
-            // No se pudo leer: se anota desde cuándo (si no estaba anotado ya)
-            // y se conserva la última lectura buena.
-            if (!it.webUnreadableSince) {
-              await prisma.artefactoCatalog
-                .update({ where: { id: it.id }, data: { webUnreadableSince: new Date() } })
-                .catch(() => {});
-            }
-            return {
-              ...base,
-              webListPrice: null, webDiscount: null, webTotal: null, delta: null,
-              discountKnown: false, changed: false, status: "sin-precio",
-              ultimaLecturaBuena: it.webCheckedAt
-                ? { listPrice: it.webListPrice, salePrice: it.webSalePrice, cuando: it.webCheckedAt }
-                : null,
-              sinLeerDesde: it.webUnreadableSince ?? new Date(),
-            };
-          }
-          // Lectura buena: se guarda como referencia y se limpia la marca de
-          // ilegible (el producto volvió).
-          await prisma.artefactoCatalog
-            .update({
-              where: { id: it.id },
-              data: {
-                webListPrice: web.listPrice,
-                webSalePrice: web.salePrice,
-                webCheckedAt: new Date(),
-                webUnreadableSince: null,
-              },
-            })
-            .catch(() => {});
-          const { listPrice: webListPrice, salePrice: webPrice, discount: webDiscount } = web;
-          // Cambió si difiere la lista, el descuento O el total (no solo el
-          // total — ver comentario en RevisionRow.changed).
-          // Si el descuento no es confiable (tienda sin API), no lo usamos
-          // como señal de cambio ni se aplicará: solo miramos la lista.
-          const changed = web.discountKnown
-            ? Math.abs(webListPrice - base.storedListPrice) > EPS_PESO ||
-              Math.abs(webDiscount - base.storedDiscount) > EPS_DCTO ||
-              Math.abs(webPrice - base.storedTotal) > EPS_PESO
-            : Math.abs(webListPrice - base.storedListPrice) > EPS_PESO;
-          return {
-            ...base,
-            webListPrice,
-            webDiscount,
-            webTotal: webPrice,
-            delta: webPrice - base.storedTotal,
-            discountKnown: web.discountKnown,
-            changed,
-            status: "ok",
-          };
-        } catch {
-          return {
-            ...base,
-            webListPrice: null, webDiscount: null, webTotal: null, delta: null,
-            discountKnown: false, changed: false, status: "error",
-            ultimaLecturaBuena: it.webCheckedAt
-              ? { listPrice: it.webListPrice, salePrice: it.webSalePrice, cuando: it.webCheckedAt }
-              : null,
-            sinLeerDesde: it.webUnreadableSince,
-          };
-        }
+        // La foto se revisa en paralelo con el precio (ver repararFoto): son
+        // dos viajes independientes, no se esperan entre sí.
+        const foto = repararFoto(it);
+        const row = await revisarPrecio(it);
+        return { ...row, fotoReparada: (await foto) != null };
       })
     );
 
@@ -209,13 +180,111 @@ export async function POST(request: NextRequest) {
     const conLink = items.length;
     const cambiaron = rows.filter((r) => r.changed).length;
     const noLeidos = rows.filter((r) => r.status !== "ok").length;
+    const fotosReparadas = rows.filter((r) => r.fotoReparada).length;
 
-    return NextResponse.json({ rows, resumen: { conLink, cambiaron, noLeidos } });
+    return NextResponse.json({
+      rows,
+      resumen: { conLink, cambiaron, noLeidos, fotosReparadas },
+    });
   } catch (error) {
     console.error("Error revisando precios de artefactos:", error);
     return NextResponse.json(
       { error: "Error al revisar precios" },
       { status: 500 }
     );
+  }
+}
+
+// Comparación guardado-vs-web de UN artefacto (lo de siempre; se separó en su
+// propia función para poder revisar la foto en paralelo).
+async function revisarPrecio(it: {
+  id: string;
+  name: string;
+  detail: string | null;
+  brand: string | null;
+  referenceLink: string | null;
+  listPrice: number;
+  discountPercent: number | null;
+  webListPrice: number | null;
+  webSalePrice: number | null;
+  webCheckedAt: Date | null;
+  webUnreadableSince: Date | null;
+}): Promise<RevisionRow> {
+  const link = it.referenceLink as string;
+  const storedDiscount = it.discountPercent ?? 0;
+  const base = {
+    id: it.id,
+    name: it.name,
+    detail: it.detail,
+    brand: it.brand,
+    referenceLink: link,
+    storedListPrice: it.listPrice,
+    storedDiscount,
+    storedTotal: total(it.listPrice, storedDiscount),
+  };
+  try {
+    // Lectura única para todas las tiendas (ver leerPrecioWeb.ts).
+    const web = await leerPrecioWeb(link);
+    if (!web) {
+      // No se pudo leer: se anota desde cuándo (si no estaba anotado ya)
+      // y se conserva la última lectura buena.
+      if (!it.webUnreadableSince) {
+        await prisma.artefactoCatalog
+          .update({ where: { id: it.id }, data: { webUnreadableSince: new Date() } })
+          .catch(() => {});
+      }
+      return {
+        ...base,
+        webListPrice: null, webDiscount: null, webTotal: null, delta: null,
+        discountKnown: false, changed: false, status: "sin-precio",
+        ultimaLecturaBuena: it.webCheckedAt
+          ? { listPrice: it.webListPrice, salePrice: it.webSalePrice, cuando: it.webCheckedAt }
+          : null,
+        sinLeerDesde: it.webUnreadableSince ?? new Date(),
+      };
+    }
+    // Lectura buena: se guarda como referencia y se limpia la marca de
+    // ilegible (el producto volvió).
+    await prisma.artefactoCatalog
+      .update({
+        where: { id: it.id },
+        data: {
+          webListPrice: web.listPrice,
+          webSalePrice: web.salePrice,
+          webCheckedAt: new Date(),
+          webUnreadableSince: null,
+        },
+      })
+      .catch(() => {});
+    const { listPrice: webListPrice, salePrice: webPrice, discount: webDiscount } = web;
+    // Cambió si difiere la lista, el descuento O el total (no solo el
+    // total — ver comentario en RevisionRow.changed).
+    // Si el descuento no es confiable (tienda sin API), no lo usamos
+    // como señal de cambio ni se aplicará: solo miramos la lista.
+    const changed = web.discountKnown
+      ? Math.abs(webListPrice - base.storedListPrice) > EPS_PESO ||
+        Math.abs(webDiscount - base.storedDiscount) > EPS_DCTO ||
+        Math.abs(webPrice - base.storedTotal) > EPS_PESO
+      : Math.abs(webListPrice - base.storedListPrice) > EPS_PESO;
+    return {
+      ...base,
+      webListPrice,
+      webDiscount,
+      webTotal: webPrice,
+      delta: webPrice - base.storedTotal,
+      discountKnown: web.discountKnown,
+      changed,
+      status: "ok",
+    };
+  } catch {
+    return {
+      ...base,
+      webListPrice: null, webDiscount: null, webTotal: null, delta: null,
+      discountKnown: false, changed: false, status: "error",
+      ultimaLecturaBuena: it.webCheckedAt
+        ? { listPrice: it.webListPrice, salePrice: it.webSalePrice, cuando: it.webCheckedAt }
+        : null,
+      sinLeerDesde: it.webUnreadableSince,
+    };
   }
 }

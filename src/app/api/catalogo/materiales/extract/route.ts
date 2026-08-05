@@ -24,6 +24,9 @@ import { fetchArtefactoData } from "@/lib/catalog/fetchArtefactoData";
 import { requireSession } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
+// Sale a la tienda a leer precio + ficha: hay sitios que tardan ~10 s en
+// contestar y sin esto Vercel corta la función antes de tiempo.
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   const gate = await requireSession();

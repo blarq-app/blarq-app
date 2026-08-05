@@ -6,6 +6,9 @@ import { requireSession } from "@/lib/apiAuth";
 // tienda, por texto. Devuelve candidatos con precio y stock de HOY para que
 // MJ elija cuál linkear cuando el producto viejo se movió o quiere cambiar
 // de fuente. Hoy solo tiendas VTEX (mK).
+// Sale a la tienda: con una tienda lenta, sin esto Vercel corta la función.
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   const gate = await requireSession();
   if (gate instanceof Response) return gate;

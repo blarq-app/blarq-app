@@ -4,7 +4,7 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Las obras archivadas salen del desplegable de proyecto (2026-08-05, rama `fix/desplegable-esconder-proyectos-archivados`, PR #379 abierto)**: pendiente 130. En la lista de Facturas el selector de proyecto mostraba 4 obras archivadas (Cocina Rodrigo de Triana, Depto Colon, Los Halcones, Muebles Cruz del Sur).
+- **Las obras archivadas salen del desplegable de proyecto (2026-08-05, rama `fix/desplegable-esconder-proyectos-archivados`, PR #379 MERGEADO y EN PROD 2026-08-05)**: pendiente 130. En la lista de Facturas el selector de proyecto mostraba 4 obras archivadas (Cocina Rodrigo de Triana, Depto Colon, Los Halcones, Muebles Cruz del Sur).
   - **La causa NO eran las cotizaciones.** El filtro que ya existía (`NOT { status: "cotizacion", isInternal: false }`) escondía bien las 4 cotizaciones reales. Lo que se colaba tenía `status = "archivado"`, un estado que se agregó después y que el filtro nunca contempló.
   - **El mismo `where` estaba copiado a mano en 5 pantallas** (facturas, detalle de factura, banco/movimientos, contabilidad/gastos, facturas por proyecto) — el prompt del pendiente listaba 4, la quinta (`facturas/[id]/page.tsx`) apareció con grep. Los 5 tenían el mismo agujero. Ahora el criterio vive en `src/lib/projects/asignables.ts`. Mismo patrón que el §3.2 de la auditoría de banco.
   - **OJO con el fix "obvio"**: hacerlo como *mostrar solo los proyectos numerados* mata BLARQ y CASA, que también salen sin número pero son los centros internos donde caen los gastos del estudio (385 y 17 facturas). El criterio correcto es **esconder las archivadas**, no mostrar solo las numeradas.

@@ -224,7 +224,12 @@ const CSS = `
   .hd { border-bottom: 0.3px solid #9B9182; padding: 3.5pt 0; margin-top: 7mm; font-size: 5pt; letter-spacing: .1em; text-transform: uppercase; color: #9B9182; font-weight: 700; }
   .hd span:nth-child(4){ text-align:center; } .hd span:nth-child(5),.hd span:nth-child(6),.hd span:nth-child(7){ text-align:right; }
 
-  .cap { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #36322C; padding: 5pt 2pt 3pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }
+  /* La línea que separa el capítulo de sus partidas va en 0.6px: sigue leyéndose
+     como corte, pero deja de ser la línea más gruesa de la hoja. Queda al mismo
+     peso que los títulos de bloque (.blk-title), y por encima del encabezado de
+     columnas (.hd, 0.3px) — la jerarquía de líneas del documento se mantiene.
+     Las del Cuadro Resumen (.cuadro) NO se tocan. */
+  .cap { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 0.6px solid #36322C; padding: 5pt 2pt 3pt; margin-top: 5pt; break-inside: avoid; break-after: avoid; }
   /* El primer capítulo se acerca al encabezado de columnas (menos aire que
      entre capítulos, que conservan su separación). */
   .hd + .chpage .cap { margin-top: 1pt; }

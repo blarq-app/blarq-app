@@ -71,9 +71,17 @@ model Project {
   // Movimientos bancarios conciliados a esta obra a mano (hoy: transferencias
   // internas Operativa→Sueldos imputadas a la obra). Ver BankMovement.projectId.
   bankMovements   BankMovement[]
-  // Objetivos % de la fila AVANCE del Cuadro Resumen, guardados por concepto
-  // (ej. {"obra":65,"cocina":100}). Es el borrador del próximo avance que MJ
-  // está armando para el cliente — se guarda para no perderlo al navegar.
+  // Estado guardado del Cuadro Resumen de esta obra. Dos cosas conviven en el
+  // mismo JSON, con claves distintas y sin pisarse:
+  //   - un número por concepto = el objetivo % de la fila AVANCE
+  //     (ej. {"obra":65,"cocina":100}). Es el borrador del próximo avance que
+  //     MJ está armando para el cliente — se guarda para no perderlo al navegar.
+  //   - "mostrarVersionAnterior": true|false = si el cuadro muestra la fila de
+  //     comparación con la versión anterior (pendiente 141). Va acá y no en una
+  //     columna nueva porque es la misma preferencia por obra del mismo cuadro,
+  //     y así no hubo que migrar la base viva por un booleano.
+  // El endpoint PUT /api/proyectos/[id]/avance-objetivos hace merge parcial:
+  // guardar una de las dos cosas no borra la otra.
   avanceObjetivos Json?
 
   @@index([maestroId])

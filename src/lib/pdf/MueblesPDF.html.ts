@@ -14,6 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { formatHerrajeName } from "@/lib/presupuesto/herrajeNombre";
 
 const PROFESSIONAL = "MARÍA JOSÉ BLANCO";
 
@@ -235,7 +236,9 @@ function renderHerrajes(herrajes?: MuebleHerrajeInput[]): string {
     .map((h) => {
       const spec = [h.measure, h.finish].filter(Boolean).join(" · ");
       const mut = spec ? ` <span class="hmut">· ${esc(spec)}</span>` : "";
-      return `<div class="hrow"><span class="hname">${esc(h.name)}${mut}</span><span class="hqty">${fmtQty(h.quantity)} UN</span></div>`;
+      // Nombre con la escritura homologada (pendiente 139) — el mismo helper
+      // que usa el editor, para que el PDF y la pantalla no puedan divergir.
+      return `<div class="hrow"><span class="hname">${esc(formatHerrajeName(h.name))}${mut}</span><span class="hqty">${fmtQty(h.quantity)} UN</span></div>`;
     })
     .join("");
 }

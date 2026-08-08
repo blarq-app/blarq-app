@@ -8,6 +8,7 @@ import {
 import { renderPDF } from "@/lib/pdf/renderPDF";
 import { requireSession } from "@/lib/apiAuth";
 import { aggregateShoppingItems } from "@/lib/listaCompra/perdidaCantidad";
+import { selectVigente } from "@/lib/projects/selectVersion";
 
 export async function GET(
   request: NextRequest,
@@ -37,13 +38,15 @@ export async function GET(
     const obraBudgets = await prisma.budgetVersion.findMany({
       where: { projectId: id, type: "obra" },
       orderBy: { createdAt: "desc" },
-      select: { id: true, version: true, status: true },
+      select: { id: true, version: true, status: true, createdAt: true },
     });
 
-    let selectedBudget = v ? obraBudgets.find((b) => b.id === v) : null;
-    if (!selectedBudget)
-      selectedBudget = obraBudgets.find((b) => b.status === "aprobado") || null;
-    if (!selectedBudget) selectedBudget = obraBudgets[0] || null;
+    // Mismo criterio que la pantalla: ?v=ID (elección manual) > la VIGENTE.
+    // Ver el comentario largo en lista-compra/page.tsx.
+    const selectedBudget =
+      (v ? obraBudgets.find((b) => b.id === v) : null) ??
+      selectVigente(obraBudgets) ??
+      null;
 
     let rows: ListaCompraRow[] = [];
 

@@ -5,9 +5,11 @@ import {
   aggregateShoppingItems,
   countItemsWithoutMaterial,
 } from "@/lib/listaCompra/perdidaCantidad";
+import { selectVigente } from "@/lib/projects/selectVersion";
 
 // Recalcula qtyNeeded agregando componentes de tipo "material" de cada partida
-// del presupuesto de obra más reciente (aprobado si existe).
+// de la versión de obra VIGENTE (la más reciente entre enviada y aprobada;
+// ver src/lib/projects/selectVersion.ts).
 // - Agrega/actualiza items NO manuales por (materialId) o (name+unit).
 // - Preserva qtyBought y notas.
 // - Items manuales quedan intactos.
@@ -23,17 +25,15 @@ export async function POST(
   try {
     const { id: projectId } = await params;
 
-    const budget =
-      (await prisma.budgetVersion.findFirst({
-        where: { projectId, type: "obra", status: "aprobado" },
-        orderBy: { createdAt: "desc" },
-        include: { obraItems: true },
-      })) ||
-      (await prisma.budgetVersion.findFirst({
-        where: { projectId, type: "obra" },
-        orderBy: { createdAt: "desc" },
-        include: { obraItems: true },
-      }));
+    // Antes acá había dos consultas encadenadas: primero la aprobada más
+    // reciente y, si no había ninguna, la más reciente de cualquier estado.
+    // Eso dejaba la sincronización pegada en una versión aprobada vieja aunque
+    // ya hubiera una versión nueva enviada. Ahora es el criterio único.
+    const versions = await prisma.budgetVersion.findMany({
+      where: { projectId, type: "obra" },
+      select: { id: true, status: true, createdAt: true },
+    });
+    const budget = selectVigente(versions);
 
     if (!budget) {
       return NextResponse.json(

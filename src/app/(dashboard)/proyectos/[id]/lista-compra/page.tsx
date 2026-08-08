@@ -8,6 +8,7 @@ import {
   aggregateShoppingItems,
   countItemsWithoutMaterial,
 } from "@/lib/listaCompra/perdidaCantidad";
+import { selectVigente } from "@/lib/projects/selectVersion";
 
 export default async function ListaCompraPage({
   params,
@@ -32,11 +33,19 @@ export default async function ListaCompraPage({
     select: { id: true, version: true, status: true, createdAt: true },
   });
 
-  // Presupuesto seleccionado: ?v=ID > aprobado más reciente > último
-  let selectedBudget = v ? obraBudgets.find((b) => b.id === v) : null;
-  if (!selectedBudget)
-    selectedBudget = obraBudgets.find((b) => b.status === "aprobado") || null;
-  if (!selectedBudget) selectedBudget = obraBudgets[0] || null;
+  // Presupuesto seleccionado: ?v=ID (elección manual de MJ) > la VIGENTE.
+  //
+  // Antes acá decía "la aprobada más reciente > la última". Eso obligaba a MJ a
+  // sacarle el "aprobada" a la V2 y ponérsela a la V3 cada vez que el proyecto
+  // avanzaba de versión, porque si no la lista de compra se quedaba pegada en
+  // la versión vieja. Ahora usa el MISMO criterio que la plata y los EP
+  // (selectVigente): manda la más reciente entre enviada y aprobada. El estado
+  // "aprobado" sigue existiendo como registro de qué firmó el cliente y como
+  // candado para no borrar esa versión, pero ya no decide cuál manda.
+  const selectedBudget =
+    (v ? obraBudgets.find((b) => b.id === v) : null) ??
+    selectVigente(obraBudgets) ??
+    null;
 
   // Traer partidas con catalogo y componentes
   let computed: ComputedRow[] = [];

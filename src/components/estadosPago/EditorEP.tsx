@@ -1,8 +1,9 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatDate } from "@/lib/utils";
+import { SenalGuardado, useSenalGuardado } from "@/components/banco/senalGuardado";
 import { groupEpItemsByChapter } from "@/lib/presupuesto/chapters";
 import { annotateZones } from "@/lib/presupuesto/zones";
 import {
@@ -90,9 +91,16 @@ export default function EditorEP({
   const [items, setItems] = useState<Item[]>(ep.items);
   const [date, setDate] = useState(ep.date.split("T")[0]);
   const [notes, setNotes] = useState(ep.notes || "");
-  const [saving, setSaving] = useState(false);
-  const [dirty, setDirty] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
+  // El EP guarda SOLO, al salir de cada campo — igual que el editor de obra y
+  // el de muebles. Antes tenía un botón "Guardar cambios" y era la única
+  // pantalla de la app que lo pedía: salir sin apretarlo perdía todo el avance
+  // cargado. La señal "guardando… / ✓ guardado" es la misma que usa el banco.
+  const { busy, confirmado, setSaving, refrescarYConfirmar } = useSenalGuardado();
+  // Lo último que quedó confirmado en el servidor para fecha y notas, para no
+  // mandar un guardado cuando el campo se abandona sin haber cambiado nada.
+  const fechaGuardada = useRef(ep.date.split("T")[0]);
+  const notasGuardadas = useRef(ep.notes || "");
   // input mode por item: por default es "pct" (decisión: el usuario calcula
   // el % en su cabeza y lo tipea; la cantidad ejecutada se deriva).
   const [inputMode, setInputMode] = useState<Record<string, "qty" | "pct">>({});
@@ -159,10 +167,54 @@ export default function EditorEP({
     return m;
   }, [chapterGroups]);
 
+  // ── Guardado ──────────────────────────────────────────────────────────
+  //
+  // Los guardados se encadenan uno detrás de otro: nunca hay dos escrituras en
+  // vuelo al mismo tiempo. Es la lección del PR #202 (las cantidades de
+  // herrajes mandaban un PUT por tecla y las respuestas se pisaban). Acá el
+  // disparo ya es al salir del campo, no por tecla, y la cola cierra el resto:
+  // además permite ESPERAR lo pendiente antes de cerrar el EP o abrir el PDF.
+  const colaGuardado = useRef<Promise<unknown>>(Promise.resolve());
+  const pendientes = useRef(0);
+
+  function encolar(tarea: () => Promise<void>) {
+    pendientes.current += 1;
+    setSaving(true);
+    colaGuardado.current = colaGuardado.current
+      .then(tarea, tarea)
+      .catch(() => {})
+      .then(() => {
+        pendientes.current -= 1;
+        // El refresco de pantalla va FUERA de la cola, y recién cuando no queda
+        // nada por mandar: así cargar cinco partidas seguidas hace UN refresco
+        // en vez de cinco. Metido adentro, cada guardado esperaba el re-render
+        // del anterior y la cola se arrastraba varios segundos — lo suficiente
+        // para que el último avance todavía no hubiera salido al recargar.
+        if (pendientes.current === 0) {
+          refrescarYConfirmar();
+          setSaving(false);
+        }
+      });
+  }
+
+  // La cola tiene SOLO los guardados, así que esperarla es rápido.
+  function esperarGuardados() {
+    return colaGuardado.current;
+  }
+
+  function mostrarError(id: string, err: string) {
+    setErrorByItem((m) => ({ ...m, [id]: err }));
+    // Limpiar mensaje a los 5s
+    setTimeout(() => setErrorByItem((m) => ({ ...m, [id]: null })), 5000);
+  }
+
   // ── Edición ───────────────────────────────────────────────────────────
-  function tryUpdateQty(id: string, newQty: number) {
+  // Guarda el avance de UNA partida. Se llama al SALIR del campo (blur/Enter),
+  // no en cada tecla: así el número que se guarda es exactamente el que MJ
+  // terminó de escribir, y no uno intermedio ("5" camino a "50").
+  function tryUpdateQty(id: string, newQty: number): boolean {
     const item = items.find((i) => i.id === id);
-    if (!item || isClosed || item.outOfScope) return;
+    if (!item || isClosed || item.outOfScope) return false;
     const snap = snapshotsById[id];
     const err = validateQuantityExecuted(newQty, {
       prevExecutedQuantity: snap.prevExecutedQuantity,
@@ -170,14 +222,18 @@ export default function EditorEP({
       outOfScope: snap.outOfScope,
     });
     if (err) {
-      setErrorByItem((m) => ({ ...m, [id]: err }));
-      // Limpiar mensaje a los 5s
-      setTimeout(
-        () => setErrorByItem((m) => ({ ...m, [id]: null })),
-        5000
-      );
-      return;
+      mostrarError(id, err);
+      return false;
     }
+    // Sin cambio real: no vale la pena molestar al servidor (pasa cada vez que
+    // se entra y se sale de un campo sin tocarlo, tabulando por la tabla).
+    if (Math.abs(newQty - item.quantityExecuted) < 1e-9) return true;
+
+    // Valores previos, por si el servidor rechaza y hay que volver atrás.
+    const qtyPrevia = item.quantityExecuted;
+    const pctPrevio = item.pctAccumulated;
+
+    // La pantalla se actualiza al toque; el guardado va detrás.
     setItems((prev) =>
       prev.map((i) =>
         i.id === id
@@ -191,57 +247,76 @@ export default function EditorEP({
       )
     );
     setErrorByItem((m) => ({ ...m, [id]: null }));
-    setDirty(true);
+
+    encolar(async () => {
+      // Si no quedó guardado, la pantalla no puede seguir mostrándolo como si
+      // sí: se vuelve al valor anterior y se explica por qué.
+      const revertir = () =>
+        setItems((prev) =>
+          prev.map((i) =>
+            i.id === id
+              ? { ...i, quantityExecuted: qtyPrevia, pctAccumulated: pctPrevio }
+              : i
+          )
+        );
+      try {
+        const res = await fetch(`/api/estados-pago/${ep.id}/items/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ quantityExecuted: newQty }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          revertir();
+          mostrarError(id, j.error || "No se pudo guardar el avance.");
+        }
+      } catch {
+        revertir();
+        mostrarError(id, "No se pudo guardar: revisá la conexión.");
+      }
+    });
+
+    return true;
   }
 
   function setMode(id: string, mode: "qty" | "pct") {
     setInputMode((m) => ({ ...m, [id]: mode }));
   }
 
-  // ── Guardado / Cierre / Sync ──────────────────────────────────────────
-  async function save() {
-    setSaving(true);
-    try {
+  // Fecha y notas del encabezado. Van por el PUT del EP (no tocan partidas),
+  // también al salir del campo.
+  function guardarCabecera(patch: { date?: string; notes?: string }) {
+    encolar(async () => {
       const res = await fetch(`/api/estados-pago/${ep.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date,
-          notes,
-          items: items.map((i) => ({
-            id: i.id,
-            quantityExecuted: i.quantityExecuted,
-            pctAccumulated: i.pctAccumulated,
-            descriptionMaestro: i.descriptionMaestro,
-          })),
-        }),
+        body: JSON.stringify(patch),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         alert(j.error || "Error al guardar");
-        return false;
+        // Volver a lo último confirmado: el campo no puede quedar mostrando
+        // algo que no se guardó.
+        if (patch.date !== undefined) setDate(fechaGuardada.current);
+        if (patch.notes !== undefined) setNotes(notasGuardadas.current);
+        return;
       }
-      setDirty(false);
-      router.refresh();
-      return true;
-    } finally {
-      setSaving(false);
-    }
+      if (patch.date !== undefined) fechaGuardada.current = patch.date;
+      if (patch.notes !== undefined) notasGuardadas.current = patch.notes;
+    });
   }
 
+  // ── Cierre / Sync / PDF ───────────────────────────────────────────────
+  // Las tres esperan la cola: al hacer clic el campo que estaba en foco dispara
+  // su blur y encola su guardado, pero ese guardado todavía está viajando. Sin
+  // el await, el PDF podría salir sin el último avance tipeado.
   async function openSyncModal() {
-    if (dirty) {
-      const ok = await save();
-      if (!ok) return;
-    }
+    await esperarGuardados();
     setShowSyncModal(true);
   }
 
   async function closeEp() {
-    if (dirty) {
-      const ok = await save();
-      if (!ok) return;
-    }
+    await esperarGuardados();
     if (
       !confirm(
         "¿Cerrar este EP?\n\n" +
@@ -266,12 +341,15 @@ export default function EditorEP({
     }
   }
 
-  async function openPdf() {
-    if (dirty) {
-      const ok = await save();
-      if (!ok) return;
-    }
-    window.open(`/api/estados-pago/${ep.id}/pdf?variant=maestro`, "_blank");
+  function openPdf() {
+    // La pestaña se abre SINCRÓNICAMENTE, dentro del clic. Si se abriera recién
+    // después de esperar el guardado, el bloqueador de pop-ups la mataría.
+    const pestana = window.open("", "_blank");
+    esperarGuardados().then(() => {
+      const url = `/api/estados-pago/${ep.id}/pdf?variant=maestro`;
+      if (pestana) pestana.location.href = url;
+      else window.open(url, "_blank");
+    });
   }
 
   async function handleDelete() {
@@ -300,9 +378,9 @@ export default function EditorEP({
                 editable={!isClosed}
                 inputType="date"
                 value={date}
-                onChange={(v) => {
-                  setDate(v);
-                  setDirty(true);
+                onChange={setDate}
+                onCommit={(v) => {
+                  if (v !== fechaGuardada.current) guardarCabecera({ date: v });
                 }}
               />
               <Field
@@ -351,27 +429,24 @@ export default function EditorEP({
 
         {/* Acciones */}
         <div className="flex items-center justify-end gap-2 mt-5 pt-4 border-t border-gray-100">
+          {/* No hay botón de guardar: el EP guarda solo al salir de cada campo.
+              Acá va la señal de que quedó guardado, en un lugar fijo — el mismo
+              lugar donde antes estaba el botón. */}
+          {!isClosed && (
+            <span className="mr-auto">
+              <SenalGuardado busy={busy} confirmado={confirmado} />
+            </span>
+          )}
           {hasNewerVersion && !isClosed && (
             <button
               onClick={openSyncModal}
-              disabled={saving}
               className="text-xs px-3 py-1.5 rounded border border-amber-300 bg-amber-50 text-amber-800 hover:border-amber-500"
             >
               Sincronizar con {latestBudgetVersion?.version}
             </button>
           )}
-          {!isClosed && (
-            <button
-              onClick={save}
-              disabled={saving || !dirty}
-              className="text-xs px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
-            >
-              {saving ? "Guardando…" : dirty ? "Guardar cambios" : "Guardado"}
-            </button>
-          )}
           <button
             onClick={openPdf}
-            disabled={saving}
             className="text-xs px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50"
           >
             Exportar PDF
@@ -379,7 +454,6 @@ export default function EditorEP({
           {!isClosed && (
             <button
               onClick={closeEp}
-              disabled={saving}
               className="text-xs px-3 py-1.5 rounded bg-gray-900 text-white hover:bg-gray-700"
             >
               Cerrar EP
@@ -388,7 +462,6 @@ export default function EditorEP({
           {!isClosed && (
             <button
               onClick={handleDelete}
-              disabled={saving}
               className="text-xs px-3 py-1.5 rounded text-red-500 hover:text-red-700"
             >
               Eliminar
@@ -506,51 +579,15 @@ export default function EditorEP({
                       ) : (
                         <div>
                           <div className="flex items-center gap-1 justify-end leading-none">
-                            {mode === "pct" ? (
-                              <>
-                                <input
-                                  type="number"
-                                  step="1"
-                                  min={0}
-                                  max={100}
-                                  value={Number(c.pctAccumulatedCurrent.toFixed(2))}
-                                  onFocus={(e) => e.currentTarget.select()}
-                                  onChange={(e) => {
-                                    const pct = parseFloat(e.target.value) || 0;
-                                    tryUpdateQty(i.id, pctToQuantity(pct, i.quantity));
-                                  }}
-                                  className="w-12 border border-gray-300 rounded px-1 py-0.5 text-right text-xs tabular-nums bg-gray-50/40 focus:bg-white focus:ring-1 focus:ring-gray-900 outline-none"
-                                />
-                                <span className="text-[10px] text-gray-500">%</span>
-                                <button
-                                  onClick={() => setMode(i.id, "qty")}
-                                  className="text-[10px] text-gray-300 hover:text-gray-600 tabular-nums leading-none"
-                                  title={`Cambiar a cantidad — equivale a ${fmtNum(i.quantityExecuted)} ${i.unit.toLowerCase()}`}
-                                >
-                                  ({fmtNum(i.quantityExecuted)})
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={i.quantityExecuted}
-                                  onFocus={(e) => e.currentTarget.select()}
-                                  onChange={(e) =>
-                                    tryUpdateQty(i.id, parseFloat(e.target.value) || 0)
-                                  }
-                                  className="w-14 border border-gray-300 rounded px-1 py-0.5 text-right text-xs tabular-nums bg-gray-50/40 focus:bg-white focus:ring-1 focus:ring-gray-900 outline-none"
-                                />
-                                <button
-                                  onClick={() => setMode(i.id, "pct")}
-                                  className="text-[10px] text-gray-300 hover:text-gray-600 tabular-nums leading-none"
-                                  title="Cambiar a %"
-                                >
-                                  ({c.pctAccumulatedCurrent.toFixed(0)}%)
-                                </button>
-                              </>
-                            )}
+                            <AvanceInput
+                              mode={mode}
+                              pctValue={c.pctAccumulatedCurrent}
+                              qtyValue={i.quantityExecuted}
+                              totalQuantity={i.quantity}
+                              unit={i.unit}
+                              onCommitQty={(q) => tryUpdateQty(i.id, q)}
+                              onSetMode={(m) => setMode(i.id, m)}
+                            />
                           </div>
                           {err && (
                             <div className="text-[10px] text-red-600 leading-tight mt-0.5">
@@ -656,9 +693,11 @@ export default function EditorEP({
           </label>
           <textarea
             value={notes}
-            onChange={(e) => {
-              setNotes(e.target.value);
-              setDirty(true);
+            onChange={(e) => setNotes(e.target.value)}
+            onBlur={(e) => {
+              if (e.target.value !== notasGuardadas.current) {
+                guardarCabecera({ notes: e.target.value });
+              }
             }}
             disabled={isClosed}
             rows={2}
@@ -684,6 +723,98 @@ export default function EditorEP({
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────
+
+// Campo de avance de una partida. Edita en LOCAL mientras se tipea y recién
+// manda al servidor al SALIR del campo (blur o Enter) — mismo criterio que la
+// cantidad del editor de obra y la de herrajes en muebles.
+//
+// Por qué importa acá: antes guardaba en cada tecla, así que escribir "50"
+// pasaba primero por "5" y disparaba dos guardados; con la validación de tope
+// del EP, un intermedio podía quedar rechazado o pisado por la respuesta del
+// otro. Al salir del campo se guarda una sola vez, el número final.
+//
+// Se puede tipear el % (default) o la cantidad; el botoncito gris de al lado
+// cambia de modo y muestra el equivalente en la otra unidad.
+function AvanceInput({
+  mode,
+  pctValue,
+  qtyValue,
+  totalQuantity,
+  unit,
+  onCommitQty,
+  onSetMode,
+}: {
+  mode: "qty" | "pct";
+  pctValue: number;
+  qtyValue: number;
+  totalQuantity: number;
+  unit: string;
+  // Devuelve false si el valor no era admisible (tope del EP): ahí el campo
+  // vuelve a mostrar lo que había.
+  onCommitQty: (qty: number) => boolean;
+  onSetMode: (mode: "qty" | "pct") => void;
+}) {
+  const valorExterno =
+    mode === "pct" ? Number(pctValue.toFixed(2)) : Number(qtyValue.toFixed(4));
+  const [draft, setDraft] = useState(String(valorExterno));
+  // Re-sincroniza cuando el valor cambia desde afuera (se guardó, se revirtió,
+  // se sincronizó con otra versión) o cuando se cambia de modo % ↔ cantidad.
+  useEffect(() => {
+    setDraft(String(valorExterno));
+  }, [valorExterno, mode]);
+
+  function commit() {
+    const n = parseFloat(draft);
+    if (Number.isNaN(n)) {
+      setDraft(String(valorExterno));
+      return;
+    }
+    const nuevaQty = mode === "pct" ? pctToQuantity(n, totalQuantity) : n;
+    if (!onCommitQty(nuevaQty)) setDraft(String(valorExterno));
+  }
+
+  return (
+    <>
+      <input
+        type="number"
+        step={mode === "pct" ? "1" : "0.01"}
+        min={0}
+        max={mode === "pct" ? 100 : undefined}
+        value={draft}
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        className={`${
+          mode === "pct" ? "w-12" : "w-14"
+        } border border-gray-300 rounded px-1 py-0.5 text-right text-xs tabular-nums bg-gray-50/40 focus:bg-white focus:ring-1 focus:ring-gray-900 outline-none`}
+      />
+      {mode === "pct" ? (
+        <>
+          <span className="text-[10px] text-gray-500">%</span>
+          <button
+            onClick={() => onSetMode("qty")}
+            className="text-[10px] text-gray-300 hover:text-gray-600 tabular-nums leading-none"
+            title={`Cambiar a cantidad — equivale a ${fmtNum(qtyValue)} ${unit.toLowerCase()}`}
+          >
+            ({fmtNum(qtyValue)})
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={() => onSetMode("pct")}
+          className="text-[10px] text-gray-300 hover:text-gray-600 tabular-nums leading-none"
+          title="Cambiar a %"
+        >
+          ({pctValue.toFixed(0)}%)
+        </button>
+      )}
+    </>
+  );
+}
+
 function fmtNum(n: number): string {
   return new Intl.NumberFormat("es-CL", {
     maximumFractionDigits: 2,
@@ -697,6 +828,7 @@ function Field({
   editable,
   inputType,
   onChange,
+  onCommit,
   badge,
 }: {
   label: string;
@@ -705,6 +837,8 @@ function Field({
   editable?: boolean;
   inputType?: string;
   onChange?: (v: string) => void;
+  // Guardado: se dispara al SALIR del campo, no en cada tecla.
+  onCommit?: (v: string) => void;
   badge?: string | null;
 }) {
   return (
@@ -722,6 +856,10 @@ function Field({
           type={inputType ?? "text"}
           value={value}
           onChange={(e) => onChange?.(e.target.value)}
+          onBlur={(e) => onCommit?.(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
           className="text-sm text-gray-900 bg-transparent border-0 p-0 focus:ring-0 outline-none"
         />
       ) : rawValue !== undefined ? (

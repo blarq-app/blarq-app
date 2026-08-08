@@ -10,6 +10,7 @@
  */
 import fs from "fs";
 import path from "path";
+import { formatHerrajeName } from "@/lib/presupuesto/herrajeNombre";
 
 export interface MueblistaHerrajeInput {
   sector: string;
@@ -87,9 +88,11 @@ function renderSector(sector: string, lines: MueblistaHerrajeInput[]): string {
   const rows = lines
     .map((h) => {
       const spec = [h.measure, h.finish].filter(Boolean).join(" · ");
+      // El nombre va homologado en estilo oración (pendiente 139) con el mismo
+      // helper que usa el editor, para que PDF y pantalla no puedan divergir.
       return `
       <tr>
-        <td>${esc(h.name)}</td>
+        <td>${esc(formatHerrajeName(h.name))}</td>
         <td class="c-spec">${esc(spec) || "—"}</td>
         <td class="c-prov">${esc(h.supplier)}</td>
         <td class="c-qty">${fmtQty(h.quantity)}</td>

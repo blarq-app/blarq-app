@@ -36,6 +36,11 @@ function fmtFechaMovimiento(iso: string): string {
 
 // Una transferencia interna Operativa→Sueldos conciliada a esta obra. Es el
 // detalle de "Ya transferido": el usuario ve de qué está hecho ese total.
+// Una celda de pago ya lista para pintar: el monto de UN concepto, la factura
+// con que se cobró y la fecha en que entró. La fecha viaja en la celda (y no en
+// la fila) porque cada columna se apila por su cuenta — ver `filasPagos`.
+type CeldaPago = { monto: number; folio: string | null; date: Date };
+
 export type TransferenciaSueldo = {
   id: string;
   date: string; // ISO — se serializa en el server component
@@ -175,6 +180,43 @@ export default function CuadroResumenAvance({
     const transferidoDeMas = transferidoTotal - generadoTotal > 1000;
     return { porConcepto, totalAPedir, totalSaldoNuevo, generadoTotal, aTransferir, transferidoDeMas };
   }, [conceptos, avance, transferido, transferidoTotal]);
+
+  // ── Pagos: cada columna de corrido, compactada hacia arriba ──────────────
+  //
+  // El cálculo (`computeCuadroResumen`) agrupa los pagos por FECHA EXACTA: una
+  // fila por día, y si un concepto no se cobró ese día su celda queda con
+  // guion. Eso se veía desordenado — en Paseo del Sena la obra tiene pagos el
+  // 08-06, 10-06, 29-06 y 06-07, y muebles solo los dos últimos, así que la
+  // columna MUEBLES arrancaba dos filas más abajo con dos huecos arriba.
+  //
+  // Acá reapilamos SOLO PARA MOSTRAR: cada concepto lista sus propios pagos en
+  // orden de fecha, sin huecos, y los guiones quedan al final (donde un
+  // concepto tiene menos pagos que otro). No se pierde nada: cada concepto ya
+  // trae su propia sub-columna FECHA, así que alinear por día no aportaba.
+  //
+  // Es un cambio de PRESENTACIÓN: los montos son los mismos, así que TOTAL
+  // PAGOS, AVANCE y SALDO (que se calculan aparte, sobre `conceptos`) no se
+  // mueven. Tampoco toca "Me paso a Sueldos", que comparte el mismo cálculo.
+  const filasPagos = useMemo<Partial<Record<ConceptoKey, CeldaPago>>[]>(() => {
+    // `pagos` ya viene ordenado por fecha, así que filtrar preserva el orden.
+    const columnas = conceptos.map((c) => ({
+      key: c.key,
+      celdas: pagos
+        .filter((r) => r.porConcepto[c.key].monto)
+        .map((r) => ({
+          monto: r.porConcepto[c.key].monto,
+          folio: r.porConcepto[c.key].folio,
+          date: r.date,
+        })),
+    }));
+    // Alto de la tabla = el concepto con más pagos.
+    const alto = columnas.reduce((max, col) => Math.max(max, col.celdas.length), 0);
+    return Array.from({ length: alto }, (_, i) => {
+      const fila: Partial<Record<ConceptoKey, CeldaPago>> = {};
+      for (const col of columnas) if (col.celdas[i]) fila[col.key] = col.celdas[i];
+      return fila;
+    });
+  }, [conceptos, pagos]);
 
   // ── Descargar como imagen (versión limpia para el cliente) ───────────────
   // No fotografiamos el formulario (cajitas rojas, inputs). Renderizamos una
@@ -333,17 +375,17 @@ export default function CuadroResumenAvance({
                 <td className="py-1 pl-1 border-l border-gray-200 text-right whitespace-nowrap">{formatCLP(totalAcordado)}</td>
               </tr>
 
-              {/* Cobros (agrupados por fecha) */}
-              {pagos.map((r, i) => (
+              {/* Cobros — cada columna de corrido (ver `filasPagos`) */}
+              {filasPagos.map((fila, i) => (
                 <tr key={i} className="border-b border-gray-50 text-gray-700">
                   <td className="py-1 pr-1"></td>
                   {conceptos.map((c) => {
-                    const cell = r.porConcepto[c.key];
+                    const cell = fila[c.key];
                     return (
                       <Fragment key={c.key}>
-                        <td className="py-1 px-1 border-l border-gray-100 text-left text-gray-500 whitespace-nowrap">{cell.monto ? fmtDate(r.date) : ""}</td>
-                        <td className="py-1 px-1 text-right whitespace-nowrap">{cellMonto(cell.monto)}</td>
-                        <td className="py-1 px-1 text-right text-gray-500">{cell.monto && cell.folio ? cell.folio : ""}</td>
+                        <td className="py-1 px-1 border-l border-gray-100 text-left text-gray-500 whitespace-nowrap">{cell ? fmtDate(cell.date) : ""}</td>
+                        <td className="py-1 px-1 text-right whitespace-nowrap">{cellMonto(cell?.monto ?? 0)}</td>
+                        <td className="py-1 px-1 text-right text-gray-500">{cell?.folio ?? ""}</td>
                       </Fragment>
                     );
                   })}
@@ -643,17 +685,17 @@ export default function CuadroResumenAvance({
                 <td className="py-1.5 pl-2 border-l border-gray-200 text-right whitespace-nowrap">{formatCLP(totalAcordado)}</td>
               </tr>
 
-              {/* Cobros */}
-              {pagos.map((r, i) => (
+              {/* Cobros — mismo apilado por columna que en pantalla */}
+              {filasPagos.map((fila, i) => (
                 <tr key={i} className="border-b border-gray-50 text-gray-700">
                   <td className="py-1.5 pr-2"></td>
                   {conceptos.map((c) => {
-                    const cell = r.porConcepto[c.key];
+                    const cell = fila[c.key];
                     return (
                       <Fragment key={c.key}>
-                        <td className="py-1.5 px-2 border-l border-gray-100 text-left text-gray-500 whitespace-nowrap">{cell.monto ? fmtDate(r.date) : ""}</td>
-                        <td className="py-1.5 px-2 text-right whitespace-nowrap">{cellMonto(cell.monto)}</td>
-                        <td className="py-1.5 px-2 text-right text-gray-500">{cell.monto && cell.folio ? cell.folio : ""}</td>
+                        <td className="py-1.5 px-2 border-l border-gray-100 text-left text-gray-500 whitespace-nowrap">{cell ? fmtDate(cell.date) : ""}</td>
+                        <td className="py-1.5 px-2 text-right whitespace-nowrap">{cellMonto(cell?.monto ?? 0)}</td>
+                        <td className="py-1.5 px-2 text-right text-gray-500">{cell?.folio ?? ""}</td>
                       </Fragment>
                     );
                   })}

@@ -1,8 +1,18 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-05.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-08.
 
 ---
+
+- **La Lista de compra sigue la versión VIGENTE, no "la aprobada" (2026-08-08, rama `fix/lista-compra-version-vigente`, PR #386 MERGEADO y EN PROD 2026-08-08)**: pendiente 142. MJ: aprobada la V2, cuando el proyecto avanzaba a una V3 la lista se quedaba pegada en la V2 y había que sacarle el "aprobada" a la vieja y ponérsela a la nueva a mano — aunque un proyecto aprobado ya no se desaprueba nunca.
+  - **La causa: convivían dos criterios de qué versión manda.** El unificado (`src/lib/projects/selectVersion.ts` — la más reciente entre *enviada* y *aprobada*) ya lo usaban `metrics.ts`, el Resumen, el Cuadro Resumen, `fondoSueldos.ts` y los EP (vía `findLatestObraBudget`). La Lista de compra quedó afuera de la unificación de 2026-07-22 y seguía con "la aprobada más reciente > la última", **copiado en sus tres caminos**: pantalla, PDF y sync.
+  - **Ahora los tres usan `selectVigente`.** Se conserva el override manual `?v=ID` del selector de presupuesto, que manda por encima del criterio.
+  - **El estado "aprobado" NO se tocó ni se eliminó**: sigue siendo el registro de qué versión firmó el cliente y el candado que impide borrarla (`presupuestos/[id]/route.ts`). Lo único que pierde es decidir cuál manda.
+  - **Efecto medido en la viva**: cambian **2 de 13** proyectos con presupuesto de obra, los dos con el problema al revés — **Cocina Candelaria** y **Casa Los Algarrobos** tienen V1 enviada + V2 borrador y la lista tomaba el **borrador** mientras la plata tomaba la V1. Pasan a la V1: mismos 60 y 88 materiales, cambian cantidades (6 y 43 líneas). Ningún otro proyecto se mueve. Script: `scripts/diag-142-lista-compra-vigente.ts` (se le pasa el env a mano, §4.9).
+  - **Los EP ya usaban el criterio único.** Las dos menciones a `status === "aprobado"` que quedan en `NuevoEPButton.tsx` y `SyncDiffModal.tsx` son **rótulos** del desplegable ("aprobado" → "aprobada"), no eligen versión: no había nada que alinear.
+  - **Dato suelto**: `lista-compra/sync/route.ts` **no lo llama nadie** en el código hoy — no hay botón de "Sincronizar" enganchado. Se alineó igual para que no divergiera de nuevo.
+  - **GOTCHA de git que costó tiempo**: `[id]` en una ruta es un **comodín de pathspec**. `git add` / `git stash push` / `git checkout` sobre `src/app/api/proyectos/[id]/...` no hacen nada y avisan "No local changes to save" — hay que usar `git add ':(literal)<ruta>'`.
+  - **Alcance**: solo los 3 archivos de `lista-compra`. **No toca `metrics.ts` ni ningún cálculo de plata** — la lista de compra no mueve montos. El Resumen y el Cuadro Resumen quedan idénticos.
 
 - **Fotos rotas del catálogo de artefactos (2026-08-05, rama `fix/catalogo-fotos-rotas`, pendiente 132)**: MJ vio el TOALLERO 30CM CROMO con el recuadro de foto vacío aunque tenía link. **La causa**: el catálogo no guarda la foto, guarda el LINK a la foto que vive en el servidor del proveedor (`mkchile.vtexassets.com`, `byp.vtexassets.com`). Cuando MK o BYP reemplazan la imagen cambia el id del archivo y el link viejo queda en 404: el campo `imageUrl` sigue lleno pero la pantalla muestra el cuadrito vacío.
   - **Por qué no se arreglaba solo**: "Revisar precios" solo leía precios y nunca tocaba `imageUrl`. La foto entraba por un único camino — el botón "Extraer" AL CREAR el artefacto — así que una foto rota quedaba rota para siempre.

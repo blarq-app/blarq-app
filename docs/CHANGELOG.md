@@ -4,6 +4,15 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-08-08 — Herrajes: alta de un clic, una sola forma de escribir los nombres, y filas que se arrastran
+
+- **Agregar un herraje del catálogo eran dos pasos y ahora es uno.** `+ elegir` marcaba la fila y un bloque de abajo con sector + cantidad + `Agregar` recién creaba la línea; ahora `+ agregar` la crea con cantidad 1 y la cantidad se ajusta en la propia línea (ya era editable, PR #202). La fila sigue **sin** ser clickeable entera a propósito, para no perder el link al producto.
+- **El SECTOR salió del alta por decisión de MJ.** Consecuencia viva: **hoy no hay ningún lugar donde asignarle sector a una línea de herraje**. Lo nuevo entra sin sector; lo que ya lo tiene se sigue mostrando agrupado. Queda pendiente retomarlo.
+- **Una sola fuente de cómo se ESCRIBE un nombre de herraje**: `src/lib/presupuesto/herrajeNombre.ts` (`formatHerrajeName`), usado por el editor **y por los dos PDF** (cliente y mueblista). El catálogo se cargó por tandas y tenía tres estilos conviviendo (HBT en MAYÚSCULA por script, DPH mezclando oración / Title Case / MAYÚSCULA). MJ eligió **cada palabra con mayúscula**, conservando marcas (`Spacetower Merivobox`), letra de modelo de Blum (`Merivobox E`), siglas (`3D`) y la L de litros (`2x33L`), y dejando en minúscula medidas (`500mm`, `40kg`), multiplicador (`(x10)`) y conectores (`sin Retén`).
+- **Normaliza el DISPLAY, no el dato — decisión deliberada.** Reescribir el catálogo lo desharía la próxima tanda de HBT, que se carga por script en MAYÚSCULA. Por eso el helper es único: si el editor y los PDF tuvieran cada uno el suyo, divergirían. **Si entra una marca nueva hay que sumarla a `NOMBRES_PROPIOS`** o queda en minúscula detrás de un conector. Cambian 48 de los 71 nombres del catálogo.
+- **Se arrastran los componentes de una partida y las líneas de herraje**, los dos niveles que faltaban (capítulos y partidas ya andaban desde el PR #209). Dos endpoints `reorder` masivos nuevos (`muebles/details/reorder`, `muebles/items/{itemId}/herrajes/reorder`) calcados de los existentes: renumeran en transacción en vez de disparar N PATCH. Cada nivel con su propio DndContext, y en herrajes **uno por sector** — el arrastre no cruza sectores porque el sector es un campo de la línea, no su posición.
+- **No toca plata, ni `metrics.ts`, ni el schema, ni reescribe datos.** Verificado contra la viva (solo lectura): las 8 partidas de herrajes cuadran, el costo de la partida es la suma de costo × cantidad de sus líneas. El reorder no recalcula a propósito: el orden no cambia la suma.
+
 ## 2026-08-08 — La Lista de compra sigue la versión VIGENTE, no "la aprobada"
 
 - **El síntoma**: aprobada la V2, cuando el proyecto avanzaba a una V3 la lista de compra se quedaba pegada en la V2. MJ tenía que sacarle el "aprobada" a la vieja y ponérsela a la nueva a mano, aunque un proyecto aprobado ya no se desaprueba nunca.

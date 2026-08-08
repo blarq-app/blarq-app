@@ -316,7 +316,7 @@ export default function CuadroResumenAvance({
                       <td className="py-1 px-1"></td>
                     </Fragment>
                   ))}
-                  <td className="py-1 pl-1 border-l border-gray-100 text-right whitespace-nowrap tabular-nums">{formatCLP(anterior!.total)}</td>
+                  <td className="py-1 pl-1 border-l border-gray-100 text-right whitespace-nowrap tabular-nums">{anterior!.totalComparable ? formatCLP(anterior!.total) : <span className="text-gray-200">—</span>}</td>
                 </tr>
               )}
 
@@ -626,7 +626,7 @@ export default function CuadroResumenAvance({
                       <td className="py-1.5 px-2"></td>
                     </Fragment>
                   ))}
-                  <td className="py-1.5 pl-2 border-l border-gray-100 text-right whitespace-nowrap tabular-nums">{formatCLP(anterior!.total)}</td>
+                  <td className="py-1.5 pl-2 border-l border-gray-100 text-right whitespace-nowrap tabular-nums">{anterior!.totalComparable ? formatCLP(anterior!.total) : <span className="text-gray-200">—</span>}</td>
                 </tr>
               )}
 

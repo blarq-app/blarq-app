@@ -133,6 +133,17 @@ export type CuadroResumenAnterior = {
   // (los que tienen acordado vigente > 0). Así el total de la fila siempre
   // cuadra con las columnas que se ven.
   total: number;
+  // ¿Ese total se puede comparar contra el de la versión vigente?
+  //
+  // Solo si TODOS los conceptos visibles tienen versión anterior. Si a alguno
+  // le falta, el total de la fila suma menos conceptos que el de abajo y la
+  // comparación miente: en Portofino, obra tiene V6 pero muebles y artefactos
+  // no, así que el total anterior daba $61.919.250 contra $75.659.753 de la V7
+  // — se lee como "subió 14 millones" cuando la obra en realidad BAJÓ un poco
+  // y el resto de la diferencia son columnas sin dato. Cuando esto es false el
+  // cuadro deja la celda del total vacía: las columnas siguen siendo
+  // comparables una a una, el total no.
+  totalComparable: boolean;
 };
 
 function lastUpdated(arr: BudgetVersionLite[]): BudgetVersionLite | undefined {
@@ -365,11 +376,21 @@ export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenDa
       iluminacion: ant.iluminacion,
       muebles: ant.muebles,
     };
+    // ¿Cada concepto que el cuadro muestra tiene versión anterior? (los tres de
+    // artefactos cuelgan de la misma versión de artefactos).
+    const tieneAnteriorElConcepto = (key: ConceptoKey) =>
+      key === "obra"
+        ? Boolean(obraAnterior)
+        : key === "muebles"
+          ? Boolean(mueblesAnterior)
+          : Boolean(artefactosAnterior);
+
     anterior = {
       versionLabel: todosIguales ? nombres[0] : "Anterior",
       acordado: acordadoAnterior,
       // Total solo de las columnas visibles (ver CuadroResumenAnterior).
       total: conceptos.reduce((s, c) => s + acordadoAnterior[c.key], 0),
+      totalComparable: conceptos.every((c) => tieneAnteriorElConcepto(c.key)),
     };
   }
 

@@ -516,6 +516,12 @@ export default async function ResultadosPage({
         objetivosGuardados={
           (project.avanceObjetivos as Record<string, number> | null) ?? null
         }
+        // Tilde de "mostrar la versión anterior" guardado por obra: vive en el
+        // mismo JSON que los objetivos (ver comentario en el schema).
+        compararGuardado={
+          (project.avanceObjetivos as { mostrarVersionAnterior?: boolean } | null)
+            ?.mostrarVersionAnterior === true
+        }
       />
 
       {/* Presupuesto vs Real — tabla jerárquica con 3 secciones + total */}

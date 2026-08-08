@@ -49,6 +49,7 @@ export default function CuadroResumenAvance({
   projectId,
   projectName,
   objetivosGuardados,
+  compararGuardado = false,
 }: {
   data: CuadroResumenData;
   // Las transferencias a Sueldos de esta obra, de la más nueva a la más vieja.
@@ -58,8 +59,12 @@ export default function CuadroResumenAvance({
   projectId: string;
   // Nombre de la obra — encabezado de la imagen que se le manda al cliente.
   projectName: string;
-  // Objetivos % guardados (borrador del avance), o null si nunca se guardó.
-  objetivosGuardados: Record<string, number> | null;
+  // Objetivos % guardados (borrador del avance), o null si nunca se guardó. El
+  // JSON comparte lugar con el tilde de comparación (un booleano), por eso el
+  // valor puede no ser número — se lee con guard más abajo.
+  objetivosGuardados: Record<string, number | boolean> | null;
+  // Si esta obra quedó con la fila de comparación prendida la última vez.
+  compararGuardado?: boolean;
 }) {
   // Totales por concepto — misma suma NETA que antes hacía el groupBy en el
   // server (una devolución viene con monto negativo y netea sola).
@@ -75,7 +80,7 @@ export default function CuadroResumenAvance({
   const transferidoTotal = transferido.obra + transferido.muebles + transferido.sinConcepto;
   // El detalle arranca cerrado: el bloque se lee primero como resumen.
   const [verDetalle, setVerDetalle] = useState(false);
-  const { conceptos, pagos, totalAcordado, totalPagado, saldoTotal, avanceTotal, versionLabel } =
+  const { conceptos, pagos, totalAcordado, totalPagado, saldoTotal, avanceTotal, versionLabel, anterior } =
     data;
 
   // % OBJETIVO al que MJ quiere llegar, por concepto. Default por concepto = lo
@@ -83,12 +88,23 @@ export default function CuadroResumenAvance({
   // $0). 100% → te pide EXACTO el saldo que falta.
   const [avance, setAvance] = useState<Record<string, number>>(() =>
     Object.fromEntries(
-      conceptos.map((c) => [
-        c.key,
-        objetivosGuardados?.[c.key] ?? Math.floor(c.avancePct * 100),
-      ])
+      conceptos.map((c) => {
+        const g = objetivosGuardados?.[c.key];
+        return [c.key, typeof g === "number" ? g : Math.floor(c.avancePct * 100)];
+      })
     )
   );
+
+  // ── Comparación con la versión anterior (opcional) ────────────────────────
+  // Fila extra arriba del acordado, en gris, con lo que decía la versión
+  // pasada. MJ la prende solo cuando quiere que el cliente vea la variación —
+  // por eso es un tilde y no algo siempre visible. Queda guardado por obra.
+  const [comparar, setComparar] = useState(compararGuardado);
+  // Solo hay algo que comparar si el cálculo encontró una versión anterior
+  // enviada/aprobada; si no, el tilde ni se ofrece (no tiene sentido un tilde
+  // que no hace nada).
+  const hayAnterior = anterior !== null;
+  const mostrarAnterior = hayAnterior && comparar;
 
   // Guardado con retardo (debounce) para no pegarle al server en cada tecla.
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -101,6 +117,17 @@ export default function CuadroResumenAvance({
         body: JSON.stringify({ objetivos }),
       }).catch(() => {});
     }, 600);
+  }
+
+  // El tilde se guarda al toque (no hay tecleo que agrupar). El mismo endpoint
+  // hace merge parcial, así que esto no le pisa los % del avance.
+  function toggleComparar(valor: boolean) {
+    setComparar(valor);
+    fetch(`/api/proyectos/${projectId}/avance-objetivos`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mostrarVersionAnterior: valor }),
+    }).catch(() => {});
   }
 
   const calc = useMemo(() => {
@@ -187,6 +214,13 @@ export default function CuadroResumenAvance({
   const cellMonto = (v: number) =>
     v > 0 ? <span className="tabular-nums">{formatCLP(v)}</span> : <span className="text-gray-300">—</span>;
 
+  // Igual que cellMonto pero para la fila de la versión anterior: el monto
+  // hereda el gris claro de la fila (no lleva color propio) y el "—" va todavía
+  // más tenue, porque un concepto que no existía en esa versión no tiene que
+  // llamar la atención.
+  const cellMontoTenue = (v: number) =>
+    v > 0 ? <span className="tabular-nums">{formatCLP(v)}</span> : <span className="text-gray-200">—</span>;
+
   function setPct(key: string, value: string) {
     const n = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
     setAvance((prev) => {
@@ -217,6 +251,18 @@ export default function CuadroResumenAvance({
             <h2 className="text-lg font-semibold text-gray-900">Cuadro Resumen</h2>
             <p className="text-[11px] text-gray-400 mt-0.5">Valores con IVA incluido</p>
           </div>
+          <div className="flex items-center gap-3 shrink-0">
+          {hayAnterior && (
+            <label className="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={comparar}
+                onChange={(e) => toggleComparar(e.target.checked)}
+                className="accent-gray-900 w-3.5 h-3.5"
+              />
+              Comparar con {anterior!.versionLabel}
+            </label>
+          )}
           <button
             type="button"
             onClick={descargarImagen}
@@ -228,6 +274,7 @@ export default function CuadroResumenAvance({
             </svg>
             {descargando ? "Generando…" : "Descargar imagen"}
           </button>
+          </div>
         </div>
         {/* Mismo formato que antes (Fecha/Monto/Factura por concepto), pero con
             letra y padding chicos para que entre completo. */}
@@ -256,6 +303,23 @@ export default function CuadroResumenAvance({
               </tr>
             </thead>
             <tbody>
+              {/* Versión ANTERIOR (opcional) — arriba del acordado vigente y en
+                  gris claro, para que se lea como el punto de partida y no
+                  compita con la fila que manda. */}
+              {mostrarAnterior && (
+                <tr className="border-b border-gray-100 text-gray-400">
+                  <td className="py-1 pr-1 text-left">{anterior!.versionLabel}</td>
+                  {conceptos.map((c) => (
+                    <Fragment key={c.key}>
+                      <td className="py-1 px-1 border-l border-gray-100"></td>
+                      <td className="py-1 px-1 text-right whitespace-nowrap">{cellMontoTenue(anterior!.acordado[c.key])}</td>
+                      <td className="py-1 px-1"></td>
+                    </Fragment>
+                  ))}
+                  <td className="py-1 pl-1 border-l border-gray-100 text-right whitespace-nowrap tabular-nums">{anterior!.totalComparable ? formatCLP(anterior!.total) : <span className="text-gray-200">—</span>}</td>
+                </tr>
+              )}
+
               {/* Acordado (versión vigente) */}
               <tr className="bg-gray-50 border-b border-gray-200 font-semibold text-gray-900">
                 <td className="py-1 pr-1 text-left">{versionLabel}</td>
@@ -549,6 +613,23 @@ export default function CuadroResumenAvance({
               </tr>
             </thead>
             <tbody>
+              {/* Versión ANTERIOR (opcional) — misma fila que en pantalla: es
+                  la comparación que MJ le manda al cliente, así que tiene que
+                  salir igual en la imagen. */}
+              {mostrarAnterior && (
+                <tr className="border-b border-gray-100 text-gray-400">
+                  <td className="py-1.5 pr-2 text-left">{anterior!.versionLabel}</td>
+                  {conceptos.map((c) => (
+                    <Fragment key={c.key}>
+                      <td className="py-1.5 px-2 border-l border-gray-100"></td>
+                      <td className="py-1.5 px-2 text-right whitespace-nowrap">{cellMontoTenue(anterior!.acordado[c.key])}</td>
+                      <td className="py-1.5 px-2"></td>
+                    </Fragment>
+                  ))}
+                  <td className="py-1.5 pl-2 border-l border-gray-100 text-right whitespace-nowrap tabular-nums">{anterior!.totalComparable ? formatCLP(anterior!.total) : <span className="text-gray-200">—</span>}</td>
+                </tr>
+              )}
+
               {/* Acordado */}
               <tr className="bg-gray-50 border-b border-gray-200 font-semibold text-gray-900">
                 <td className="py-1.5 pr-2 text-left">{versionLabel}</td>

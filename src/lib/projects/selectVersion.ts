@@ -47,3 +47,25 @@ export function selectVigentes<T extends VersionLike>(arr: T[]): T[] {
 export function selectVigente<T extends VersionLike>(arr: T[]): T | undefined {
   return selectVigentes(arr)[0];
 }
+
+// La versión ANTERIOR a la vigente: la penúltima enviada/aprobada del tipo.
+// Sirve para la fila de comparación opcional del Cuadro Resumen (la versión
+// pasada arriba de la actual, para que el cliente vea la variación).
+//
+// Mismo criterio que `selectVigentes` — por fecha, y solo enviadas/aprobadas —
+// para que las dos filas del cuadro no puedan contradecirse. Se decidió por
+// fecha y NO por linaje (`parentVersionId`): en la base viva de hoy la mayoría
+// de las versiones se armaron desde cero y tienen el papá en null, así que el
+// linaje dejaría sin comparación a obras que sí tienen una versión previa
+// enviada (verificado 2026-08-08, decisión de MJ).
+//
+// Los borradores NUNCA entran: la fila anterior tiene que ser algo que el
+// cliente efectivamente vio. Por eso tampoco hay fallback como en
+// `selectVigentes` — si hay menos de dos enviadas/aprobadas, no hay con qué
+// comparar y esto devuelve undefined (el cuadro entonces no ofrece la opción).
+export function selectAnterior<T extends VersionLike>(arr: T[]): T | undefined {
+  const publicadas = arr
+    .filter((b) => b.status === "enviado" || b.status === "aprobado")
+    .sort(porFechaDesc);
+  return publicadas[1];
+}

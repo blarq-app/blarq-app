@@ -18,7 +18,7 @@
 //   - Sueldo lo generan OBRA (su GG) y MUEBLES (utilidad neta). Artefactos NO.
 
 import { conceptoDeFactura, desgloseDeCobro } from "@/lib/invoices/conceptoCobro";
-import { selectVigentes } from "@/lib/projects/selectVersion";
+import { selectAnterior, selectVigentes } from "@/lib/projects/selectVersion";
 
 // ── Tipos de entrada (estructuralmente compatibles con el include del resumen) ──
 // `noCobrado` es opcional en el tipo porque los callers arman el input con un
@@ -107,6 +107,43 @@ export type CuadroResumenData = {
   saldoTotal: number;
   avanceTotal: number; // totalPagado / totalAcordado
   versionLabel: string; // "V5" / "V6" / "Acordado" (si hay 2+ aprobadas por tipo)
+  // Acordado de la versión anterior (campo ADITIVO, ver CuadroResumenAnterior).
+  // null cuando no hay ninguna versión previa enviada/aprobada con la que
+  // comparar — ahí el cuadro directamente no ofrece la comparación.
+  anterior: CuadroResumenAnterior | null;
+};
+
+// Fila opcional de COMPARACIÓN: el acordado de la versión anterior, para
+// ponerlo arriba del actual y que el cliente vea la variación entre versiones.
+// Es SOLO display — no toca acordado/cobrado/avance/saldo de la fila vigente,
+// ni el cálculo de "Me paso a Sueldos" (que ni se entera de este campo).
+export type CuadroResumenAnterior = {
+  // "V2" si todos los conceptos que tienen versión anterior coinciden en el
+  // nombre; "Anterior" si no coinciden (ej. obra V1_Con ampliación + muebles V1).
+  versionLabel: string;
+  // Acordado de la versión anterior por concepto. Un concepto que no existía en
+  // la versión anterior queda en 0 y en el cuadro se ve como "—".
+  acordado: Record<ConceptoKey, number>;
+  // OJO: esta fila NO lleva fecha, a propósito. La columna Fecha del cuadro se
+  // llena con `updatedAt`, que es cuándo se TOCÓ la versión por última vez —
+  // en una versión vieja eso da fechas de hoy y le miente al cliente (visto en
+  // Paseo del Sena: la V2 de muebles decía 08-08-26). El Excel de MJ tampoco
+  // pone fecha en la fila de comparación: solo la etiqueta y los montos.
+  // Suma del acordado anterior, SOLO de los conceptos que el cuadro muestra
+  // (los que tienen acordado vigente > 0). Así el total de la fila siempre
+  // cuadra con las columnas que se ven.
+  total: number;
+  // ¿Ese total se puede comparar contra el de la versión vigente?
+  //
+  // Solo si TODOS los conceptos visibles tienen versión anterior. Si a alguno
+  // le falta, el total de la fila suma menos conceptos que el de abajo y la
+  // comparación miente: en Portofino, obra tiene V6 pero muebles y artefactos
+  // no, así que el total anterior daba $61.919.250 contra $75.659.753 de la V7
+  // — se lee como "subió 14 millones" cuando la obra en realidad BAJÓ un poco
+  // y el resto de la diferencia son columnas sin dato. Cuando esto es false el
+  // cuadro deja la celda del total vacía: las columnas siguen siendo
+  // comparables una a una, el total no.
+  totalComparable: boolean;
 };
 
 function lastUpdated(arr: BudgetVersionLite[]): BudgetVersionLite | undefined {
@@ -118,6 +155,69 @@ function fmtDate(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const yy = String(d.getFullYear()).slice(2);
   return `${dd}-${mm}-${yy}`;
+}
+
+// ── Acordado por concepto de un juego de versiones ──────────────────────────
+//
+// Es la fórmula del acordado, extraída acá para poder correrla DOS veces sobre
+// juegos de versiones distintos: el vigente (la fila de siempre) y el anterior
+// (la fila de comparación opcional). Antes estaba inline dentro de
+// `computeCuadroResumen`; se sacó tal cual, sin cambiarle nada, justamente para
+// que la fila de comparación no pueda usar una fórmula distinta a la actual.
+//
+// Las partidas "NO COBRADO" (BLARQ las absorbe: se le pagan al maestro pero no
+// se le cobran al cliente) quedan FUERA del costo directo, igual que en
+// metrics.ts y en el PDF de la cotización. Hasta el 2026-07-30 este archivo las
+// sumaba: el Cuadro Resumen de Portofino mostraba $925.000 de más que la
+// tarjeta "Total Acordado" de la misma página, y el GG que se traspasa a
+// sueldos salía inflado en la parte proporcional. No se había visto antes
+// porque Portofino V7 es el primer presupuesto de la base con partidas marcadas.
+function acordadoDeVersiones(
+  obras: BudgetVersionLite[],
+  muebles: BudgetVersionLite[],
+  artefactos: BudgetVersionLite[]
+) {
+  const costoDirectoCobrable = (b: BudgetVersionLite) =>
+    (b.obraItems ?? []).reduce((ss, it) => (it.noCobrado ? ss : ss + it.total), 0);
+
+  const obraAcordado = obras.reduce((s, b) => {
+    const cd = costoDirectoCobrable(b);
+    const gg = (b.ggPercentage ?? 0) / 100;
+    const util = (b.utilityPercentage ?? 0) / 100;
+    return s + cd * (1 + gg + util) * 1.19;
+  }, 0);
+  // Utilidad OBRA al 100% = GG total (lo que se traspasa a sueldos).
+  const obraUtilidad100 = obras.reduce(
+    (s, b) => s + costoDirectoCobrable(b) * ((b.ggPercentage ?? 0) / 100),
+    0
+  );
+
+  const mueblesItems = muebles.flatMap((b) => (b.muebleChapters ?? []).flatMap((c) => c.items));
+  const mueblesAcordado = mueblesItems.reduce((s, it) => s + it.clientPriceIva * it.quantity, 0);
+  const mueblesUtilidad100 = mueblesItems.reduce(
+    (s, it) => s + (it.clientPriceNet - it.costDistributor) * it.quantity,
+    0
+  );
+
+  const sumaSub = (sub: string) =>
+    artefactos.reduce(
+      (s, b) =>
+        s +
+        (b.artefactoItems ?? [])
+          .filter((it) => it.subcategory === sub)
+          .reduce((ss, it) => ss + it.clientPrice * it.quantity, 0),
+      0
+    );
+
+  return {
+    obra: obraAcordado,
+    cocina: sumaSub("cocina"),
+    sanitarios: sumaSub("sanitario"),
+    iluminacion: sumaSub("iluminacion"),
+    muebles: mueblesAcordado,
+    obraUtilidad100,
+    mueblesUtilidad100,
+  };
 }
 
 export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenData {
@@ -133,50 +233,15 @@ export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenDa
   const lastMuebles = lastUpdated(mueblesVigentes);
   const lastArtefactos = lastUpdated(artefactosVigentes);
 
-  // ── Acordado por concepto ───────────────────────────────────────────────
-  //
-  // Las partidas "NO COBRADO" (BLARQ las absorbe: se le pagan al maestro pero
-  // no se le cobran al cliente) quedan FUERA del costo directo, igual que en
-  // metrics.ts y en el PDF de la cotización. Hasta el 2026-07-30 este archivo
-  // las sumaba: el Cuadro Resumen de Portofino mostraba $925.000 de más que la
-  // tarjeta "Total Acordado" de la misma página, y el GG que se traspasa a
-  // sueldos salía inflado en la parte proporcional. No se había visto antes
-  // porque Portofino V7 es el primer presupuesto de la base con partidas
-  // marcadas.
-  const costoDirectoCobrable = (b: BudgetVersionLite) =>
-    (b.obraItems ?? []).reduce((ss, it) => (it.noCobrado ? ss : ss + it.total), 0);
-
-  const obraAcordado = obrasVigentes.reduce((s, b) => {
-    const cd = costoDirectoCobrable(b);
-    const gg = (b.ggPercentage ?? 0) / 100;
-    const util = (b.utilityPercentage ?? 0) / 100;
-    return s + cd * (1 + gg + util) * 1.19;
-  }, 0);
-  // Utilidad OBRA al 100% = GG total (lo que se traspasa a sueldos).
-  const obraUtilidad100 = obrasVigentes.reduce(
-    (s, b) => s + costoDirectoCobrable(b) * ((b.ggPercentage ?? 0) / 100),
-    0
-  );
-
-  const mueblesItems = mueblesVigentes.flatMap((b) => (b.muebleChapters ?? []).flatMap((c) => c.items));
-  const mueblesAcordado = mueblesItems.reduce((s, it) => s + it.clientPriceIva * it.quantity, 0);
-  const mueblesUtilidad100 = mueblesItems.reduce(
-    (s, it) => s + (it.clientPriceNet - it.costDistributor) * it.quantity,
-    0
-  );
-
-  const sumaSub = (sub: string) =>
-    artefactosVigentes.reduce(
-      (s, b) =>
-        s +
-        (b.artefactoItems ?? [])
-          .filter((it) => it.subcategory === sub)
-          .reduce((ss, it) => ss + it.clientPrice * it.quantity, 0),
-      0
-    );
-  const cocinaAcordado = sumaSub("cocina");
-  const sanitariosAcordado = sumaSub("sanitario");
-  const iluminacionAcordado = sumaSub("iluminacion");
+  // ── Acordado por concepto (versión vigente) ─────────────────────────────
+  const vig = acordadoDeVersiones(obrasVigentes, mueblesVigentes, artefactosVigentes);
+  const obraAcordado = vig.obra;
+  const obraUtilidad100 = vig.obraUtilidad100;
+  const mueblesAcordado = vig.muebles;
+  const mueblesUtilidad100 = vig.mueblesUtilidad100;
+  const cocinaAcordado = vig.cocina;
+  const sanitariosAcordado = vig.sanitarios;
+  const iluminacionAcordado = vig.iluminacion;
 
   const totalAcordado =
     obraAcordado + cocinaAcordado + sanitariosAcordado + iluminacionAcordado + mueblesAcordado;
@@ -276,5 +341,67 @@ export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenDa
       ? lastObra?.version ?? lastMuebles?.version ?? lastArtefactos?.version ?? "—"
       : "Acordado";
 
-  return { conceptos, pagos, totalAcordado, totalPagado, saldoTotal, avanceTotal, versionLabel };
+  // ── Fila de comparación: el acordado de la versión ANTERIOR ─────────────
+  //
+  // Cada tipo elige su propia versión anterior (obra la suya, muebles la suya,
+  // artefactos la suya) — exactamente el mismo criterio por columna que ya usa
+  // la fila vigente. Si un tipo no tiene versión previa enviada/aprobada, su
+  // columna queda vacía en la comparación pero las otras igual se muestran
+  // (caso Portofino: obra tiene V6 anterior, muebles y artefactos no).
+  const obraAnterior = selectAnterior(budgets.filter((b) => b.type === "obra"));
+  const mueblesAnterior = selectAnterior(budgets.filter((b) => b.type === "muebles"));
+  const artefactosAnterior = selectAnterior(budgets.filter((b) => b.type === "artefactos"));
+
+  let anterior: CuadroResumenAnterior | null = null;
+  if (obraAnterior || mueblesAnterior || artefactosAnterior) {
+    const ant = acordadoDeVersiones(
+      obraAnterior ? [obraAnterior] : [],
+      mueblesAnterior ? [mueblesAnterior] : [],
+      artefactosAnterior ? [artefactosAnterior] : []
+    );
+    // Etiqueta: si TODOS los tipos que tienen versión anterior la llaman igual
+    // ("V2"), la fila dice "V2". Si no coinciden (ej. Depto Colón: obra
+    // "V1_Con ampliación" y muebles "V1"), decir una sola sería mentir sobre
+    // las otras columnas, así que la fila dice "Anterior" a secas — mismo
+    // criterio con el que `versionLabel` cae en "Acordado".
+    const nombres = [obraAnterior, mueblesAnterior, artefactosAnterior]
+      .filter((b): b is BudgetVersionLite => Boolean(b))
+      .map((b) => b.version);
+    const todosIguales = nombres.every((n) => n === nombres[0]);
+
+    const acordadoAnterior: Record<ConceptoKey, number> = {
+      obra: ant.obra,
+      cocina: ant.cocina,
+      sanitarios: ant.sanitarios,
+      iluminacion: ant.iluminacion,
+      muebles: ant.muebles,
+    };
+    // ¿Cada concepto que el cuadro muestra tiene versión anterior? (los tres de
+    // artefactos cuelgan de la misma versión de artefactos).
+    const tieneAnteriorElConcepto = (key: ConceptoKey) =>
+      key === "obra"
+        ? Boolean(obraAnterior)
+        : key === "muebles"
+          ? Boolean(mueblesAnterior)
+          : Boolean(artefactosAnterior);
+
+    anterior = {
+      versionLabel: todosIguales ? nombres[0] : "Anterior",
+      acordado: acordadoAnterior,
+      // Total solo de las columnas visibles (ver CuadroResumenAnterior).
+      total: conceptos.reduce((s, c) => s + acordadoAnterior[c.key], 0),
+      totalComparable: conceptos.every((c) => tieneAnteriorElConcepto(c.key)),
+    };
+  }
+
+  return {
+    conceptos,
+    pagos,
+    totalAcordado,
+    totalPagado,
+    saldoTotal,
+    avanceTotal,
+    versionLabel,
+    anterior,
+  };
 }

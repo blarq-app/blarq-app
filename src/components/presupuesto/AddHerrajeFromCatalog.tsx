@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatCLP } from "@/lib/utils";
+import { formatHerrajeName } from "@/lib/presupuesto/herrajeNombre";
 
 // Para mostrar una imagen externa (DPH/HBT / CDN) sin que un bloqueador del
 // navegador la frene, la servimos por nuestro proxy. Las subidas (data:) van
@@ -82,22 +83,30 @@ const CATEGORY_LABELS: Record<string, string> = {
 /**
  * Modal para agregar herrajes del catálogo a una partida de herrajes de la
  * cotización de muebles. Espejo de AddArtefactoFromCatalog, pero adaptado al
- * modelo de herraje (un costo, sector en vez de room, proveedor DPH/HBT).
+ * modelo de herraje (un costo, proveedor DPH/HBT).
  *
  * El modal hace el POST él mismo y, al éxito, llama onAdded(line, item) para
  * que el editor meta la línea y refresque los totales de la partida. Queda
  * abierto para seguir sumando varios herrajes sin reabrirlo cada vez.
+ *
+ * ALTA DE UN CLIC (pendiente 138). Antes eran dos pasos: "+ elegir" marcaba la
+ * fila y recién un bloque de abajo (sector + cantidad + "Agregar") creaba la
+ * línea. MJ: "sería mejor apretar +agregar que elegir, la vuelta es más larga,
+ * no le veo sentido". Ahora "+ agregar" crea la línea con cantidad 1 y la
+ * cantidad se ajusta después en la propia línea de la partida.
+ *
+ * El sector salió del alta por decisión de MJ (2026-08-08): lo va a retomar
+ * aparte. Las líneas nuevas entran sin sector; las que YA tienen sector se
+ * siguen mostrando agrupadas igual en la partida.
  */
 export default function AddHerrajeFromCatalog({
   budgetId,
   itemId,
-  existingSectors,
   onAdded,
   onClose,
 }: {
   budgetId: string;
   itemId: string;
-  existingSectors: string[];
   onAdded: (line: MuebleHerrajeLine, item: UpdatedItem) => void;
   onClose: () => void;
 }) {
@@ -109,11 +118,12 @@ export default function AddHerrajeFromCatalog({
   const [items, setItems] = useState<HerrajeCatalogItem[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Herraje elegido + datos de la línea a crear (sector / cantidad).
-  const [selected, setSelected] = useState<HerrajeCatalogItem | null>(null);
-  const [sector, setSector] = useState("");
-  const [qty, setQty] = useState(1);
-  const [adding, setAdding] = useState(false);
+  // Id de la fila cuyo POST está en vuelo (para deshabilitar solo ese botón) y
+  // cuántas veces se agregó cada herraje en esta sesión del modal — sin esa
+  // marca no hay forma de saber que el clic entró, porque la partida está más
+  // abajo en la página y no se ve desde acá.
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [addedCount, setAddedCount] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
 
   // Se trae el catálogo del proveedor activo cada vez que cambia la pestaña.
@@ -165,11 +175,12 @@ export default function AddHerrajeFromCatalog({
     });
   }, [items, query, filterCategory]);
 
-  // Crea la línea de herraje en la partida. El back devuelve la línea y el item
-  // recalculado; se los pasamos al editor por onAdded.
-  async function handleAdd() {
-    if (!selected) return;
-    setAdding(true);
+  // Crea la línea de herraje en la partida, de un clic, con cantidad 1. El back
+  // devuelve la línea y el item recalculado; se los pasamos al editor por
+  // onAdded. El modal queda abierto para seguir sumando.
+  async function handleAdd(it: HerrajeCatalogItem) {
+    if (addingId) return; // un alta a la vez: evita el doble clic accidental
+    setAddingId(it.id);
     setError(null);
     try {
       const res = await fetch(
@@ -177,11 +188,7 @@ export default function AddHerrajeFromCatalog({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            catalogId: selected.id,
-            sector: sector.trim(),
-            quantity: qty,
-          }),
+          body: JSON.stringify({ catalogId: it.id, quantity: 1 }),
         }
       );
       if (!res.ok) {
@@ -191,14 +198,11 @@ export default function AddHerrajeFromCatalog({
       }
       const data = await res.json();
       onAdded(data.line, data.item);
-      // Dejamos el modal abierto para seguir sumando. Limpiamos la selección
-      // pero conservamos el sector (en general MJ carga varios del mismo sector).
-      setSelected(null);
-      setQty(1);
+      setAddedCount((prev) => ({ ...prev, [it.id]: (prev[it.id] ?? 0) + 1 }));
     } catch {
       setError("No se pudo agregar el herraje.");
     } finally {
-      setAdding(false);
+      setAddingId(null);
     }
   }
 
@@ -216,7 +220,7 @@ export default function AddHerrajeFromCatalog({
               onClick={() => {
                 setSupplier(s);
                 setFilterCategory(null);
-                setSelected(null);
+                setError(null);
               }}
               className={`px-2 py-0.5 rounded ${
                 supplier === s
@@ -281,27 +285,32 @@ export default function AddHerrajeFromCatalog({
         )}
         {!loading &&
           results.map((it) => {
-            const isSel = selected?.id === it.id;
+            const veces = addedCount[it.id] ?? 0;
+            const enVuelo = addingId === it.id;
             return (
-              // Fila NO clickeable entera: solo "+ elegir" la selecciona, así MJ
-              // puede revisar el link sin elegir sin querer.
+              // Fila NO clickeable entera: solo "+ agregar" crea la línea, así MJ
+              // puede revisar el link del producto sin agregarlo sin querer.
               <div
                 key={it.id}
                 className={`grid grid-cols-[4rem_3rem_minmax(0,1.6fr)_5rem_5rem_5.5rem] items-start gap-3 px-3 py-2 border-b border-gray-100 last:border-b-0 text-xs text-left hover:bg-gray-50 ${
-                  isSel ? "bg-gray-50" : ""
+                  veces > 0 ? "bg-gray-50" : ""
                 }`}
               >
-                <button
-                  onClick={() => {
-                    setSelected(it);
-                    setError(null);
-                  }}
-                  className={`text-left font-medium hover:text-gray-600 ${
-                    isSel ? "text-gray-900" : "text-gray-900"
-                  }`}
-                >
-                  {isSel ? "elegido" : "+ elegir"}
-                </button>
+                <div className="flex flex-col items-start gap-0.5">
+                  <button
+                    onClick={() => handleAdd(it)}
+                    disabled={addingId !== null}
+                    className="text-left font-medium text-gray-900 hover:text-gray-600 disabled:opacity-40"
+                  >
+                    {enVuelo ? "agregando…" : "+ agregar"}
+                  </button>
+                  {/* Marca de que el clic entró (la partida no se ve desde acá). */}
+                  {veces > 0 && !enVuelo && (
+                    <span className="text-[10px] text-gray-500 tabular-nums">
+                      agregado{veces > 1 ? ` ×${veces}` : ""}
+                    </span>
+                  )}
+                </div>
                 {it.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -313,8 +322,11 @@ export default function AddHerrajeFromCatalog({
                   <div className="w-10 h-10 bg-gray-100 rounded border border-gray-200" />
                 )}
                 <div className="min-w-0">
+                  {/* Nombre homologado en estilo oración (pendiente 139): el
+                      catálogo tiene tres estilos mezclados según cómo se cargó
+                      cada proveedor. */}
                   <div className="font-semibold text-gray-900 leading-tight break-words">
-                    {it.name}
+                    {formatHerrajeName(it.name)}
                   </div>
                   <div className="text-[10px] text-gray-500 leading-tight break-words">
                     {it.brand || CATEGORY_LABELS[it.category] || "—"}
@@ -346,77 +358,17 @@ export default function AddHerrajeFromCatalog({
           })}
       </div>
 
-      {/* Una vez elegido un herraje: sector + cantidad + agregar. */}
-      {selected && (
-        <div className="mt-3 bg-white border border-gray-200 rounded p-2.5">
-          <datalist id="herraje-sectores-list">
-            {existingSectors.map((s) => (
-              <option key={s} value={s} />
-            ))}
-          </datalist>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
-                Herraje elegido
-              </div>
-              <div className="text-xs font-semibold text-gray-900 leading-tight break-words">
-                {selected.name}
-                {selected.measure ? (
-                  <span className="text-gray-500 font-normal">
-                    {" "}
-                    · {selected.measure.toUpperCase()}
-                  </span>
-                ) : null}
-                {selected.finish ? (
-                  <span className="text-gray-500 font-normal">
-                    {" "}
-                    · {selected.finish.toUpperCase()}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
-                Sector
-              </label>
-              <input
-                type="text"
-                list="herraje-sectores-list"
-                value={sector}
-                onChange={(e) => setSector(e.target.value)}
-                placeholder="ej. Lavaplatos"
-                className="w-40 bg-white border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-gray-500"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
-                Cant.
-              </label>
-              <input
-                type="number"
-                value={qty}
-                onChange={(e) => setQty(parseInt(e.target.value) || 1)}
-                className="w-14 bg-white border border-gray-300 rounded px-2 py-1 text-xs text-center outline-none focus:border-gray-500"
-              />
-            </div>
-            <button
-              onClick={handleAdd}
-              disabled={adding}
-              className="text-xs bg-gray-900 text-white px-4 py-1.5 rounded hover:bg-gray-800 disabled:opacity-50"
-            >
-              {adding ? "Agregando…" : "Agregar"}
-            </button>
-          </div>
-          {error && (
-            <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-              {error}
-            </div>
-          )}
+      {error && (
+        <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+          {error}
         </div>
       )}
 
       {/* Cerrar el modal (sigue abierto para sumar varios). */}
-      <div className="mt-3 flex justify-end">
+      <div className="mt-3 flex items-center justify-between gap-4">
+        <span className="text-[10px] text-gray-400">
+          Entra con cantidad 1. La cantidad se ajusta en la línea de la partida.
+        </span>
         <button
           onClick={onClose}
           className="text-xs text-gray-600 px-3 py-1.5 hover:text-gray-900"

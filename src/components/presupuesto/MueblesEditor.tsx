@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
 import AddHerrajeFromCatalog from "./AddHerrajeFromCatalog";
+import { formatHerrajeName } from "@/lib/presupuesto/herrajeNombre";
 import {
   DndContext,
   closestCenter,
@@ -353,6 +354,86 @@ export default function MueblesEditor({
       );
     } catch (err) {
       console.error("Error al reordenar capítulos:", err);
+    }
+  }
+
+  // Reordenar COMPONENTES (MuebleDetail) dentro de una partida de muebles.
+  // Optimista y sin merge: el componente no tiene numeración visible, así que
+  // basta con mover el array; el server solo persiste el sortOrder.
+  async function reorderDetails(
+    chapterId: string,
+    itemId: string,
+    orderedIds: string[]
+  ) {
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) => {
+                if (i.id !== itemId) return i;
+                const byId = new Map(i.details.map((d) => [d.id, d]));
+                const details = orderedIds
+                  .map((id) => byId.get(id))
+                  .filter((d): d is MuebleDetail => !!d);
+                return { ...i, details };
+              }),
+            }
+      )
+    );
+    try {
+      const res = await fetch(
+        `/api/presupuestos/${budgetId}/muebles/details/reorder`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itemId, orderedIds }),
+        }
+      );
+      if (!res.ok) console.error("Error al reordenar componentes:", await res.text());
+    } catch (err) {
+      console.error("Error al reordenar componentes:", err);
+    }
+  }
+
+  // Reordenar LÍNEAS DE HERRAJE dentro de una partida. Optimista. `orderedIds`
+  // viene con TODAS las líneas de la partida (el arrastre ocurre dentro de un
+  // sector, pero el sortOrder es global a la partida).
+  async function reorderHerrajes(
+    chapterId: string,
+    itemId: string,
+    orderedIds: string[]
+  ) {
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) => {
+                if (i.id !== itemId) return i;
+                const byId = new Map(i.herrajes.map((h) => [h.id, h]));
+                const herrajes = orderedIds
+                  .map((id) => byId.get(id))
+                  .filter((h): h is MuebleHerraje => !!h);
+                return { ...i, herrajes };
+              }),
+            }
+      )
+    );
+    try {
+      const res = await fetch(
+        `/api/presupuestos/${budgetId}/muebles/items/${itemId}/herrajes/reorder`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderedIds }),
+        }
+      );
+      if (!res.ok) console.error("Error al reordenar herrajes:", await res.text());
+    } catch (err) {
+      console.error("Error al reordenar herrajes:", err);
     }
   }
 
@@ -1077,7 +1158,13 @@ export default function MueblesEditor({
           onDeleteHerraje={(itemId, herrajeId) =>
             deleteHerraje(ch.id, itemId, herrajeId)
           }
+          onReorderHerrajes={(itemId, orderedIds) =>
+            reorderHerrajes(ch.id, itemId, orderedIds)
+          }
           onAddDetail={(itemId) => addDetail(ch.id, itemId)}
+          onReorderDetails={(itemId, orderedIds) =>
+            reorderDetails(ch.id, itemId, orderedIds)
+          }
           onUpdateDetail={(itemId, detailId, patch) =>
             updateDetail(ch.id, itemId, detailId, patch)
           }
@@ -1234,6 +1321,7 @@ function ChapterBlock({
   onUpdateItem,
   onDeleteItem,
   onAddDetail,
+  onReorderDetails,
   onUpdateDetail,
   onDeleteDetail,
   onAddQuote,
@@ -1244,6 +1332,7 @@ function ChapterBlock({
   onHerrajeAdded,
   onUpdateHerraje,
   onDeleteHerraje,
+  onReorderHerrajes,
 }: {
   chapter: MuebleChapter;
   // Número de capítulo DERIVADO por posición (1, 2, 3…) al renderizar, no el
@@ -1259,6 +1348,7 @@ function ChapterBlock({
   onUpdateItem: (itemId: string, patch: Partial<MuebleItem>) => void;
   onDeleteItem: (itemId: string) => void;
   onAddDetail: (itemId: string) => void;
+  onReorderDetails: (itemId: string, orderedIds: string[]) => void;
   onUpdateDetail: (
     itemId: string,
     detailId: string,
@@ -1294,6 +1384,7 @@ function ChapterBlock({
     patch: { quantity?: number; sector?: string; name?: string }
   ) => void;
   onDeleteHerraje: (itemId: string, herrajeId: string) => void;
+  onReorderHerrajes: (itemId: string, orderedIds: string[]) => void;
 }) {
   const subtotal = chapter.items.reduce(
     (s, i) => s + i.clientPriceIva * i.quantity,
@@ -1380,6 +1471,7 @@ function ChapterBlock({
                     displayNumber={`${displayChapterNumber}.${itemIdx + 1}`}
                     budgetId={budgetId}
                     dragHandle={handle}
+                    sensors={sensors}
                     onUpdate={(patch) => onUpdateHerrajePartida(item.id, patch)}
                     onDelete={() => onDeleteItem(item.id)}
                     onHerrajeAdded={(line, updated) =>
@@ -1391,15 +1483,22 @@ function ChapterBlock({
                     onDeleteHerraje={(herrajeId) =>
                       onDeleteHerraje(item.id, herrajeId)
                     }
+                    onReorderHerrajes={(orderedIds) =>
+                      onReorderHerrajes(item.id, orderedIds)
+                    }
                   />
                 ) : (
                   <ItemBlock
                     item={item}
                     displayNumber={`${displayChapterNumber}.${itemIdx + 1}`}
                     dragHandle={handle}
+                    sensors={sensors}
                     onUpdate={(patch) => onUpdateItem(item.id, patch)}
                     onDelete={() => onDeleteItem(item.id)}
                     onAddDetail={() => onAddDetail(item.id)}
+                    onReorderDetails={(orderedIds) =>
+                      onReorderDetails(item.id, orderedIds)
+                    }
                     onUpdateDetail={(detailId, patch) =>
                       onUpdateDetail(item.id, detailId, patch)
                     }
@@ -1490,13 +1589,52 @@ function SortableItemWrapper({
   );
 }
 
+// Fila arrastrable del TERCER nivel: un componente de una partida o una línea
+// de herraje. Mismo criterio que el resto del archivo: SOLO la manija ⋮⋮ lleva
+// los listeners, así los inputs de la fila (nombre, materialidad, cantidad)
+// siguen editables — dnd-kit escribe estilos inline en la fila y si la fila
+// entera arrastrara se comería el click de los inputs.
+function SortableRow({
+  id,
+  className,
+  children,
+}: {
+  id: string;
+  className: string;
+  children: (handle: React.ReactNode) => React.ReactNode;
+}) {
+  const sortable = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.5 : 1,
+    zIndex: sortable.isDragging ? 10 : ("auto" as const),
+    position: "relative" as const,
+    background: sortable.isDragging ? "#FAFAFA" : undefined,
+  };
+  const handle = (
+    <DragHandle
+      attributes={sortable.attributes}
+      listeners={sortable.listeners}
+      className="text-[9px]"
+    />
+  );
+  return (
+    <div ref={sortable.setNodeRef} style={style} className={className}>
+      {children(handle)}
+    </div>
+  );
+}
+
 function ItemBlock({
   item,
   displayNumber,
   dragHandle,
+  sensors,
   onUpdate,
   onDelete,
   onAddDetail,
+  onReorderDetails,
   onUpdateDetail,
   onDeleteDetail,
   onAddQuote,
@@ -1510,9 +1648,11 @@ function ItemBlock({
   // partida): así la numeración siempre sale consecutiva.
   displayNumber: string;
   dragHandle: React.ReactNode;
+  sensors: ReturnType<typeof useSensors>;
   onUpdate: (patch: Partial<MuebleItem>) => void;
   onDelete: () => void;
   onAddDetail: () => void;
+  onReorderDetails: (orderedIds: string[]) => void;
   onUpdateDetail: (detailId: string, patch: Partial<MuebleDetail>) => void;
   onDeleteDetail: (detailId: string) => void;
   onAddQuote: () => void;
@@ -1582,51 +1722,84 @@ function ItemBlock({
       </div>
 
       {/* Componentes (CUERPO INTERIOR / TRASERA / etc) — sub-filas indentadas
-          en la columna PARTIDA, con grid interno (nombre | materialidad | ✕) */}
-      {item.details.map((d) => (
-        <div
-          key={d.id}
-          className={`${ROW_GRID} px-4 py-0.5 border-b border-gray-50`}
+          en la columna PARTIDA, con grid interno (⋮⋮ | nombre | materialidad | ✕).
+          DndContext PROPIO (tercer nivel, dentro del de items y del de
+          capítulos) para que arrastrar un componente no arrastre su partida ni
+          su capítulo: cada contexto solo conoce los ids de su SortableContext. */}
+      <DndContext
+        id={`muebles-details-dnd-${item.id}`}
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={(e: DragEndEvent) => {
+          const { active, over } = e;
+          if (!over || active.id === over.id) return;
+          const oldIdx = item.details.findIndex((d) => d.id === active.id);
+          const newIdx = item.details.findIndex((d) => d.id === over.id);
+          if (oldIdx < 0 || newIdx < 0) return;
+          onReorderDetails(
+            arrayMove(item.details, oldIdx, newIdx).map((d) => d.id)
+          );
+        }}
+      >
+        <SortableContext
+          items={item.details.map((d) => d.id)}
+          strategy={verticalListSortingStrategy}
         >
-          <div></div>
-          <div className="grid grid-cols-[10rem_minmax(0,1fr)_1.5rem] gap-2 items-center">
-            <input
-              type="text"
-              value={d.name}
-              onChange={(e) =>
-                onUpdateDetail(d.id, { name: e.target.value.toUpperCase() })
-              }
-              placeholder="COMPONENTE"
-              className="bg-transparent border-0 p-0 text-[11px] uppercase tracking-tight text-gray-700 outline-none"
-            />
-            <input
-              type="text"
-              value={d.material}
-              onChange={(e) =>
-                onUpdateDetail(d.id, { material: e.target.value })
-              }
-              placeholder="materialidad…"
-              className="bg-transparent border-0 p-0 text-[11px] text-gray-600 outline-none"
-            />
-            {/* Botón eliminar componente. Antes era una ✕ de 10px en gris muy
-                claro dentro de una columna de 1rem: blanco de click minúsculo,
-                MJ no lograba borrar los componentes agregados por error. Ahora
-                es un botón con padding (área de click ~24px), glifo más grande y
-                color más visible que se pone rojo al pasar por encima. */}
-            <button
-              onClick={() => onDeleteDetail(d.id)}
-              className="flex items-center justify-center justify-self-end -my-1 h-6 w-6 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 text-sm leading-none cursor-pointer"
-              title="Eliminar componente"
-              aria-label="Eliminar componente"
+          {item.details.map((d) => (
+            <SortableRow
+              key={d.id}
+              id={d.id}
+              className={`${ROW_GRID} px-4 py-0.5 border-b border-gray-50`}
             >
-              ✕
-            </button>
-          </div>
-          <div></div>
-          <div></div>
-          <div></div>
-        </div>
-      ))}
+              {(handle) => (
+                <>
+                  <div></div>
+                  <div className="grid grid-cols-[0.75rem_10rem_minmax(0,1fr)_1.5rem] gap-2 items-center">
+                    {handle}
+                    <input
+                      type="text"
+                      value={d.name}
+                      onChange={(e) =>
+                        onUpdateDetail(d.id, {
+                          name: e.target.value.toUpperCase(),
+                        })
+                      }
+                      placeholder="COMPONENTE"
+                      className="bg-transparent border-0 p-0 text-[11px] uppercase tracking-tight text-gray-700 outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={d.material}
+                      onChange={(e) =>
+                        onUpdateDetail(d.id, { material: e.target.value })
+                      }
+                      placeholder="materialidad…"
+                      className="bg-transparent border-0 p-0 text-[11px] text-gray-600 outline-none"
+                    />
+                    {/* Botón eliminar componente. Antes era una ✕ de 10px en gris
+                        muy claro dentro de una columna de 1rem: blanco de click
+                        minúsculo, MJ no lograba borrar los componentes agregados
+                        por error. Ahora es un botón con padding (área de click
+                        ~24px), glifo más grande y color más visible que se pone
+                        rojo al pasar por encima. */}
+                    <button
+                      onClick={() => onDeleteDetail(d.id)}
+                      className="flex items-center justify-center justify-self-end -my-1 h-6 w-6 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 text-sm leading-none cursor-pointer"
+                      title="Eliminar componente"
+                      aria-label="Eliminar componente"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div></div>
+                  <div></div>
+                  <div></div>
+                </>
+              )}
+            </SortableRow>
+          ))}
+        </SortableContext>
+      </DndContext>
 
       {/* Botón "+ Componente" en la columna PARTIDA */}
       <div className={`${ROW_GRID} px-4 pb-1 border-b border-gray-100`}>
@@ -1931,17 +2104,20 @@ function HerrajePartidaBlock({
   displayNumber,
   budgetId,
   dragHandle,
+  sensors,
   onUpdate,
   onDelete,
   onHerrajeAdded,
   onUpdateHerraje,
   onDeleteHerraje,
+  onReorderHerrajes,
 }: {
   item: MuebleItem;
   // Número DERIVADO por posición (igual que ItemBlock): consecutivo, no editable.
   displayNumber: string;
   budgetId: string;
   dragHandle: React.ReactNode;
+  sensors: ReturnType<typeof useSensors>;
   onUpdate: (patch: {
     itemNumber?: string;
     name?: string;
@@ -1959,6 +2135,8 @@ function HerrajePartidaBlock({
     patch: { quantity?: number; sector?: string; name?: string }
   ) => void;
   onDeleteHerraje: (herrajeId: string) => void;
+  // Recibe TODAS las líneas de la partida en el orden nuevo.
+  onReorderHerrajes: (orderedIds: string[]) => void;
 }) {
   const [showCatalog, setShowCatalog] = useState(false);
   // Costo interno colapsable, IGUAL que muebles/cubiertas. Arranca ABIERTO
@@ -1981,10 +2159,27 @@ function HerrajePartidaBlock({
     else groups.push({ sector, lines: [line] });
   }
 
-  // Sectores ya usados (para sugerir en el modal).
-  const existingSectors = Array.from(
-    new Set(item.herrajes.map((h) => h.sector).filter(Boolean))
-  );
+  // Arrastre de una línea DENTRO de su sector. El sortOrder es global a la
+  // partida, así que se rearma la lista completa: se reemplazan las líneas de
+  // ese sector por su orden nuevo y el resto queda donde estaba.
+  //
+  // El arrastre NO cruza sectores a propósito: soltar una línea en otro grupo
+  // no le cambiaría el sector (el sector es un campo de la línea, no su
+  // posición), así que volvería a saltar a su grupo original y se vería como
+  // que el arrastre "no funcionó". Cambiar el sector de una línea queda para
+  // cuando MJ retome ese tema (decisión del 2026-08-08).
+  function reordenarEnSector(sector: string, lines: MuebleHerraje[], e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIdx = lines.findIndex((l) => l.id === active.id);
+    const newIdx = lines.findIndex((l) => l.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const nuevas = arrayMove(lines, oldIdx, newIdx);
+    const global = groups.flatMap((g) =>
+      g.sector === sector ? nuevas : g.lines
+    );
+    onReorderHerrajes(global.map((l) => l.id));
+  }
 
   // Margen mostrado como % entero (0.2 → 20).
   const marginPct = item.utilityPercentage
@@ -2044,53 +2239,78 @@ function HerrajePartidaBlock({
               </div>
             )}
 
-            {/* Cada herraje del sector */}
-            {g.lines.map((h) => (
-              <div
-                key={h.id}
-                className={`${ROW_GRID} px-4 py-0.5 border-b border-gray-50`}
+            {/* Cada herraje del sector. DndContext PROPIO por sector: el
+                arrastre queda confinado al grupo (ver reordenarEnSector). */}
+            <DndContext
+              id={`muebles-herrajes-dnd-${item.id}-${g.sector || "__sin__"}`}
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={(e: DragEndEvent) =>
+                reordenarEnSector(g.sector, g.lines, e)
+              }
+            >
+              <SortableContext
+                items={g.lines.map((l) => l.id)}
+                strategy={verticalListSortingStrategy}
               >
-                <div></div>
-                {/* Columna PARTIDA: nombre + medida + color + proveedor.
-                    Flex (no grid anidado): el grid anidado colapsaba la columna
-                    del nombre a ~1 carácter y lo dibujaba en vertical. */}
-                <div className="flex items-baseline gap-2 min-w-0">
-                  {/* Nombre editable (commit al salir del campo). */}
-                  <HerrajeNameInput
-                    value={h.name}
-                    onCommit={(name) => onUpdateHerraje(h.id, { name })}
-                  />
-                  {(h.measure || h.finish) && (
-                    <span className="shrink-0 text-[10px] text-gray-500 self-center">
-                      {[h.measure, h.finish]
-                        .filter(Boolean)
-                        .map((s) => (s as string).toUpperCase())
-                        .join(" · ")}
-                    </span>
-                  )}
-                  <span className="shrink-0 text-[9px] uppercase tracking-wider text-gray-400 self-center">
-                    {h.supplier}
-                  </span>
-                  {/* Costo unitario (read-only, gris). */}
-                  <span className="shrink-0 w-16 text-[10px] text-right tabular-nums text-gray-400 self-center">
-                    {formatCLP(h.costNet)}
-                  </span>
-                </div>
-                {/* Cantidad editable (commit al salir del campo) + subtotal. */}
-                <HerrajeQtyInput
-                  value={h.quantity}
-                  costNet={h.costNet}
-                  onCommit={(qty) => onUpdateHerraje(h.id, { quantity: qty })}
-                />
-                <button
-                  onClick={() => onDeleteHerraje(h.id)}
-                  className="text-gray-300 hover:text-red-500 text-xs leading-none"
-                  title="Eliminar herraje"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+                {g.lines.map((h) => (
+                  <SortableRow
+                    key={h.id}
+                    id={h.id}
+                    className={`${ROW_GRID} px-4 py-0.5 border-b border-gray-50`}
+                  >
+                    {(handle) => (
+                      <>
+                        <div></div>
+                        {/* Columna PARTIDA: manija + nombre + medida + color +
+                            proveedor. Flex (no grid anidado): el grid anidado
+                            colapsaba la columna del nombre a ~1 carácter y lo
+                            dibujaba en vertical. */}
+                        <div className="flex items-baseline gap-2 min-w-0">
+                          <span className="shrink-0 self-center">{handle}</span>
+                          {/* Nombre editable (commit al salir del campo),
+                              mostrado en estilo oración (pendiente 139). */}
+                          <HerrajeNameInput
+                            value={formatHerrajeName(h.name)}
+                            onCommit={(name) => onUpdateHerraje(h.id, { name })}
+                          />
+                          {(h.measure || h.finish) && (
+                            <span className="shrink-0 text-[10px] text-gray-500 self-center">
+                              {[h.measure, h.finish]
+                                .filter(Boolean)
+                                .map((s) => (s as string).toUpperCase())
+                                .join(" · ")}
+                            </span>
+                          )}
+                          <span className="shrink-0 text-[9px] uppercase tracking-wider text-gray-400 self-center">
+                            {h.supplier}
+                          </span>
+                          {/* Costo unitario (read-only, gris). */}
+                          <span className="shrink-0 w-16 text-[10px] text-right tabular-nums text-gray-400 self-center">
+                            {formatCLP(h.costNet)}
+                          </span>
+                        </div>
+                        {/* Cantidad editable (commit al salir) + subtotal. */}
+                        <HerrajeQtyInput
+                          value={h.quantity}
+                          costNet={h.costNet}
+                          onCommit={(qty) =>
+                            onUpdateHerraje(h.id, { quantity: qty })
+                          }
+                        />
+                        <button
+                          onClick={() => onDeleteHerraje(h.id)}
+                          className="text-gray-300 hover:text-red-500 text-xs leading-none"
+                          title="Eliminar herraje"
+                        >
+                          ✕
+                        </button>
+                      </>
+                    )}
+                  </SortableRow>
+                ))}
+              </SortableContext>
+            </DndContext>
           </div>
         ))
       )}
@@ -2113,7 +2333,6 @@ function HerrajePartidaBlock({
         <AddHerrajeFromCatalog
           budgetId={budgetId}
           itemId={item.id}
-          existingSectors={existingSectors}
           onAdded={(line, updated) =>
             onHerrajeAdded(line as MuebleHerraje, updated as Partial<MuebleItem>)
           }

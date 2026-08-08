@@ -32,17 +32,9 @@ export async function PUT(
     const { id } = await params;
     const data = await request.json();
 
-    // Actualizar EP (status, notes, date) y/o items (% avance)
-    const ep = await prisma.estadoPago.update({
-      where: { id },
-      data: {
-        status: data.status,
-        notes: data.notes,
-        date: data.date ? new Date(data.date) : undefined,
-      },
-    });
-
-    // Bloquear edición si el EP está cerrado
+    // Bloquear edición si el EP está cerrado. Va ANTES de escribir: hasta acá
+    // el update corría primero y el chequeo después, así que un EP cerrado se
+    // quedaba igual con la fecha y las notas nuevas pese a devolver el 409.
     const current = await prisma.estadoPago.findUnique({
       where: { id },
       select: { status: true },
@@ -53,6 +45,16 @@ export async function PUT(
         { status: 409 }
       );
     }
+
+    // Actualizar EP (status, notes, date) y/o items (% avance)
+    const ep = await prisma.estadoPago.update({
+      where: { id },
+      data: {
+        status: data.status,
+        notes: data.notes,
+        date: data.date ? new Date(data.date) : undefined,
+      },
+    });
 
     if (Array.isArray(data.items)) {
       await Promise.all(

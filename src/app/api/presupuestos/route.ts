@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
+import { computeHerrajeItemTotals } from "@/lib/presupuesto/muebleHerrajes";
 
 // Crear nueva versión de presupuesto
 export async function POST(request: NextRequest) {
@@ -256,6 +257,9 @@ export async function POST(request: NextRequest) {
         // - Reseteamos precios y cantidades — son específicos del proyecto.
         // - NO copiamos quotes (cotizaciones alternativas) — son del
         //   contexto histórico del proyecto fuente.
+        // - SÍ copiamos las líneas de herraje con su costo (ver más abajo:
+        //   el costo de una partida de herrajes no es un precio tipeado por
+        //   proyecto, es la suma de sus líneas de catálogo).
         // En modo duplicar normal, copia todo tal cual.
         const isTemplate = !!data.resetQuantities;
         const chapters = await prisma.muebleChapter.findMany({
@@ -267,6 +271,13 @@ export async function POST(request: NextRequest) {
               include: {
                 details: { orderBy: { sortOrder: "asc" } },
                 quotes: { orderBy: { sortOrder: "asc" } },
+                // Las líneas de la partida HERRAJES (kind="herrajes"). Sin
+                // esto la copia salía con el precio pero SIN el listado, y
+                // encima como "mueble" (el `kind` tampoco se copiaba): la
+                // partida perdía el bloque de líneas y el botón "Agregar del
+                // catálogo". Omisión de cuando se armó la feature de herrajes
+                // — el duplicador nunca se actualizó (pendiente 137).
+                herrajes: { orderBy: { sortOrder: "asc" } },
               },
             },
           },
@@ -281,22 +292,74 @@ export async function POST(request: NextRequest) {
             },
           });
           for (const item of ch.items) {
+            // Una partida de herrajes CON líneas no tiene precio propio: su
+            // costo es Σ(costNet × cantidad) de las líneas, y cada costNet es
+            // un snapshot del catálogo de herrajes (el mismo herraje vale lo
+            // mismo en cualquier obra). Por eso en modo plantilla NO la
+            // blanqueamos como al resto: dejarla en $0 con el listado abajo
+            // mostraría "$0" arriba de una lista que evidentemente suma algo.
+            // Copiamos las líneas y volvemos a derivar el total de ellas.
+            // Las partidas de herrajes SIN líneas son modo manual (proveedor +
+            // total tipeado a mano) y se blanquean igual que los muebles.
+            const esHerrajeItemizado =
+              item.kind === "herrajes" && item.herrajes.length > 0;
+            const totalesHerraje = esHerrajeItemizado
+              ? computeHerrajeItemTotals(item.herrajes, item.utilityPercentage)
+              : null;
+            const blanquear = isTemplate && !esHerrajeItemizado;
+
             const newItem = await prisma.muebleItem.create({
               data: {
                 budgetVersionId: budget.id,
                 chapterId: newChapter.id,
                 itemNumber: item.itemNumber,
                 name: item.name,
+                kind: item.kind, // mueble | herrajes — sin esto la copia caía a "mueble"
                 descriptionGeneral: item.descriptionGeneral,
-                quantity: isTemplate ? 1 : item.quantity,
+                // Las partidas de herrajes van siempre en cantidad 1: las
+                // cantidades reales viven en cada línea.
+                quantity: esHerrajeItemizado ? 1 : isTemplate ? 1 : item.quantity,
                 supplier: item.supplier, // preservar — proveedores son típicos
-                costDistributor: isTemplate ? 0 : item.costDistributor,
+                costDistributor: totalesHerraje
+                  ? totalesHerraje.costDistributor
+                  : blanquear
+                    ? 0
+                    : item.costDistributor,
                 utilityPercentage: item.utilityPercentage, // % se mantiene
-                clientPriceNet: isTemplate ? 0 : item.clientPriceNet,
-                clientPriceIva: isTemplate ? 0 : item.clientPriceIva,
+                clientPriceNet: totalesHerraje
+                  ? totalesHerraje.clientPriceNet
+                  : blanquear
+                    ? 0
+                    : item.clientPriceNet,
+                clientPriceIva: totalesHerraje
+                  ? totalesHerraje.clientPriceIva
+                  : blanquear
+                    ? 0
+                    : item.clientPriceIva,
                 sortOrder: item.sortOrder,
               },
             });
+
+            // Líneas de herraje: se copian tal cual (sector, proveedor,
+            // nombre, medida, terminación, SKU, cantidad, costo congelado y
+            // el vínculo al catálogo para trazabilidad).
+            for (const h of item.herrajes) {
+              await prisma.muebleHerraje.create({
+                data: {
+                  itemId: newItem.id,
+                  catalogId: h.catalogId,
+                  sector: h.sector,
+                  supplier: h.supplier,
+                  name: h.name,
+                  measure: h.measure,
+                  finish: h.finish,
+                  sku: h.sku,
+                  quantity: h.quantity,
+                  costNet: h.costNet,
+                  sortOrder: h.sortOrder,
+                },
+              });
+            }
             for (const det of item.details) {
               await prisma.muebleDetail.create({
                 data: {

@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-08-08 — La Lista de compra sigue la versión VIGENTE, no "la aprobada"
+
+- **El síntoma**: aprobada la V2, cuando el proyecto avanzaba a una V3 la lista de compra se quedaba pegada en la V2. MJ tenía que sacarle el "aprobada" a la vieja y ponérsela a la nueva a mano, aunque un proyecto aprobado ya no se desaprueba nunca.
+- **La causa: convivían dos criterios de qué versión manda.** El unificado (`src/lib/projects/selectVersion.ts`, la más reciente entre enviada y aprobada) lo usan la plata (`metrics.ts`), el Resumen, el Cuadro Resumen, el Fondo de Sueldos y los EP. La Lista de compra se quedó afuera de esa unificación de 2026-07-22 y seguía con "la aprobada más reciente > la última", copiado en sus **tres** caminos: pantalla, PDF y sync.
+- **Ahora los tres usan `selectVigente`.** Se conserva el override manual `?v=ID` del selector de presupuesto, que sigue mandando por encima del criterio. El estado "aprobado" **no se toca**: sigue siendo el registro de qué versión firmó el cliente y el candado que impide borrarla (`presupuestos/[id]/route.ts`); lo único que pierde es la potestad de decidir cuál manda.
+- **Efecto medido en la viva (2026-08-06/08)**: cambian **2 de 13** proyectos con presupuesto de obra, los dos con el problema al revés — Cocina Candelaria y Casa Los Algarrobos tienen V1 enviada + V2 borrador, y la lista tomaba el **borrador** mientras la plata tomaba la V1. Pasan a la V1: mismos 60 y 88 materiales, cambian cantidades (6 y 43 líneas). Ningún otro proyecto se mueve.
+- **No toca `metrics.ts` ni ningún cálculo de plata** — la lista de compra no mueve montos, y el diff son solo los 3 archivos de `lista-compra`. Los EP ya usaban el criterio único vía `findLatestObraBudget`; las dos menciones a `"aprobado"` que quedan en `NuevoEPButton` y `SyncDiffModal` son rótulos del desplegable ("aprobado" → "aprobada"), no eligen versión.
+
 ## 2026-08-05 — El catálogo de artefactos deja de perder fotos cuando el proveedor las reemplaza
 
 - **La causa: el catálogo no guarda la foto, guarda el link a la foto del proveedor.** `imageUrl` apunta a `mkchile.vtexassets.com` / `byp.vtexassets.com`, y cuando MK o BYP reemplazan la imagen cambia el id del archivo: el link viejo queda en 404, el campo sigue lleno y la pantalla dibuja el recuadro vacío. En la base viva eran **9 de 129** (el caso que lo destapó: TOALLERO 30CM CROMO), más 2 entradas con link pero sin foto.

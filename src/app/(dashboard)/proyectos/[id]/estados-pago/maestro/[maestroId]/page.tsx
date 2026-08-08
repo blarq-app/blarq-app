@@ -9,6 +9,30 @@ import PartidaAssigner, {
   type AssignerItem,
 } from "@/components/estadosPago/PartidaAssigner";
 
+// Una cifra del panorama. La jerarquía la da la tipografía, no el color (§3):
+// rótulo chico en versalitas, número grande en tabular-nums.
+function Metrica({
+  label,
+  value,
+  nota,
+}: {
+  label: string;
+  value: string;
+  nota?: string;
+}) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider text-gray-500">
+        {label}
+      </div>
+      <div className="mt-0.5 text-lg font-medium text-gray-900 tabular-nums">
+        {value}
+      </div>
+      {nota && <div className="text-[10px] text-gray-400">{nota}</div>}
+    </div>
+  );
+}
+
 export default async function MaestroEstadosPagoPage({
   params,
 }: {
@@ -84,7 +108,46 @@ export default async function MaestroEstadosPagoPage({
   );
   const epThis = epAcum.map((t, i) => t - (i > 0 ? epAcum[i - 1] : 0));
   const amountById = new Map<string, number>();
-  sorted.forEach((ep, i) => amountById.set(ep.id, epThis[i]));
+  sorted.forEach((ep, i) => {
+    // Un EP CERRADO tiene su monto CONGELADO al cerrarlo (amountPaid): esa es
+    // la plata que se le pagó al maestro y es la misma cifra que muestra el
+    // editor del EP en "Pagos por estado de pago". Recalcularlo como diferencia
+    // de porcentajes (lo que se hacía acá) da distinto en cuanto queda un
+    // borrador en el medio de dos cerrados, porque el borrador entra en el
+    // acumulado corrido. En la secuencia normal las dos cuentas dan igual.
+    //
+    // El fallback cubre los EPs cerrados antes de que existiera amountPaid:
+    // si ninguna partida lo tiene, se sigue usando la diferencia.
+    const congelado = ep.items.reduce((s, it) => s + (it.amountPaid ?? 0), 0);
+    const tieneCongelado = ep.items.some((it) => it.amountPaid != null);
+    amountById.set(
+      ep.id,
+      ep.status === "cerrado" && tieneCongelado ? congelado : epThis[i]
+    );
+  });
+
+  // ── Panorama del maestro ────────────────────────────────────────────────
+  // Sale todo de lo que la página YA trae (las partidas de la versión vigente
+  // y los EPs con sus items): no hace falta ninguna consulta nueva.
+  //
+  // Mano de obra total = lo que se le pagaría a este maestro si terminara TODAS
+  // sus partidas. Se lee de la MISMA fuente con la que el EP arma su snapshot
+  // (ObraItem.costLabor → EstadoPagoItem.laborUnitPrice), para que no puedan
+  // dar distinto.
+  const moTotal = (budget?.obraItems ?? [])
+    .filter((it) => it.maestroId === maestroId)
+    .reduce((s, it) => s + it.quantity * (it.costLabor ?? 0), 0);
+
+  // Pagado = SOLO los EPs cerrados, con el monto que quedó congelado al
+  // cerrarlos (amountPaid). Un EP en borrador todavía se edita: no es plata
+  // pagada. Es el mismo criterio con el que el editor calcula el acumulado.
+  const pagado = eps
+    .filter((ep) => ep.status === "cerrado")
+    .reduce(
+      (s, ep) => s + ep.items.reduce((a, it) => a + (it.amountPaid ?? 0), 0),
+      0
+    );
+  const saldo = moTotal - pagado;
 
   return (
     <div>
@@ -100,11 +163,18 @@ export default async function MaestroEstadosPagoPage({
       <div className="flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h2 className="text-xl font-medium text-gray-900">{maestro.name}</h2>
+          {/* El conteo de partidas se movió al panorama de abajo; acá quedan
+              solo los datos de contacto para no repetir la misma cifra dos
+              veces. Si no hay partidas asignadas todavía no hay panorama, así
+              que en ese caso el conteo sigue mostrándose acá. */}
           <p className="text-sm text-gray-500 mt-0.5">
-            {assignedCount} partida{assignedCount !== 1 ? "s" : ""} asignada
-            {assignedCount !== 1 ? "s" : ""}
-            {maestro.phone && ` · ${maestro.phone}`}
-            {maestro.emitsInvoice && " · emite factura"}
+            {assignedCount === 0 && "Sin partidas asignadas"}
+            {assignedCount === 0 && (maestro.phone || maestro.emitsInvoice)
+              ? " · "
+              : ""}
+            {maestro.phone}
+            {maestro.phone && maestro.emitsInvoice && " · "}
+            {maestro.emitsInvoice && "emite factura"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -132,6 +202,27 @@ export default async function MaestroEstadosPagoPage({
           />
         </div>
       </div>
+
+      {/* PANORAMA — cuánta mano de obra tiene asignada, cuánto lleva cobrado y
+          cuánto le queda. Antes solo se veía "N partidas asignadas" y había que
+          sumar los EPs a mano para saber en qué iba. */}
+      {assignedCount > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+          <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4">
+            <Metrica
+              label="Partidas asignadas"
+              value={String(assignedCount)}
+            />
+            <Metrica label="Mano de obra total" value={formatCLP(moTotal)} />
+            <Metrica
+              label="Pagado"
+              value={formatCLP(pagado)}
+              nota="solo EPs cerrados"
+            />
+            <Metrica label="Saldo por pagar" value={formatCLP(saldo)} />
+          </div>
+        </div>
+      )}
 
       {/* Estados de pago de este maestro (arriba: es lo principal) */}
       <div className="flex items-center justify-between mb-3">

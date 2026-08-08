@@ -106,6 +106,9 @@ export async function GET(
         quantity: i.quantity,
         laborUnitPrice: i.laborUnitPrice,
         pctAccumulated: c.pctAccumulatedCurrent,
+        // Lo que ya venía pagado de EPs cerrados: es el tramo oscuro de la barra.
+        pctPrev: c.pctAccumulatedPrev,
+        prevAmountPaid: snap.prevAmountPaid,
         amountThisEp: c.amountThisEp,
         totalAccumulated: c.totalAccumulated,
         outOfScope: i.outOfScope,

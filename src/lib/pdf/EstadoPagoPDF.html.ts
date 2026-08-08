@@ -28,6 +28,8 @@ export interface EPItemInput {
   quantity: number;
   laborUnitPrice: number;
   pctAccumulated: number; // 0..100
+  pctPrev: number; // 0..100 — % que ya venía pagado de EPs cerrados anteriores
+  prevAmountPaid: number; // $ ya pagado al maestro por esta partida antes de este EP
   amountThisEp: number; // delta este EP (newQty × pu)
   totalAccumulated: number; // acumulado total = prevAmountPaid + amountThisEp (lo que va en columna "$ A PAGAR" del PDF)
   outOfScope: boolean;
@@ -75,6 +77,45 @@ function fmtCLP(n: number): string {
 
 function fmtQty(n: number): string {
   return new Intl.NumberFormat("es-CL", { maximumFractionDigits: 2 }).format(n);
+}
+
+function clampPct(n: number): number {
+  return Math.min(100, Math.max(0, n));
+}
+
+/**
+ * Celda de avance de una partida: barra en DOS TRAMOS + leyenda de cada parte.
+ *
+ * El tramo oscuro es lo que el maestro YA cobró en EPs cerrados anteriores; el
+ * claro es lo que agrega este EP. Hasta acá la barra pintaba un solo tramo con
+ * el acumulado, así que el maestro veía "66%" sin saber cuánto de eso ya le
+ * habían pagado.
+ *
+ * La leyenda omite la parte que no aplica: en el EP 1 no hay previo (un solo
+ * tramo, una sola línea) y una partida fuera de alcance tiene previo pero no
+ * suma nada nuevo.
+ */
+function avanceCelda(item: EPItemInput): string {
+  const prev = clampPct(item.pctPrev);
+  const total = clampPct(item.pctAccumulated);
+  const nuevo = Math.max(0, total - prev);
+  const leyenda = [
+    prev > 0
+      ? `<div><span class="marca" style="background:#8A7F6F"></span>ya pagado ${prev.toFixed(0)}% · ${fmtCLP(item.prevAmountPaid)}</div>`
+      : "",
+    nuevo > 0
+      ? `<div><span class="marca" style="background:#CFCBC5"></span>este EP ${nuevo.toFixed(0)}% · ${fmtCLP(item.amountThisEp)}</div>`
+      : "",
+  ].join("");
+  return `
+              <div class="avance-cell">
+                <div class="avance-bar">
+                  <div class="avance-fill avance-fill-prev" style="width: ${prev.toFixed(1)}%"></div>
+                  <div class="avance-fill avance-fill-nuevo" style="width: ${nuevo.toFixed(1)}%"></div>
+                </div>
+                <span class="avance-pct">${total.toFixed(0)}%</span>
+              </div>
+              ${leyenda ? `<div class="avance-leyenda">${leyenda}</div>` : ""}`;
 }
 
 function fmtDate(d: string | Date): string {
@@ -196,7 +237,7 @@ const CSS = `
   .col-qty    { width: 6%;  text-align: center; font-variant-numeric: tabular-nums; }
   .col-pu     { width: 9%;  text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
   .col-total  { width: 10%; text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .col-avance { width: 10%; text-align: center; }
+  .col-avance { width: 14%; text-align: center; }
   .col-pagar  { width: 10%; text-align: right;  font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 500; }
 
   thead .col-desc { font-size: 7pt; color: #000; }
@@ -219,16 +260,22 @@ const CSS = `
   .avance-bar {
     flex: 1;
     height: 8px;
-    background: #F0F0F0;
+    background: #EEEDEC;
     border-radius: 1px;
     overflow: hidden;
     position: relative;
+    display: flex;
   }
-  .avance-fill {
-    height: 100%;
-    background: #F4A261;
-    border-radius: 1px;
-  }
+  /* La barra va en DOS TRAMOS: el oscuro es lo que ya se le pagó al maestro en
+     EPs cerrados anteriores, el claro es lo que agrega ESTE EP. Antes pintaba
+     un solo tramo y el maestro no podía ver de dónde venía el acumulado. */
+  /* Greige de la marca (globals.css), no el naranja que había antes ni un
+     negro duro: Piedra para lo ya pagado y Greige para lo de este EP. Son los
+     MISMOS dos tonos que usa la barra de la pantalla, para que el PDF que
+     recibe el maestro y lo que ve MJ no se lean distinto. */
+  .avance-fill { height: 100%; }
+  .avance-fill-prev  { background: #8A7F6F; }
+  .avance-fill-nuevo { background: #CFCBC5; }
   .avance-pct {
     font-size: 6.5pt;
     font-variant-numeric: tabular-nums;
@@ -236,6 +283,24 @@ const CSS = `
     white-space: nowrap;
     min-width: 28px;
     text-align: right;
+  }
+  /* Leyenda debajo de la barra. Dos líneas cortas: no entra en una sola con el
+     ancho de la columna. Se omite la que no aplica (en el EP 1 no hay previo). */
+  .avance-leyenda {
+    margin-top: 2px;
+    font-size: 5.5pt;
+    line-height: 1.25;
+    font-variant-numeric: tabular-nums;
+    color: #555;
+    white-space: nowrap;
+    text-align: center;
+  }
+  .avance-leyenda .marca {
+    display: inline-block;
+    width: 4px; height: 4px;
+    border-radius: 1px;
+    margin-right: 2px;
+    vertical-align: middle;
   }
 
   /* Out of scope row — sutil ámbar */
@@ -383,12 +448,7 @@ export function renderEPHtml(data: EPHTMLInput): string {
             <td class="col-qty">${fmtQty(item.quantity)}</td>
             <td class="col-pu">${fmtCLP(item.laborUnitPrice)}</td>
             <td class="col-total">${fmtCLP(item.quantity * item.laborUnitPrice)}</td>
-            <td class="col-avance">
-              <div class="avance-cell">
-                <div class="avance-bar"><div class="avance-fill" style="width: ${Math.min(100, Math.max(0, item.pctAccumulated)).toFixed(0)}%"></div></div>
-                <span class="avance-pct">${item.pctAccumulated.toFixed(0)}%</span>
-              </div>
-            </td>
+            <td class="col-avance">${avanceCelda(item)}</td>
             <td class="col-pagar">${item.totalAccumulated > 0 ? fmtCLP(item.totalAccumulated) : "—"}</td>
           </tr>`;
           }

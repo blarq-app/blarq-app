@@ -1,6 +1,6 @@
 // Diagnóstico SOLO LECTURA (pendiente 139): muestra cómo quedaría cada nombre
 // del catálogo de herrajes y de las líneas ya cargadas en cotizaciones al
-// aplicarles el estilo oración. NO escribe nada.
+// homologarles la escritura (cada palabra en mayúscula). NO escribe nada.
 //
 // Uso: npx tsx scripts/diag-139-nombres-herrajes.ts <ruta-env>
 import { PrismaClient } from "@prisma/client";
@@ -64,23 +64,25 @@ async function main() {
       console.log(`      ${nuevo}`);
       cambian.push({ antes: h.name, despues: nuevo });
     }
-    // Casos raros = tokens que dejan de leerse como sigla al bajar a minúscula.
-    // Se descartan las palabras comunes: si el nombre entero está en MAYÚSCULA
-    // todas sus palabras "parecen" sigla, así que ahí solo se miran los tokens
-    // que mezclan letra y número (2X33L, 40KG, X10, 5MM) o que son una letra
-    // suelta de modelo (MERIVOBOX E / M).
+    // Casos raros = tokens en MAYÚSCULA que el helper cambia. Se comparan token
+    // a token POR POSICIÓN (el helper no agrega ni saca palabras), así el
+    // "después" que se imprime es el real y no uno adivinado.
+    // Si el nombre entero está en MAYÚSCULA todas sus palabras "parecen" sigla,
+    // así que ahí solo se miran los tokens que mezclan letra y número (2X33L,
+    // 40KG, X10, 5MM) o que son una letra suelta de modelo (MERIVOBOX E / M).
     const todoMayus = h.name === h.name.toUpperCase();
-    const tokens = h.name.match(/[\p{L}\p{N}]+/gu) ?? [];
-    for (const t of tokens) {
-      if (t !== t.toUpperCase()) continue; // no está en mayúscula → no aplica
+    const antesTok = h.name.match(/[\p{L}\p{N}]+/gu) ?? [];
+    const despuesTok = nuevo.match(/[\p{L}\p{N}]+/gu) ?? [];
+    antesTok.forEach((t, i) => {
+      const d = despuesTok[i];
+      if (d === undefined || d === t) return; // no cambió
+      if (t !== t.toUpperCase()) return; // no estaba en mayúscula
       const esSiglaClara = todoMayus
         ? /\d/.test(t) || t.length <= 2 // mezcla con número, o letra de modelo
         : t.length <= 4 && !/^\d+$/.test(t); // mayúscula aislada en texto normal
-      if (!esSiglaClara) continue;
-      if (!nuevo.includes(t)) {
-        raros.push({ antes: t, despues: t.toLowerCase(), motivo: h.name });
-      }
-    }
+      if (!esSiglaClara) return;
+      raros.push({ antes: t, despues: d, motivo: h.name });
+    });
   }
 
   console.log("\n── ESTILO ACTUAL DEL CATÁLOGO ──");

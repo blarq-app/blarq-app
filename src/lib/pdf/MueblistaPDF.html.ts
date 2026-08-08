@@ -88,7 +88,7 @@ function renderSector(sector: string, lines: MueblistaHerrajeInput[]): string {
   const rows = lines
     .map((h) => {
       const spec = [h.measure, h.finish].filter(Boolean).join(" · ");
-      // El nombre va homologado en estilo oración (pendiente 139) con el mismo
+      // El nombre va con la escritura homologada (pendiente 139) con el mismo
       // helper que usa el editor, para que PDF y pantalla no puedan divergir.
       return `
       <tr>

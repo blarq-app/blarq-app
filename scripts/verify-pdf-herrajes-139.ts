@@ -1,5 +1,5 @@
 // Baja los dos PDF de la cotización de muebles de dev (el del cliente y el del
-// mueblista) para verificar que los nombres de herraje salen en estilo oración
+// mueblista) para verificar que los nombres de herraje salen homologados
 // (pendiente 139). Solo lectura: no escribe en la base.
 // Uso: npx tsx scripts/verify-pdf-herrajes-139.ts [url]
 import { readFileSync, mkdirSync, writeFileSync } from "fs";

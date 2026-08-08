@@ -2,7 +2,7 @@
  * Verificación en pantalla de los pendientes 138 / 139 / 140.
  *
  *   138 — "+ agregar" del catálogo entra la línea de UN clic.
- *   139 — los nombres de herraje se muestran en estilo oración.
+ *   139 — los nombres de herraje se muestran con cada palabra en mayúscula.
  *   140 — se arrastran los componentes y las líneas de herraje, y el orden
  *         queda GUARDADO (se recarga la página y se vuelve a leer).
  *
@@ -184,7 +184,7 @@ async function main() {
   const cajaModal = modal.locator("xpath=ancestor::div[1]/..");
   await foto(cajaModal, "138-catalogo-un-clic");
 
-  // Los nombres del catálogo ya salen en estilo oración (139).
+  // Los nombres del catálogo ya salen homologados (139).
   const nombresCatalogo = await cajaModal
     .locator(".font-semibold.text-gray-900.leading-tight")
     .evaluateAll((els) => els.slice(0, 6).map((e) => e.textContent!.trim()));
@@ -212,7 +212,7 @@ async function main() {
   await foto(cajaModal, "138-catalogo-hbt");
 
   const lineas = await lineasHerraje(page);
-  console.log("  líneas en la partida (139 · estilo oración):");
+  console.log("  líneas en la partida (139 · homologadas):");
   for (const l of lineas) console.log(`    ${l}`);
   ok(
     lineas.length === lineasIniciales + 4,

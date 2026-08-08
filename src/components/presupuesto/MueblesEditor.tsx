@@ -2269,7 +2269,7 @@ function HerrajePartidaBlock({
                         <div className="flex items-baseline gap-2 min-w-0">
                           <span className="shrink-0 self-center">{handle}</span>
                           {/* Nombre editable (commit al salir del campo),
-                              mostrado en estilo oración (pendiente 139). */}
+                              con la escritura homologada (pendiente 139). */}
                           <HerrajeNameInput
                             value={formatHerrajeName(h.name)}
                             onCommit={(name) => onUpdateHerraje(h.id, { name })}

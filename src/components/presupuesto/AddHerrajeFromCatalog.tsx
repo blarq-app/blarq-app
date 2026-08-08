@@ -322,7 +322,7 @@ export default function AddHerrajeFromCatalog({
                   <div className="w-10 h-10 bg-gray-100 rounded border border-gray-200" />
                 )}
                 <div className="min-w-0">
-                  {/* Nombre homologado en estilo oración (pendiente 139): el
+                  {/* Nombre con la escritura homologada (pendiente 139): el
                       catálogo tiene tres estilos mezclados según cómo se cargó
                       cada proveedor. */}
                   <div className="font-semibold text-gray-900 leading-tight break-words">

@@ -149,6 +149,14 @@ export default async function MaestroEstadosPagoPage({
     );
   const saldo = moTotal - pagado;
 
+  // ¿Queda un EP de este maestro sin cerrar? Un EP nuevo arrancaría desde el
+  // último CERRADO y no vería lo cargado en ese borrador: los dos terminarían
+  // cobrando el mismo tramo de avance. Se avisa al crear (NuevoEPButton).
+  const borradorAbierto = sorted.filter((ep) => ep.status !== "cerrado").at(-1);
+  const epEnBorrador = borradorAbierto
+    ? { number: borradorAbierto.number }
+    : null;
+
   return (
     <div>
       <div className="mb-4">
@@ -199,6 +207,7 @@ export default async function MaestroEstadosPagoPage({
               status: v.status,
             }))}
             defaultVersionId={budget?.id}
+            epEnBorrador={epEnBorrador}
           />
         </div>
       </div>

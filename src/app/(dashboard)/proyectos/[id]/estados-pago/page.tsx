@@ -87,6 +87,13 @@ export default async function EstadosPagoPage({
       );
   }
   const legacyEps = project.estadosPago.filter((ep) => !ep.maestroId);
+  // Mismo aviso que en la pantalla del maestro: si queda un EP sin cerrar, uno
+  // nuevo arrancaría desde el último CERRADO y el mismo avance se cobraría dos
+  // veces. Acá la serie es la de obra completa (los que no tienen maestro).
+  const legacyEnBorrador = [...legacyEps]
+    .sort((a, b) => a.number - b.number)
+    .filter((ep) => ep.status !== "cerrado")
+    .at(-1);
 
   // Maestros disponibles para agregar (no vinculados aún a esta obra).
   const enObraIds = new Set(maestrosEnObra.map((pm) => pm.maestroId));
@@ -167,6 +174,9 @@ export default async function EstadosPagoPage({
                 disabled={!hasObra}
                 versions={obraVersions}
                 defaultVersionId={obraBudget?.id}
+                epEnBorrador={
+                  legacyEnBorrador ? { number: legacyEnBorrador.number } : null
+                }
               />
             )}
           </div>

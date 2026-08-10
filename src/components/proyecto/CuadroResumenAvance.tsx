@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { toPng } from "html-to-image";
 import { formatCLP } from "@/lib/utils";
@@ -225,10 +225,54 @@ export default function CuadroResumenAvance({
   // Estos hooks van ANTES del early return de abajo (regla de hooks de React).
   const exportRef = useRef<HTMLDivElement>(null);
   const [descargando, setDescargando] = useState(false);
+
+  // ── Logo de BLARQ para el encabezado de la imagen ────────────────────────
+  // Mismo archivo que usan los PDF (`blarq-logo-horizontal-ink.png`), así la
+  // imagen del Cuadro Resumen y los PDF de obra/muebles se ven de la misma
+  // familia. Los PDF lo incrustan con `assetDataUri()` (lee el archivo con
+  // `fs`), pero acá estamos en un componente CLIENTE: no hay `fs`. Se baja por
+  // fetch UNA vez y se guarda como data URI en estado.
+  //
+  // El data URI no es cosmética: html-to-image fotografía el DOM tal cual está
+  // en ese instante, y una <img> que todavía no terminó de bajar sale EN
+  // BLANCO. Con la imagen ya incrustada no hay red en el momento de la captura
+  // (y igual la esperamos con decode() antes de disparar, por las dudas).
+  const [logoUri, setLogoUri] = useState<string | null>(null);
+  useEffect(() => {
+    let vigente = true;
+    fetch("/assets/blarq-logo-horizontal-ink.png")
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error("sin logo"))))
+      .then(
+        (blob) =>
+          new Promise<string>((resolve, reject) => {
+            const fr = new FileReader();
+            fr.onload = () => resolve(String(fr.result));
+            fr.onerror = () => reject(new Error("no se pudo leer el logo"));
+            fr.readAsDataURL(blob);
+          })
+      )
+      .then((uri) => {
+        if (vigente) setLogoUri(uri);
+      })
+      // Si falla, el encabezado cae al texto "BLARQ" de siempre: la imagen
+      // sale igual, sin logo, en vez de romperse.
+      .catch(() => {});
+    return () => {
+      vigente = false;
+    };
+  }, []);
+
   async function descargarImagen() {
     if (!exportRef.current) return;
     setDescargando(true);
     try {
+      // Esperar a que TODA imagen del nodo esté decodificada antes de la
+      // captura (ver comentario del logo): html-to-image no espera sola.
+      await Promise.all(
+        Array.from(exportRef.current.querySelectorAll("img")).map((img) =>
+          img.decode().catch(() => {})
+        )
+      );
       const dataUrl = await toPng(exportRef.current, {
         pixelRatio: 2, // nitidez para pantalla retina / impresión
         backgroundColor: "#ffffff",
@@ -625,8 +669,21 @@ export default function CuadroResumenAvance({
               <p className="text-[11px] uppercase tracking-[0.2em] text-gray-400 mb-1">Cuadro Resumen</p>
               <h1 className="text-2xl font-semibold text-gray-900 leading-tight">{projectName}</h1>
             </div>
+            {/* Marca: el logo real, del mismo ancho que en los PDF (31mm ≈
+                120px) y con la misma opacidad, para que se lea discreto — esto
+                es un cuadro de números, no una portada. Si el logo no cargó,
+                cae al texto "BLARQ" de antes. */}
             <div className="text-right text-[11px] text-gray-400 leading-snug">
-              <p className="font-medium text-gray-600">BLARQ</p>
+              {logoUri ? (
+                <img
+                  src={logoUri}
+                  alt="BLARQ"
+                  style={{ width: "120px", height: "auto", opacity: 0.72 }}
+                  className="inline-block mb-1.5"
+                />
+              ) : (
+                <p className="font-medium text-gray-600">BLARQ</p>
+              )}
               <p>{hoyStr}</p>
             </div>
           </div>
@@ -648,7 +705,10 @@ export default function CuadroResumenAvance({
                   <Fragment key={c.key}>
                     <th className="pb-1 px-2 border-l border-gray-100 text-left font-medium">Fecha</th>
                     <th className="pb-1 px-2 text-right font-medium">Monto</th>
-                    <th className="pb-1 px-2 text-right font-medium">Fact.</th>
+                    {/* "Factura" completo (y no "Fact.") porque esta imagen la
+                        lee el cliente, no MJ: la abreviatura no se entiende de
+                        afuera. Va en nowrap para que no se parta en dos. */}
+                    <th className="pb-1 px-2 text-right font-medium whitespace-nowrap">Factura</th>
                   </Fragment>
                 ))}
                 <th className="pb-1 pl-2 border-l border-gray-200"></th>
@@ -685,10 +745,16 @@ export default function CuadroResumenAvance({
                 <td className="py-1.5 pl-2 border-l border-gray-200 text-right whitespace-nowrap">{formatCLP(totalAcordado)}</td>
               </tr>
 
-              {/* Cobros — mismo apilado por columna que en pantalla */}
+              {/* Cobros — mismo apilado por columna que en pantalla.
+                  El bloque va rotulado "Transferencias" en la columna de la
+                  izquierda (la misma donde viven TOTAL PAGOS / SALDO
+                  PENDIENTE), sobre la primera fila: sin rótulo, el cliente ve
+                  una lista de montos y no entiende que son SUS pagos. */}
               {filasPagos.map((fila, i) => (
                 <tr key={i} className="border-b border-gray-50 text-gray-700">
-                  <td className="py-1.5 pr-2"></td>
+                  <td className="py-1.5 pr-2 text-left uppercase tracking-wide text-[10px] text-gray-500 align-top whitespace-nowrap">
+                    {i === 0 ? "Transferencias" : ""}
+                  </td>
                   {conceptos.map((c) => {
                     const cell = fila[c.key];
                     return (
@@ -702,6 +768,13 @@ export default function CuadroResumenAvance({
                   <td className="py-1.5 pl-2 border-l border-gray-200"></td>
                 </tr>
               ))}
+
+              {/* Aire entre el detalle de transferencias y el bloque de
+                  totales — igual que en pantalla: una fila vacía que separa
+                  los pagos de los subtotales (Total pagos / Avance / Saldo). */}
+              <tr aria-hidden="true">
+                <td colSpan={2 + conceptos.length * 3} className="h-5"></td>
+              </tr>
 
               {/* TOTAL PAGOS */}
               <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold text-gray-900">
@@ -745,13 +818,9 @@ export default function CuadroResumenAvance({
               </tr>
             </tbody>
           </table>
-
-          <p className="text-[11px] text-gray-500 mt-4">
-            Avance total cobrado: {(avanceTotal * 100).toFixed(0)}% del acordado.
-            {calc.totalAPedir > 0 && (
-              <> En este avance se cobra <span className="font-medium tabular-nums">{formatCLP(calc.totalAPedir)}</span>; el saldo queda en {formatCLP(calc.totalSaldoNuevo)}.</>
-            )}
-          </p>
+          {/* Sin nota al pie: el resumen en palabras ("avance total cobrado…")
+              es para MJ y quedó SOLO en la vista de pantalla. En la imagen que
+              va al cliente los números del cuadro se explican solos. */}
         </div>
       </div>
     </div>

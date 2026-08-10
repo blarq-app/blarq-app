@@ -473,7 +473,7 @@ export default function EditorEP({
       {/* TABLA DE PARTIDAS */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {/* Headers */}
-        <div className="grid grid-cols-[3rem_minmax(0,3fr)_3rem_5rem_5.5rem_6rem_8rem_6.5rem] items-center gap-2 px-4 py-2 border-y-2 border-gray-900 bg-white text-[10px] font-bold text-gray-900 uppercase tracking-wider">
+        <div className="grid grid-cols-[3rem_minmax(0,3fr)_3rem_5rem_5.5rem_6rem_8rem_9rem] items-center gap-2 px-4 py-2 border-y-2 border-gray-900 bg-white text-[10px] font-bold text-gray-900 uppercase tracking-wider">
           <div className="text-center">Item</div>
           <div className="text-left">Partida + Descripción</div>
           <div className="text-center">Un.</div>
@@ -526,7 +526,7 @@ export default function EditorEP({
                     </div>
                   )}
                   <div
-                    className={`grid grid-cols-[3rem_minmax(0,3fr)_3rem_5rem_5.5rem_6rem_8rem_6.5rem] items-center gap-2 px-4 py-1 border-b border-gray-100 ${
+                    className={`grid grid-cols-[3rem_minmax(0,3fr)_3rem_5rem_5.5rem_6rem_8rem_9rem] items-center gap-2 px-4 py-1 border-b border-gray-100 ${
                       i.outOfScope ? "bg-amber-50/40" : ""
                     } ${c.warningExceedsTotal ? "bg-amber-50" : ""}`}
                   >
@@ -575,6 +575,12 @@ export default function EditorEP({
                           <div className="text-[10px] text-gray-400">
                             {fmtNum(i.quantityExecuted)} {i.unit.toLowerCase()}
                           </div>
+                          <BarraAvance
+                            pctPrev={c.pctAccumulatedPrev}
+                            pctTotal={c.pctAccumulatedCurrent}
+                            prevPagado={snap.prevAmountPaid}
+                            montoEsteEp={c.amountThisEp}
+                          />
                         </div>
                       ) : (
                         <div>
@@ -589,6 +595,12 @@ export default function EditorEP({
                               onSetMode={(m) => setMode(i.id, m)}
                             />
                           </div>
+                          <BarraAvance
+                            pctPrev={c.pctAccumulatedPrev}
+                            pctTotal={c.pctAccumulatedCurrent}
+                            prevPagado={snap.prevAmountPaid}
+                            montoEsteEp={c.amountThisEp}
+                          />
                           {err && (
                             <div className="text-[10px] text-red-600 leading-tight mt-0.5">
                               {err}
@@ -597,11 +609,20 @@ export default function EditorEP({
                         </div>
                       )}
                     </div>
-                    {/* $ ACUMULADO — total pagado/pagable por esta partida hasta este EP */}
+                    {/* $ ACUMULADO — total pagado/pagable por esta partida hasta
+                        este EP, y de dónde sale: cuánto ya se le pagó al maestro
+                        en EPs cerrados y cuánto agrega este. La línea de "ya
+                        pagado" solo aparece si hubo EP anterior — en el EP 1 no
+                        hay previo y una leyenda en $0 solo haría ruido. */}
                     <div className="text-right text-xs tabular-nums pt-0.5">
                       <div className="font-medium text-gray-900">
                         {formatCLP(c.totalAccumulated)}
                       </div>
+                      {snap.prevAmountPaid > 0 && (
+                        <div className="text-[10px] text-gray-500 leading-tight">
+                          ya pagado {formatCLP(snap.prevAmountPaid)}
+                        </div>
+                      )}
                       {c.amountThisEp > 0 && (
                         <div className="text-[10px] text-green-700 leading-tight">
                           +{formatCLP(c.amountThisEp)} este EP
@@ -723,6 +744,59 @@ export default function EditorEP({
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────
+
+// Barra de avance en DOS TRAMOS: el oscuro es lo que ya se le pagó al maestro
+// en EPs cerrados anteriores, el claro es lo que agrega ESTE EP. Antes era un
+// solo tramo y la pantalla decía "+$X este EP" sin decir de dónde venía.
+//
+// En el EP 1 no hay previo: queda un solo tramo claro, sin tramo oscuro vacío.
+// En una partida `outOfScope` pasa al revés — tiene previo pagado pero no suma
+// nada nuevo, así que queda solo el tramo oscuro.
+//
+// Grises a propósito (§3): la jerarquía la da el TONO, no el color.
+function BarraAvance({
+  pctPrev,
+  pctTotal,
+  prevPagado,
+  montoEsteEp,
+}: {
+  pctPrev: number;
+  pctTotal: number;
+  prevPagado: number;
+  montoEsteEp: number;
+}) {
+  const prev = clampPct(pctPrev);
+  const total = clampPct(pctTotal);
+  const nuevo = Math.max(0, total - prev);
+  if (total <= 0 && prev <= 0) {
+    // Sin avance todavía: la barra vacía no aporta y el cero no tiene que
+    // ocupar lugar prominente (§3).
+    return <div className="mt-1 h-1.5 w-full rounded-full bg-gray-100" />;
+  }
+  const detalle = [
+    prev > 0 ? `Ya pagado ${prev.toFixed(0)}% · ${formatCLP(prevPagado)}` : null,
+    nuevo > 0 ? `Este EP ${nuevo.toFixed(0)}% · ${formatCLP(montoEsteEp)}` : null,
+  ]
+    .filter(Boolean)
+    .join("  ·  ");
+  return (
+    <div
+      className="mt-1 flex h-1.5 w-full overflow-hidden rounded-full bg-gray-100"
+      title={detalle}
+    >
+      {prev > 0 && (
+        <div className="bg-gray-500" style={{ width: `${prev}%` }} />
+      )}
+      {nuevo > 0 && (
+        <div className="bg-gray-300" style={{ width: `${nuevo}%` }} />
+      )}
+    </div>
+  );
+}
+
+function clampPct(n: number): number {
+  return Math.min(100, Math.max(0, n));
+}
 
 // Campo de avance de una partida. Edita en LOCAL mientras se tipea y recién
 // manda al servidor al SALIR del campo (blur o Enter) — mismo criterio que la

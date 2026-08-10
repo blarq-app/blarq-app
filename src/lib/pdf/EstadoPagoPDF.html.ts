@@ -332,6 +332,16 @@ const CSS = `
   tr.total-row .col-pu, tr.total-row .col-total, tr.total-row .col-pagar {
     font-weight: 700;
   }
+  /* La fila de lo que se paga AHORA: es el número que el maestro va a cobrar,
+     así que va más marcada que el acumulado de arriba. */
+  tr.pagar-row td {
+    border-bottom: 0.75pt solid #000;
+    background: #F2F2F2;
+    padding: 5px 4px;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 8pt;
+  }
 
   /* ── Histórico EPs ───────────────────────────────────────────── */
   .historico-wrap { margin-top: 14px; }
@@ -405,6 +415,13 @@ export function renderEPHtml(data: EPHTMLInput): string {
   }));
 
   const totalAccumulatedPrior = previousEps.reduce((s, p) => s + p.totalPaid, 0);
+  // Total de la columna "$ ACUMULADO": la suma de lo que muestran las filas.
+  // Sin esto la columna no cerraba con su propio pie (ver la nota de las dos
+  // filas de totales más abajo).
+  const totalAccumulatedAllItems = items.reduce(
+    (s, i) => s + i.totalAccumulated,
+    0
+  );
 
   const logoUri = getLogoDataUri();
   const logoHtml = logoUri
@@ -533,15 +550,28 @@ export function renderEPHtml(data: EPHTMLInput): string {
         <th class="col-pu">P.U</th>
         <th class="col-total">TOTAL</th>
         <th class="col-avance">AVANCE</th>
-        <th class="col-pagar">$ A PAGAR</th>
+        <th class="col-pagar">$ ACUMULADO</th>
       </tr>
     </thead>
     <tbody>
       ${tableRows}
+      <!-- Dos filas, no una. Antes había UNA sola que ponía el monto de ESTE EP
+           al pie de una columna cuyas filas traen el ACUMULADO: la columna no
+           sumaba su propio total y quedaba a mano leer el acumulado como si
+           fuera lo que hay que pagar (en el EP 2 de Paseo del Sena eran
+           $3.993.242 contra $3.077.400 reales). Ahora cada total corresponde a
+           su columna, y lo que se paga va en su propia fila, rotulado. -->
       <tr class="total-row">
         <td class="col-item"></td>
         <td class="col-name" colspan="5">TOTAL MANO DE OBRA</td>
         <td class="col-total">${fmtCLP(totalLaborBudget)}</td>
+        <td class="col-avance"></td>
+        <td class="col-pagar">${fmtCLP(totalAccumulatedAllItems)}</td>
+      </tr>
+      <tr class="pagar-row">
+        <td class="col-item"></td>
+        <td class="col-name" colspan="5">A PAGAR ESTE ESTADO DE PAGO</td>
+        <td class="col-total"></td>
         <td class="col-avance"></td>
         <td class="col-pagar">${fmtCLP(totalAmountThisEp)}</td>
       </tr>

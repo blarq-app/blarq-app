@@ -226,21 +226,25 @@ export default function CuadroResumenAvance({
   const exportRef = useRef<HTMLDivElement>(null);
   const [descargando, setDescargando] = useState(false);
 
-  // ── Logo de BLARQ para el encabezado de la imagen ────────────────────────
-  // Mismo archivo que usan los PDF (`blarq-logo-horizontal-ink.png`), así la
-  // imagen del Cuadro Resumen y los PDF de obra/muebles se ven de la misma
-  // familia. Los PDF lo incrustan con `assetDataUri()` (lee el archivo con
-  // `fs`), pero acá estamos en un componente CLIENTE: no hay `fs`. Se baja por
-  // fetch UNA vez y se guarda como data URI en estado.
+  // ── Isotipo de BLARQ para el encabezado de la imagen ─────────────────────
+  // El ISOTIPO (la "A"), no el logo completo con el wordmark: es el mismo
+  // criterio que en los PDF, donde el wordmark de 31mm va solo en la PORTADA y
+  // las hojas con tabla llevan el isotipo a 40px (corrección de MJ del
+  // 2026-07-29, ver `.dhead-iso` en ObraPDF/ArtefactosPDF/MueblesPDF). Esta
+  // imagen es una hoja de tabla, así que va con isotipo.
+  //
+  // Los PDF lo incrustan con `assetDataUri()` (lee el archivo con `fs`), pero
+  // acá estamos en un componente CLIENTE: no hay `fs`. Se baja por fetch UNA
+  // vez y se guarda como data URI en estado.
   //
   // El data URI no es cosmética: html-to-image fotografía el DOM tal cual está
   // en ese instante, y una <img> que todavía no terminó de bajar sale EN
   // BLANCO. Con la imagen ya incrustada no hay red en el momento de la captura
   // (y igual la esperamos con decode() antes de disparar, por las dudas).
-  const [logoUri, setLogoUri] = useState<string | null>(null);
+  const [isotipoUri, setIsotipoUri] = useState<string | null>(null);
   useEffect(() => {
     let vigente = true;
-    fetch("/assets/blarq-logo-horizontal-ink.png")
+    fetch("/assets/blarq-isotipo-piedra.png")
       .then((r) => (r.ok ? r.blob() : Promise.reject(new Error("sin logo"))))
       .then(
         (blob) =>
@@ -252,7 +256,7 @@ export default function CuadroResumenAvance({
           })
       )
       .then((uri) => {
-        if (vigente) setLogoUri(uri);
+        if (vigente) setIsotipoUri(uri);
       })
       // Si falla, el encabezado cae al texto "BLARQ" de siempre: la imagen
       // sale igual, sin logo, en vez de romperse.
@@ -669,17 +673,17 @@ export default function CuadroResumenAvance({
               <p className="text-[11px] uppercase tracking-[0.2em] text-gray-400 mb-1">Cuadro Resumen</p>
               <h1 className="text-2xl font-semibold text-gray-900 leading-tight">{projectName}</h1>
             </div>
-            {/* Marca: el logo real, del mismo ancho que en los PDF (31mm ≈
-                120px) y con la misma opacidad, para que se lea discreto — esto
-                es un cuadro de números, no una portada. Si el logo no cargó,
-                cae al texto "BLARQ" de antes. */}
+            {/* Marca: el isotipo, con las mismas medidas que en las hojas de
+                tabla de los PDF (40px, opacidad .55) — discreto, porque esto
+                es un cuadro de números y no una portada. Si no cargó, cae al
+                texto "BLARQ" de antes. */}
             <div className="text-right text-[11px] text-gray-400 leading-snug">
-              {logoUri ? (
+              {isotipoUri ? (
                 <img
-                  src={logoUri}
+                  src={isotipoUri}
                   alt="BLARQ"
-                  style={{ width: "120px", height: "auto", opacity: 0.72 }}
-                  className="inline-block mb-1.5"
+                  style={{ width: "40px", height: "auto", opacity: 0.55 }}
+                  className="inline-block mb-2"
                 />
               ) : (
                 <p className="font-medium text-gray-600">BLARQ</p>

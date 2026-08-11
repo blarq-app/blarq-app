@@ -30,7 +30,7 @@ import DuplicarArtefactos from "./DuplicarArtefactos";
 import RevisarPreciosArtefactos, {
   type ArtefactoPricePatch,
 } from "./RevisarPreciosArtefactos";
-import { ROOM_ORDER, roomLabel } from "@/lib/presupuesto/ambientes";
+import { ROOM_ORDER, roomKey, roomLabel } from "@/lib/presupuesto/ambientes";
 
 // Input numérico con separadores de miles. Sin foco muestra "5.488.460",
 // con foco muestra "5488460" para edición. onChange devuelve el número crudo.
@@ -207,8 +207,12 @@ export default function ArtefactosEditor({
   const totalUtilidad = totalCliente - totalCostoBlarq;
 
   // ── Agrupación: subcategoría → habitación → items ────────────────────
+  // Un bloque de ambiente. `key` es la clave NORMALIZADA (agrupa "Cocina" y
+  // "cocina"); `room` es el valor crudo que se guarda en los artefactos nuevos
+  // de este bloque — el del primer artefacto, que es el nombre que se muestra.
   type RoomGroup = {
     key: string;
+    room: string;
     label: string;
     items: ArtefactoItem[];
     subtotal: number;
@@ -238,9 +242,11 @@ export default function ArtefactosEditor({
     })
     .map((subKey) => {
       const subItems = subcatBuckets.get(subKey) ?? [];
+      // Agrupa por clave NORMALIZADA: dos ambientes que se leen igual son el
+      // mismo bloque, aunque estén guardados distinto ("Cocina" / "cocina").
       const roomBuckets = new Map<string, ArtefactoItem[]>();
       for (const it of subItems) {
-        const r = it.room || "otro";
+        const r = roomKey(it.room || "otro");
         const arr = roomBuckets.get(r) ?? [];
         arr.push(it);
         roomBuckets.set(r, arr);
@@ -269,9 +275,14 @@ export default function ArtefactosEditor({
             (s, it) => s + (it.realCostBlarq ?? 0) * it.quantity,
             0
           );
+          // El nombre visible es el del PRIMER artefacto del bloque (el de
+          // arriba). Si el bloque quedó con dos escrituras distintas, manda
+          // esa; renombrarlo unifica a todos (ver changeRoomForGroup).
+          const room = rItems[0]?.room || "otro";
           return {
             key: rkey,
-            label: roomLabel(rkey),
+            room,
+            label: roomLabel(room),
             items: rItems,
             subtotal,
             subtotalCostoBlarq,
@@ -422,21 +433,46 @@ export default function ArtefactosEditor({
   // Cambia el AMBIENTE (room) de TODO un bloque: reasigna el room de cada
   // artefacto de ese grupo. Sirve para corregir un bloque mal cargado (ej.
   // artefactos de cocina que quedaron en "Baño principal") o para renombrar
-  // un ambiente. Si el nuevo room coincide con otro bloque existente de la
-  // misma subcategoría, los dos bloques se fusionan (es lo esperado).
+  // un ambiente. Si el nuevo nombre se lee igual que otro bloque de la misma
+  // subcategoría, los dos bloques se fusionan (es lo esperado).
   // `room` no está en SYNC_FIELDS ni NAME_SYNC_FIELDS, así que reusar
   // updateItem no contagia el cambio a copias del mismo producto en otros
   // ambientes — solo mueve las filas de ESTE bloque.
+  //
+  // OJO (bug 2026-08-11): acá había un `if (newRoom === oldRoomKey) return` y
+  // en el banner otro `if (next === label) return`. Entre los dos, renombrar
+  // un ambiente NO GUARDABA NADA en el caso más común: el bloque guardado
+  // como "cocina" se muestra como "Cocina" (mapa de nombres) y encima el
+  // campo lo pintaba en MAYÚSCULA, así que MJ escribía exactamente el nombre
+  // que veía y el cambio se descartaba en silencio. Ahora la comparación es
+  // contra lo GUARDADO en cada artefacto, no contra el nombre visible: si
+  // alguno tiene otro texto, se escribe. Eso además unifica un bloque que
+  // quedó con dos escrituras distintas.
   function changeRoomForGroup(
     subKey: string,
-    oldRoomKey: string,
+    groupKey: string,
+    labelActual: string,
     newRoom: string
   ) {
-    if (!newRoom || newRoom === oldRoomKey) return;
-    const targets = items.filter(
-      (i) => (i.subcategory || "sanitario") === subKey && (i.room || "otro") === oldRoomKey
+    const next = newRoom.trim();
+    if (!next) return;
+    const delBloque = items.filter(
+      (i) =>
+        (i.subcategory || "sanitario") === subKey &&
+        roomKey(i.room || "otro") === groupKey
     );
-    for (const it of targets) updateItem(it.id, { room: newRoom });
+    const aCambiar = delBloque.filter((i) => (i.room || "otro") !== next);
+    if (aCambiar.length === 0) return; // ya están todos con ese nombre
+    // Un bloque "mezclado" es el que quedó con dos escrituras del mismo
+    // ambiente ("Cocina" y "cocina"). Ahí SIEMPRE escribimos, aunque el texto
+    // sea el que ya se ve: es la forma de unificarlo desde la app.
+    const mezclado =
+      new Set(delBloque.map((i) => i.room || "otro")).size > 1;
+    // Bloque parejo y el texto es igual al nombre visible → no hubo renombre.
+    // (Pasa al entrar y salir del campo sin escribir: "bano_principal" se
+    // muestra "Baño principal" y no queremos reescribir la clave por un clic.)
+    if (!mezclado && next === labelActual) return;
+    for (const it of aCambiar) updateItem(it.id, { room: next });
   }
 
   // Aplica los cambios que vienen del modal "Comparar con mi catálogo": baja
@@ -651,11 +687,12 @@ export default function ArtefactosEditor({
   // pisan los rangos entre ambientes.
 
   // Orden actual de los ambientes de una subcategoría (por sortOrder mínimo).
+  // Las claves son las NORMALIZADAS (roomKey), igual que en el agrupado.
   function roomOrderOf(subKey: string, base: ArtefactoItem[]): string[] {
     const min = new Map<string, number>();
     for (const it of base) {
       if ((it.subcategory || "sanitario") !== subKey) continue;
-      const r = it.room || "otro";
+      const r = roomKey(it.room || "otro");
       const cur = min.get(r);
       if (cur === undefined || it.sortOrder < cur) min.set(r, it.sortOrder);
     }
@@ -670,7 +707,7 @@ export default function ArtefactosEditor({
       .filter((i) => (i.subcategory || "sanitario") === subKey)
       .sort((a, b) => a.sortOrder - b.sortOrder);
     for (const it of sub) {
-      const r = it.room || "otro";
+      const r = roomKey(it.room || "otro");
       if (!byRoom.has(r)) byRoom.set(r, []);
       byRoom.get(r)!.push(it);
     }
@@ -679,10 +716,14 @@ export default function ArtefactosEditor({
 
   // Renumera el sortOrder de toda la subcategoría según un orden de ambientes
   // y el orden interno de cada uno; aplica al estado y persiste lo que cambió.
+  // `forzarPersistir`: ids que hay que guardar sí o sí aunque su sortOrder no
+  // haya cambiado. Lo usa la mudanza de un artefacto a otro ambiente — ahí lo
+  // que cambió es el `room`, y puede caer justo en la misma posición.
   function applyOrder(
     roomOrder: string[],
     itemsByRoom: Map<string, ArtefactoItem[]>,
-    base: ArtefactoItem[]
+    base: ArtefactoItem[],
+    forzarPersistir?: Set<string>
   ) {
     let c = 0;
     const newSort = new Map<string, number>();
@@ -694,43 +735,94 @@ export default function ArtefactosEditor({
     );
     setItems(updated);
     for (const it of updated) {
-      if (newSort.has(it.id) && oldSort.get(it.id) !== it.sortOrder) {
+      if (
+        newSort.has(it.id) &&
+        (oldSort.get(it.id) !== it.sortOrder || forzarPersistir?.has(it.id))
+      ) {
         persistItem(it);
       }
     }
   }
 
-  // Arrastrar reordena las FILAS dentro de un ambiente; renumera la subcat
-  // manteniendo el orden de los demás ambientes.
-  function onDragEndRoom(
-    e: DragEndEvent,
-    subKey: string,
-    roomKey: string,
-    roomItems: ArtefactoItem[]
-  ) {
+  // Un solo manejador de arrastre por subcategoría. Antes había dos contextos
+  // separados (uno para los BLOQUES de ambiente, uno POR CADA ambiente para
+  // sus filas), y por eso un artefacto no podía salir de su ambiente: el
+  // arrastre nunca cruzaba de contexto. Ahora los dos tipos de arrastre viven
+  // en el mismo contexto y se distinguen por el id — los bloques son
+  // "<subKey>::<claveDeAmbiente>", las filas son el id del artefacto.
+  //
+  // Tres gestos posibles:
+  //   · bloque sobre bloque   → reordena ambientes
+  //   · fila sobre fila del MISMO ambiente → reordena filas
+  //   · fila sobre fila (o sobre el bloque) de OTRO ambiente → muda el
+  //     artefacto a ese ambiente, en el lugar donde se soltó
+  function onDragEndSubcat(e: DragEndEvent, subKey: string) {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const oldIdx = roomItems.findIndex((it) => it.id === active.id);
-    const newIdx = roomItems.findIndex((it) => it.id === over.id);
-    if (oldIdx < 0 || newIdx < 0) return;
-    const byRoom = groupRooms(subKey, items);
-    byRoom.set(roomKey, arrayMove(roomItems, oldIdx, newIdx));
-    applyOrder(roomOrderOf(subKey, items), byRoom, items);
-  }
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    const prefijo = `${subKey}::`;
+    const esBloque = (id: string) => id.startsWith(prefijo);
+    // Ambiente al que apunta un id, sea un bloque o una fila.
+    const ambienteDe = (id: string): string | null => {
+      if (esBloque(id)) return id.slice(prefijo.length);
+      const it = items.find((i) => i.id === id);
+      return it ? roomKey(it.room || "otro") : null;
+    };
 
-  // Arrastrar reordena los BLOQUES de ambiente (ej. subir "Baño 3" sobre
-  // "Baño 2"). Los ids de la lista de ambientes son "<subKey>::<roomKey>".
-  function onDragEndRoomBlocks(e: DragEndEvent, subKey: string) {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
-    const roomOf = (id: string) => id.split("::").slice(1).join("::");
-    const fromRoom = roomOf(String(active.id));
-    const toRoom = roomOf(String(over.id));
-    const order = roomOrderOf(subKey, items);
-    const from = order.indexOf(fromRoom);
-    const to = order.indexOf(toRoom);
-    if (from < 0 || to < 0) return;
-    applyOrder(arrayMove(order, from, to), groupRooms(subKey, items), items);
+    const orden = roomOrderOf(subKey, items);
+    const porAmbiente = groupRooms(subKey, items);
+
+    // (a) Se arrastró un AMBIENTE completo.
+    if (esBloque(activeId)) {
+      const destino = ambienteDe(overId);
+      const from = orden.indexOf(activeId.slice(prefijo.length));
+      const to = destino ? orden.indexOf(destino) : -1;
+      if (from < 0 || to < 0 || from === to) return;
+      applyOrder(arrayMove(orden, from, to), porAmbiente, items);
+      return;
+    }
+
+    // (b) Se arrastró una FILA.
+    const item = items.find((i) => i.id === activeId);
+    const desde = item ? roomKey(item.room || "otro") : null;
+    const hacia = ambienteDe(overId);
+    if (!item || !desde || !hacia) return;
+
+    if (hacia === desde) {
+      const lista = porAmbiente.get(desde) ?? [];
+      const oldIdx = lista.findIndex((i) => i.id === activeId);
+      const newIdx = lista.findIndex((i) => i.id === overId);
+      if (oldIdx < 0 || newIdx < 0) return;
+      porAmbiente.set(desde, arrayMove(lista, oldIdx, newIdx));
+      applyOrder(orden, porAmbiente, items);
+      return;
+    }
+
+    // Mudanza a otro ambiente. El artefacto se guarda con el nombre de
+    // ambiente TAL CUAL lo tiene el bloque destino (su primer artefacto), así
+    // no se inventa una escritura nueva del mismo ambiente.
+    const destinoLista = [...(porAmbiente.get(hacia) ?? [])];
+    const roomDestino = destinoLista[0]?.room || hacia;
+    const base = items.map((i) =>
+      i.id === activeId ? { ...i, room: roomDestino } : i
+    );
+    const movido = base.find((i) => i.id === activeId)!;
+    // Soltado sobre el bloque (banner o zona muerta) → al final del ambiente.
+    const at = esBloque(overId)
+      ? destinoLista.length
+      : Math.max(0, destinoLista.findIndex((i) => i.id === overId));
+    destinoLista.splice(at, 0, movido);
+    const origenLista = (porAmbiente.get(desde) ?? []).filter(
+      (i) => i.id !== activeId
+    );
+    porAmbiente.set(desde, origenLista);
+    porAmbiente.set(hacia, destinoLista);
+    // Si el ambiente de origen se quedó sin artefactos, desaparece.
+    const nuevoOrden = orden.filter((r) => r !== desde || origenLista.length > 0);
+    // El PUT por ítem manda la fila completa, así que el `room` nuevo viaja
+    // junto con el sortOrder: un solo guardado por artefacto.
+    applyOrder(nuevoOrden, porAmbiente, base, new Set([activeId]));
   }
 
   // Duplica un ambiente COMPLETO: copia todos sus artefactos a un ambiente
@@ -738,18 +830,18 @@ export default function ArtefactosEditor({
   // para armar un baño igual a otro y después cambiarle el nombre.
   async function duplicateRoom(
     subKey: string,
-    roomKey: string,
-    roomLabel: string
+    groupKey: string,
+    labelActual: string
   ) {
     const roomItems = items
       .filter(
         (i) =>
           (i.subcategory || "sanitario") === subKey &&
-          (i.room || "otro") === roomKey
+          roomKey(i.room || "otro") === groupKey
       )
       .sort((a, b) => a.sortOrder - b.sortOrder);
     if (roomItems.length === 0) return;
-    const newRoom = `${roomLabel} (copia)`;
+    const newRoom = `${labelActual} (copia)`;
     try {
       const created: ArtefactoItem[] = [];
       for (const src of roomItems) {
@@ -779,15 +871,16 @@ export default function ArtefactosEditor({
         created.push(await res.json());
       }
       // Insertar el ambiente nuevo justo después del original y renumerar.
+      const newKey = roomKey(newRoom);
       const order = roomOrderOf(subKey, items);
-      const at = order.indexOf(roomKey);
+      const at = order.indexOf(groupKey);
       const newOrder = [
         ...order.slice(0, at + 1),
-        newRoom,
+        newKey,
         ...order.slice(at + 1),
       ];
       const byRoom = groupRooms(subKey, items);
-      byRoom.set(newRoom, created); // copias en el mismo orden que el original
+      byRoom.set(newKey, created); // copias en el mismo orden que el original
       applyOrder(newOrder, byRoom, [...items, ...created]);
     } catch {
       alert("Error al duplicar el ambiente");
@@ -970,12 +1063,14 @@ export default function ArtefactosEditor({
             {sub.label}
           </div>
 
-          {/* Los ambientes (bloques) son arrastrables entre sí: se agarra el
-              banner por la manija ⋮⋮ y se sube/baja sobre otro ambiente. */}
+          {/* UN SOLO contexto de arrastre para toda la subcategoría: los
+              ambientes (se agarran del banner por la manija ⋮⋮) y las filas
+              (manija ⋮⋮ a la izquierda). Estar en el mismo contexto es lo que
+              permite sacar un artefacto de un ambiente y soltarlo en otro. */}
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
-            onDragEnd={(e) => onDragEndRoomBlocks(e, sub.key)}
+            onDragEnd={(e) => onDragEndSubcat(e, sub.key)}
           >
             <SortableContext
               items={sub.rooms.map((r) => `${sub.key}::${r.key}`)}
@@ -1004,7 +1099,12 @@ export default function ArtefactosEditor({
                           <RoomBanner
                             label={room.label}
                             onChange={(newRoom) =>
-                              changeRoomForGroup(sub.key, room.key, newRoom)
+                              changeRoomForGroup(
+                                sub.key,
+                                room.key,
+                                room.label,
+                                newRoom
+                              )
                             }
                           />
                         </div>
@@ -1052,7 +1152,7 @@ export default function ArtefactosEditor({
                             onAdd={async (payload) => {
                               await addItemFromPayload(
                                 sub.key,
-                                room.key,
+                                room.room,
                                 payload
                               );
                               setAddingTo(null);
@@ -1090,35 +1190,29 @@ export default function ArtefactosEditor({
                         <div></div>
                       </div>
 
-                      {/* Items del room — arrastrables (manija ⋮⋮ a la izq) */}
-                      <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={(e) =>
-                          onDragEndRoom(e, sub.key, room.key, room.items)
-                        }
+                      {/* Items del room — arrastrables (manija ⋮⋮ a la izq).
+                          Comparten el DndContext de la subcategoría, así una
+                          fila se puede soltar en otro ambiente. */}
+                      <SortableContext
+                        items={room.items.map((i) => i.id)}
+                        strategy={verticalListSortingStrategy}
                       >
-                        <SortableContext
-                          items={room.items.map((i) => i.id)}
-                          strategy={verticalListSortingStrategy}
-                        >
-                          {room.items.map((item) => (
-                            <SortableArtefactoRow
-                              key={item.id}
-                              item={item}
-                              projectId={projectId}
-                              showCost={showCost}
-                              gridCls={gridCls}
-                              onUpdate={(patch) => updateItem(item.id, patch)}
-                              onVolverAlDctoDeLaTienda={() =>
-                                volverAlDctoDeLaTienda(item.id)
-                              }
-                              onDelete={() => deleteItem(item.id)}
-                              onDuplicate={() => duplicateItem(item)}
-                            />
-                          ))}
-                        </SortableContext>
-                      </DndContext>
+                        {room.items.map((item) => (
+                          <SortableArtefactoRow
+                            key={item.id}
+                            item={item}
+                            projectId={projectId}
+                            showCost={showCost}
+                            gridCls={gridCls}
+                            onUpdate={(patch) => updateItem(item.id, patch)}
+                            onVolverAlDctoDeLaTienda={() =>
+                              volverAlDctoDeLaTienda(item.id)
+                            }
+                            onDelete={() => deleteItem(item.id)}
+                            onDuplicate={() => duplicateItem(item)}
+                          />
+                        ))}
+                      </SortableContext>
 
                       {/* Subtotal del room */}
                       <div
@@ -1424,6 +1518,18 @@ function SortableRoomBlock({
 // (changeRoomForGroup, en el padre). Escape descarta. Antes había un botón
 // "Editar ambiente" con un desplegable; MJ prefiere escribir el nombre
 // directo, sin ese paso intermedio.
+//
+// DOS COSAS QUE ESTABAN MAL (2026-08-11):
+//
+// 1. El campo tenía `uppercase`: MOSTRABA "COCINA" y GUARDABA lo tipeado
+//    ("Cocina", "cocina"). Como el nombre del ambiente sale impreso en el PDF
+//    del cliente ("Total artefactos cocina"), no se puede guardar en mayúscula
+//    para que la vista sea cierta — así que se saca el `uppercase` y el campo
+//    muestra exactamente el texto que queda guardado. El bloque sigue
+//    leyéndose como título por la negrita y el interletrado.
+// 2. Descartaba el cambio cuando el texto coincidía con el nombre VISIBLE.
+//    Combinado con el punto 1, escribir el nombre que se veía en pantalla no
+//    guardaba nada. Ahora decide el padre, comparando contra lo guardado.
 function RoomBanner({
   label,
   onChange,
@@ -1432,14 +1538,18 @@ function RoomBanner({
   onChange: (newRoom: string) => void;
 }) {
   // Se edita una copia local del nombre; recién al confirmar se persiste.
-  // El padre remonta el bloque cuando cambia el ambiente (key=room.key), así
-  // que el useState se reinicializa solo con el label nuevo.
+  // El padre remonta el bloque cuando cambia la clave del ambiente, así que
+  // el useState se reinicializa solo con el label nuevo.
   const [value, setValue] = useState(label);
 
+  // Siempre confirmamos al salir del campo. Quién decide si hay algo que
+  // escribir es el padre, comparando contra lo GUARDADO en cada artefacto —
+  // no contra el nombre visible, que es justamente lo que hacía que el
+  // renombre se perdiera.
   function commit() {
     const next = value.trim();
-    // Vacío o sin cambios → volver al nombre actual, no tocar nada.
-    if (!next || next === label) {
+    // Vacío → volver al nombre actual, no tocar nada.
+    if (!next) {
       setValue(label);
       return;
     }
@@ -1459,8 +1569,8 @@ function RoomBanner({
           e.currentTarget.blur();
         }
       }}
-      title="Nombre del ambiente — clic para editar"
-      className="flex-1 min-w-0 bg-transparent border-0 p-0 text-[11px] font-bold uppercase tracking-wider text-gray-900 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
+      title="Nombre del ambiente — clic para editar. Se guarda al salir del campo o con Enter."
+      className="flex-1 min-w-0 bg-transparent border-0 p-0 text-[11px] font-bold tracking-wider text-gray-900 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
     />
   );
 }
@@ -1649,7 +1759,7 @@ function SortableArtefactoRow({
         {...sortable.attributes}
         {...sortable.listeners}
         className="cursor-grab text-gray-300 hover:text-gray-700 select-none leading-none text-center"
-        title="Arrastrar para reordenar dentro del ambiente"
+        title="Arrastrar para reordenar — o soltar sobre otro ambiente para mover el artefacto ahí"
       >
         ⋮⋮
       </span>

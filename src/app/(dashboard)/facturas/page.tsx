@@ -39,65 +39,87 @@ export default async function FacturasPage({
 }) {
   const sp = await searchParams;
 
-  const where: Record<string, unknown> = {};
-  // Filtro por id exacto (link de la imputación conciliada). Gana sobre el
-  // resto: si viene invoiceId, se muestra esa única factura.
-  if (sp.invoiceId) where.id = sp.invoiceId;
-  if (sp.type) where.type = sp.type;
-  if (sp.status) where.status = sp.status;
-  if (sp.origin) where.origin = sp.origin;
-  if (sp.projectId === "sin-asignar") where.projectId = null;
-  else if (sp.projectId) where.projectId = sp.projectId;
-  if (sp.tipoDoc) where.tipoDoc = Number(sp.tipoDoc);
-  if (sp.categoryId) where.categoryId = sp.categoryId;
-  if (sp.dateFrom || sp.dateTo) {
-    const dateFilter: Record<string, Date> = {};
-    if (sp.dateFrom) dateFilter.gte = new Date(sp.dateFrom);
-    if (sp.dateTo) {
-      // inclusivo: hasta el final del día
-      const end = new Date(sp.dateTo);
-      end.setHours(23, 59, 59, 999);
-      dateFilter.lte = end;
+  // Arma el `where` de la consulta a partir de los filtros de la URL.
+  //
+  // `omitir` existe por las PASTILLAS con conteo: el número que va al lado de
+  // "Pendiente" tiene que contar las pendientes que quedan DENTRO del resto de
+  // los filtros puestos, pero ignorando el filtro de estado en sí — si no, al
+  // tener "Pagada" activo todas las demás pastillas dirían 0 y no se podría
+  // saltar de una a otra. Mismo criterio que el `statsWhere` del banco.
+  function buildWhere(omitir?: "type" | "status" | "tipoDoc") {
+    const where: Record<string, unknown> = {};
+    // Filtro por id exacto (link de la imputación conciliada). Gana sobre el
+    // resto: si viene invoiceId, se muestra esa única factura.
+    if (sp.invoiceId) where.id = sp.invoiceId;
+    if (sp.type && omitir !== "type") where.type = sp.type;
+    if (sp.status && omitir !== "status") where.status = sp.status;
+    if (sp.origin) where.origin = sp.origin;
+    if (sp.projectId === "sin-asignar") where.projectId = null;
+    else if (sp.projectId) where.projectId = sp.projectId;
+    if (sp.tipoDoc && omitir !== "tipoDoc") where.tipoDoc = Number(sp.tipoDoc);
+    if (sp.categoryId) where.categoryId = sp.categoryId;
+    if (sp.dateFrom || sp.dateTo) {
+      const dateFilter: Record<string, Date> = {};
+      if (sp.dateFrom) dateFilter.gte = new Date(sp.dateFrom);
+      if (sp.dateTo) {
+        // inclusivo: hasta el final del día
+        const end = new Date(sp.dateTo);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.lte = end;
+      }
+      where.issueDate = dateFilter;
     }
-    where.issueDate = dateFilter;
-  }
-  if (sp.q) {
-    // mode "insensitive" para que la búsqueda matchee independiente de
-    // mayúsculas/minúsculas. Es necesario en Postgres (en SQLite el LIKE
-    // era case-insensitive por default; tras el cutover a Neon se rompió).
-    //
-    // Si q es un folio PURO (solo dígitos), el folio se matchea EXACTO: así
-    // buscar "3322" no arrastra "11332256" (que lo contiene). Los otros
-    // campos (nombre, RUT, notas) siguen por "contiene". Si q tiene letras,
-    // el folio vuelve a "contiene" (búsqueda parcial de texto normal).
-    const qFolioNumerico = /^\d+$/.test(sp.q.trim());
-    where.OR = [
-      qFolioNumerico
-        ? { folioNumber: sp.q.trim() }
-        : { folioNumber: { contains: sp.q, mode: "insensitive" } },
-      { businessName: { contains: sp.q, mode: "insensitive" } },
-      { rutIssuer: { contains: sp.q, mode: "insensitive" } },
-      { notes: { contains: sp.q, mode: "insensitive" } },
-    ];
-  }
-  if (sp.monto) {
-    // Permitir formato chileno con puntos ("1.234.567") o solo dígitos.
-    const digits = sp.monto.replace(/[^\d]/g, "");
-    const m = parseFloat(digits);
-    if (!isNaN(m) && m > 0) {
-      // Tolerancia ±$10 para redondeos de IVA.
-      where.totalAmount = { gte: m - 10, lte: m + 10 };
+    if (sp.q) {
+      // mode "insensitive" para que la búsqueda matchee independiente de
+      // mayúsculas/minúsculas. Es necesario en Postgres (en SQLite el LIKE
+      // era case-insensitive por default; tras el cutover a Neon se rompió).
+      //
+      // Si q es un folio PURO (solo dígitos), el folio se matchea EXACTO: así
+      // buscar "3322" no arrastra "11332256" (que lo contiene). Los otros
+      // campos (nombre, RUT, notas) siguen por "contiene". Si q tiene letras,
+      // el folio vuelve a "contiene" (búsqueda parcial de texto normal).
+      const qFolioNumerico = /^\d+$/.test(sp.q.trim());
+      where.OR = [
+        qFolioNumerico
+          ? { folioNumber: sp.q.trim() }
+          : { folioNumber: { contains: sp.q, mode: "insensitive" } },
+        { businessName: { contains: sp.q, mode: "insensitive" } },
+        { rutIssuer: { contains: sp.q, mode: "insensitive" } },
+        { notes: { contains: sp.q, mode: "insensitive" } },
+      ];
     }
-  }
-  if (sp.sinClasificar) {
-    // NC recibidas sin compensación decidida = plata a favor flotando.
-    where.tipoDoc = 61;
-    where.type = "recibida";
-    where.compensationType = null;
-    where.status = { not: "anulada" };
+    if (sp.monto) {
+      // Permitir formato chileno con puntos ("1.234.567") o solo dígitos.
+      const digits = sp.monto.replace(/[^\d]/g, "");
+      const m = parseFloat(digits);
+      if (!isNaN(m) && m > 0) {
+        // Tolerancia ±$10 para redondeos de IVA.
+        where.totalAmount = { gte: m - 10, lte: m + 10 };
+      }
+    }
+    if (sp.sinClasificar) {
+      // NC recibidas sin compensación decidida = plata a favor flotando.
+      // Se aplica SIEMPRE, incluso cuando se omite una dimensión: es el modo
+      // en el que está la pantalla, no una pastilla que se pueda soltar.
+      where.tipoDoc = 61;
+      where.type = "recibida";
+      where.compensationType = null;
+      where.status = { not: "anulada" };
+    }
+    return where;
   }
 
-  const [invoices, projects, categories] = await Promise.all([
+  const where = buildWhere();
+
+  const [
+    invoices,
+    projects,
+    categories,
+    totalsByType,
+    countsByType,
+    countsByStatus,
+    countsByTipoDoc,
+  ] = await Promise.all([
     prisma.invoice.findMany({
       where,
       orderBy: { issueDate: "desc" },
@@ -134,20 +156,54 @@ export default async function FacturasPage({
         parent: { select: { id: true, name: true } },
       },
     }),
+    // Totales de las tarjetas de arriba. Van por consulta y NO sumando las
+    // filas traídas: la lista corta en 500, así que sumar `invoices` daba el
+    // total de las primeras 500 y no el de todas las que matchean el filtro.
+    prisma.invoice.groupBy({
+      by: ["type"],
+      where,
+      _count: { _all: true },
+      _sum: { totalAmount: true, netAmount: true },
+    }),
+    // Conteos de las pastillas. Cada uno omite su propia dimensión (ver
+    // buildWhere) para que se pueda saltar de una pastilla a otra.
+    prisma.invoice.groupBy({
+      by: ["type"],
+      where: buildWhere("type"),
+      _count: { _all: true },
+    }),
+    prisma.invoice.groupBy({
+      by: ["status"],
+      where: buildWhere("status"),
+      _count: { _all: true },
+    }),
+    prisma.invoice.groupBy({
+      by: ["tipoDoc"],
+      where: buildWhere("tipoDoc"),
+      _count: { _all: true },
+    }),
   ]);
 
-  const totalEmitido = invoices
-    .filter((i) => i.type === "emitida")
-    .reduce((s, i) => s + i.totalAmount, 0);
-  const totalEmitidoNeto = invoices
-    .filter((i) => i.type === "emitida")
-    .reduce((s, i) => s + i.netAmount, 0);
-  const totalRecibido = invoices
-    .filter((i) => i.type === "recibida")
-    .reduce((s, i) => s + i.totalAmount, 0);
-  const totalRecibidoNeto = invoices
-    .filter((i) => i.type === "recibida")
-    .reduce((s, i) => s + i.netAmount, 0);
+  // Los cuatro totales de arriba, ya por consulta y no sobre las 500 filas.
+  const totalFacturas = totalsByType.reduce((s, r) => s + r._count._all, 0);
+  const filaEmitidas = totalsByType.find((r) => r.type === "emitida");
+  const filaRecibidas = totalsByType.find((r) => r.type === "recibida");
+  const totalEmitido = filaEmitidas?._sum.totalAmount ?? 0;
+  const totalEmitidoNeto = filaEmitidas?._sum.netAmount ?? 0;
+  const totalRecibido = filaRecibidas?._sum.totalAmount ?? 0;
+  const totalRecibidoNeto = filaRecibidas?._sum.netAmount ?? 0;
+
+  // Conteos aplanados a { valor: cuántas } para las pastillas.
+  const conteoTipo: Record<string, number> = {};
+  for (const r of countsByType) conteoTipo[r.type] = r._count._all;
+  const conteoEstado: Record<string, number> = {};
+  for (const r of countsByStatus) conteoEstado[r.status] = r._count._all;
+  // tipoDoc es número (33/34/61/56/39) y puede venir null en facturas viejas;
+  // las null no tienen pastilla, así que se descartan.
+  const conteoDocumento: Record<string, number> = {};
+  for (const r of countsByTipoDoc) {
+    if (r.tipoDoc != null) conteoDocumento[String(r.tipoDoc)] = r._count._all;
+  }
 
   // Cuántas facturas SII están sin asignar a proyecto — para destacar el
   // filtro y atraer la atención del usuario.
@@ -346,7 +402,15 @@ export default async function FacturasPage({
           ocupaban tres tarjetas altas antes de que apareciera la primera
           factura, que es a lo que se entra. */}
       <div className="grid grid-cols-3 gap-2 md:gap-4 mb-6">
-        <Stat label="Total" value={invoices.length.toString()} sub="facturas" />
+        <Stat
+          label="Total"
+          value={totalFacturas.toLocaleString("es-CL")}
+          sub={
+            invoices.length < totalFacturas
+              ? `facturas · se listan ${invoices.length}`
+              : "facturas"
+          }
+        />
         <Stat
           label="Emitido"
           value={formatCLP(totalEmitido)}
@@ -362,6 +426,11 @@ export default async function FacturasPage({
       <FacturasFilterBar
         projects={projects}
         categories={categories}
+        conteos={{
+          tipo: conteoTipo,
+          estado: conteoEstado,
+          documento: conteoDocumento,
+        }}
         initial={{
           type: sp.type ?? "",
           status: sp.status ?? "",

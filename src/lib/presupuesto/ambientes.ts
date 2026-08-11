@@ -49,3 +49,38 @@ export function roomLabel(room: string): string {
   if (!limpio) return room;
   return limpio.charAt(0).toUpperCase() + limpio.slice(1);
 }
+
+/**
+ * CLAVE de agrupación de un ambiente (2026-08-11).
+ *
+ * Dos ambientes que se LEEN igual son el mismo ambiente. Antes se agrupaba por
+ * el texto crudo, así que "Cocina" y "cocina" eran dos bloques distintos —
+ * imposibles de distinguir en pantalla y, peor, repetidos en el PDF que ve el
+ * cliente ("Total artefactos cocina" dos veces). Caso real: Cocina Candelaria.
+ *
+ * Se ignoran mayúsculas, espacios sobrantes, guiones bajos y tildes: son
+ * diferencias que MJ no puede ver cuando escribe el nombre. Pasa primero por
+ * `roomLabel` para que las claves históricas agrupen con su nombre escrito a
+ * mano (`bano_principal` y "Baño principal" → misma clave).
+ *
+ * Es SOLO para agrupar/comparar. El valor guardado sigue siendo el texto que
+ * escribió MJ, y es ese el que se muestra (ver `roomLabel`).
+ */
+export function roomKey(room: string): string {
+  return roomLabel(room)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[_\s]+/g, " ")
+    .trim();
+}
+
+// ROOM_ORDER normalizado, para poder comparar contra claves de agrupación.
+const ROOM_ORDER_KEYS = ROOM_ORDER.map(roomKey);
+
+// Posición de un ambiente en el orden conocido; los inventados por MJ caen al
+// final (99).
+export function roomOrderIndex(key: string): number {
+  const i = ROOM_ORDER_KEYS.indexOf(roomKey(key));
+  return i === -1 ? 99 : i;
+}

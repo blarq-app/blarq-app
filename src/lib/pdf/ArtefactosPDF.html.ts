@@ -29,7 +29,7 @@ const DEFAULT_PAYMENT_TERMS = [
   { stage: "Saldo", percentage: 10 },
 ];
 
-import { ROOM_ORDER, roomLabel } from "@/lib/presupuesto/ambientes";
+import { roomKey, roomLabel, roomOrderIndex } from "@/lib/presupuesto/ambientes";
 
 const SUBCATEGORY_LABELS: Record<string, string> = {
   sanitario: "Artefactos sanitarios",
@@ -284,22 +284,25 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
 
   const orderedSubcats: SubcatGroup[] = subcatKeysSorted.map((subKey) => {
     const subItems = subcatBuckets.get(subKey) ?? [];
+    // Agrupa por clave NORMALIZADA (roomKey): "Cocina" y "cocina" son el mismo
+    // ambiente. Antes se agrupaba por el texto crudo y el cliente recibía el
+    // PDF con la sección "Cocina" repetida dos veces.
     const roomBuckets = new Map<string, ArtefactoItemInput[]>();
     for (const it of subItems) {
-      const k = it.room || "otro";
+      const k = roomKey(it.room || "otro");
       const arr = roomBuckets.get(k) ?? [];
       arr.push(it);
       roomBuckets.set(k, arr);
     }
-    const roomKeysSorted = Array.from(roomBuckets.keys()).sort((a, b) => {
-      const ia = ROOM_ORDER.indexOf(a);
-      const ib = ROOM_ORDER.indexOf(b);
-      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-    });
+    const roomKeysSorted = Array.from(roomBuckets.keys()).sort(
+      (a, b) => roomOrderIndex(a) - roomOrderIndex(b)
+    );
     const rooms: RoomGroup[] = roomKeysSorted.map((rkey) => {
       const rItems = roomBuckets.get(rkey) ?? [];
       const subtotal = rItems.reduce((s, it) => s + it.clientPrice * it.quantity, 0);
-      return { key: rkey, label: roomLabel(rkey), items: rItems, subtotal };
+      // Nombre visible: el del primer artefacto del grupo (el mismo criterio
+      // que el editor), no la clave normalizada.
+      return { key: rkey, label: roomLabel(rItems[0]?.room || "otro"), items: rItems, subtotal };
     });
     const subtotal = rooms.reduce((s, r) => s + r.subtotal, 0);
     return { key: subKey, label: SUBCATEGORY_LABELS[subKey] ?? subKey, rooms, subtotal };

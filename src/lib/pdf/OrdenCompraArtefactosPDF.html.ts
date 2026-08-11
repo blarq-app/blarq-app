@@ -20,7 +20,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { roomLabel } from "@/lib/presupuesto/ambientes";
+import { roomKey, roomLabel } from "@/lib/presupuesto/ambientes";
 
 export const SUBCATEGORY_LABELS: Record<string, string> = {
   sanitario: "Artefactos sanitarios",
@@ -194,10 +194,12 @@ interface FilaOC {
 function construirGrupos(
   items: OrdenCompraItemInput[]
 ): Array<{ label: string; filas: FilaOC[] }> {
+  // Agrupa por clave NORMALIZADA: "Cocina" y "cocina" son el mismo ambiente
+  // (ver src/lib/presupuesto/ambientes.ts).
   const orden: string[] = [];
   const buckets = new Map<string, OrdenCompraItemInput[]>();
   for (const it of items) {
-    const key = it.room || "otro";
+    const key = roomKey(it.room || "otro");
     if (!buckets.has(key)) {
       buckets.set(key, []);
       orden.push(key);
@@ -206,7 +208,8 @@ function construirGrupos(
   }
 
   return orden.map((key) => ({
-    label: roomLabel(key),
+    // Nombre visible: el del primer artefacto del grupo, no la clave.
+    label: roomLabel(buckets.get(key)![0]?.room || "otro"),
     filas: buckets.get(key)!.map((it) => ({
       name: it.name,
       detail: it.detail,

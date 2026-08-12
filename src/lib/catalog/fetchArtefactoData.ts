@@ -52,19 +52,34 @@ export interface ArtefactoExtracted {
 }
 
 // Decodifica entidades HTML básicas que aparecen en meta tags.
+//
+// Las numéricas van PRIMERO y `&amp;` al final, a propósito: así un `&amp;#39;`
+// del sitio termina como el texto `&#39;` (que es lo que quiso decir) y no como
+// una comilla. hbt.cl (Magento) escribe el og:title todo en entidades hex
+// —"BISAGRA&#X20;CLIPTOP&#X20;95&#XB0;"— y sin esto ese pegote entraba tal cual
+// al nombre y al detalle del herraje.
 function decode(s: string): string {
+  const codePoint = (n: number) => {
+    try {
+      return String.fromCodePoint(n);
+    } catch {
+      return ""; // fuera de rango: mejor comerse el caracter que reventar
+    }
+  };
   return s
-    .replace(/&amp;/g, "&")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => codePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => codePoint(parseInt(dec, 10)))
+    .replace(/&nbsp;/gi, " ")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
     .replace(/&aacute;/g, "á")
     .replace(/&eacute;/g, "é")
     .replace(/&iacute;/g, "í")
     .replace(/&oacute;/g, "ó")
     .replace(/&uacute;/g, "ú")
     .replace(/&ntilde;/g, "ñ")
+    .replace(/&amp;/g, "&")
     .trim();
 }
 
@@ -198,7 +213,12 @@ async function fetchHtml(url: string): Promise<string | null> {
     const res = await fetch(url, {
       headers: BROWSER_HEADERS,
       redirect: "follow",
-      signal: AbortSignal.timeout(12000),
+      // 25 s, no 12. hbt.cl (Magento) tarda ~10 s medidos en el primer byte y
+      // manda ~390 KB: con 12 s alcanzaba raspando y cualquier día malo del
+      // proveedor daba "no se pudo abrir el link" con un link sano. El techo
+      // real de la request lo pone el maxDuration de la ruta (60 s), así que
+      // 25 s deja margen sin riesgo de que la función se corte por su cuenta.
+      signal: AbortSignal.timeout(25000),
     });
     if (!res.ok) return null;
     return await res.text();

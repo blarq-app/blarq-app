@@ -17,6 +17,8 @@ import { suggestMaterialCategory } from "@/lib/catalog/suggestCategory";
 import { requireSession } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
+// Lee el HTML de la tienda para sugerir categoría: mismo riesgo de tienda lenta.
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   const gate = await requireSession();

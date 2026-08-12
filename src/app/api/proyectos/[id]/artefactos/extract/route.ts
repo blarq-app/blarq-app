@@ -20,6 +20,9 @@ import { extraerArtefactoDeLink } from "@/lib/catalog/extraerArtefacto";
 import { requireSession } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
+// Mismo motivo que en /api/catalogo/artefactos/extract: hay tiendas que tardan
+// ~10 s (hbt.cl) y sin esto Vercel corta antes de que contesten.
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   const gate = await requireSession();

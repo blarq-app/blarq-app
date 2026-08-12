@@ -903,6 +903,15 @@ export default function HerrajesCatalogClient({
               key={s}
               onClick={() => {
                 setActiveTab(s);
+                // Si el alta está abierta, el proveedor la sigue. El formulario
+                // se abre con la pestaña de ese momento y antes no se enteraba
+                // del cambio: se podía estar parada en HBT con el formulario
+                // diciendo DPH, y el herraje se guardaba en el proveedor
+                // equivocado. La edición NO se toca: ahí el proveedor es el del
+                // herraje que se está editando, no el de la pestaña.
+                if (adding && !editingId) {
+                  setNewItem((prev) => ({ ...prev, supplier: s }));
+                }
                 // Categorías/medidas/colores difieren por pestaña: limpiamos
                 // filtros para no esconder todo con un filtro de otra pestaña.
                 setFilterCategory(null);

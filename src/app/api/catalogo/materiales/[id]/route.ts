@@ -4,6 +4,10 @@ import { fetchPriceFromUrl } from "@/lib/catalog/fetchPrice";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
 
+// El PUT sale a la tienda a leer el precio cuando cambia el link: con una
+// tienda lenta, sin esto Vercel corta la función antes de que conteste.
+export const maxDuration = 60;
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

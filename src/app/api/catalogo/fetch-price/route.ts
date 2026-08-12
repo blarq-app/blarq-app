@@ -5,6 +5,9 @@ import { requireSession } from "@/lib/apiAuth";
 // POST /api/catalogo/fetch-price — scraping liviano de Sodimac/Easy.
 // La lógica de scraping vive en src/lib/catalog/fetchPrice.ts para que se
 // pueda reutilizar desde el PUT del material (auto-fetch al cambiar link).
+// Sale a la tienda: con una tienda lenta, sin esto Vercel corta la función.
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   const gate = await requireSession();
   if (gate instanceof Response) return gate;

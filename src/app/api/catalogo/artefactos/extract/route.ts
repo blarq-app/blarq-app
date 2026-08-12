@@ -16,6 +16,12 @@ import { extraerArtefactoDeLink } from "@/lib/catalog/extraerArtefacto";
 import { requireSession } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
+// Salimos a la web del proveedor, y hay tiendas LENTAS: hbt.cl (Magento) tarda
+// ~10 s en contestar el primer byte y la página pesa ~390 KB. Sin declarar esto,
+// Vercel corta la función al default (10-15 s) justo antes de que la tienda
+// conteste, y la UI muestra "no se pudo abrir el link" — cuando el link estaba
+// perfecto. En local nunca se veía porque local no tiene ese corte.
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   const gate = await requireSession();

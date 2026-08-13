@@ -6,6 +6,11 @@ import MueblesEditor from "@/components/presupuesto/MueblesEditor";
 import ArtefactosEditor from "@/components/presupuesto/ArtefactosEditor";
 import CoverFields from "@/components/presupuesto/CoverFields";
 import { getObraBaselineItems } from "@/lib/presupuesto/versionDiff";
+import {
+  esTipoCondiciones,
+  parseCondiciones,
+} from "@/lib/presupuesto/condiciones";
+import { getPlantillaCondiciones } from "@/lib/presupuesto/condicionesPlantilla";
 
 // Subcategorías de artefactos que pueden salir como orden de compra al
 // proveedor. El rótulo es el que usa MJ al hablar ("baño", no "sanitario").
@@ -55,6 +60,17 @@ export default async function PresupuestoDetailPage({
   });
 
   if (!budget) notFound();
+
+  // Las condiciones que se van a editar (y que salen en el PDF). Si la versión
+  // es anterior al cambio no tiene propias: se muestran las de la plantilla,
+  // que es exactamente el texto fijo que ese PDF venía imprimiendo. Así el
+  // editor nunca arranca en blanco.
+  const condiciones =
+    parseCondiciones(budget.conditions) ??
+    (esTipoCondiciones(budget.type)
+      ? await getPlantillaCondiciones(budget.type)
+      : []);
+  const budgetConCondiciones = { ...budget, conditions: condiciones };
 
   // Base de comparación entre versiones: items de la foto de la última versión
   // enviada al cliente (o null si no hay). El editor calcula las marcas al
@@ -155,16 +171,16 @@ export default async function PresupuestoDetailPage({
 
       {budget.type === "obra" && (
         <ObraEditor
-          budget={budget}
+          budget={budgetConCondiciones}
           projectId={project.id}
           baselineItems={baselineItems}
         />
       )}
       {budget.type === "muebles" && (
-        <MueblesEditor budget={budget} projectId={project.id} />
+        <MueblesEditor budget={budgetConCondiciones} projectId={project.id} />
       )}
       {budget.type === "artefactos" && (
-        <ArtefactosEditor budget={budget} projectId={project.id} />
+        <ArtefactosEditor budget={budgetConCondiciones} projectId={project.id} />
       )}
     </div>
   );

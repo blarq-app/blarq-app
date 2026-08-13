@@ -46,6 +46,8 @@ import {
   type BaselineItem,
   type ChangeResult,
 } from "@/lib/presupuesto/versionDiff";
+import CondicionesEditor from "@/components/presupuesto/CondicionesEditor";
+import type { Condicion } from "@/lib/presupuesto/condiciones";
 
 // Props que SortableRow le pasa a la fila (via render-prop) para enganchar
 // el arrastre: ref del nodo, estilo con el transform de dnd-kit, y los
@@ -339,7 +341,7 @@ interface Budget {
   version: string;
   status: string;
   type: string;
-  observations: string | null;
+  conditions: Condicion[];
   ggPercentage: number | null;
   utilityPercentage: number | null;
   obraChapters: Chapter[];
@@ -414,9 +416,6 @@ export default function ObraEditor({
   const [ggPercent, setGgPercent] = useState(initialBudget.ggPercentage || 20);
   const [utilPercent, setUtilPercent] = useState(
     initialBudget.utilityPercentage || 5
-  );
-  const [observations, setObservations] = useState(
-    initialBudget.observations || ""
   );
   const [paymentTerms, setPaymentTerms] = useState<
     { stage: string; percentage: number }[]
@@ -1390,7 +1389,6 @@ export default function ObraEditor({
         body: JSON.stringify({
           ggPercentage: ggPercent,
           utilityPercentage: utilPercent,
-          observations,
         }),
       });
 
@@ -2872,17 +2870,13 @@ export default function ObraEditor({
         </div>
       </div>
 
-      {/* Observaciones */}
+      {/* Condiciones que salen en el PDF (antes: texto fijo en el código) */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Observaciones y Condiciones
-        </h2>
-        <textarea
-          value={observations}
-          onChange={(e) => setObservations(e.target.value)}
-          rows={6}
-          className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none resize-none"
-          placeholder="Condiciones del presupuesto, plazos, exclusiones, etc."
+        <CondicionesEditor
+          modo="cotizacion"
+          tipo="obra"
+          budgetId={initialBudget.id}
+          inicial={initialBudget.conditions}
         />
       </div>
 

@@ -17,6 +17,11 @@ import {
   computeChangeMarkers,
 } from "@/lib/presupuesto/versionDiff";
 import { requireSession } from "@/lib/apiAuth";
+import {
+  esTipoCondiciones,
+  parseCondiciones,
+} from "@/lib/presupuesto/condiciones";
+import { getPlantillaCondiciones } from "@/lib/presupuesto/condicionesPlantilla";
 
 // Forzar Node runtime (no edge) — Puppeteer/Chromium necesita Node.
 export const runtime = "nodejs";
@@ -76,6 +81,17 @@ export async function GET(
     let filename: string;
     const baseName = budget.project.name.replace(/\s+/g, "_");
 
+    // Condiciones ("Observaciones generales") del PDF: salen de la versión.
+    // Null = versión anterior al cambio, que nunca tuvo condiciones propias:
+    // ahí cae a la plantilla del tipo, que es exactamente el texto fijo que
+    // esas cotizaciones venían imprimiendo. Lista vacía es otra cosa (MJ las
+    // borró a propósito) y se respeta: el PDF sale sin el bloque.
+    const condiciones =
+      parseCondiciones(budget.conditions) ??
+      (esTipoCondiciones(budget.type)
+        ? await getPlantillaCondiciones(budget.type)
+        : []);
+
     if (budget.type === "obra") {
       // Marca de cambio por partida contra la última versión enviada al
       // cliente. Si no hay versión base (ej. V1), markers quedan todos null
@@ -89,6 +105,7 @@ export async function GET(
           date: budget.date,
           ggPercentage: budget.ggPercentage,
           utilityPercentage: budget.utilityPercentage,
+          conditions: condiciones,
           coverTitle: budget.coverTitle,
           coverSubtitle: budget.coverSubtitle,
           coverNote: budget.coverNote,
@@ -136,7 +153,7 @@ export async function GET(
         budget: {
           version: budget.version,
           date: budget.date,
-          observations: budget.observations,
+          conditions: condiciones,
           coverTitle: budget.coverTitle,
           coverSubtitle: budget.coverSubtitle,
           coverNote: budget.coverNote,
@@ -198,7 +215,7 @@ export async function GET(
         budget: {
           version: budget.version,
           date: budget.date,
-          observations: budget.observations,
+          conditions: condiciones,
           coverTitle: budget.coverTitle,
           coverSubtitle: budget.coverSubtitle,
           coverNote: budget.coverNote,

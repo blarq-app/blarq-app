@@ -67,6 +67,15 @@ export default function ConfiguracionHub({
           />
         </ConfigGroup>
 
+        <ConfigGroup label="Cotizaciones">
+          <ConfigRow
+            href="/configuracion/condiciones"
+            icon="cotizaciones"
+            title="Condiciones estándar"
+            description="El texto de las Observaciones generales con el que arranca cada cotización nueva. Obra, muebles y artefactos por separado."
+          />
+        </ConfigGroup>
+
         <ConfigGroup label="Mantención de datos">
           <ConfigRow
             href="/configuracion/auditoria-precios"

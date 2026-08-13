@@ -219,7 +219,18 @@ model BudgetVersion {
   date        DateTime @default(now())
   status      String   @default("borrador") // borrador | enviado | aprobado | rechazado
   type        String   // obra | muebles | artefactos
+  // Nota interna que quedó de la época de las importaciones desde Excel. Ya
+  // NO se imprime en ningún PDF ni se edita desde la app: lo que sale al
+  // cliente son las `conditions` de acá abajo. Se conserva para no perder el
+  // texto histórico ("Importado desde Excel V7…", "Precios negociados…").
   observations String?
+  // Condiciones que salen impresas en el PDF del cliente, en este orden:
+  // [{ lead?: string, text: string }]. Se precargan al crear la cotización
+  // con la plantilla del tipo (ConditionTemplate) y desde ahí son de la
+  // versión: editarlas acá no toca la plantilla, y cambiar la plantilla no
+  // toca las cotizaciones ya creadas. Lista vacía = PDF sin observaciones.
+  // Null solo en versiones anteriores al cambio (ver lib/presupuesto/condiciones.ts).
+  conditions   Json?
   // Textos editables de la PORTADA del PDF (Manual de Marca v2). Si quedan
   // null, el generador usa un default por tipo (ver *PDF.html.ts):
   //   coverTitle    → título grande (Obra: lo escribe MJ; Muebles/Artefactos
@@ -1522,4 +1533,17 @@ model IndicadorMensual {
   updatedAt DateTime @updatedAt
 
   @@unique([year, month])
+}
+
+// Plantilla de condiciones por tipo de cotización (obra | muebles |
+// artefactos). Es el texto con el que ARRANCA una cotización nueva; se edita
+// desde Configuración › Condiciones estándar, sin tocar código. Cambiarla no
+// modifica ninguna cotización ya creada (cada versión guarda las suyas).
+model ConditionTemplate {
+  id    String @id @default(cuid())
+  type  String @unique // obra | muebles | artefactos
+  items Json // [{ lead?: string, text: string }] en orden
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

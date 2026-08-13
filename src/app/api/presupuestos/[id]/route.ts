@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { buildBudgetSnapshot } from "@/lib/catalog/budgetSnapshot";
 import { requireSession } from "@/lib/apiAuth";
+import { parseCondiciones } from "@/lib/presupuesto/condiciones";
 
 // Actualizar presupuesto (observaciones, GG%, utilidad%, estado)
 export async function PUT(
@@ -19,6 +20,18 @@ export async function PUT(
     // Permite renombrar version (ej. "V3" → "Alternativa A") sin tocar el resto.
     const updateData: Record<string, unknown> = {};
     if (data.observations !== undefined) updateData.observations = data.observations;
+    // Condiciones que salen en el PDF. Se guardan tal cual quedaron en el
+    // editor (orden incluido). Lista vacía es válida: PDF sin observaciones.
+    if (data.conditions !== undefined) {
+      const limpias = parseCondiciones(data.conditions);
+      if (!limpias) {
+        return NextResponse.json(
+          { error: "conditions debe ser una lista" },
+          { status: 400 }
+        );
+      }
+      updateData.conditions = limpias;
+    }
     // Textos de portada del PDF. Vacío → null para que el generador use el default.
     if (data.coverTitle !== undefined)
       updateData.coverTitle = String(data.coverTitle).trim() || null;

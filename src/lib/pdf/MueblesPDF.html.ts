@@ -15,6 +15,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { formatHerrajeName } from "@/lib/presupuesto/herrajeNombre";
+import { renderCondicionesHTML } from "@/lib/pdf/condicionesBlock";
+import type { Condicion } from "@/lib/presupuesto/condiciones";
 
 const PROFESSIONAL = "MARÍA JOSÉ BLANCO";
 
@@ -24,14 +26,8 @@ const DEFAULT_PAYMENT_TERMS = [
   { stage: "Saldo", percentage: 10 },
 ];
 
-// Observaciones con "entradilla" en negrita, igual que el diseño.
-const OBSERVACIONES: Array<{ lead?: string; text: string }> = [
-  { lead: "Plazos de entrega.", text: "60 días corridos para muebles desde el ingreso a producción, salvo fuerza mayor. Las cubiertas de cuarzo y granito tienen un plazo de 10 días hábiles para instalación, posterior a su rectificación." },
-  { lead: "Condiciones de entrega.", text: "Los muebles ingresan una vez puestos los cerámicos de muros con el frague seco, instalación de agua y desagüe. De haber pintura, debe estar seca. Las cubiertas solo se rectifican una vez instalados los muebles base." },
-  { lead: "Garantías.", text: "Durante la etapa de diseño se revisan minuciosamente todos los detalles hasta lograr la plena satisfacción del cliente. Aprobado el diseño, todo cambio tiene costo adicional. No nos hacemos responsables por alteraciones en muebles y cubiertas una vez recibidos a conformidad." },
-  { text: "Este presupuesto tiene una validez de 10 días corridos." },
-  { text: "Los valores podrán sufrir modificaciones si existen variaciones considerables respecto de las medidas rectificadas en terreno." },
-];
+// Las condiciones ya NO viven acá: son de la versión (`budget.conditions`) y
+// se editan en la cotización. Ver lib/presupuesto/condiciones.ts.
 
 // ─── Types ────────────────────────────────────────────────────────────────
 export interface MuebleDetailInput {
@@ -79,7 +75,9 @@ export interface MueblesHTMLInput {
   budget: {
     version: string;
     date: string | Date;
-    observations: string | null;
+    // Condiciones de ESTA versión, en orden. Vacío → sin bloque de
+    // observaciones en el PDF.
+    conditions: Condicion[];
     coverTitle?: string | null;
     coverSubtitle?: string | null;
     coverNote?: string | null;
@@ -375,15 +373,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
         </div>
       </div>
 
-      <div class="obs">
-        <div class="blk-title">Observaciones generales</div>
-        <div class="obs-list">
-          ${OBSERVACIONES.map(
-            (o, i) => `<div class="obs-item"><span class="obs-num">${i + 1}</span><span>${o.lead ? `<b>${esc(o.lead)}</b> ` : ""}${esc(o.text)}</span></div>`
-          ).join("")}
-          ${budget.observations ? `<div class="obs-item"><span class="obs-num">·</span><span>${esc(budget.observations)}</span></div>` : ""}
-        </div>
-      </div>
+      ${renderCondicionesHTML(budget.conditions, "obs-list")}
     </div>
   </div>
 

@@ -22,6 +22,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import CondicionesEditor from "@/components/presupuesto/CondicionesEditor";
+import type { Condicion } from "@/lib/presupuesto/condiciones";
 
 // Manija de arrastre ⋮⋮ — mismo glifo gris que el catálogo de herrajes. Solo el
 // handle lleva los listeners de useSortable (no la fila entera), para no romper
@@ -233,7 +235,7 @@ type PaymentTerm = {
 type Budget = {
   id: string;
   version: string;
-  observations: string | null;
+  conditions: Condicion[];
   muebleChapters: MuebleChapter[];
   paymentTerms: PaymentTerm[];
 };
@@ -254,9 +256,6 @@ export default function MueblesEditor({
   const budgetId = initialBudget.id;
   const [chapters, setChapters] = useState<MuebleChapter[]>(
     initialBudget.muebleChapters
-  );
-  const [observations, setObservations] = useState(
-    initialBudget.observations || ""
   );
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerm[]>(
     initialBudget.paymentTerms.length > 0
@@ -1081,15 +1080,11 @@ export default function MueblesEditor({
     );
   }
 
-  // ── Guardar formas de pago + observaciones ──
+  // ── Guardar formas de pago ──
+  // (las condiciones del PDF se guardan solas, ver CondicionesEditor)
   async function saveAll() {
     setSaving(true);
     try {
-      await fetch(`/api/presupuestos/${budgetId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ observations }),
-      });
       await fetch(`/api/presupuestos/${budgetId}/forma-pago`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -1279,17 +1274,13 @@ export default function MueblesEditor({
         </div>
       </div>
 
-      {/* Observaciones */}
+      {/* Condiciones que salen en el PDF (antes: texto fijo en el código) */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-base font-semibold text-gray-900 mb-3">
-          Observaciones (opcional)
-        </h2>
-        <textarea
-          value={observations}
-          onChange={(e) => setObservations(e.target.value)}
-          rows={3}
-          placeholder="Las observaciones generales del PDF van automáticamente. Acá podés agregar notas específicas adicionales para esta cotización."
-          className="w-full px-3 py-2 border border-gray-300 rounded text-sm outline-none resize-y focus:ring-1 focus:ring-gray-900"
+        <CondicionesEditor
+          modo="cotizacion"
+          tipo="muebles"
+          budgetId={initialBudget.id}
+          inicial={initialBudget.conditions}
         />
       </div>
 

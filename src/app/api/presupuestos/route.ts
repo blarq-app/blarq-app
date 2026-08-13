@@ -1,7 +1,13 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
 import { computeHerrajeItemTotals } from "@/lib/presupuesto/muebleHerrajes";
+import {
+  esTipoCondiciones,
+  parseCondiciones,
+} from "@/lib/presupuesto/condiciones";
+import { getPlantillaCondiciones } from "@/lib/presupuesto/condicionesPlantilla";
 
 // Crear nueva versión de presupuesto
 export async function POST(request: NextRequest) {
@@ -50,14 +56,32 @@ export async function POST(request: NextRequest) {
     // defaults (20/5) y al duplicar se perdían los porcentajes del original
     // — bug: V1 con 20/10 se duplicaba como V2 con 20/5 y los totales no
     // calzaban.
-    let basePrev: { ggPercentage: number | null; utilityPercentage: number | null; discountPercentage: number | null } | null = null;
+    let basePrev: {
+      ggPercentage: number | null;
+      utilityPercentage: number | null;
+      discountPercentage: number | null;
+      conditions: unknown;
+    } | null = null;
     if (baseId) {
       basePrev = await prisma.budgetVersion.findUnique({
         where: { id: baseId },
-        select: { ggPercentage: true, utilityPercentage: true, discountPercentage: true },
+        select: {
+          ggPercentage: true,
+          utilityPercentage: true,
+          discountPercentage: true,
+          conditions: true,
+        },
       });
       if (!basePrev) return NextResponse.json({ error: "Versión base no encontrada" }, { status: 404 });
     }
+
+    // Condiciones del PDF: al duplicar se heredan de la versión origen (V6 sale
+    // con lo mismo que se le mandó al cliente en V5); en una versión nueva de
+    // cero se precargan con la plantilla del tipo. Nunca arranca en blanco —
+    // ese era justo el problema: JT no veía las condiciones y las tipeó a mano.
+    const condicionesIniciales =
+      parseCondiciones(basePrev?.conditions) ??
+      (esTipoCondiciones(data.type) ? await getPlantillaCondiciones(data.type) : []);
 
     const budget = await prisma.budgetVersion.create({
       data: {
@@ -67,6 +91,7 @@ export async function POST(request: NextRequest) {
         status: "borrador",
         parentVersionId: parentForNew,
         observations: data.observations || null,
+        conditions: condicionesIniciales as unknown as Prisma.InputJsonValue,
         ggPercentage: data.ggPercentage ?? basePrev?.ggPercentage ?? 20,
         utilityPercentage: data.utilityPercentage ?? basePrev?.utilityPercentage ?? 5,
         discountPercentage: data.discountPercentage ?? basePrev?.discountPercentage ?? 0,

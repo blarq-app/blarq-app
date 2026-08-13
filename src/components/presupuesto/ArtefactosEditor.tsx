@@ -31,6 +31,8 @@ import RevisarPreciosArtefactos, {
   type ArtefactoPricePatch,
 } from "./RevisarPreciosArtefactos";
 import { ROOM_ORDER, roomLabel } from "@/lib/presupuesto/ambientes";
+import CondicionesEditor from "@/components/presupuesto/CondicionesEditor";
+import type { Condicion } from "@/lib/presupuesto/condiciones";
 
 // Input numérico con separadores de miles. Sin foco muestra "5.488.460",
 // con foco muestra "5488460" para edición. onChange devuelve el número crudo.
@@ -101,7 +103,7 @@ interface PaymentTerm {
 interface Budget {
   id: string;
   version: string;
-  observations: string | null;
+  conditions: Condicion[];
   artefactoItems: ArtefactoItem[];
   paymentTerms: PaymentTerm[];
 }
@@ -163,9 +165,6 @@ export default function ArtefactosEditor({
   const router = useRouter();
   const [items, setItems] = useState<ArtefactoItem[]>(
     initialBudget.artefactoItems
-  );
-  const [observations, setObservations] = useState(
-    initialBudget.observations || ""
   );
   const [paymentTerms, setPaymentTerms] = useState(
     initialBudget.paymentTerms.length > 0
@@ -845,11 +844,6 @@ export default function ArtefactosEditor({
   async function handleSave() {
     setSaving(true);
     try {
-      await fetch(`/api/presupuestos/${initialBudget.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ observations }),
-      });
       await fetch(`/api/presupuestos/${initialBudget.id}/forma-pago`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -1319,17 +1313,13 @@ export default function ArtefactosEditor({
         </div>
       </div>
 
-      {/* Observaciones */}
+      {/* Condiciones que salen en el PDF (antes: texto fijo en el código) */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-4">
-          Observaciones
-        </h2>
-        <textarea
-          value={observations}
-          onChange={(e) => setObservations(e.target.value)}
-          rows={4}
-          className="w-full px-3 py-2 border border-gray-300 rounded text-xs outline-none resize-none focus:border-gray-500"
-          placeholder="Notas adicionales que se incluirán en el PDF cliente…"
+        <CondicionesEditor
+          modo="cotizacion"
+          tipo="artefactos"
+          budgetId={initialBudget.id}
+          inicial={initialBudget.conditions}
         />
       </div>
 

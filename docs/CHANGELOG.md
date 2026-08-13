@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-08-13 — Las condiciones que salen en el PDF se ven y se editan, y las estándar se cambian sin código
+
+- **La causa: las "Observaciones generales" estaban hardcodeadas en cada plantilla de PDF**, una lista distinta por tipo (8 en obra, 5 en muebles, 5 en artefactos). El campo `observations` de la versión era otra cosa: en **obra el PDF ni lo leía** — JT escribió las 8 condiciones a mano porque en la app no las veía, y ese texto no iba a salir nunca (pasó en 4 cotizaciones). En **muebles y artefactos sí se imprimía**, colgado abajo de las fijas: 3 cotizaciones salían con las condiciones **duplicadas** y 3 con notas internas del tipo "Importado desde V5_ARTEFACTOS Portofino (26.02.26)" **impresas al cliente**.
+- **Ahora la fuente única por versión es `BudgetVersion.conditions`** (lista ordenada de `{lead?, text}`): lo que está ahí es exactamente lo que sale impreso, sin nada fijo por detrás. Los tres PDF comparten el mismo bloque (`src/lib/pdf/condicionesBlock.ts`) y **lista vacía = PDF sin observaciones**, decisión explícita de MJ ("lo que ves es lo que sale").
+- **La plantilla vive en la base y se edita en Configuración › Condiciones estándar** (modelo `ConditionTemplate`, una por tipo). Precarga las cotizaciones nuevas; al duplicar se hereda de la versión origen. **Cambiar la plantilla no toca ninguna cotización ya creada** — cada versión conserva lo que se pactó con ese cliente.
+- **Agregar una condición dentro de una cotización ofrece un tilde para dejarla también en la plantilla, apagado por default** (mismo criterio que las reglas de proveedor, §4.5: lo puntual de una obra no se arrastra a todas). El guardado se dispara desde el tilde y no desde el blur del texto — clickear el tilde ya saca el foco, así que el blur corría con el tilde todavía apagado.
+- **Migración**: `scripts/migrar-condiciones-schema.ts` (SQL idempotente, no `prisma db push`: dropearía drift de otras ramas) + `scripts/backfill-condiciones.ts`, que le da a cada versión existente el mismo texto que ya venía imprimiendo. Ningún PDF viejo cambia salvo los que hoy salen duplicados o con nota interna. `observations` queda en la base con su texto histórico pero ya no se imprime ni se edita. **No toca plata ni `metrics.ts`.**
+
 ## 2026-08-08 — Herrajes: alta de un clic, una sola forma de escribir los nombres, y filas que se arrastran
 
 - **Agregar un herraje del catálogo eran dos pasos y ahora es uno.** `+ elegir` marcaba la fila y un bloque de abajo con sector + cantidad + `Agregar` recién creaba la línea; ahora `+ agregar` la crea con cantidad 1 y la cantidad se ajusta en la propia línea (ya era editable, PR #202). La fila sigue **sin** ser clickeable entera a propósito, para no perder el link al producto.

@@ -22,6 +22,8 @@ import path from "node:path";
 import { sanitizeRichTextHtml } from "@/lib/richText";
 import { groupByChapter } from "@/lib/presupuesto/chapters";
 import { annotateZones } from "@/lib/presupuesto/zones";
+import { renderCondicionesHTML } from "@/lib/pdf/condicionesBlock";
+import type { Condicion } from "@/lib/presupuesto/condiciones";
 
 const PROFESSIONAL = "JOSÉ TOMÁS LARRAÍN";
 
@@ -32,16 +34,8 @@ const DEFAULT_PAYMENT_TERMS = [
   { stage: "Saldo", percentage: 10 },
 ];
 
-const OBSERVACIONES = [
-  "Mandante dejará libre los accesos y las superficies a intervenir, dispondrá de suministro eléctrico y de agua potable, además de baño para las personas que trabajen en la obra.",
-  "Todo aumento de obra se recargará al costo directo según los precios unitarios más un recargo del mismo porcentaje en GG expresado en la oferta.",
-  "No se consideran Permisos Municipales ni de administración del Condominio dentro de este presupuesto.",
-  "Esta cotización tiene una validez de 10 días corridos.",
-  "Los pagos se harán con el valor de la UF del día, y solo se aceptarán pagos por transferencia bancaria o con tarjeta por medio de link de pago, en cuyo caso se agregará la comisión de Transbank.",
-  "Los valores expresados en la cotización podrían variar luego de visitar la propiedad.",
-  "Al aprobar la cotización se autoriza a la empresa BLARQ a publicar contenido en Redes Sociales y página web: fotos y videos del avance y estado de la obra, y a la instalación de publicidad hacia el exterior de la obra (terrazas, balcones, portón).",
-  "Una vez aprobado el presupuesto, se solicita pago de anticipo al menos 2 semanas antes del comienzo de la obra.",
-];
+// Las condiciones ya NO viven acá: son de la versión (`budget.conditions`) y
+// se editan en la cotización. Ver lib/presupuesto/condiciones.ts.
 
 // ─── Types ────────────────────────────────────────────────────────────────
 export interface ObraChapterInput {
@@ -88,6 +82,9 @@ export interface ObraHTMLInput {
     coverTitle?: string | null;
     coverSubtitle?: string | null;
     coverNote?: string | null;
+    // Condiciones de ESTA versión, en orden. Vacío → el PDF sale sin el
+    // bloque de observaciones.
+    conditions: Condicion[];
   };
   chapters: ObraChapterInput[];
   items: ObraItemInput[];
@@ -490,14 +487,7 @@ export function renderObraHTML(data: ObraHTMLInput): string {
         </div>
       </div>
 
-      <div class="obs">
-        <div class="blk-title">Observaciones generales</div>
-        <div class="obs-grid">
-          ${OBSERVACIONES.map(
-            (o, i) => `<div class="obs-item"><span class="obs-num">${i + 1}</span><span>${esc(o)}</span></div>`
-          ).join("")}
-        </div>
-      </div>
+      ${renderCondicionesHTML(budget.conditions, "obs-grid")}
       ${
         hasMarkers
           ? `<div class="leyenda">Respecto a la versión anterior: ${renderMarker("added")} partida nueva · ${renderMarker("up")} subió · ${renderMarker("down")} bajó.</div>`

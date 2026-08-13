@@ -30,6 +30,8 @@ const DEFAULT_PAYMENT_TERMS = [
 ];
 
 import { ROOM_ORDER, roomLabel } from "@/lib/presupuesto/ambientes";
+import { renderCondicionesHTML } from "@/lib/pdf/condicionesBlock";
+import type { Condicion } from "@/lib/presupuesto/condiciones";
 
 const SUBCATEGORY_LABELS: Record<string, string> = {
   sanitario: "Artefactos sanitarios",
@@ -38,13 +40,8 @@ const SUBCATEGORY_LABELS: Record<string, string> = {
 };
 const SUBCATEGORY_ORDER = ["sanitario", "cocina", "iluminacion"];
 
-const OBSERVACIONES = [
-  "Los artefactos cotizados están sujetos a disponibilidad de stock al momento del pago del anticipo.",
-  "Los descuentos aplicados son sobre precio lista del proveedor y válidos solo para esta cotización.",
-  "Tiempo de despacho: 7 a 15 días hábiles tras el pago del anticipo, dependiendo del proveedor.",
-  "Esta cotización tiene una validez de 10 días corridos.",
-  "Los precios pueden variar por ajustes del proveedor o tipo de cambio.",
-];
+// Las condiciones ya NO viven acá: son de la versión (`budget.conditions`) y
+// se editan en la cotización. Ver lib/presupuesto/condiciones.ts.
 
 // ─── Types ────────────────────────────────────────────────────────────────
 export interface ArtefactoItemInput {
@@ -76,7 +73,9 @@ export interface ArtefactosHTMLInput {
   budget: {
     version: string;
     date: string | Date;
-    observations: string | null;
+    // Condiciones de ESTA versión, en orden. Vacío → sin bloque de
+    // observaciones en el PDF.
+    conditions: Condicion[];
     coverTitle?: string | null;
     coverSubtitle?: string | null;
     coverNote?: string | null;
@@ -438,15 +437,7 @@ export function renderArtefactosHTML(input: ArtefactosHTMLInput): string {
         </div>
       </div>
 
-      <div class="obs">
-        <div class="blk-title">Observaciones generales</div>
-        <div class="obs-list">
-          ${OBSERVACIONES.map(
-            (o, i) => `<div class="obs-item"><span class="obs-num">${i + 1}</span><span>${esc(o)}</span></div>`
-          ).join("")}
-          ${budget.observations ? `<div class="obs-item"><span class="obs-num">·</span><span>${esc(budget.observations)}</span></div>` : ""}
-        </div>
-      </div>
+      ${renderCondicionesHTML(budget.conditions, "obs-list")}
     </div>
   </div>
 

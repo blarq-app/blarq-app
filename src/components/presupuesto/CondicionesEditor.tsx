@@ -230,8 +230,11 @@ export default function CondicionesEditor({
               <textarea
                 value={fila.text}
                 onChange={(e) => editar(fila.key, { text: e.target.value })}
+                // Caso al revés: tildó primero y escribió después. El servidor
+                // no duplica si el texto ya está en la plantilla.
                 onBlur={() => {
-                  if (fila.nueva && fila.pendientePlantilla) guardarEnPlantilla(fila);
+                  if (fila.nueva && fila.pendientePlantilla && fila.text.trim())
+                    guardarEnPlantilla(fila);
                 }}
                 rows={1}
                 placeholder="Escribí la condición…"
@@ -246,9 +249,15 @@ export default function CondicionesEditor({
                   <input
                     type="checkbox"
                     checked={!!fila.pendientePlantilla}
-                    onChange={(e) =>
-                      editar(fila.key, { pendientePlantilla: e.target.checked })
-                    }
+                    // El guardado en la plantilla se dispara acá y no solo al
+                    // salir del texto: clickear el tilde ya saca el foco del
+                    // textarea, así que para cuando corre ese blur el tilde
+                    // todavía figura apagado y no se guardaba nada.
+                    onChange={(e) => {
+                      const marcado = e.target.checked;
+                      editar(fila.key, { pendientePlantilla: marcado });
+                      if (marcado && fila.text.trim()) guardarEnPlantilla(fila);
+                    }}
                     className="w-4 h-4 accent-gray-900"
                   />
                   Dejarla también para las próximas cotizaciones de{" "}

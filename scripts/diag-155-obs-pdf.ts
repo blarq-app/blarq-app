@@ -7,7 +7,14 @@
  *
  *   npx tsx scripts/diag-155-obs-pdf.ts
  */
-import "dotenv/config";
+import { config } from "dotenv";
+
+// Por default lee la base de .env; con `--env .env.prod` se puede renderizar
+// el PDF con los datos reales, que es lo que MJ necesita ver para aprobar.
+const args = process.argv.slice(2);
+const envIdx = args.indexOf("--env");
+config({ path: envIdx >= 0 ? args[envIdx + 1] : ".env", override: true });
+const FILTRO = args.find((a) => !a.startsWith("--") && a !== args[envIdx + 1]) ?? "Portofino";
 import fs from "node:fs";
 import path from "node:path";
 import puppeteer from "puppeteer";
@@ -18,12 +25,13 @@ import { parseCondiciones, type Condicion } from "../src/lib/presupuesto/condici
 const prisma = new PrismaClient();
 const OUT = path.join(process.cwd(), "scripts", "_capturas-155");
 
+
 async function main() {
   const v = await prisma.budgetVersion.findFirst({
     where: {
       type: "obra",
       obraItems: { some: {} },
-      project: { name: { contains: "Portofino" } },
+      project: { name: { contains: FILTRO } },
     },
     include: {
       project: true,

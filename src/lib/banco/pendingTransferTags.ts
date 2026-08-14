@@ -22,11 +22,20 @@ import {
   type ConceptoTraspaso,
 } from "@/lib/banco/internalTransferTags";
 
-// Tolerancia de fecha. El comprobante puede quedar fechado un día antes o
-// después de cuando el banco registró el movimiento en la cartola (una
-// transferencia de la noche que el banco asienta al día siguiente). Un día para
-// cada lado alcanza y —verificado arriba— no genera ambigüedad.
-const VENTANA_DIAS = 1;
+// Tolerancia de fecha entre el comprobante y la cartola.
+//
+// Empezó en 1 día y NO alcanzaba: el primer traspaso real que MJ mandó por el
+// bot (14-ago-2026, viernes 16:23) el banco lo asentó el LUNES 17. Tres días de
+// diferencia, así que el bot no lo encontró y contestó "todavía no está en la
+// app" cuando sí estaba. Un fin de semana largo puede estirarlo más.
+//
+// 15 días es holgado a propósito, porque el que manda acá es el MONTO: medido
+// sobre los 41 traspasos históricos a Sueldos, ningún monto tiene un gemelo
+// dentro de ±60 días, y en toda la historia solo un monto se repitió alguna vez
+// ($2.400.000, dos veces, con meses de distancia). La fecha sirve para acotar,
+// no para identificar. Y si aun así aparece más de un candidato, no se elige:
+// se pregunta.
+const VENTANA_DIAS = 15;
 
 export interface TraspasoCandidato {
   id: string;

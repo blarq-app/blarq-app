@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-08-13 — El bot de Telegram también etiqueta los traspasos a Sueldos, desde el comprobante
+
+- **El mismo bot atiende ahora dos chats que no se mezclan**, ruteados por `chat.id`: el de siempre sigue siendo el de facturas (sin cambios), y uno nuevo dedicado a los **traspasos Operativa → Sueldos** (`TELEGRAM_SUELDOS_CHAT_ID`). MJ manda el pantallazo del comprobante + `Sena obra` y el traspaso queda con obra y concepto, en vez de esperar a que se acuerde de etiquetarlo a mano en /banco/movimientos.
+- **La etiqueta puede llegar antes que la plata**: cuando MJ manda el comprobante el traspaso todavía no existe en la app (entra al importar la cartola), así que se guarda la intención en `PendingTransferTag` y el import la aplica sola al detectar el par. Modelo aparte del de facturas a propósito: `PendingProjectTag` exige `rutIssuer` y `folioNumber`, que una transferencia entre cuentas propias no tiene.
+- **La identidad del traspaso es fecha + monto** — lo único duro que trae el papel. Verificado en la base viva sobre los 38 traspasos históricos: nunca hubo dos del mismo monto el mismo día, ni con ventana de ±1 día. Igual, si aparece más de un candidato el bot **no elige**: pregunta con botones. Tampoco adivina el concepto (obra vs muebles) ni pisa lo que ya estaba puesto a mano.
+- **La regla de "etiquetar los dos lados del par" se extrajo a `lib/banco/internalTransferTags.ts`**, compartida con el PATCH de movimientos donde estaba duplicada dos veces. Dos caminos que escriben el mismo dato ahora comparten la regla.
+- Detalle y pasos para activarlo: [SETUP_telegram-traspasos-sueldos.md](SETUP_telegram-traspasos-sueldos.md).
+
 ## 2026-08-13 — Las condiciones que salen en el PDF se ven y se editan, y las estándar se cambian sin código
 
 - **La causa: las "Observaciones generales" estaban hardcodeadas en cada plantilla de PDF**, una lista distinta por tipo (8 en obra, 5 en muebles, 5 en artefactos). El campo `observations` de la versión era otra cosa: en **obra el PDF ni lo leía** — JT escribió las 8 condiciones a mano porque en la app no las veía, y ese texto no iba a salir nunca (pasó en 4 cotizaciones). En **muebles y artefactos sí se imprimía**, colgado abajo de las fijas: 3 cotizaciones salían con las condiciones **duplicadas** y 3 con notas internas del tipo "Importado desde V5_ARTEFACTOS Portofino (26.02.26)" **impresas al cliente**.

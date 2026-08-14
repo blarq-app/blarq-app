@@ -68,6 +68,9 @@ model Project {
   shoppingItems   ShoppingItem[]
   invoiceRules    InvoiceCategorizationRule[]
   pendingTags     PendingProjectTag[]
+  // Etiquetas en espera de los traspasos a Sueldos que MJ manda por Telegram
+  // antes de importar la cartola. Ver PendingTransferTag.
+  pendingTransferTags PendingTransferTag[]
   // Movimientos bancarios conciliados a esta obra a mano (hoy: transferencias
   // internas Operativa→Sueldos imputadas a la obra). Ver BankMovement.projectId.
   bankMovements   BankMovement[]
@@ -1210,6 +1213,59 @@ model PendingProjectTag {
 
   // El sync busca por (rutIssuer, folioNumber, status) al llegar cada factura.
   @@index([rutIssuer, folioNumber, status])
+  @@index([status])
+}
+
+// Etiqueta "en espera" de un TRASPASO a la cuenta Sueldos.
+//
+// MJ se pasa plata de Operativa a Sueldos y le manda al bot el pantallazo del
+// comprobante diciendo la obra y el concepto. En ese momento la transferencia
+// TODAVÍA NO existe en la app: entra recién cuando se importa la cartola. Por
+// eso la intención se guarda acá y el import la aplica sola al detectar el
+// traspaso.
+//
+// Por qué un modelo aparte y no PendingProjectTag: aquel identifica su destino
+// por (rutIssuer, folioNumber) —ambos obligatorios— y una transferencia entre
+// dos cuentas propias no tiene ni RUT emisor ni folio. Meterle valores falsos
+// para reusar el modelo ensuciaría el flujo de facturas.
+//
+// La identidad del traspaso acá es (fecha + monto). Medido en la base viva
+// sobre los 38 traspasos históricos a Sueldos: nunca hubo dos del mismo monto
+// el mismo día, ni siquiera con ventana de ±1 día. Aun así, si al buscar
+// aparece más de un candidato NO se elige — el bot pregunta.
+model PendingTransferTag {
+  id              String    @id @default(cuid())
+  // Datos leídos del comprobante. La fecha se guarda a medianoche UTC, igual
+  // que BankMovement.date, para que el match por día sea comparable.
+  transferDate    DateTime
+  amount          Float     // monto ABSOLUTO en pesos (el comprobante no trae signo)
+  bankName        String?   // banco del comprobante, referencial
+  destination     String?   // cuenta/destino leído, referencial
+  // Destino a aplicar. La obra es obligatoria — sin obra no se guarda nada, el
+  // bot pregunta. El concepto puede faltar un rato: si MJ mandó el comprobante
+  // sin decir si es obra o muebles, la etiqueta nace "por_confirmar" y el bot
+  // le manda los dos botones. Nunca se adivina (un traspaso es uno u otro, y
+  // adivinar mal descuadra el "me paso a Sueldos" de esa obra).
+  projectId       String
+  concepto        String?   // obra | muebles
+  // Quién lo mandó (id numérico de Telegram + nombre para mostrar).
+  requestedBy     String?
+  requestedByName String?
+  // Ciclo de vida:
+  //   "por_confirmar" → falta que MJ toque el botón del concepto.
+  //   "esperando"     → completa; la transferencia todavía no entró al banco.
+  //   "aplicada"      → se etiquetó el movimiento (por el import o al toque).
+  //   "descartada"    → se canceló o se reemplazó por una corrección.
+  status          String    @default("esperando")
+  appliedToMovementId String?
+  appliedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project         Project   @relation(fields: [projectId], references: [id])
+
+  // El import busca por (status, transferDate) al detectar cada traspaso.
+  @@index([status, transferDate])
   @@index([status])
 }
 

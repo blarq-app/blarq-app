@@ -7,6 +7,7 @@ import { planImportDedup } from "@/lib/banco/dedup";
 import { requireSession } from "@/lib/apiAuth";
 import { esSocio } from "@/lib/banco/socios";
 import { MOV_STATUS } from "@/lib/banco/movementStatus";
+import { applyPendingTransferTagsForMovement } from "@/lib/banco/pendingTransferTags";
 
 // El dedup del import vive en `planImportDedup` (src/lib/banco/dedup.ts).
 // Identifica cada movimiento por una huella estable (fecha + monto +
@@ -187,6 +188,9 @@ export async function POST(request: NextRequest) {
     const otherAccounts = await prisma.bankAccount.findMany({
       where: { id: { not: bankAccount.id } },
     });
+    // Cuántas etiquetas del bot de Telegram se aplicaron a traspasos recién
+    // detectados (ver más abajo). Normalmente 0 o 1 por cartola.
+    let pendingTransferTagsApplied = 0;
     for (const movId of insertedIds) {
       const mov = await prisma.bankMovement.findUnique({ where: { id: movId } });
       if (!mov || !mov.counterpartyRut?.startsWith("0772707339")) continue;
@@ -218,6 +222,15 @@ export async function POST(request: NextRequest) {
             data: { internalTransferToId: mov.id, status: MOV_STATUS.INTERNO, category: "transfer_interno" },
           });
           stats.internalTransfersDetected++;
+
+          // Etiquetas en espera del bot de Telegram: si MJ ya había mandado el
+          // pantallazo del comprobante de este traspaso diciendo la obra y el
+          // concepto, se aplican acá — el traspaso recién ahora existe en la
+          // app. Se busca por fecha + monto (ver pendingTransferTags.ts).
+          // Es el único momento donde el traspaso pasa de "no existe" a
+          // "existe y está linkeado", que es lo que la etiqueta esperaba.
+          pendingTransferTagsApplied +=
+            await applyPendingTransferTagsForMovement(mov.id);
           break;
         }
       }
@@ -249,6 +262,8 @@ export async function POST(request: NextRequest) {
       if (r.applied) rulesApplied++;
     }
     (stats as { rulesApplied?: number }).rulesApplied = rulesApplied;
+    (stats as { pendingTransferTagsApplied?: number }).pendingTransferTagsApplied =
+      pendingTransferTagsApplied;
 
     // 6. Actualizar saldo conocido de la cuenta. Solo si la cartola es más
     // reciente que el último saldo guardado — así re-importar una cartola

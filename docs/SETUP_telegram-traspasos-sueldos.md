@@ -113,8 +113,11 @@ Modelo nuevo: `PendingTransferTag` (prisma/schema.prisma).
 
 ## Para activarlo
 
-1. **Crear el chat dedicado** en Telegram (un grupo nuevo con el bot adentro, o
-   un canal — lo importante es que sea distinto del de facturas).
+1. **Crear el chat dedicado** en Telegram: tiene que ser un **grupo nuevo** con
+   el bot adentro, aunque esté MJ sola. No puede ser una conversación 1:1 —
+   Telegram permite una sola por bot, y esa ya es la de facturas. Por eso el
+   chat de traspasos queda exento del silencio que el bot guarda en grupos (ver
+   el comentario en el webhook).
 2. **Sacar el id del chat**: escribirle `/chatid` en ese chat. El bot responde
    el número (los grupos dan un id negativo, ej `-1001234567890`).
 3. **Env var en Vercel** (Production): `TELEGRAM_SUELDOS_CHAT_ID` = ese número.

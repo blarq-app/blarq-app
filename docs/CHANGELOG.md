@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-08-14 — El traspaso se encuentra aunque el banco lo asiente días después
+
+- **El primer traspaso real mandado por el bot falló**: MJ transfirió el viernes 14-ago a las 16:23 y el banco lo asentó el **lunes 17**. La búsqueda miraba ±1 día, así que no lo encontró y contestó "la transferencia todavía no está en la app" cuando sí estaba. **La fecha del comprobante y la de la cartola no son la misma cosa.**
+- **La ventana pasa a ±15 días.** Es holgada a propósito porque el que identifica el traspaso es el **monto**: sobre los 41 traspasos históricos a Sueldos ningún monto tiene un gemelo dentro de ±60 días, y en toda la historia uno solo se repitió alguna vez ($2.400.000, con meses de distancia). Ante dos candidatos el bot sigue preguntando en vez de elegir.
+- **Script nuevo `scripts/aplicar-etiquetas-traspaso-pendientes.ts`** (con dry-run): reintenta las etiquetas que quedaron esperando un import que ya pasó. Se corrió en la viva para el traspaso de JNC-Vitacura, que quedó etiquetado en los dos lados del par.
+- Caso 7 en `scripts/test-pending-transfer-tags.ts`: comprobante del viernes, movimiento del lunes.
+
 ## 2026-08-13 — El bot de Telegram también etiqueta los traspasos a Sueldos, desde el comprobante
 
 - **El mismo bot atiende ahora dos chats que no se mezclan**, ruteados por `chat.id`: el de siempre sigue siendo el de facturas (sin cambios), y uno nuevo dedicado a los **traspasos Operativa → Sueldos** (`TELEGRAM_SUELDOS_CHAT_ID`). MJ manda el pantallazo del comprobante + `Sena obra` y el traspaso queda con obra y concepto, en vez de esperar a que se acuerde de etiquetarlo a mano en /banco/movimientos.

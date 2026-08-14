@@ -227,6 +227,27 @@ async function main() {
     `concepto=${mov6?.internalConcepto}`
   );
 
+  // ══ CASO 7: el banco asienta el traspaso DÍAS DESPUÉS del comprobante ══
+  // Es el caso real que falló la primera vez en producción: MJ transfirió el
+  // viernes 14 a las 16:23 y el banco lo registró el lunes 17.
+  console.log("\nCASO 7 — el comprobante dice viernes, el banco lo asentó el lunes:");
+  const fViernes = new Date("2031-03-21T00:00:00.000Z");
+  const fLunes = new Date("2031-03-24T00:00:00.000Z");
+  const par7 = await crearTraspaso(fLunes, 2_225_888);
+  const tag7 = await createPendingTransferTag({
+    transferDate: fViernes, amount: 2_225_888,
+    bankName: "Santander", destination: "Cuenta Sueldos",
+    projectId: obra.id, concepto: "obra",
+    requestedBy: "1", requestedByName: "test",
+  });
+  const r7 = await resolverEtiqueta(tag7);
+  const mov7 = await prisma.bankMovement.findUnique({ where: { id: par7.entra.id } });
+  chequear(
+    "lo encuentra igual (3 días de diferencia)",
+    r7?.tipo === "aplicada" && mov7?.projectId === obra.id,
+    `tipo=${r7?.tipo}`
+  );
+
   await limpiar(prisma);
   console.log(`\n${fallos === 0 ? "TODO OK" : `${fallos} FALLA(S)`}`);
   await prisma.$disconnect();

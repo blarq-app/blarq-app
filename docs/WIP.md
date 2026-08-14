@@ -1,8 +1,14 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-13.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-14.
 
 ---
+
+- **Bot de traspasos a Sueldos EN PROD y funcionando (2026-08-14, PRs #398 y #400, pendiente 158)**: quedó todo desplegado — tabla creada en la viva, código publicado, `TELEGRAM_SUELDOS_CHAT_ID` seteada en Vercel. El grupo de Telegram es **"Traspaso sueldo"** (MJ + @Blarq_bot). MJ ya lo usó con un traspaso real de JNC-Vitacura.
+  - **GOTCHA que apareció en el primer uso real — la fecha del comprobante NO es la del banco.** MJ transfirió el **viernes 14-ago 16:23** y el banco lo asentó el **lunes 17**. La búsqueda miraba ±1 día → el bot no lo encontró y contestó "todavía no está en la app" cuando sí estaba. **Ventana ampliada a ±15 días** (#400): el que identifica el traspaso es el **monto**, no la fecha — sobre 41 traspasos ningún monto tiene gemelo dentro de ±60 días y solo uno se repitió alguna vez en toda la historia. Ante dos candidatos, sigue preguntando.
+  - **El traspaso de JNC quedó etiquetado** en los dos lados con `scripts/aplicar-etiquetas-traspaso-pendientes.ts --aplicar` (tiene dry-run). Ese script queda para cualquier etiqueta que se cuelgue esperando un import que ya pasó.
+  - **Otra metida de pata a no repetir**: le dije a MJ que escribiera `/chatid` cuando el comando todavía no estaba desplegado. El bot le contestó lo de la factura (cayó al flujo viejo) y ella lo leyó como "no me contesta". **Verificar que algo esté publicado antes de mandarla a probarlo.**
+  - Herramientas de diagnóstico del bot, las dos de solo lectura: `getMe` (identidad, permisos de grupo) y `getWebhookInfo` (URL, updates pendientes, último error). Sirvieron para descartar que el problema fuera del webhook.
 
 - **El bot etiqueta los traspasos a Sueldos desde el comprobante (2026-08-13, rama `worktree-bot-traspasos-sueldos`, pendiente 158)**: MJ se pasa plata de Operativa a Sueldos separando obra de muebles, y esas transferencias entraban a la app **sin obra y sin concepto** hasta que se acordaba de etiquetarlas a mano en /banco/movimientos. Ahora manda el pantallazo del comprobante + `Sena obra` y queda etiquetado.
   - **El MISMO bot atiende dos chats que no se mezclan**, ruteados por `chat.id`: el de siempre sigue siendo el de facturas (ese flujo no se tocó) y uno nuevo dedicado a traspasos (`TELEGRAM_SUELDOS_CHAT_ID`). El ruteo es por chat y no por lo que se ve en la foto — decisión dura, sin ambigüedad. La lectura de la imagen es solo **red de seguridad**: si entra una factura por ese chat, el bot avisa ("se ve como factura electrónica de Sodimac") y no guarda nada.

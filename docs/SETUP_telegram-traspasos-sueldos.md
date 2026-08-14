@@ -95,11 +95,18 @@ Modelo nuevo: `PendingTransferTag` (prisma/schema.prisma).
   `(rutIssuer, folioNumber)`, los dos obligatorios. Una transferencia entre dos
   cuentas propias no tiene RUT emisor ni folio; meterle valores falsos para
   reusar el modelo ensuciaría el flujo de facturas.
-- **La identidad del traspaso es fecha + monto.** Es lo único duro que trae el
-  papel. Medido en la base viva sobre los 38 traspasos históricos a Sueldos:
-  **nunca** hubo dos del mismo monto el mismo día, ni con ventana de ±1 día
-  (`scripts/diag-traspasos-sueldos-match.ts`). Aun así, si aparece más de un
-  candidato el bot **no elige** — pregunta con botones.
+- **El que identifica el traspaso es el MONTO; la fecha solo acota.** Es lo
+  único duro que trae el papel. Medido en la base viva sobre los 41 traspasos
+  históricos a Sueldos: ningún monto tiene un gemelo dentro de ±60 días, y en
+  toda la historia un solo monto se repitió alguna vez ($2.400.000, dos veces,
+  con meses de distancia) — `scripts/diag-traspasos-sueldos-match.ts`. Aun así,
+  si aparece más de un candidato el bot **no elige**: pregunta con botones.
+- **La ventana de fecha es de ±15 días, y tiene que ser holgada.** Empezó en ±1
+  día y no alcanzó: el primer traspaso real (viernes 14-ago-2026, 16:23) el
+  banco lo asentó el **lunes 17**, así que el bot no lo encontró y contestó "la
+  transferencia todavía no está en la app" cuando sí estaba. La fecha del
+  comprobante y la de la cartola **no son la misma cosa** — un fin de semana
+  largo puede estirar la diferencia todavía más.
 - **Se etiquetan los dos lados del par.** Una transferencia son dos movimientos
   linkeados (sale de Operativa, entra a Sueldos). La regla vive en
   `lib/banco/internalTransferTags.ts`, compartida con el botón de la app — antes

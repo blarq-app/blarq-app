@@ -8,6 +8,11 @@ import {
 } from "@/lib/banco/movementStatus";
 import { upsertRuleFromMovement } from "@/lib/banco/categorizationRules";
 import { esCategoriaBancoValida } from "@/lib/banco/categorias";
+import {
+  esTraspasoInterno,
+  esConceptoValido,
+  etiquetarTraspaso,
+} from "@/lib/banco/internalTransferTags";
 import { requireSession } from "@/lib/apiAuth";
 
 // PATCH /api/banco/movimientos/[id]
@@ -72,14 +77,11 @@ export async function PATCH(
     });
     if (!mov) return NextResponse.json({ error: "Movimiento no encontrado" }, { status: 404 });
 
-    // Asignar / desasignar OBRA a una transferencia interna. Una transferencia
-    // son DOS movimientos linkeados (sale −X de Operativa, entra +X a Sueldos):
-    // etiquetamos los dos lados a la vez para que la obra quede conciliada sin
-    // importar en cuál fila clickeó MJ. El cálculo de "transferido por obra"
-    // suma SOLO el lado que entra a Sueldos (ver fondoSueldos.ts), así que
-    // etiquetar ambos lados no produce doble conteo.
+    // Asignar / desasignar OBRA a una transferencia interna. Etiqueta LOS DOS
+    // lados del par — la regla vive en internalTransferTags.ts, compartida con
+    // el bot de Telegram que hace lo mismo desde el comprobante.
     if (body.internalProjectId !== undefined) {
-      if (mov.category !== "transfer_interno" && mov.status !== "interno") {
+      if (!esTraspasoInterno(mov)) {
         return NextResponse.json(
           { error: "Solo se puede asignar obra a transferencias internas" },
           { status: 400 }
@@ -89,48 +91,29 @@ export async function PATCH(
         const existe = await prisma.project.count({ where: { id: body.internalProjectId } });
         if (!existe) return NextResponse.json({ error: "La obra no existe" }, { status: 400 });
       }
-      // Ambos lados del par. La relación internalTransferToId se setea en los
-      // dos sentidos al importar, pero por si algún dato viejo solo tiene un
-      // lado, buscamos también el que apunta a este mov.
-      const ids = new Set<string>([mov.id]);
-      if (mov.internalTransferToId) ids.add(mov.internalTransferToId);
-      const back = await prisma.bankMovement.findFirst({
-        where: { internalTransferToId: mov.id },
-        select: { id: true },
+      const etiquetados = await etiquetarTraspaso(mov, {
+        projectId: body.internalProjectId,
       });
-      if (back) ids.add(back.id);
-      const r = await prisma.bankMovement.updateMany({
-        where: { id: { in: Array.from(ids) } },
-        data: { projectId: body.internalProjectId },
-      });
-      return NextResponse.json({ ok: true, etiquetados: r.count });
+      return NextResponse.json({ ok: true, etiquetados });
     }
 
     // Asignar / desasignar CONCEPTO (obra | muebles) a una transferencia interna
     // — de qué utilidad es el traspaso. Mismo criterio que la obra: se setea en
     // los dos lados del par.
     if (body.internalConcepto !== undefined) {
-      if (mov.category !== "transfer_interno" && mov.status !== "interno") {
+      if (!esTraspasoInterno(mov)) {
         return NextResponse.json(
           { error: "Solo se puede asignar concepto a transferencias internas" },
           { status: 400 }
         );
       }
-      if (body.internalConcepto && !["obra", "muebles"].includes(body.internalConcepto)) {
+      if (body.internalConcepto && !esConceptoValido(body.internalConcepto)) {
         return NextResponse.json({ error: "Concepto inválido" }, { status: 400 });
       }
-      const ids = new Set<string>([mov.id]);
-      if (mov.internalTransferToId) ids.add(mov.internalTransferToId);
-      const back = await prisma.bankMovement.findFirst({
-        where: { internalTransferToId: mov.id },
-        select: { id: true },
+      const etiquetados = await etiquetarTraspaso(mov, {
+        internalConcepto: body.internalConcepto,
       });
-      if (back) ids.add(back.id);
-      const r = await prisma.bankMovement.updateMany({
-        where: { id: { in: Array.from(ids) } },
-        data: { internalConcepto: body.internalConcepto },
-      });
-      return NextResponse.json({ ok: true, etiquetados: r.count });
+      return NextResponse.json({ ok: true, etiquetados });
     }
 
     // Marcar a qué MES corresponde un sueldo/previred (formato "YYYY-MM", o

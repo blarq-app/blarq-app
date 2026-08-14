@@ -187,12 +187,18 @@ export async function POST(request: NextRequest) {
   // en un grupo ignoramos en silencio lo que claramente NO es una
   // interacción con él: mensajes sin foto que tampoco son un comando (/...).
   // En privado (1:1) seguimos respondiendo a todo, que ahí sí ayuda guiar.
+  //
+  // El chat de TRASPASOS queda fuera de ese silencio aunque sea un grupo: es
+  // un chat dedicado (Telegram no deja tener dos conversaciones 1:1 con el
+  // mismo bot, así que se arma como grupo aunque esté MJ sola). Ahí no hay
+  // conversación ajena que ignorar, y callarse ante un mensaje suelto se lee
+  // como que el bot está caído.
   const texto = (msg.text ?? msg.caption ?? "").trim();
   const isGroup =
     msg.chat.type === "group" || msg.chat.type === "supergroup";
   const tieneFoto = !!(msg.photo && msg.photo.length > 0);
   const esComando = texto.startsWith("/");
-  if (isGroup && !tieneFoto && !esComando) {
+  if (isGroup && !tieneFoto && !esComando && !esChatDeTraspasos(chatId)) {
     return NextResponse.json({ ok: true });
   }
 

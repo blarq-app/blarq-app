@@ -120,6 +120,9 @@ async function main() {
     texto?: string;
     conFoto?: boolean;
     callbackData?: string;
+    // El chat de traspasos real va a ser un GRUPO: Telegram no deja tener dos
+    // conversaciones 1:1 con el mismo bot.
+    tipoChat?: string;
   }) {
     respuestas = [];
     const update = opts.callbackData
@@ -135,7 +138,7 @@ async function main() {
           message: {
             message_id: messageId++,
             from: { id: Number(USER_ID), first_name: "MJ" },
-            chat: { id: opts.chatId, type: "private" },
+            chat: { id: opts.chatId, type: opts.tipoChat ?? "private" },
             ...(opts.texto ? { caption: opts.texto } : {}),
             ...(opts.conFoto
               ? { photo: [{ file_id: "foto-prueba", width: 400, height: 600 }] }
@@ -246,6 +249,28 @@ async function main() {
   console.log("   MJ  ┃ Portofino obra");
   await mandar({ chatId: CHAT_TRASPASOS, texto: "Portofino obra" });
   pintarRespuestas();
+
+  // ══ 8. El chat real va a ser un GRUPO, no un 1:1 ══
+  // En el grupo de FACTURAS el bot se calla ante un mensaje suelto (para no
+  // contestarle a la conversación entre MJ, JT y JP). El chat de traspasos es
+  // dedicado, así que ahí SÍ tiene que contestar aunque sea un grupo.
+  console.log("── 8. Lo mismo, pero en un GRUPO (así va a ser el chat real) ──");
+  console.log("   MJ  ┃ Portofino obra");
+  await mandar({ chatId: CHAT_TRASPASOS, texto: "Portofino obra", tipoChat: "supergroup" });
+  if (respuestas.length === 0) {
+    console.log("   BOT ┃ (no contestó — MAL: en el chat dedicado tiene que responder)\n");
+  } else {
+    pintarRespuestas();
+  }
+
+  console.log("── 9. Un mensaje suelto en el grupo de FACTURAS: sigue en silencio ──");
+  console.log("   MJ  ┃ dale, gracias");
+  await mandar({ chatId: CHAT_FACTURAS, texto: "dale, gracias", tipoChat: "supergroup" });
+  console.log(
+    respuestas.length === 0
+      ? "   BOT ┃ (en silencio, como corresponde)\n"
+      : "   BOT ┃ (contestó — MAL: no debería meterse en la conversación)\n"
+  );
 
   await limpiar();
   await prisma.$disconnect();

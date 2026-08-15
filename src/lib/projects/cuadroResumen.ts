@@ -51,9 +51,12 @@ type BudgetVersionLite = {
 type PaymentLite = { amountApplied: number; bankMovement: { date: Date } };
 type InvoiceLite = {
   type: string;
-  // Categoría que MJ asigna a la factura emitida (CostCategory "Obra" /
-  // "Muebles" / "Artefactos", appliesTo="emitida"). ES la fuente de verdad
-  // del concepto del cobro — el cuadro la lee de acá.
+  // Categoría que MJ asigna a la factura emitida (CostCategory "Obra",
+  // "Muebles" o "Artefactos"). ES la fuente de verdad del concepto del cobro
+  // — el cuadro la lee de acá. Se matchea por NOMBRE (ver conceptoDeFactura),
+  // no por id: desde 2026-08-14 "Muebles" y "Artefactos" son los mismos nodos
+  // con los que se catalogan las compras (appliesTo="both"), y "Obra" es el
+  // único que existe solo del lado del cobro.
   category: { name: string } | null;
   // Campo legacy "obra | muebles | artefactos". Casi siempre null; se usa
   // solo como respaldo si una factura vieja no tiene categoría.

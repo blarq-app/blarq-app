@@ -4,6 +4,22 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-08-14 — Un solo "Muebles" y un solo "Artefactos": se unieron los dos juegos de categorías
+
+- **Había dos juegos de categorías raíz con nombres repetidos**, uno para lo que BLARQ compra (`appliesTo="recibida"`) y otro para lo que le cobra al cliente (`appliesTo="emitida"`). En los desplegables aparecían **dos "Muebles" y dos "Artefactos" idénticos**, sin forma de saber cuál era cuál. No eran duplicados por error — eran dos juegos a propósito — pero el nombre repetido los volvía indistinguibles.
+- **Consecuencia real: 12 facturas de COMPRA quedaron archivadas del lado del cobro** (ICPROYECTOS ×4, Geoffroy ×4, Proyectos Ingeniería ×2, Kitchen Center, Asael de la O). No se perdía plata —`metrics.ts` agrupa por NOMBRE de categoría, así que caían igual en el balde correcto— pero se perdía el detalle: no bajaban a Herrajes/Cocina/Baño y salían como "(Sin subcategoría)". Se movieron al juego de compra con la evidencia de las otras facturas de cada proveedor; donde el proveedor no dejaba clara la subcategoría, al padre.
+- **Y se unieron los dos juegos**: `Muebles` y `Artefactos` pasan a ser UN solo nodo `appliesTo="both"`, y se borraron los dos de cobro (no colgaba nada de ellos). La duplicación no hacía falta — **la factura ya dice sola de qué lado está con su campo `type`**, y cada consumidor mira un solo lado: el gasto por obra recorre solo recibidas, y el concepto del cobro (`conceptoCobro.ts` → Cuadro Resumen, fondo de sueldos) solo emitidas, matcheando por NOMBRE. Como el nombre no cambió, ningún cálculo se enteró. `Obra` sigue existiendo solo del lado del cobro; nunca estuvo duplicada. Las 6 subcategorías quedan `recibida`, así que a un cobro se le ofrecen solo las 3 de arriba.
+- **Cierra además el agujero por el que esto pudo pasar**: el motor de reglas de proveedor aplica —y retroaplica— **sin mirar el tipo de factura**, así que una regla podía mandar una compra a una categoría de cobro. Con un solo nodo ya no hay a dónde equivocarse.
+- **`scripts/seed-emitidas-categories.ts` recreaba los duplicados** si alguien lo volvía a correr (buscaba por `appliesTo="emitida"`). Ahora solo crea "Obra", marca `both` las otras dos y avisa si vuelven a aparecer nombres repetidos.
+- Verificación antes/después sobre las 15 obras con presupuesto (metrics + fondo de sueldos + Cuadro Resumen): **idéntico, ni un peso se movió**. Scripts: `diag-160-*`, `mover-160-facturas-al-juego-de-compra.ts`, `unir-160-categorias-muebles-artefactos.ts` (todos con dry-run y respaldo).
+
+## 2026-08-14 — Los avisos del Resumen dicen de qué familia son
+
+- Los avisos de presupuesto consumido de artefactos salían como **"Cocina", "Baño", "Iluminación" a secas**, mezclados con los de muebles ("Mueble", "Herrajes", "Cubiertas"). Al lado de "Herrajes" no se entendía de dónde venía cada uno. Ahora dicen **"Artefactos cocina"**, **"Artefactos baño"** y **"Artefactos iluminación"**.
+- **Se mantiene la palabra "Baño" y no "Sanitarios"** (MJ descartó "Sanitarios"): la rama del árbol de facturas se llama literalmente `Artefactos > Baño`, que es de donde sale el gasto que mide el aviso. Con "Sanitarios" habría que ir a buscar a Facturas una categoría que no existe.
+- Son **tres strings** — el primer argumento de `pushDeviationAlert`. Los otros dos son claves de datos (la key del presupuesto y el nombre exacto de la categoría de la factura) y no se tocaron: si se tocan, el aviso se queda sin números y desaparece.
+- §4.1: snapshot pre/post de las 35 obras de la viva (`scripts/diag-159-snapshot-avisos.ts`). Normalizando el prefijo el diff da vacío — misma cantidad de avisos, misma severidad, mismos porcentajes y mismos totales.
+
 ## 2026-08-14 — El traspaso se encuentra aunque el banco lo asiente días después
 
 - **El primer traspaso real mandado por el bot falló**: MJ transfirió el viernes 14-ago a las 16:23 y el banco lo asentó el **lunes 17**. La búsqueda miraba ±1 día, así que no lo encontró y contestó "la transferencia todavía no está en la app" cuando sí estaba. **La fecha del comprobante y la de la cartola no son la misma cosa.**

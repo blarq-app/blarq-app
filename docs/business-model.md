@@ -182,9 +182,18 @@ Para clasificar gastos por proyecto. La estructura debe soportar jerarquía padr
 
 Las categorías viven en el modelo `CostCategory` (árbol padre/hijo de dos niveles).
 **No hay pantalla para crearlas ni editarlas**: se insertan por script (ver `prisma/seed.ts`
-y los `scripts/*categor*`). Hay además tres categorías paralelas para las facturas que
-BLARQ **emite** al cliente — Obra, Muebles, Artefactos — distinguidas por el campo
-`appliesTo`; "Muebles" y "Artefactos" existen dos veces, una por cada lado.
+y los `scripts/*categor*`). A qué tipo de factura sirve cada categoría lo dice el campo
+`appliesTo` (`recibida` / `emitida` / `both`). Las facturas que BLARQ **emite** al cliente
+se catalogan con tres: **Obra** (solo del lado del cobro) y **Muebles** y **Artefactos**,
+que son los MISMOS nodos con los que se catalogan las compras, marcados `both`. Sus
+subcategorías (Mueble, Cubiertas, Herrajes; Cocina, Baño, Iluminación) quedan `recibida`,
+así que a un cobro se le ofrecen solo las tres de arriba.
+
+Hasta 2026-08-14 "Muebles" y "Artefactos" existían **dos veces**, una por cada lado, con el
+mismo nombre y sin forma de distinguirlas en los desplegables — de ahí salieron 12 facturas
+de compra archivadas del lado del cobro. Se unieron: la factura ya dice sola de qué lado
+está con su campo `type`, así que la categoría no necesitaba repetirlo. Ver
+`scripts/unir-160-categorias-muebles-artefactos.ts`.
 
 ### El otro vocabulario: categorías de movimiento bancario
 

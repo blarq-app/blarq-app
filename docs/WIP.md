@@ -4,7 +4,7 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Categorías unidas + avisos con familia (2026-08-15, rama `worktree-pend-159-160-avisos-categorias`, pendientes 159 y 160)**: dos temas del mismo hilo. **APLICADO EN LA VIVA**, falta mergear el código.
+- **Categorías unidas + avisos con familia (2026-08-15, PR #402 en prod, pendientes 159 y 160)**: dos temas del mismo hilo. **EN PROD** (PR #402 mergeado el 2026-08-15): los datos ya estaban aplicados en la viva y el código quedó publicado.
   - **159 (texto puro)**: los avisos del Resumen dicen "Artefactos cocina / baño / iluminación" en vez de "Cocina / Baño / Iluminación" a secas. **Se mantiene "Baño", MJ descartó "Sanitarios"** — la rama de facturas se llama `Artefactos > Baño` y ahí va a buscar. Snapshot pre/post de 35 obras: ni un número se movió.
   - **160 — la nota de la libreta decía "son duplicados, borralos" y era FALSO**: eran dos juegos a propósito (compra vs cobro), distinguidos por `appliesTo`. Borrarlos rompía la app.
   - **12 facturas de compra estaban del lado del cobro** y se movieron al de compra. **APLICADO en la viva**, respaldo en `backup-160-categorias-facturas.json`. Donde el proveedor no dejaba clara la subcategoría (ICPROYECTOS, Geoffroy, Asael) fueron al **padre** — MJ puede afinarlas cuando quiera.

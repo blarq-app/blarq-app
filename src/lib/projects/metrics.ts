@@ -453,10 +453,24 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   );
   pushDeviationAlert("Herrajes", mueblesBudgetBySub.Herrajes, realBySpecific["Herrajes"] ?? 0);
   pushDeviationAlert("Cubiertas", mueblesBudgetBySub.Cubiertas, realBySpecific["Cubiertas"] ?? 0);
-  // Artefactos
-  pushDeviationAlert("Cocina", artefactosBudgetBySub.Cocina, realBySpecific["Cocina"] ?? 0);
-  pushDeviationAlert("Baño", artefactosBudgetBySub.Baño, realBySpecific["Baño"] ?? 0);
-  pushDeviationAlert("Iluminación", artefactosBudgetBySub.Iluminación, realBySpecific["Iluminación"] ?? 0);
+  // Artefactos — el rótulo lleva "Artefactos" adelante porque estos avisos se
+  // leen mezclados con los de muebles (Mueble, Herrajes, Cubiertas): "Cocina" o
+  // "Baño" a secas, al lado de "Herrajes", no dejaban ver de qué familia venía
+  // cada uno. Se mantiene la palabra "Baño" (y no "Sanitarios") porque la rama
+  // del árbol de facturas se llama literalmente "Artefactos > Baño": es la
+  // categoría que MJ va a buscar en Facturas cuando el aviso le llame la atención.
+  //
+  // OJO: acá solo el PRIMER argumento es texto de pantalla. Los otros dos son
+  // claves de datos — "Baño" es a la vez la key del presupuesto y el nombre
+  // exacto de la categoría de la factura. Si se tocan, el aviso se queda sin
+  // números y desaparece de la pantalla.
+  pushDeviationAlert("Artefactos cocina", artefactosBudgetBySub.Cocina, realBySpecific["Cocina"] ?? 0);
+  pushDeviationAlert("Artefactos baño", artefactosBudgetBySub.Baño, realBySpecific["Baño"] ?? 0);
+  pushDeviationAlert(
+    "Artefactos iluminación",
+    artefactosBudgetBySub.Iluminación,
+    realBySpecific["Iluminación"] ?? 0
+  );
   // Facturas vencidas — con el monto total pendiente.
   if (invoicesOverdueCount > 0) {
     alerts.push({

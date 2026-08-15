@@ -1,8 +1,19 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-14.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-15.
 
 ---
+
+- **Categorías unidas + avisos con familia (2026-08-15, rama `worktree-pend-159-160-avisos-categorias`, pendientes 159 y 160)**: dos temas del mismo hilo. **APLICADO EN LA VIVA**, falta mergear el código.
+  - **159 (texto puro)**: los avisos del Resumen dicen "Artefactos cocina / baño / iluminación" en vez de "Cocina / Baño / Iluminación" a secas. **Se mantiene "Baño", MJ descartó "Sanitarios"** — la rama de facturas se llama `Artefactos > Baño` y ahí va a buscar. Snapshot pre/post de 35 obras: ni un número se movió.
+  - **160 — la nota de la libreta decía "son duplicados, borralos" y era FALSO**: eran dos juegos a propósito (compra vs cobro), distinguidos por `appliesTo`. Borrarlos rompía la app.
+  - **12 facturas de compra estaban del lado del cobro** y se movieron al de compra. **APLICADO en la viva**, respaldo en `backup-160-categorias-facturas.json`. Donde el proveedor no dejaba clara la subcategoría (ICPROYECTOS, Geoffroy, Asael) fueron al **padre** — MJ puede afinarlas cuando quiera.
+  - **Después se UNIERON los dos juegos** (decisión de MJ tras pedir análisis profundo): `Muebles` y `Artefactos` son ahora UN nodo `appliesTo="both"`; se borraron los dos de cobro y las 7 emitidas se mudaron. **APLICADO en la viva**, respaldo en `backup-160-union-categorias.json`. `Obra` no se tocó.
+  - **Por qué se pudo unir sin romper nada**: la factura ya dice de qué lado está con `type`, y cada consumidor mira un lado solo — `metrics.ts` solo recibidas, `conceptoCobro.ts` solo emitidas **y matcheando por NOMBRE**. El nombre no cambió → nadie se enteró. Verificado: 15 obras con metrics + fondo + Cuadro Resumen **idénticas**.
+  - **GOTCHA que casi arrastra el error de vuelta**: `scripts/seed-emitidas-categories.ts` **recreaba los duplicados** si alguien lo volvía a correr (buscaba por `appliesTo="emitida"`). Corregido en el mismo commit.
+  - **GOTCHA de fondo**: el motor de reglas de proveedor aplica y **retroaplica sin mirar el tipo de factura** — una regla podía mandar una compra a una categoría de cobro. Con un solo nodo ya no puede pasar, pero la asimetría sigue existiendo para `Obra`.
+  - **Queda pendiente, chico**: en el form de factura (`/facturas/nueva`, `/facturas/[id]`) y en la pantalla de reglas se sigue ofreciendo **"Obra"** aunque casi siempre se esté catalogando una compra. Esas 3 pantallas no filtran por `appliesTo` (ni lo seleccionan de la base). MJ lo vio y lo dejó para después.
+  - **OJO — worktree viejo a descartar**: `.claude/worktrees/avisos-artefactos-familia` tiene un intento anterior del 159 **sin commitear** que usa "Sanitarios" y además toca la tabla del Resumen. **MJ lo descartó** — no mergear eso.
 
 - **Bot de traspasos a Sueldos EN PROD y funcionando (2026-08-14, PRs #398 y #400, pendiente 158)**: quedó todo desplegado — tabla creada en la viva, código publicado, `TELEGRAM_SUELDOS_CHAT_ID` seteada en Vercel. El grupo de Telegram es **"Traspaso sueldo"** (MJ + @Blarq_bot). MJ ya lo usó con un traspaso real de JNC-Vitacura.
   - **GOTCHA que apareció en el primer uso real — la fecha del comprobante NO es la del banco.** MJ transfirió el **viernes 14-ago 16:23** y el banco lo asentó el **lunes 17**. La búsqueda miraba ±1 día → el bot no lo encontró y contestó "todavía no está en la app" cuando sí estaba. **Ventana ampliada a ±15 días** (#400): el que identifica el traspaso es el **monto**, no la fecha — sobre 41 traspasos ningún monto tiene gemelo dentro de ±60 días y solo uno se repitió alguna vez en toda la historia. Ante dos candidatos, sigue preguntando.

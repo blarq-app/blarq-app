@@ -464,10 +464,10 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   // claves de datos — "Baño" es a la vez la key del presupuesto y el nombre
   // exacto de la categoría de la factura. Si se tocan, el aviso se queda sin
   // números y desaparece de la pantalla.
-  pushDeviationAlert("Artefactos cocina", artefactosBudgetBySub.Cocina, realBySpecific["Cocina"] ?? 0);
-  pushDeviationAlert("Artefactos baño", artefactosBudgetBySub.Baño, realBySpecific["Baño"] ?? 0);
+  pushDeviationAlert("Artefactos Cocina", artefactosBudgetBySub.Cocina, realBySpecific["Cocina"] ?? 0);
+  pushDeviationAlert("Artefactos Baño", artefactosBudgetBySub.Baño, realBySpecific["Baño"] ?? 0);
   pushDeviationAlert(
-    "Artefactos iluminación",
+    "Artefactos Iluminación",
     artefactosBudgetBySub.Iluminación,
     realBySpecific["Iluminación"] ?? 0
   );

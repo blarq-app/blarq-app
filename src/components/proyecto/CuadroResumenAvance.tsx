@@ -449,8 +449,13 @@ export default function CuadroResumenAvance({
                 <td colSpan={2 + conceptos.length * 3} className="h-4"></td>
               </tr>
 
-              {/* TOTAL PAGOS */}
-              <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold text-gray-900">
+              {/* TOTAL PAGOS — sin fondo propio (ver el mismo bloque en el
+                  render de exportación, más abajo: la banda clara del AVANCE
+                  quedaba pegada a este gris y las dos se confundían). Se toca
+                  acá TAMBIÉN, aunque en pantalla el AVANCE sea rojo y no haya
+                  banda clara, para que la pantalla y la imagen no se separen —
+                  es el error que ya mordió en el #389. */}
+              <tr className="border-t border-gray-300 font-semibold text-gray-600">
                 <td className="py-1 pr-1 text-left uppercase tracking-wide">Total pagos</td>
                 {conceptos.map((c) => (
                   <Fragment key={c.key}>
@@ -780,8 +785,12 @@ export default function CuadroResumenAvance({
                 <td colSpan={2 + conceptos.length * 3} className="h-5"></td>
               </tr>
 
-              {/* TOTAL PAGOS */}
-              <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold text-gray-900">
+              {/* TOTAL PAGOS — sin fondo propio a propósito. Antes iba en
+                  `bg-gray-50` (#F5F5F5); con la banda del AVANCE ahora clara
+                  (#EDEDEC) quedaban dos grises casi iguales, uno encima del
+                  otro, y la banda dejaba de distinguirse. Esta fila cede el
+                  peso y se queda con el filete: la que manda es la de abajo. */}
+              <tr className="border-t border-gray-300 font-semibold text-gray-600">
                 <td className="py-1.5 pr-2 text-left uppercase tracking-wide text-[10px]">Total pagos</td>
                 {conceptos.map((c) => (
                   <Fragment key={c.key}>
@@ -792,21 +801,35 @@ export default function CuadroResumenAvance({
                 <td className="py-1.5 pl-2 border-l border-gray-200 text-right whitespace-nowrap">{formatCLP(totalPagado)}</td>
               </tr>
 
-              {/* AVANCE (a cobrar) — banda negra editorial, % como texto plano */}
-              <tr className="bg-gray-900 text-white font-medium">
+              {/* AVANCE (a cobrar) — banda CLARA, % como texto plano.
+                  Hasta 2026-08-17 esta banda iba en `bg-gray-900` (#2A2722)
+                  con texto blanco. MJ, mirando Casa Los Algarrobos: "me parece
+                  muy fuerte el negro" — en un documento que ve el cliente, un
+                  bloque casi negro cruzando el cuadro pesa de más. Se invirtió:
+                  fondo Banda (#EDEDEC, el tono que el Manual de Marca v2 define
+                  justo para bandas y filas) y letra oscura.
+
+                  El peso lo hace ahora la TIPOGRAFÍA (semibold + el total en
+                  bold), no el color — regla de la casa (§3 de CLAUDE.md).
+
+                  Ojo con el contraste: esto se imprime. El fondo #EDEDEC puede
+                  desaparecer en papel, así que la fila NO puede depender de él
+                  para leerse — de ahí los filetes arriba y abajo, y que el
+                  texto vaya oscuro (gray-800 / gray-600), no gris claro. */}
+              <tr className="bg-banda text-gray-800 font-semibold border-y border-gray-300">
                 <td className="py-2 pr-2 pl-1 text-left uppercase tracking-wide text-[10px]">Avance a cobrar</td>
                 {conceptos.map((c) => {
                   const cc = calc.porConcepto.get(c.key)!;
                   return (
                     <Fragment key={c.key}>
-                      <td className="py-2 px-2 border-l border-gray-700 text-left text-gray-300">{avance[c.key] ?? 0}%</td>
+                      <td className="py-2 px-2 border-l border-gray-300 text-left text-gray-600 font-normal">{avance[c.key] ?? 0}%</td>
                       <td colSpan={2} className="py-2 px-2 text-right whitespace-nowrap">
-                        {cc.aPedir > 0 ? formatCLP(cc.aPedir) : <span className="text-gray-500">—</span>}
+                        {cc.aPedir > 0 ? formatCLP(cc.aPedir) : <span className="text-gray-400">—</span>}
                       </td>
                     </Fragment>
                   );
                 })}
-                <td className="py-2 pl-2 pr-1 border-l border-gray-700 text-right whitespace-nowrap font-semibold">{formatCLP(calc.totalAPedir)}</td>
+                <td className="py-2 pl-2 pr-1 border-l border-gray-300 text-right whitespace-nowrap font-bold">{formatCLP(calc.totalAPedir)}</td>
               </tr>
 
               {/* SALDO PENDIENTE */}

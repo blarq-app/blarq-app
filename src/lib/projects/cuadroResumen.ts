@@ -275,10 +275,21 @@ export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenDa
       grupos.set(clave, row);
     }
     row.porConcepto[key].monto += monto;
-    // Si ya había una factura para este concepto en la misma fecha, juntamos los folios.
-    row.porConcepto[key].folio = row.porConcepto[key].folio
-      ? `${row.porConcepto[key].folio}/${folio ?? ""}`
-      : folio;
+    // Si ya había una factura para este concepto en la misma fecha, juntamos
+    // los folios — pero SIN repetir uno que ya esté en la lista.
+    //
+    // Antes se concatenaba a ciegas y salía "185/185" (y "177/185/185" en
+    // obra). Pasa cuando UNA factura se cobra en VARIAS transferencias del
+    // mismo día: cada transferencia entra acá por separado, y si además la
+    // factura tiene el desglose cargado, los 5 conceptos reciben las dos —
+    // así que el mismo folio se pegaba dos veces. Es solo el rótulo: los
+    // montos se suman aparte (arriba) y no se tocan.
+    const yaEstan = row.porConcepto[key].folio;
+    if (!yaEstan) {
+      row.porConcepto[key].folio = folio;
+    } else if (folio && !yaEstan.split("/").includes(folio)) {
+      row.porConcepto[key].folio = `${yaEstan}/${folio}`;
+    }
   };
   for (const inv of invoices.filter((i) => i.type === "emitida")) {
     // Desglose cargado a mano: la factura se reparte entre los 5 conceptos y

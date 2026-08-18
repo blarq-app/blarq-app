@@ -1,8 +1,15 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-17.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-18.
 
 ---
+
+- **Dos rastros que faltaban (2026-08-18, rama `fix/166-167-rastro-devolucion-y-aviso`, pendientes 166 y 167)**: los dos son de PANTALLA — no tocan plata, ni estado, ni la base. La app sabía las dos respuestas y no las mostraba.
+  - **167 — la pastilla "Devolución" no decía de qué era.** El dato estaba (los dos movimientos comparten `netZeroGroupId`) pero ese campo **ni salía de la base**: faltaba en el `select` de la pantalla de movimientos. Ahora hay un desplegable linkeado debajo de la pastilla, calcado del de "N pagos · $X".
+  - **Funciona en los DOS sentidos sin un flag**: el sustantivo ("pago" / "devolución") sale del SIGNO del otro lado del par, no del movimiento en el que estás parada. Un solo componente sirve para los dos.
+  - **GOTCHA chico**: `toLocaleDateString("es-CL", {month: "2-digit"})` **ignora el `2-digit`** y devuelve "29/7". Al lado de las otras fechas de la tabla se ve desprolijo — la fecha corta se arma a mano, leyendo las partes en UTC (los movimientos se guardan a medianoche UTC).
+  - **166 — el aviso de la NC decía "factura no sincronizada todavía" y era FALSO.** La lista de facturas referenciables corta en las 50 más recientes del proveedor y **SODIMAC tiene 523**, así que una de agosto 2025 quedaba fuera. Mandaba a perseguir un problema de sincronización inexistente.
+  - Se arregló por los dos lados: el detalle **carga siempre la factura referenciada** aunque esté fuera del corte, y hay un **buscador por folio** para referenciar cualquier factura vieja. Probado contra la viva: buscando un folio 120 posiciones atrás lo encuentra y lo deja elegido; con un folio inexistente avisa la verdad.
 
 - **La plata que vuelve del proveedor (2026-08-17, PR #406, pendiente 162)**: dos casos con la misma raíz — plata que vuelve y la app no la sabe atar a su origen. **EN PROD** (mergeado el 2026-08-17): datos aplicados en la viva y código desplegado.
   - **OJO para la próxima**: los datos se aplicaron ANTES de que el código saliera, y en esa ventana las dos NC repartidas se veían en la app en vivo como *"NC sin compensar"* — el cartel viejo no sabía leer el modo `split`. Estaban bien por dentro. Si se vuelve a hacer algo así, conviene desplegar primero y aplicar los datos después.

@@ -126,13 +126,55 @@ export default async function EditFacturaPage({
       })
     : [];
 
+  // La lista de arriba corta en las 50 más recientes. Si la NC ya referencia un
+  // folio que quedó FUERA de ese corte, se trae aparte y se agrega.
+  //
+  // Sin esto el desplegable mostraba "— Sin referencia —" para una factura que
+  // sí está en la app, y el cartel de al lado concluía —falso— "factura no
+  // sincronizada todavía". Pasó con la NC 61496059 de SODIMAC: la factura
+  // 141929316 (Martín de Zamora, $191.709, pagada) está hace rato, pero SODIMAC
+  // emite tantas que una de agosto 2025 no entra en las 50 últimas. El cartel
+  // mandaba a perseguir un problema de sincronización que no existía.
+  const referenciaFueraDelCorte =
+    isNCorND &&
+    invoice.referenceFolioNumber &&
+    !referenceCandidates.some((c) => c.folioNumber === invoice.referenceFolioNumber)
+      ? await prisma.invoice.findFirst({
+          where: {
+            type: invoice.type,
+            tipoDoc: { in: [33, 34] },
+            folioNumber: invoice.referenceFolioNumber,
+            ...(invoice.type === "recibida"
+              ? { rutIssuer: invoice.rutIssuer ?? undefined }
+              : { rutReceiver: invoice.rutReceiver ?? undefined }),
+            NOT: { id: invoice.id },
+          },
+          select: {
+            id: true,
+            folioNumber: true,
+            tipoDoc: true,
+            totalAmount: true,
+            businessName: true,
+            issueDate: true,
+            status: true,
+          },
+        })
+      : null;
+  // Va primera: es la que está elegida, tiene que verse sin scrollear la lista.
+  const referenceOptions = referenciaFueraDelCorte
+    ? [referenciaFueraDelCorte, ...referenceCandidates]
+    : referenceCandidates;
+
   // Para el panel de compensación de una NC: solo ofrecer facturas que
   // todavía tienen saldo (pendiente / parcial). Una NC se aplica a una
   // factura que aún debe plata; ofrecer las ya pagadas o anuladas confunde
   // (no son conciliables). El dropdown de "factura referenciada" del form,
   // en cambio, usa la lista completa (la referencia del SII puede apuntar a
   // una factura ya pagada).
-  const compensableCandidates = referenceCandidates.filter(
+  // Sobre referenceOptions y no sobre las 50 crudas: si la factura referenciada
+  // quedó fuera del corte y todavía debe plata, es una candidata legítima a
+  // recibir el crédito y no tendría por qué faltar acá.
+  const compensableCandidates = referenceOptions.filter(
     (c) => c.status === "pendiente" || c.status === "parcial"
   );
 
@@ -419,10 +461,15 @@ export default async function EditFacturaPage({
         projects={projects}
         categories={categories}
         tipoDoc={invoice.tipoDoc ?? null}
-        referenceCandidates={referenceCandidates.map((c) => ({
+        referenceCandidates={referenceOptions.map((c) => ({
           ...c,
           issueDate: c.issueDate.toISOString().split("T")[0],
         }))}
+        // Para buscar por folio una factura que no entró en las 50 más
+        // recientes. El buscador filtra por esta contraparte.
+        referenceCounterpartyRut={
+          (invoice.type === "recibida" ? invoice.rutIssuer : invoice.rutReceiver) ?? null
+        }
         initial={{
           id: invoice.id,
           type: invoice.type as "emitida" | "recibida",

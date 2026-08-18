@@ -10,6 +10,7 @@ import InternalTransferConceptoSelect from "./InternalTransferConceptoSelect";
 import SalaryPeriodSelect from "./SalaryPeriodSelect";
 import CategoryInlineSelect from "./CategoryInlineSelect";
 import PaymentsDetailPopover from "./PaymentsDetailPopover";
+import NetZeroDetailPopover, { type NetZeroPar } from "./NetZeroDetailPopover";
 import ImputacionColumnFilter from "./ImputacionColumnFilter";
 import ProyectoColumnFilter from "./ProyectoColumnFilter";
 import { deriveEstado, derivePaymentRespaldo } from "@/lib/banco/movementDisplay";
@@ -54,6 +55,10 @@ export type MovementRow = {
   // Cuánto vuelve por este movimiento en notas de crédito (un mismo depósito
   // puede traer las NC de varias obras). También es plata explicada.
   ncRefundAmount: number;
+  // Los movimientos con los que este se cancela (mismo netZeroGroupId). Vacío
+  // cuando no es parte de ninguna devolución. Sirve en los DOS sentidos: en la
+  // devolución trae el pago, y en el pago trae la devolución.
+  netZeroPares: NetZeroPar[];
   payments: Payment[];
 };
 
@@ -510,9 +515,14 @@ function RespaldoContenido({
         </div>
       </div>
     ) : m.status === "neto_cero" ? (
-      <span className="inline-block text-[9px] uppercase tracking-wide bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
-        Devolución
-      </span>
+      // La pastilla sola decía "Devolución" y nada más: no se podía saber de
+      // QUÉ era. Ahora, debajo, el movimiento que la origina, linkeado.
+      <div className="space-y-0.5">
+        <span className="inline-block text-[9px] uppercase tracking-wide bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+          Devolución
+        </span>
+        <NetZeroDetailPopover pares={m.netZeroPares} />
+      </div>
     ) : m.payments.length > 0 ? (
       (() => {
         const resp = derivePaymentRespaldo(
@@ -549,6 +559,10 @@ function RespaldoContenido({
                 sumApplied={sumApplied}
               />
             )}
+            {/* El otro sentido: este movimiento paga su factura Y además tiene
+                un sobrante que se devolvió. Sin esto, desde el pago no había
+                forma de llegar a la devolución que lo cierra. */}
+            <NetZeroDetailPopover pares={m.netZeroPares} />
             {overImputed && (
               <span
                 className="inline-block text-[9px] uppercase tracking-wide bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded"

@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-08-18 — Dos rastros que faltaban: de qué es la devolución, y el aviso que mentía
+
+- **La pastilla "Devolución" no decía de qué era.** Un movimiento en neto cero mostraba la palabra y nada más: desde la devolución no se podía llegar al pago que cancela, ni desde el pago a su devolución. El dato estaba guardado —los dos comparten `netZeroGroupId`— pero ese campo **ni siquiera salía de la base**: no estaba en el `select` de la pantalla de movimientos.
+- **Ahora la pastilla lleva debajo un desplegable linkeado** (`NetZeroDetailPopover`, calcado de `PaymentsDetailPopover`, el de "N pagos · $X"): dice `pago 29-07 · $2.153.598` y al abrirlo muestra el movimiento con su contraparte, linkeado a `/banco/movimientos?id=`. **Funciona en los dos sentidos** sin decírselo: el sustantivo sale del SIGNO del otro lado, así que parado en la devolución dice "pago" y parado en el pago dice "devolución". Cuando el neteo fue parcial lo aclara (`se neteó $47.991 · el resto paga F-49090`), para que no se lea como que se anuló el pago entero.
+- **El aviso de la NC decía "factura no sincronizada todavía" y era falso.** La lista de facturas referenciables corta en las 50 más recientes del proveedor; SODIMAC tiene **523**, así que la factura de agosto 2025 quedaba fuera del corte y el cartel sacaba la conclusión equivocada. Mandaba a perseguir un problema de sincronización que no existía.
+- **Dos arreglos**: el detalle ahora **carga siempre la factura referenciada** aunque esté fuera del corte (va primera en la lista), y se agrega un **buscador por folio** para poder referenciar cualquier factura vieja. El texto del aviso ya no inventa la causa — solo aparece si la factura de verdad no está, y dice dónde buscarla.
+- Los dos son de pantalla: no tocan plata, ni estado, ni la base.
+
 ## 2026-08-17 — La plata que vuelve del proveedor: sobrantes devueltos y notas de crédito partidas
 
 - **Cierra el "Caso C" del ADR de plata que no es gasto ni ingreso**, que decía textual *"no está resuelto"*. Cuando le pagabas de más a un proveedor y te devolvía la diferencia, no había forma de cerrarlo: la acción "Devolución (neto cero)" exigía que ningún movimiento tuviera factura pegada, y el pago grande ya estaba conciliado a la suya — que es lo correcto. El sobrante y su devolución quedaban pendientes para siempre.

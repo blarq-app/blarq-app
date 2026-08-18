@@ -317,6 +317,33 @@ export default function CuadroResumenAvance({
   const cellMontoTenue = (v: number) =>
     v > 0 ? <span className="tabular-nums">{formatCLP(v)}</span> : <span className="text-gray-200">—</span>;
 
+  // ¿Hay algo que pedir en esta celda, o va el guion?
+  //
+  // Se redondea ANTES de decidir. `aPedir` sale de una resta con fracciones
+  // (el objetivo % por el acordado, menos lo pagado), así que un concepto YA
+  // cobrado al 100% no da 0 exacto sino una fracción de peso —en Paseo del
+  // Sena, 0,26 en Art. Sanitarios y 0,37 en Muebles—. Esa fracción pasaba el
+  // `> 0` de antes y la celda terminaba imprimiendo "$0", que es justo lo que
+  // la regla de la casa evita ("el cero no ocupa espacio prominente"), y en la
+  // imagen que le llega a la clienta.
+  //
+  // Se compara contra el peso ENTERO que se va a mostrar, que es lo que hace
+  // formatCLP: así la condición y lo impreso no pueden discrepar. Va como
+  // helper compartido a propósito — lo usan los DOS renders (pantalla y
+  // exportación) y si viviera duplicado se volverían a separar (#389).
+  const hayQuePedir = (v: number) => Math.round(v) > 0;
+
+  // Total de la fila AVANCE, en pesos ENTEROS — la suma de lo que realmente se
+  // muestra en cada celda, no de las fracciones. Con todos los conceptos ya
+  // cobrados al 100%, las fracciones sumaban 0,63 y la columna Total imprimía
+  // "$1" mientras cada celda decía "—": un total que no cierra con nada de lo
+  // que el cliente ve. NO toca el cálculo (`calc.totalAPedir` sigue igual y es
+  // el que alimenta el saldo): es solo cómo se imprime esta celda.
+  const totalAPedirMostrado = conceptos.reduce(
+    (suma, c) => suma + Math.round(calc.porConcepto.get(c.key)!.aPedir),
+    0
+  );
+
   function setPct(key: string, value: string) {
     const n = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
     setAvance((prev) => {
@@ -493,12 +520,12 @@ export default function CuadroResumenAvance({
                         </span>
                       </td>
                       <td colSpan={2} className="py-1 px-1 text-right whitespace-nowrap">
-                        {cc.aPedir > 0 ? formatCLP(cc.aPedir) : <span className="text-rose-300">—</span>}
+                        {hayQuePedir(cc.aPedir) ? formatCLP(cc.aPedir) : <span className="text-rose-300">—</span>}
                       </td>
                     </Fragment>
                   );
                 })}
-                <td className="py-1 pl-1 border-l border-gray-200 text-right whitespace-nowrap">{formatCLP(calc.totalAPedir)}</td>
+                <td className="py-1 pl-1 border-l border-gray-200 text-right whitespace-nowrap">{formatCLP(totalAPedirMostrado)}</td>
               </tr>
 
               {/* SALDO PENDIENTE */}
@@ -830,12 +857,12 @@ export default function CuadroResumenAvance({
                     <Fragment key={c.key}>
                       <td className="py-2 px-2 border-l border-gray-300 text-left text-gray-600 font-normal">{avance[c.key] ?? 0}%</td>
                       <td colSpan={2} className="py-2 px-2 text-right whitespace-nowrap">
-                        {cc.aPedir > 0 ? formatCLP(cc.aPedir) : <span className="text-gray-400">—</span>}
+                        {hayQuePedir(cc.aPedir) ? formatCLP(cc.aPedir) : <span className="text-gray-400">—</span>}
                       </td>
                     </Fragment>
                   );
                 })}
-                <td className="py-2 pl-2 pr-1 border-l border-gray-300 text-right whitespace-nowrap font-bold">{formatCLP(calc.totalAPedir)}</td>
+                <td className="py-2 pl-2 pr-1 border-l border-gray-300 text-right whitespace-nowrap font-bold">{formatCLP(totalAPedirMostrado)}</td>
               </tr>
 
               {/* SALDO PENDIENTE */}

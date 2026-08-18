@@ -10,7 +10,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { sanitizeRichTextHtml } from "@/lib/richText";
+import { sanitizeRichTextHtml, plainTextToHtml } from "@/lib/richText";
 import { groupByChapter, type ChapterLike } from "@/lib/presupuesto/chapters";
 import { annotateZones } from "@/lib/presupuesto/zones";
 
@@ -27,10 +27,12 @@ export interface ObraMaestroItemInput {
   // respeta ESTE orden, igual que la cotizacion y el PDF al cliente.
   sortOrder: number;
   name: string;
-  // Para el maestro mostramos la descriptionMaestro (instrucciones de
-  // ejecucion) cuando existe. Si no, cae a descriptionCliente.
+  // El alcance del maestro muestra la descriptionMaestro (instrucciones de
+  // ejecucion) y NADA MAS: si esta vacia, la celda va vacia. Hasta 2026-08-15
+  // caia a descriptionCliente; decidido con MJ que la herencia se va, porque
+  // la descripcion del cliente trae condiciones comerciales, precios de
+  // provision y notas internas que no van en el alcance de un maestro.
   descriptionMaestro: string | null;
-  descriptionCliente: string | null;
   unit: string;
   quantity: number;
 }
@@ -244,7 +246,11 @@ export function renderObraMaestroHTML(data: ObraMaestroHTMLInput): string {
             <td class="col-item">${ch.index}.${idx + 1}</td>
             <td class="col-name">${esc(item.name)}</td>
             <td class="col-desc">${sanitizeRichTextHtml(
-              item.descriptionMaestro ?? item.descriptionCliente
+              // SOLO la del maestro: si está vacía, la celda va vacía. No se
+              // hereda la del cliente (ver nota en el encabezado del archivo).
+              // plainTextToHtml: las descripciones de maestro viejas son texto
+              // plano con saltos de línea — sin esto se aplastan en un renglón.
+              plainTextToHtml(item.descriptionMaestro)
             )}</td>
             <td class="col-unit">${esc(item.unit)}</td>
             <td class="col-qty">${fmtQty(item.quantity)}</td>

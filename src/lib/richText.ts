@@ -77,3 +77,27 @@ export function plainTextToHtml(value: string | null | undefined): string {
     .map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`)
     .join("");
 }
+
+/**
+ * HTML del editor → texto plano. Para el Excel, que escribe el valor tal cual
+ * en la celda y no entiende etiquetas: sin esto, una descripción con formato
+ * le llega al maestro como `<p><span style="color:...">TEXTO</span></p>`.
+ * Los cortes de bloque (`</p>`, `<br>`, `<li>`) se conservan como salto de
+ * línea, que en la celda se ve gracias al `wrapText`.
+ */
+export function richTextToPlainText(html: string | null | undefined): string {
+  if (!html) return "";
+  return html
+    .replace(/<\s*(br|\/p|\/li|\/ul|\/ol)\s*\/?\s*>/gi, "\n")
+    .replace(/<\s*li[^>]*>/gi, "· ")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/gi, "&") // último: si no, re-decodifica lo anterior
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}

@@ -112,7 +112,6 @@ export async function GET(
       sortOrder: it.sortOrder,
       name: it.name,
       descriptionMaestro: it.descriptionMaestro,
-      descriptionCliente: it.descriptionCliente,
       unit: it.unit,
       quantity: it.quantity,
     }));

@@ -8,6 +8,16 @@
  * sombreados grises en headers/capitulos/sub-chapters, bordes finos
  * en cada fila, fuentes bold/italic, etc. SheetJS community no soporta
  * estilos al escribir.
+ *
+ * DESCRIPCIONES — la columna sale de `descriptionMaestro` y de nada más. Hasta
+ * 2026-08-15 intentaba heredar `descriptionCliente` cuando la del maestro
+ * estaba vacía (un `??` que además nunca se disparaba, porque el editor guarda
+ * `""` y no `null`). Decidido con MJ que la herencia se va: las dos
+ * descripciones dicen cosas distintas — la del cliente trae condiciones
+ * comerciales, precios de provisión y notas internas ("SE PONE VALOR PROFORMA
+ * PARA NO TENERLO EN 0") que no van en el alcance de un maestro, y la copia
+ * silenciosa habría afectado 358 partidas sin que nadie las revisara. Lo que no
+ * esté escrito para el maestro sale vacío, a propósito.
  */
 
 import ExcelJS from "exceljs";
@@ -15,6 +25,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { groupByChapter, type ChapterLike } from "@/lib/presupuesto/chapters";
 import { annotateZones } from "@/lib/presupuesto/zones";
+import { richTextToPlainText } from "@/lib/richText";
 
 const PROFESSIONAL = "JOSE TOMAS LARRAIN";
 
@@ -26,7 +37,6 @@ export interface ObraMaestroXLSXItemInput {
   sortOrder: number;
   name: string;
   descriptionMaestro: string | null;
-  descriptionCliente: string | null;
   unit: string;
   quantity: number;
 }
@@ -250,9 +260,15 @@ export async function buildObraMaestroXLSX(
       const itRow = ws.getRow(currentRow);
       itRow.getCell(1).value = `${ch.index}.${idx + 1}`;
       itRow.getCell(2).value = it.name;
-      itRow.getCell(3).value = it.descriptionMaestro ?? it.descriptionCliente ?? "";
+      // SOLO la descripción del maestro. Si está vacía, la celda va vacía: NO
+      // se hereda la del cliente. Ver la nota en el encabezado del archivo.
+      // Texto plano: la celda de Excel no interpreta las etiquetas del editor.
+      itRow.getCell(3).value = richTextToPlainText(it.descriptionMaestro);
       itRow.getCell(4).value = it.unit;
-      itRow.getCell(5).value = it.quantity;
+      // Redondeada a 2 decimales, igual que el PDF. Va como NUMERO (no texto)
+      // porque la columna TOTAL la multiplica; y redondeada, para que al
+      // maestro le calce la cuenta con lo que ve escrito.
+      itRow.getCell(5).value = Math.round(it.quantity * 100) / 100;
       // Col F (P.U.) la dejamos vacia para que el maestro tipee.
       // Col G (TOTAL) lleva la formula =E*F.
       itRow.getCell(7).value = { formula: `E${currentRow}*F${currentRow}`, result: 0 } as ExcelJS.CellFormulaValue;
@@ -269,7 +285,12 @@ export async function buildObraMaestroXLSX(
       itRow.getCell(4).alignment = { horizontal: "center", vertical: "middle" };
       itRow.getCell(5).font = { ...fontBase };
       itRow.getCell(5).alignment = { horizontal: "center", vertical: "middle" };
-      itRow.getCell(5).numFmt = "#,##0.##";
+      // "General" y NO "#,##0.##": en un formato de Excel el separador decimal
+      // se dibuja siempre que esté en el patrón, aunque los decimales sean
+      // opcionales (`##`). Por eso las cantidades enteras salían como "172,"
+      // con la coma colgando. General las muestra "172" y "28,2" según
+      // corresponda, con la coma decimal del idioma del Excel de MJ.
+      itRow.getCell(5).numFmt = "General";
       itRow.getCell(6).font = { ...fontBase };
       itRow.getCell(6).alignment = { horizontal: "right", vertical: "middle" };
       itRow.getCell(6).numFmt = '"$"#,##0';

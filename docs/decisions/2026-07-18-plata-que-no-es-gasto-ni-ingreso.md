@@ -145,7 +145,7 @@ ficha de la NC lo muestra en un aviso (`src/lib/banco/ncSplit.ts`).
 
 ## Referencias
 
-- PRs: #306 (primer intento, superado), #307 (modelo final), #405 (familias C y D).
+- PRs: #306 (primer intento, superado), #307 (modelo final), #406 (familias C y D).
 - Archivos de las familias C y D: `src/lib/banco/ncSplit.ts` (reparto de una NC,
   puro), `src/lib/banco/movementStatus.ts` (`saldadoDelMovimiento` — las tres vías
   por las que un movimiento queda explicado),

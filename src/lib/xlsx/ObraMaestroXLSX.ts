@@ -268,7 +268,8 @@ export async function buildObraMaestroXLSX(
       // Redondeada a 2 decimales, igual que el PDF. Va como NUMERO (no texto)
       // porque la columna TOTAL la multiplica; y redondeada, para que al
       // maestro le calce la cuenta con lo que ve escrito.
-      itRow.getCell(5).value = Math.round(it.quantity * 100) / 100;
+      const qty = Math.round(it.quantity * 100) / 100;
+      itRow.getCell(5).value = qty;
       // Col F (P.U.) la dejamos vacia para que el maestro tipee.
       // Col G (TOTAL) lleva la formula =E*F.
       itRow.getCell(7).value = { formula: `E${currentRow}*F${currentRow}`, result: 0 } as ExcelJS.CellFormulaValue;
@@ -285,12 +286,15 @@ export async function buildObraMaestroXLSX(
       itRow.getCell(4).alignment = { horizontal: "center", vertical: "middle" };
       itRow.getCell(5).font = { ...fontBase };
       itRow.getCell(5).alignment = { horizontal: "center", vertical: "middle" };
-      // "General" y NO "#,##0.##": en un formato de Excel el separador decimal
-      // se dibuja siempre que esté en el patrón, aunque los decimales sean
-      // opcionales (`##`). Por eso las cantidades enteras salían como "172,"
-      // con la coma colgando. General las muestra "172" y "28,2" según
-      // corresponda, con la coma decimal del idioma del Excel de MJ.
-      itRow.getCell(5).numFmt = "General";
+      // El formato se elige por celda porque Excel no sabe decir "decimales
+      // solo si existen": el separador decimal se dibuja siempre que esté en
+      // el patrón, aunque los decimales sean opcionales (`##`) — por eso un
+      // `#,##0.##` fijo mostraba las cantidades enteras como "172,", con la
+      // coma colgando. Tampoco sirve "General", que saca la coma pero se lleva
+      // puesto el punto de los miles (13000 en vez de 13.000). Con el ternario
+      // cada cantidad lleva el patrón que le corresponde: "13.000" y "172" las
+      // enteras, "28,2" y "12,25" las que tienen decimales.
+      itRow.getCell(5).numFmt = Number.isInteger(qty) ? "#,##0" : "#,##0.##";
       itRow.getCell(6).font = { ...fontBase };
       itRow.getCell(6).alignment = { horizontal: "right", vertical: "middle" };
       itRow.getCell(6).numFmt = '"$"#,##0';

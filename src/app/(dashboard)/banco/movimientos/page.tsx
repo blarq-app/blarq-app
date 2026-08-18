@@ -446,6 +446,38 @@ export default async function MovimientosPage({
     );
   }
 
+  // El OTRO lado de cada devolución neto cero. Los movimientos que se cancelan
+  // entre sí comparten `netZeroGroupId`; hasta ahora ese dato no salía de la
+  // base, así que la pastilla "Devolución" no podía decir de qué era. Se traen
+  // todos los del grupo y después cada fila se queda con los que NO son ella.
+  const gruposNetoCero = Array.from(
+    new Set(movements.map((m) => m.netZeroGroupId).filter((g): g is string => !!g))
+  );
+  const movsDeGrupos = gruposNetoCero.length
+    ? await prisma.bankMovement.findMany({
+        where: { netZeroGroupId: { in: gruposNetoCero } },
+        select: {
+          id: true,
+          date: true,
+          amount: true,
+          description: true,
+          counterpartyName: true,
+          netZeroGroupId: true,
+          netZeroAmount: true,
+          bankAccount: { select: { alias: true } },
+          payments: {
+            select: { invoice: { select: { folioNumber: true } } },
+            take: 1,
+          },
+        },
+      })
+    : [];
+  const porGrupo = new Map<string, typeof movsDeGrupos>();
+  for (const m of movsDeGrupos) {
+    const g = m.netZeroGroupId!;
+    porGrupo.set(g, [...(porGrupo.get(g) ?? []), m]);
+  }
+
   // Serializar para el componente client de la tabla (Date → ISO string).
   const movementRows = movements.map((m) => ({
     id: m.id,
@@ -462,6 +494,18 @@ export default async function MovimientosPage({
     salaryPeriod: m.salaryPeriod,
     netZeroAmount: m.netZeroAmount,
     ncRefundAmount: ncPorMovimiento.get(m.id) ?? 0,
+    netZeroPares: (m.netZeroGroupId ? (porGrupo.get(m.netZeroGroupId) ?? []) : [])
+      .filter((p) => p.id !== m.id)
+      .map((p) => ({
+        id: p.id,
+        date: p.date.toISOString(),
+        amount: p.amount,
+        description: p.description,
+        counterpartyName: p.counterpartyName,
+        bankAccountAlias: p.bankAccount.alias,
+        netZeroAmount: p.netZeroAmount,
+        facturaFolio: p.payments[0]?.invoice.folioNumber ?? null,
+      })),
     payments: m.payments.map((p) => ({
       id: p.id,
       invoiceId: p.invoiceId,

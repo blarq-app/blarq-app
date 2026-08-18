@@ -58,6 +58,7 @@ export default function FacturaForm({
   categories,
   tipoDoc = null,
   referenceCandidates = [],
+  referenceCounterpartyRut = null,
   // A dónde volver al cancelar/guardar/eliminar. Por defecto la lista sin
   // filtro; el detalle nos pasa la lista con el filtro que MJ tenía puesto.
   returnTo = "/facturas",
@@ -68,6 +69,9 @@ export default function FacturaForm({
   categories: Category[];
   tipoDoc?: number | null;
   referenceCandidates?: ReferenceCandidate[];
+  // RUT de la contraparte de la NC/ND, para acotar la búsqueda por folio a las
+  // facturas del mismo proveedor (o cliente).
+  referenceCounterpartyRut?: string | null;
   returnTo?: string;
 }) {
   const router = useRouter();
@@ -84,8 +88,98 @@ export default function FacturaForm({
     businessName: string;
   } | null>(null);
 
+  // ── Buscar la factura referenciada por folio ────────────────────────────
+  // El desplegable trae las 50 facturas más recientes del mismo proveedor. Con
+  // uno que emite mucho (SODIMAC), una factura de hace meses no entra en ese
+  // corte y no había forma de elegirla. Con esto se busca por folio y la
+  // encontrada se suma a la lista.
+  const [folioBuscado, setFolioBuscado] = useState("");
+  const [buscandoFolio, setBuscandoFolio] = useState(false);
+  const [avisoBusqueda, setAvisoBusqueda] = useState<string | null>(null);
+  const [encontradas, setEncontradas] = useState<ReferenceCandidate[]>([]);
+
+  // Lo que ve el desplegable: las que vinieron del server más las que se
+  // fueron encontrando a mano, sin repetir folio.
+  const opcionesReferencia = [
+    ...encontradas.filter(
+      (e) => !referenceCandidates.some((c) => c.folioNumber === e.folioNumber)
+    ),
+    ...referenceCandidates,
+  ];
+
   function set<K extends keyof FacturaFormValues>(key: K, value: FacturaFormValues[K]) {
     setV((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function buscarPorFolio() {
+    const folio = folioBuscado.trim();
+    if (!folio) return;
+    setBuscandoFolio(true);
+    setAvisoBusqueda(null);
+    try {
+      const res = await fetch(
+        `/api/facturas?type=${v.type}&q=${encodeURIComponent(folio)}`
+      );
+      if (!res.ok) {
+        setAvisoBusqueda("No se pudo buscar. Probá de nuevo.");
+        return;
+      }
+      const todas = (await res.json()) as {
+        id: string;
+        folioNumber: string | null;
+        tipoDoc: number | null;
+        totalAmount: number;
+        businessName: string | null;
+        issueDate: string;
+        rutIssuer: string | null;
+        rutReceiver: string | null;
+      }[];
+      // Solo facturas de verdad (33/34) del mismo proveedor o cliente, y no
+      // esta misma NC. El RUT se compara por dígitos: las facturas guardan
+      // "77270733-9" y no siempre con el mismo formato.
+      const soloDigitos = (r: string | null) => (r ?? "").replace(/\D/g, "");
+      const rutBuscado = soloDigitos(referenceCounterpartyRut);
+      const candidatas = todas
+        .filter((c) => c.tipoDoc === 33 || c.tipoDoc === 34)
+        .filter((c) => c.id !== v.id)
+        .filter((c) => c.folioNumber === folio)
+        .filter((c) => {
+          if (!rutBuscado) return true;
+          const suyo = soloDigitos(
+            v.type === "recibida" ? c.rutIssuer : c.rutReceiver
+          );
+          return suyo === rutBuscado;
+        });
+
+      if (candidatas.length === 0) {
+        setAvisoBusqueda(
+          `No hay ninguna factura ${folio} de este ${v.type === "recibida" ? "proveedor" : "cliente"} en la app.`
+        );
+        return;
+      }
+      const c = candidatas[0];
+      setEncontradas((prev) => [
+        {
+          id: c.id,
+          folioNumber: c.folioNumber,
+          tipoDoc: c.tipoDoc,
+          totalAmount: c.totalAmount,
+          businessName: c.businessName,
+          issueDate: c.issueDate.split("T")[0],
+        },
+        ...prev.filter((p) => p.id !== c.id),
+      ]);
+      // Encontrada = elegida. Buscarla y después tener que seleccionarla en el
+      // desplegable sería pedir el mismo gesto dos veces.
+      set("referenceFolioNumber", c.folioNumber ?? "");
+      set("referenceTipoDoc", c.tipoDoc ?? 33);
+      setFolioBuscado("");
+      setAvisoBusqueda(null);
+    } catch {
+      setAvisoBusqueda("No se pudo buscar. Probá de nuevo.");
+    } finally {
+      setBuscandoFolio(false);
+    }
   }
 
   const iva = Math.round(v.netAmount * 0.19);
@@ -355,14 +449,14 @@ export default function FacturaForm({
                   set("referenceTipoDoc", null);
                   return;
                 }
-                const c = referenceCandidates.find((c) => c.folioNumber === folio);
+                const c = opcionesReferencia.find((c) => c.folioNumber === folio);
                 set("referenceFolioNumber", folio);
                 set("referenceTipoDoc", c?.tipoDoc ?? 33);
               }}
               className={inputCls}
             >
               <option value="">— Sin referencia / no resuelta —</option>
-              {referenceCandidates.map((c) => (
+              {opcionesReferencia.map((c) => (
                 <option key={c.id} value={c.folioNumber ?? ""}>
                   F-{c.folioNumber} · {formatCLP(c.totalAmount)} ·{" "}
                   {c.businessName?.slice(0, 30) ?? "—"} · {c.issueDate}
@@ -370,11 +464,47 @@ export default function FacturaForm({
               ))}
             </select>
           </Field>
+
+          {/* Buscador por folio: la lista muestra las más recientes, y un
+              proveedor que emite mucho deja afuera cualquier factura de hace
+              unos meses. Antes no había cómo llegar a esa. */}
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              value={folioBuscado}
+              onChange={(e) => setFolioBuscado(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  buscarPorFolio();
+                }
+              }}
+              placeholder="Buscar otra factura por su N° de folio"
+              className="flex-1 text-xs border border-gray-300 rounded px-2 py-1.5"
+            />
+            <button
+              type="button"
+              onClick={buscarPorFolio}
+              disabled={buscandoFolio || !folioBuscado.trim()}
+              className="text-xs px-3 py-1.5 border border-gray-400 text-gray-800 rounded hover:bg-white disabled:opacity-50"
+            >
+              {buscandoFolio ? "Buscando…" : "Buscar"}
+            </button>
+          </div>
+          {avisoBusqueda && (
+            <p className="text-[11px] text-amber-800 mt-1">{avisoBusqueda}</p>
+          )}
+
           <p className="text-[11px] text-gray-500 mt-1">
-            {referenceCandidates.length} factura{referenceCandidates.length !== 1 ? "s" : ""} candidata
-            {referenceCandidates.length !== 1 ? "s" : ""} (mismo {v.type === "recibida" ? "proveedor" : "cliente"}).
-            {v.referenceFolioNumber && !referenceCandidates.some((c) => c.folioNumber === v.referenceFolioNumber) && (
-              <span className="text-amber-700"> · folio actual {v.referenceFolioNumber} no está en la lista (factura no sincronizada todavía).</span>
+            {opcionesReferencia.length} factura{opcionesReferencia.length !== 1 ? "s" : ""} en la lista
+            {" "}(las más recientes del mismo {v.type === "recibida" ? "proveedor" : "cliente"}).
+            {/* El aviso viejo decía "factura no sincronizada todavía" y era
+                FALSO: la factura estaba en la app, solo que fuera de las 50 más
+                recientes. Mandaba a perseguir un problema de sincronización que
+                no existía. Ahora el detalle carga siempre la referenciada, así
+                que si igual falta es porque de verdad no aparece — y el texto
+                dice eso, sin inventar la causa. */}
+            {v.referenceFolioNumber && !opcionesReferencia.some((c) => c.folioNumber === v.referenceFolioNumber) && (
+              <span className="text-amber-700"> · la factura {v.referenceFolioNumber} no aparece entre las de este {v.type === "recibida" ? "proveedor" : "cliente"}. Buscala por su folio acá arriba.</span>
             )}
           </p>
         </div>

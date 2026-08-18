@@ -11,20 +11,35 @@ import { MOV_STATUS } from "@/lib/banco/movementStatus";
 
 /**
  * Suma de las Notas de Crédito aplicadas a una factura para REDUCIR su saldo
- * (compensationType "other_invoice" → appliedToInvoiceId apunta a la factura).
- * Devuelve un monto positivo (las NC se guardan con signo variable, se usa abs).
+ * (appliedToInvoiceId apunta a la factura). Devuelve un monto positivo (las NC
+ * se guardan con signo variable, se usa abs).
  *
- * OJO: solo cuentan las "other_invoice" (el proveedor aplica el crédito a esta
- * factura, bajando lo que debés). Las NC de devolución (cash_refund /
- * bank_refund) NO ponen appliedToInvoiceId → no entran acá, porque esas te
- * devuelven la plata, no reducen el saldo de la factura.
+ * OJO: solo cuentan las que apuntan a esta factura. Las NC de devolución pura
+ * (cash_refund / bank_refund) NO ponen appliedToInvoiceId → no entran acá,
+ * porque esas te devuelven la plata, no reducen el saldo de la factura. Una NC
+ * PARTIDA ("split") sí entra, pero solo con su pedazo — `appliedAmount`.
+ *
+ * TOPE (fix 2026-08-17, pendiente 162): lo que se cuenta nunca puede pasar el
+ * `saldoRestante` de la factura. Antes esta función sumaba la NC completa sin
+ * mirar cuánto debía la factura, así que una NC de $39.222 aplicada a una
+ * factura de $22.491 la dejaba "pagada" y los $16.731 de diferencia se perdían
+ * sin dejar rastro (pasó de verdad con la NC de Portofino). Con el tope, ese
+ * excedente no se evapora: queda visible como "sin repartir" en la NC — ver
+ * repartoDeNC en ncSplit.ts, que usa el mismo criterio.
  */
-async function appliedCreditNotesTotal(invoiceId: string): Promise<number> {
+async function appliedCreditNotesTotal(
+  invoiceId: string,
+  saldoRestante: number
+): Promise<number> {
   const ncs = await prisma.invoice.findMany({
     where: { tipoDoc: 61, appliedToInvoiceId: invoiceId },
-    select: { totalAmount: true },
+    select: { totalAmount: true, appliedAmount: true },
   });
-  return ncs.reduce((s, n) => s + Math.abs(n.totalAmount), 0);
+  const pedido = ncs.reduce(
+    (s, n) => s + (n.appliedAmount ?? Math.abs(n.totalAmount)),
+    0
+  );
+  return Math.max(0, Math.min(pedido, saldoRestante));
 }
 
 /**
@@ -69,7 +84,10 @@ export async function recomputeInvoiceStatus(invoiceId: string) {
   });
 
   const sumApplied = payments.reduce((s, p) => s + p.amountApplied, 0);
-  const ncApplied = await appliedCreditNotesTotal(invoiceId);
+  const ncApplied = await appliedCreditNotesTotal(
+    invoiceId,
+    invoice.totalAmount - sumApplied
+  );
   const settled = sumApplied + ncApplied;
 
   let nextStatus: "pendiente" | "parcial" | "pagada" = "pendiente";
@@ -160,8 +178,11 @@ export async function bumpInvoiceStatusUpwards(invoiceId: string): Promise<boole
     select: { amountApplied: true, bankMovement: { select: { date: true } } },
   });
   const sumApplied = payments.reduce((s, p) => s + p.amountApplied, 0);
-  // Mismo criterio de "saldado" que recomputeInvoiceStatus: pago + NC aplicadas.
-  const settled = sumApplied + (await appliedCreditNotesTotal(invoiceId));
+  // Mismo criterio de "saldado" que recomputeInvoiceStatus: pago + NC aplicadas
+  // (topeadas al saldo que queda, para no dar por saldado de más).
+  const settled =
+    sumApplied +
+    (await appliedCreditNotesTotal(invoiceId, invoice.totalAmount - sumApplied));
 
   let derived: "pendiente" | "parcial" | "pagada" = "pendiente";
   let paidAt: Date | null = null;

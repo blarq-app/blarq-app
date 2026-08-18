@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { formatCLP } from "@/lib/utils";
 import MovementReconcileModal from "./MovementReconcileModal";
 import InvoicePickerModal from "./InvoicePickerModal";
 import GastoObraModal from "./GastoObraModal";
@@ -15,6 +16,9 @@ export type MenuMovement = {
   amount: number;
   status: string;
   hasPayments: boolean;
+  // Cuánto de este movimiento ya se neteó contra su devolución. Se descuenta
+  // de la parte libre, igual que las facturas imputadas.
+  netZeroAmount: number | null;
   counterpartyRut: string | null;
   counterpartyName: string | null;
   description: string;
@@ -96,7 +100,19 @@ export default function MovementResolveMenu({
 
   const single = movements.length === 1 ? movements[0] : null;
   const ids = movements.map((m) => m.id);
+  // Monto neto de la selección — lo consumen los modales de imputar (cuánta
+  // plata se va a asignar a una factura). Es el monto crudo, no la parte libre.
   const neto = movements.reduce((s, m) => s + m.amount, 0);
+
+  // Parte LIBRE de un movimiento, con signo: lo que le queda sin explicar
+  // después de las facturas imputadas y de lo ya neteado. Es la misma cuenta
+  // que hace el servidor — acá solo decide si ofrecer la acción.
+  const libreConSigno = (m: MenuMovement) => {
+    const aplicado =
+      m.payments.reduce((s, p) => s + p.amountApplied, 0) + (m.netZeroAmount ?? 0);
+    return Math.sign(m.amount) * Math.max(0, Math.abs(m.amount) - aplicado);
+  };
+  const netoLibre = movements.reduce((s, m) => s + libreConSigno(m), 0);
 
   const closeMenu = useCallback(() => {
     setOpen(false);
@@ -260,12 +276,25 @@ export default function MovementResolveMenu({
   }
 
   async function marcarNetoCero() {
+    // Cuando alguno de los movimientos ya tiene factura pegada, lo que se netea
+    // es SOLO lo que le sobra — conviene decirlo, porque el miedo razonable es
+    // que esto toque la factura (no la toca).
+    const sobreSobrante = movements.some((m) => m.hasPayments);
+    const monto = formatCLP(
+      movements.reduce((s, m) => s + Math.max(0, libreConSigno(m)), 0)
+    );
     if (
       !confirm(
-        `¿Marcar estos ${ids.length} movimientos como devolución (neto cero)?\n\n` +
-          `Son plata que entró y volvió (se cancelan entre sí). Salen de ` +
-          `"pendiente" y NO cuentan como ingreso ni gasto. Lo podés deshacer ` +
-          `después con "deshacer" en cualquiera de los movimientos.`
+        sobreSobrante
+          ? `¿Cerrar el sobrante de ${monto} contra su devolución?\n\n` +
+              `Las facturas ya imputadas NO se tocan: siguen pagadas por lo que ` +
+              `corresponde. Se cierra solo lo que sobraba, que sale de ` +
+              `"pendiente" y no cuenta como ingreso ni gasto. Lo podés deshacer ` +
+              `después con "deshacer" en cualquiera de los movimientos.`
+          : `¿Marcar estos ${ids.length} movimientos como devolución (neto cero)?\n\n` +
+              `Son plata que entró y volvió (se cancelan entre sí). Salen de ` +
+              `"pendiente" y NO cuentan como ingreso ni gasto. Lo podés deshacer ` +
+              `después con "deshacer" en cualquiera de los movimientos.`
       )
     )
       return;
@@ -401,17 +430,19 @@ export default function MovementResolveMenu({
   } else {
     // Selección (varios).
     const conPagos = movements.filter((m) => m.hasPayments).length;
-    const hasIngreso = movements.some((m) => m.amount > 0);
-    const hasEgreso = movements.some((m) => m.amount < 0);
     const egresosSinPago = movements.filter(
       (m) => m.amount < 0 && !m.hasPayments
     ).length;
+    // La acción se ofrece cuando lo que queda LIBRE se cancela entre sí. Que un
+    // movimiento tenga factura pegada ya no la bloquea: el caso típico es el
+    // pago de más a un proveedor, donde la factura está bien y lo único que se
+    // netea es el sobrante contra la devolución.
     const netoCeroElegible =
       movements.length >= 2 &&
-      conPagos === 0 &&
-      hasIngreso &&
-      hasEgreso &&
-      Math.abs(neto) <= 10;
+      movements.every((m) => Math.abs(libreConSigno(m)) > 1) &&
+      movements.some((m) => libreConSigno(m) > 0) &&
+      movements.some((m) => libreConSigno(m) < 0) &&
+      Math.abs(netoLibre) <= 10;
 
     // Mismo verbo que en la fila. Acá es "contra UNA factura" porque el picker
     // de selección imputa los N movimientos tildados a una sola factura.
@@ -458,7 +489,9 @@ export default function MovementResolveMenu({
         title: "No es plata real",
         items: [
           {
-            label: "Devolución (neto cero)",
+            label: conPagos > 0
+              ? "Cerrar el sobrante devuelto"
+              : "Devolución (neto cero)",
             icon: "swap",
             onClick: marcarNetoCero,
           },

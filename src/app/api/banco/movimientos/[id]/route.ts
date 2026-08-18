@@ -5,6 +5,8 @@ import {
   MOV_STATUS,
   statusPorImputacion,
   statusAlCategorizar,
+  recomputeMovementsStatus,
+  saldadoDelMovimiento,
 } from "@/lib/banco/movementStatus";
 import { upsertRuleFromMovement } from "@/lib/banco/categorizationRules";
 import { esCategoriaBancoValida } from "@/lib/banco/categorias";
@@ -137,16 +139,33 @@ export async function PATCH(
     }
 
     // Deshacer una devolución neto cero: suelta TODO el grupo (un lavado es
-    // atómico — deshacer uno deshace todos). Vuelven a "pendiente".
+    // atómico — deshacer uno deshace todos).
+    //
+    // No se puede pisar el status a "sin_asignar" en bloque: cuando el neteo era
+    // solo del SOBRANTE, el movimiento grande sigue teniendo su factura pegada y
+    // tiene que volver a "parcial", no a "pendiente". Por eso se borra la marca
+    // del neteo y se deja que el recompute derive el estado de cada uno — el que
+    // no tiene facturas cae solo a "sin_asignar".
     if (body.undoNetZero) {
       const where = mov.netZeroGroupId
         ? { netZeroGroupId: mov.netZeroGroupId }
         : { id: mov.id };
-      const r = await prisma.bankMovement.updateMany({
+      const delGrupo = await prisma.bankMovement.findMany({
         where,
-        data: { status: MOV_STATUS.SIN_ASIGNAR, netZeroGroupId: null },
+        select: { id: true },
       });
-      return NextResponse.json({ ok: true, deshechos: r.count });
+      await prisma.bankMovement.updateMany({
+        where,
+        data: {
+          // Salir del modo explícito ANTES del recompute: mientras el status sea
+          // "neto_cero" el recompute lo respeta y no lo tocaría.
+          status: MOV_STATUS.SIN_ASIGNAR,
+          netZeroGroupId: null,
+          netZeroAmount: null,
+        },
+      });
+      await recomputeMovementsStatus(delGrupo.map((m) => m.id));
+      return NextResponse.json({ ok: true, deshechos: delGrupo.length });
     }
 
     // Normalizar el atajo invoiceId al shape de payments[].
@@ -214,10 +233,20 @@ export async function PATCH(
     // Cuánto queda imputado DESPUÉS de este PATCH: lo nuevo si se cambió la
     // imputación, lo que ya tenía si no.
     const absAmount = Math.abs(mov.amount);
+    // Además de las facturas, un movimiento puede tener plata explicada por el
+    // sobrante ya neteado contra su devolución y por las NC que volvieron por
+    // acá. Este PATCH no las toca, pero cuentan para el status: sin ellas,
+    // cambiarle la categoría a un movimiento con el sobrante ya cerrado lo
+    // devolvería a "parcial".
+    const sumPagosActuales = mov.payments.reduce((s, p) => s + p.amountApplied, 0);
+    const otrosSaldos = Math.max(
+      0,
+      (await saldadoDelMovimiento(mov.id)) - sumPagosActuales
+    );
     const sumApplied =
-      nextPayments !== undefined
+      (nextPayments !== undefined
         ? nextPayments.reduce((s, p) => s + p.amountApplied, 0)
-        : mov.payments.reduce((s, p) => s + p.amountApplied, 0);
+        : sumPagosActuales) + otrosSaldos;
 
     const update: Record<string, unknown> = {};
     if (nextPayments !== undefined) {

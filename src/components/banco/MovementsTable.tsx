@@ -48,8 +48,27 @@ export type MovementRow = {
   internalConcepto: string | null;
   // A qué mes corresponde el pago (sueldo/previred), "YYYY-MM" o null (=auto).
   salaryPeriod: string | null;
+  // Cuánto de este movimiento se neteó contra su devolución (el sobrante de un
+  // pago de más). Cuenta como plata explicada, igual que las facturas.
+  netZeroAmount: number | null;
+  // Cuánto vuelve por este movimiento en notas de crédito (un mismo depósito
+  // puede traer las NC de varias obras). También es plata explicada.
+  ncRefundAmount: number;
   payments: Payment[];
 };
+
+// Cuánto del movimiento ya está explicado: facturas imputadas + sobrante
+// neteado contra su devolución + notas de crédito que volvieron por acá. Es la
+// misma cuenta que hace el servidor en saldadoDelMovimiento — si la pantalla
+// mirara solo las facturas, un movimiento ya resuelto seguiría mostrando
+// "libre $47.991" al lado.
+function saldadoDeLaFila(m: MovementRow): number {
+  return (
+    m.payments.reduce((s, p) => s + p.amountApplied, 0) +
+    (m.netZeroAmount ?? 0) +
+    m.ncRefundAmount
+  );
+}
 
 // Convierte una fila del listado al shape que consume el menú "Resolver".
 function toMenuMovement(m: MovementRow): MenuMovement {
@@ -58,6 +77,10 @@ function toMenuMovement(m: MovementRow): MenuMovement {
     amount: m.amount,
     status: m.status,
     hasPayments: m.payments.length > 0,
+    // El menú necesita la parte libre real, así que las NC devueltas por este
+    // movimiento viajan sumadas a lo neteado (para él son lo mismo: plata ya
+    // explicada que no hay que volver a resolver).
+    netZeroAmount: (m.netZeroAmount ?? 0) + m.ncRefundAmount || null,
     counterpartyRut: m.counterpartyRut,
     counterpartyName: m.counterpartyName,
     description: m.description,
@@ -173,7 +196,7 @@ export default function MovementsTable({
             )}
             {movements.map((m) => {
               const isCargo = m.amount < 0;
-              const sumApplied = m.payments.reduce((s, p) => s + p.amountApplied, 0);
+              const sumApplied = saldadoDeLaFila(m);
               const remaining = Math.max(0, Math.abs(m.amount) - sumApplied);
               const overImputed = sumApplied - Math.abs(m.amount) > 10;
               const isInternal = m.status === "interno";
@@ -313,10 +336,7 @@ export default function MovementsTable({
               <tbody className="divide-y divide-gray-100">
                 {movements.map((m) => {
                   const isCargo = m.amount < 0;
-                  const sumApplied = m.payments.reduce(
-                    (s, p) => s + p.amountApplied,
-                    0
-                  );
+                  const sumApplied = saldadoDeLaFila(m);
                   const remaining = Math.max(
                     0,
                     Math.abs(m.amount) - sumApplied

@@ -1,7 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { recomputeInvoiceStatus, cleanupInvoicesAfterUnassign } from "@/lib/banco/invoicePayments";
-import { MOV_STATUS, recomputeMovementsStatus } from "@/lib/banco/movementStatus";
+import {
+  MOV_STATUS,
+  recomputeMovementsStatus,
+  recomputeMovementStatus,
+  saldadoDelMovimiento,
+} from "@/lib/banco/movementStatus";
 import { requireSession } from "@/lib/apiAuth";
 
 // RUT de BLARQ — receptor de las facturas/pagos recibidos.
@@ -89,23 +94,27 @@ export async function POST(request: NextRequest) {
     });
 
     // ── DEVOLUCIÓN NETO CERO ───────────────────────────────────────────
-    // Plata que entró y volvió (ej. la clienta transfirió por error y se le
-    // devolvió). Se agrupan las entradas y salidas que se cancelan entre sí:
-    // salen de "pendiente", quedan pareadas con un id de grupo, y NO cuentan
-    // como ingreso ni gasto. Validaciones: ≥2 movs, ninguno ya conciliado /
-    // interno / neto cero, al menos una entrada y una salida, y la suma del
-    // grupo ≈ 0 (red de seguridad: si no se cancela, algo falta o sobra).
+    // Plata que salió y volvió. Dos formas del mismo gesto:
+    //
+    //   ENTERA — un pago por error que volvió completo (la clienta transfirió
+    //   de más y se le devolvió). Los dos movimientos se cancelan enteros.
+    //
+    //   SOLO EL SOBRANTE — le pagaste de más a un proveedor y te devolvió la
+    //   diferencia. El pago grande YA está conciliado a su factura, y eso está
+    //   bien: la factura se pagó por lo que corresponde. Lo único que se netea
+    //   es lo que sobraba. Hasta 2026-08-17 este caso no se podía cerrar — la
+    //   acción exigía que ningún movimiento tuviera factura pegada, así que el
+    //   sobrante y su devolución quedaban pendientes para siempre (era el
+    //   "Caso C" sin resolver del ADR de plata que no es gasto ni ingreso).
+    //
+    // La cuenta se hace siempre sobre la PARTE LIBRE de cada movimiento (lo que
+    // no explica ninguna factura ni un neteo anterior), con el signo del
+    // movimiento. El caso entero es el mismo cálculo cuando no hay facturas.
     if (action === "neto_cero") {
       const clp = (n: number) => "$" + Math.round(n).toLocaleString("es-CL");
       if (movs.length < 2) {
         return NextResponse.json(
           { error: "Elegí al menos 2 movimientos: las entradas y las salidas que se cancelan." },
-          { status: 400 }
-        );
-      }
-      if (movs.some((m) => m.payments.length > 0)) {
-        return NextResponse.json(
-          { error: "Algún movimiento ya está conciliado a una factura. Desasignalo antes de marcarlo como devolución." },
           { status: 400 }
         );
       }
@@ -115,31 +124,70 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      const tieneIngreso = movs.some((m) => m.amount > 0);
-      const tieneEgreso = movs.some((m) => m.amount < 0);
-      if (!tieneIngreso || !tieneEgreso) {
+
+      // Parte libre de cada movimiento, con signo: negativa si salió plata,
+      // positiva si entró. Descuenta lo ya imputado a facturas y lo ya neteado
+      // por un grupo anterior.
+      const libres = await Promise.all(
+        movs.map(async (m) => {
+          const saldado = await saldadoDelMovimiento(m.id);
+          const libre = Math.abs(m.amount) - saldado;
+          return { mov: m, libre, conSigno: Math.sign(m.amount) * libre };
+        })
+      );
+
+      const sinNadaLibre = libres.filter((l) => l.libre <= 1);
+      if (sinNadaLibre.length > 0) {
+        return NextResponse.json(
+          {
+            error:
+              `${sinNadaLibre.length === 1 ? "Un movimiento de la selección ya está" : `${sinNadaLibre.length} movimientos de la selección ya están`} ` +
+              `explicado${sinNadaLibre.length === 1 ? "" : "s"} entero${sinNadaLibre.length === 1 ? "" : "s"}: no le${sinNadaLibre.length === 1 ? "" : "s"} sobra nada para netear. Sacalo${sinNadaLibre.length === 1 ? "" : "s"} de la selección.`,
+          },
+          { status: 400 }
+        );
+      }
+      if (!libres.some((l) => l.conSigno > 0) || !libres.some((l) => l.conSigno < 0)) {
         return NextResponse.json(
           { error: "Una devolución neto cero necesita al menos una entrada y una salida." },
           { status: 400 }
         );
       }
-      const suma = movs.reduce((s, m) => s + m.amount, 0);
+      const suma = libres.reduce((s, l) => s + l.conSigno, 0);
       if (Math.abs(suma) > 10) {
         return NextResponse.json(
           {
             error:
-              `Los movimientos no se cancelan: queda un neto de ${clp(suma)}. ` +
-              `Revisá la selección (¿falta o sobra alguno?).`,
+              `Lo que queda libre no se cancela: sobra un neto de ${clp(suma)}. ` +
+              `Revisá la selección (¿falta o sobra algún movimiento?).`,
           },
           { status: 400 }
         );
       }
+
       // Id de grupo que linkea los movimientos de este lavado.
       const groupId = crypto.randomUUID();
-      await prisma.bankMovement.updateMany({
-        where: { id: { in: movs.map((m) => m.id) } },
-        data: { status: MOV_STATUS.NETO_CERO, netZeroGroupId: groupId, category: null },
-      });
+      for (const { mov, libre } of libres) {
+        // Lo neteado se ACUMULA: un movimiento puede tener dos sobrantes
+        // devueltos en momentos distintos.
+        const neteado = (mov.netZeroAmount ?? 0) + libre;
+        await prisma.bankMovement.update({
+          where: { id: mov.id },
+          data: { netZeroGroupId: groupId, netZeroAmount: neteado, category: null },
+        });
+        if (mov.payments.length === 0) {
+          // Movimiento entero neteado: es una devolución pura y se rotula como
+          // tal (modo explícito, el recompute no lo pisa).
+          await prisma.bankMovement.update({
+            where: { id: mov.id },
+            data: { status: MOV_STATUS.NETO_CERO },
+          });
+        } else {
+          // Tiene factura pegada: el status lo deriva la plata explicada, que
+          // ahora incluye lo neteado → sale de "parcial" y queda conciliado.
+          await recomputeMovementStatus(mov.id);
+        }
+      }
       return NextResponse.json({ ok: true, neteados: movs.length });
     }
 

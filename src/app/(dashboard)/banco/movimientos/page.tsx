@@ -11,6 +11,7 @@ import MovementsTable from "@/components/banco/MovementsTable";
 import LimpiarFiltrosButton from "@/components/banco/LimpiarFiltrosButton";
 import { SOCIO_RUTS, SOCIO_GLOSA_HINTS } from "@/lib/banco/socios";
 import { OPCIONES_IMPUTACION, ETIQUETA_CATEGORIA } from "@/lib/banco/categorias";
+import { aporteAlMovimiento } from "@/lib/banco/ncSplit";
 
 type SearchParams = {
   accountId?: string;
@@ -284,7 +285,11 @@ export default async function MovimientosPage({
     // sumarlo entero a "pendientes" sobreestima lo que falta conciliar.
     prisma.bankMovement.findMany({
       where: { ...statsWhere, status: "parcial" },
-      select: { amount: true, payments: { select: { amountApplied: true } } },
+      select: {
+        amount: true,
+        netZeroAmount: true,
+        payments: { select: { amountApplied: true } },
+      },
     }),
     // Proyectos y categorías para el modal "pago sin factura" (asignar un
     // movimiento a un costo de proyecto sin que exista factura).
@@ -382,7 +387,10 @@ export default async function MovimientosPage({
   let parcialAplicadoEgresos = 0;
   let parcialLibreEgresos = 0;
   for (const m of parcialMovs) {
-    const aplicado = m.payments.reduce((s, p) => s + p.amountApplied, 0);
+    // Igual que en la tabla: lo neteado contra su devolución también está
+    // explicado, así que no engorda la tarjeta de pendientes.
+    const aplicado =
+      m.payments.reduce((s, p) => s + p.amountApplied, 0) + (m.netZeroAmount ?? 0);
     const libre = Math.max(0, Math.abs(m.amount) - aplicado);
     if (m.amount >= 0) {
       parcialAplicadoIngresos += aplicado;
@@ -414,6 +422,30 @@ export default async function MovimientosPage({
   // menú Resolver (solo cuando la contraparte es la propia BLARQ).
   const BLARQ_RUT_DIGITS = "077270733";
 
+  // Notas de crédito que volvieron por estos movimientos. No hay relación en el
+  // schema (refundBankMovementId es una columna suelta), así que se traen
+  // aparte y se agrupan por movimiento. Un mismo depósito puede traer las NC de
+  // VARIAS obras, por eso se suman todas las que lo apuntan.
+  const ncsDeVuelta = await prisma.invoice.findMany({
+    where: { refundBankMovementId: { in: movements.map((m) => m.id) } },
+    select: {
+      totalAmount: true,
+      compensationType: true,
+      appliedToInvoiceId: true,
+      appliedAmount: true,
+      refundBankMovementId: true,
+      refundAmount: true,
+    },
+  });
+  const ncPorMovimiento = new Map<string, number>();
+  for (const nc of ncsDeVuelta) {
+    const movId = nc.refundBankMovementId!;
+    ncPorMovimiento.set(
+      movId,
+      (ncPorMovimiento.get(movId) ?? 0) + aporteAlMovimiento(nc)
+    );
+  }
+
   // Serializar para el componente client de la tabla (Date → ISO string).
   const movementRows = movements.map((m) => ({
     id: m.id,
@@ -428,6 +460,8 @@ export default async function MovimientosPage({
     projectId: m.projectId,
     internalConcepto: m.internalConcepto,
     salaryPeriod: m.salaryPeriod,
+    netZeroAmount: m.netZeroAmount,
+    ncRefundAmount: ncPorMovimiento.get(m.id) ?? 0,
     payments: m.payments.map((p) => ({
       id: p.id,
       invoiceId: p.invoiceId,

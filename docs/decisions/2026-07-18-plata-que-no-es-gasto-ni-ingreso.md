@@ -63,18 +63,52 @@ como si no hubiera pasado nada. Reversible con "Deshacer devolución neto cero".
 
 Ya funcionaba; no se tocó.
 
-### C. Sobrepago sobre una factura → pendiente
+### C. Sobrepago sobre una factura → neto cero parcial
 
 Un cobro/pago que excede la factura y cuyo **excedente** se devuelve. Va en las
 dos direcciones: el cliente paga de más y se le devuelve, o BLARQ le paga de más
 a un proveedor y le devuelven. La parte de la factura se concilia bien (esa sí es
-venta o gasto real), pero el **excedente y su devolución quedan en "No asignado"**:
-netean en el total, pero sueltos.
+venta o gasto real).
 
-**No está resuelto.** Hoy el sistema rechaza marcarlos como neto cero
-(*"Algún movimiento ya está conciliado a una factura"*), justamente porque el
-movimiento grande ya está pegado a su factura, que es lo correcto. Falta poder
-marcar como neto cero **solo el excedente** de un movimiento ya conciliado.
+**Resuelto el 2026-08-17.** La acción **Resolver → "Cerrar el sobrante devuelto"**
+es la misma "Devolución (neto cero)" de la familia B, pero la cuenta ya no se hace
+sobre el monto entero de cada movimiento sino sobre su **parte libre**: lo que le
+queda después de las facturas imputadas y de lo ya neteado. Con eso, el pago
+grande puede seguir pegado a su factura —que es lo correcto— y lo único que se
+netea es lo que sobraba. Lo neteado se guarda en `BankMovement.netZeroAmount`
+(positivo, acumulable) junto al `netZeroGroupId` de siempre.
+
+El status sale solo: `saldadoDelMovimiento` suma las tres vías por las que un
+movimiento queda explicado —facturas imputadas, sobrante neteado y notas de
+crédito que volvieron por ahí— y el movimiento pasa a `conciliado` cuando no le
+sobra nada. El caso entero (familia B) es el mismo cálculo cuando no hay facturas
+de por medio, así que no hay dos mecanismos: hay uno.
+
+Antes el sistema rechazaba estos casos con *"Algún movimiento ya está conciliado a
+una factura"*, y el excedente con su devolución quedaban pendientes para siempre.
+Al aplicarlo a la base viva se cerraron **4 sobrepagos por $668.825** (Da
+Ingeniería, JYR Calefacción, NP LED Studio y SODIMAC).
+
+### D. Nota de crédito partida entre una factura y el banco
+
+Descubierto al resolver el caso C. Una NC podía tener **un solo** destino
+(`compensationType`: a otra factura, al banco, o en efectivo), y la realidad no
+siempre es así: la NC de Comercial Hispano por mercadería devuelta ($143.471) pagó
+la factura del retiro ($26.637) y el resto ($116.834) volvió en un depósito.
+
+Se agrega el modo **`split`**, con los dos destinos llenos y su monto cada uno
+(`appliedAmount` / `refundAmount`). Se descartó una tabla hija de "aplicaciones"
+con N destinos (decisión de MJ, 2026-08-17): dos casilleros cubren el caso real y
+son menos piezas. Un mismo depósito puede traer las NC de **varias obras** —el de
+Comercial Hispano trae la de JNC-Vitacura y la de Portofino— y eso funciona sin
+nada extra: cada NC apunta al mismo movimiento con su pedazo, y el movimiento se
+salda con la suma.
+
+Junto con esto se puso **tope** a `appliedCreditNotesTotal`: sumaba la NC completa
+sin mirar cuánto debía la factura, así que una NC de $39.222 aplicada a una factura
+de $22.491 la dejaba "pagada" y los **$16.731 de diferencia desaparecían sin dejar
+rastro**. Ahora lo que excede el saldo no se evapora: sale por `sinRepartir` y la
+ficha de la NC lo muestra en un aviso (`src/lib/banco/ncSplit.ts`).
 
 ## Alternativas descartadas
 
@@ -102,8 +136,7 @@ marcar como neto cero **solo el excedente** de un movimiento ya conciliado.
   Si la camioneta no fueron $14.000.000 exactos, el saldo queda corrido en esa
   diferencia (se corrige en una línea).
 - **Deuda generada**:
-  - **Familia C sin resolver** — falta el "neto cero parcial" sobre el excedente
-    de un movimiento ya conciliado.
+  - ~~**Familia C sin resolver**~~ — resuelta el 2026-08-17 (ver familias C y D).
   - **Datos por revisar** — al 2026-07-18 la cuenta da $14.000.000 − $22.149.894
     = **−$8.149.894** ("los socios le deben a BLARQ"), que no es real: unos $8,1M
     de los movimientos marcados como préstamo son probablemente **sueldos o
@@ -112,7 +145,14 @@ marcar como neto cero **solo el excedente** de un movimiento ya conciliado.
 
 ## Referencias
 
-- PRs: #306 (primer intento, superado), #307 (modelo final).
+- PRs: #306 (primer intento, superado), #307 (modelo final), #405 (familias C y D).
+- Archivos de las familias C y D: `src/lib/banco/ncSplit.ts` (reparto de una NC,
+  puro), `src/lib/banco/movementStatus.ts` (`saldadoDelMovimiento` — las tres vías
+  por las que un movimiento queda explicado),
+  `src/app/api/banco/movimientos/bulk/route.ts` (acción `neto_cero`),
+  `src/app/api/facturas/[id]/compensar/route.ts` (modo `split`),
+  `src/components/facturas/CompensacionNC.tsx` (los dos casilleros y el aviso de
+  plata sin repartir).
 - Archivos: `src/lib/banco/socios.ts` (categoría y saldo de partida),
   `src/lib/dashboard/estadoResultadoCaja.ts` (`computeSaldoPrestamosSocios`,
   ruteo a no operativo), `src/components/dashboard/EstadoResultadoChart.tsx`

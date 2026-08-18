@@ -15,19 +15,25 @@ import type { CuadroResumenData, ConceptoKey } from "@/lib/projects/cuadroResume
 // Abajo, "Me paso a Sueldos" (INTERNO, no va al cliente): de obra + muebles,
 // cuánto generaría el fondo con el avance puesto, menos lo ya transferido.
 
-function fmtDate(d: Date): string {
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yy = String(d.getFullYear()).slice(2);
-  return `${dd}-${mm}-${yy}`;
-}
-
 // Fecha de un movimiento bancario (dd-mm-aa). Va en UTC a propósito: los
 // movimientos se guardan a medianoche UTC (el día calendario de la cartola), y
-// leídos en hora de Chile se verían un día ANTES. Mismo criterio que la tabla
-// de Banco → Movimientos.
-function fmtFechaMovimiento(iso: string): string {
-  const d = new Date(iso);
+// leídos en hora de Chile (UTC−4) esas 00:00 caen el día ANTERIOR a las 20:00.
+// Mismo criterio que la tabla de Banco → Movimientos.
+//
+// Hasta 2026-08-17 las filas de pagos del cuadro usaban OTRA función que leía
+// en local (`getDate()`), así que TODAS las fechas que veía el cliente salían
+// corridas un día para atrás: los dos pagos de la factura 178 de Paseo del
+// Sena entraron el 07-07 y el cuadro decía 06-07. Esa función se eliminó en
+// vez de dejarla al lado — en este archivo TODA fecha es un movimiento
+// bancario, así que una segunda versión en hora local solo servía para volver
+// a equivocarse.
+//
+// OJO: las fechas de las VERSIONES (V2, V3) NO pasan por acá. Salen ya
+// formateadas de `cuadroResumen.ts`, de `updatedAt`, que es un timestamp real
+// con hora y se lee bien en local. Son dos tipos de fecha distintos a
+// propósito: no unificar con éste.
+function fmtFechaMovimiento(fecha: Date | string): string {
+  const d = fecha instanceof Date ? fecha : new Date(fecha);
   const dd = String(d.getUTCDate()).padStart(2, "0");
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
   const yy = String(d.getUTCFullYear()).slice(2);
@@ -221,7 +227,7 @@ export default function CuadroResumenAvance({
   // ── Descargar como imagen (versión limpia para el cliente) ───────────────
   // No fotografiamos el formulario (cajitas rojas, inputs). Renderizamos una
   // copia PROLIJA del cuadro fuera de pantalla — con los % como texto plano y
-  // la fila AVANCE en una banda negra — y esa copia es la que se exporta a PNG.
+  // la fila AVANCE en una banda clara — y esa copia es la que se exporta a PNG.
   // Estos hooks van ANTES del early return de abajo (regla de hooks de React).
   const exportRef = useRef<HTMLDivElement>(null);
   const [descargando, setDescargando] = useState(false);
@@ -431,7 +437,7 @@ export default function CuadroResumenAvance({
                     const cell = fila[c.key];
                     return (
                       <Fragment key={c.key}>
-                        <td className="py-1 px-1 border-l border-gray-100 text-left text-gray-500 whitespace-nowrap">{cell ? fmtDate(cell.date) : ""}</td>
+                        <td className="py-1 px-1 border-l border-gray-100 text-left text-gray-500 whitespace-nowrap">{cell ? fmtFechaMovimiento(cell.date) : ""}</td>
                         <td className="py-1 px-1 text-right whitespace-nowrap">{cellMonto(cell?.monto ?? 0)}</td>
                         <td className="py-1 px-1 text-right text-gray-500">{cell?.folio ?? ""}</td>
                       </Fragment>
@@ -663,7 +669,7 @@ export default function CuadroResumenAvance({
 
       {/* ── Versión PROLIJA para exportar a imagen (fuera de pantalla) ──────
           Es lo que se le manda al cliente: los % van como TEXTO PLANO (no
-          cajitas editables), la fila AVANCE en una banda negra editorial, sin
+          cajitas editables), la fila AVANCE en una banda clara editorial, sin
           inputs ni cursores. No mostramos "Me paso a Sueldos" (es interno).
           Se renderiza siempre pero posicionado fuera de la vista; el botón
           captura este nodo con html-to-image. */}
@@ -768,7 +774,7 @@ export default function CuadroResumenAvance({
                     const cell = fila[c.key];
                     return (
                       <Fragment key={c.key}>
-                        <td className="py-1.5 px-2 border-l border-gray-100 text-left text-gray-500 whitespace-nowrap">{cell ? fmtDate(cell.date) : ""}</td>
+                        <td className="py-1.5 px-2 border-l border-gray-100 text-left text-gray-500 whitespace-nowrap">{cell ? fmtFechaMovimiento(cell.date) : ""}</td>
                         <td className="py-1.5 px-2 text-right whitespace-nowrap">{cellMonto(cell?.monto ?? 0)}</td>
                         <td className="py-1.5 px-2 text-right text-gray-500">{cell?.folio ?? ""}</td>
                       </Fragment>

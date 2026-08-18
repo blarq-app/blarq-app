@@ -7,6 +7,7 @@ import CompensacionNC from "@/components/facturas/CompensacionNC";
 import RemovePaymentButton from "@/components/facturas/RemovePaymentButton";
 import DesgloseCobro from "@/components/facturas/DesgloseCobro";
 import { formatCLP } from "@/lib/utils";
+import { repartoDeNC } from "@/lib/banco/ncSplit";
 
 const DTE_LABEL: Record<number, string> = {
   33: "Factura",
@@ -143,7 +144,12 @@ export default async function EditFacturaPage({
     isNC && invoice.appliedToInvoiceId
       ? await prisma.invoice.findUnique({
           where: { id: invoice.appliedToInvoiceId },
-          select: { id: true, folioNumber: true, totalAmount: true },
+          select: {
+            id: true,
+            folioNumber: true,
+            totalAmount: true,
+            payments: { select: { amountApplied: true } },
+          },
         })
       : null;
   const refundMov =
@@ -158,6 +164,21 @@ export default async function EditFacturaPage({
           },
         })
       : null;
+
+  // Cómo quedó repartida esta NC entre sus destinos. El dato que importa es
+  // `sinRepartir`: la plata de la nota de crédito que no llegó a ningún lado.
+  // Antes se perdía en silencio — una NC más grande que la factura a la que se
+  // aplicaba dejaba la factura "pagada" y la diferencia no quedaba en ninguna
+  // parte. Ahora la pantalla la muestra.
+  const reparto = isNC
+    ? repartoDeNC(
+        invoice,
+        appliedToInvoice
+          ? appliedToInvoice.totalAmount -
+              appliedToInvoice.payments.reduce((s, p) => s + p.amountApplied, 0)
+          : 0
+      )
+    : null;
 
   // Dirección inversa: NCs que aplicaron su crédito A esta factura (esta
   // factura RECIBIÓ el crédito). Se muestran como marca/bloque propio, aparte
@@ -219,7 +240,16 @@ export default async function EditFacturaPage({
           ncType={invoice.type as "emitida" | "recibida"}
           ncTotal={Math.abs(invoice.totalAmount)}
           initialCompensationType={invoice.compensationType}
-          initialAppliedTo={appliedToInvoice}
+          initialAppliedTo={
+            appliedToInvoice
+              ? {
+                  id: appliedToInvoice.id,
+                  folioNumber: appliedToInvoice.folioNumber,
+                  totalAmount: appliedToInvoice.totalAmount,
+                }
+              : null
+          }
+          reparto={reparto!}
           initialRefundMov={
             refundMov
               ? {

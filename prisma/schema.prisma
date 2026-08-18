@@ -1052,13 +1052,28 @@ model Invoice {
   //   "bank_refund": el proveedor devuelve la plata a tu cuenta bancaria.
   //     compensationType = "bank_refund" + refundBankMovementId = ID del
   //     BankMovement entrante donde se acreditó la devolución.
-  // En los tres casos la NC ya está "consumida" — no aparece como
+  //   "split": la NC se PARTE — una parte paga otra factura y el resto vuelve
+  //     al banco. Caso real Comercial Hispano: NC de $143.471 por mercadería
+  //     devuelta, de la que $26.637 pagan la factura del retiro y $116.834
+  //     vuelven en un depósito. compensationType = "split" + los dos destinos
+  //     llenos, cada uno con su monto (appliedAmount / refundAmount).
+  // En los cuatro casos la NC ya está "consumida" — no aparece como
   // pendiente ni genera ruido visual. La factura compensada (en el modo
   // other_invoice) queda cubierta por la suma de InvoicePayments + monto
   // de NCs aplicadas.
-  compensationType        String?  // "other_invoice" | "cash_refund" | "bank_refund" | null
+  compensationType        String?  // "other_invoice" | "cash_refund" | "bank_refund" | "split" | null
   appliedToInvoiceId      String?
   refundBankMovementId    String?
+  // Cuánto del monto de la NC va a cada destino, siempre positivo. Solo se
+  // llenan cuando la NC está PARTIDA (compensationType="split"); en los modos
+  // de un solo destino quedan null y se leen como "va todo ahí".
+  //
+  // Por qué existen: sin ellos una NC admite un único destino, y el excedente
+  // de una NC más grande que la factura a la que se aplica desaparecía sin
+  // dejar rastro (pasó con la NC de $39.222 aplicada a una factura de $22.491:
+  // los $16.731 de diferencia no quedaban en ningún lado). Ver ncSplit.ts.
+  appliedAmount           Float?
+  refundAmount            Float?
   origin          String   @default("manual") // manual | sii_automatica
   // Trazabilidad SII (cuando origin = sii_automatica)
   siiTrackId      String?  // Identificador del DTE en SII (track id que devuelve el proveedor)
@@ -1381,6 +1396,19 @@ model BankMovement {
   // del mismo lavado comparten este id. La suma del grupo es ≈ 0 y NO
   // cuenta como ingreso ni gasto. null = no es parte de un lavado.
   netZeroGroupId  String?
+  // Cuánto de ESTE movimiento quedó neutralizado por el grupo de arriba,
+  // siempre positivo. Existe porque el neto cero también aplica sobre el
+  // EXCEDENTE de un movimiento que ya está conciliado a su factura: pagaste
+  // $2.153.598, la factura era $2.105.607 y el proveedor te devolvió los
+  // $47.991 que sobraban. Ahí la factura no se toca (está bien pagada) y lo
+  // único que se netea es el sobrante — netZeroAmount = 47991 en el pago y
+  // 47991 en la devolución.
+  //
+  // Cuando cubre el movimiento entero (devolución pura, sin imputaciones) el
+  // status pasa a "neto_cero"; cuando solo cubre el sobrante, el movimiento
+  // queda "conciliado" porque entre la factura y el neteo ya no le sobra nada
+  // (ver statusPorImputacion en movementStatus.ts). null = no hay nada neteado.
+  netZeroAmount   Float?
   // Obra a la que MJ concilió este movimiento, A MANO. Hoy se usa solo para
   // las transferencias internas Operativa→Sueldos (category="transfer_interno"):
   // permite ver, por proyecto, cuánta utilidad ya se traspasó a la cuenta

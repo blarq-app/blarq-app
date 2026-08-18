@@ -4,6 +4,15 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-08-17 — La plata que vuelve del proveedor: sobrantes devueltos y notas de crédito partidas
+
+- **Cierra el "Caso C" del ADR de plata que no es gasto ni ingreso**, que decía textual *"no está resuelto"*. Cuando le pagabas de más a un proveedor y te devolvía la diferencia, no había forma de cerrarlo: la acción "Devolución (neto cero)" exigía que ningún movimiento tuviera factura pegada, y el pago grande ya estaba conciliado a la suya — que es lo correcto. El sobrante y su devolución quedaban pendientes para siempre.
+- **La cuenta pasa a hacerse sobre la PARTE LIBRE de cada movimiento**, no sobre su monto entero: lo que le queda después de las facturas imputadas y de lo ya neteado. Con eso la factura no se toca y se netea solo lo que sobraba. El caso "volvió todo" es el mismo cálculo cuando no hay facturas de por medio — un solo mecanismo, no dos. Campo nuevo `BankMovement.netZeroAmount`.
+- **El status del movimiento se deriva de tres vías, no de una** (`saldadoDelMovimiento`): facturas imputadas + sobrante neteado + notas de crédito que volvieron por ese movimiento. Eso además saca el caso borde que estaba documentado a mano en `movementStatus.ts` (el "conciliado sin pagos" que salda una NC): ahora sale solo.
+- **Una nota de crédito se puede partir** entre una factura y el banco (modo `split`, campos `appliedAmount` / `refundAmount`). Caso real Comercial Hispano: NC de $143.471 por mercadería devuelta, de la que $26.637 pagan la factura del retiro y $116.834 vuelven en un depósito. Un mismo depósito puede traer las NC de varias obras (este trae JNC-Vitacura y Portofino) y se salda con la suma. Se descartó una tabla hija de N destinos: dos casilleros cubren el caso y son menos piezas (decisión de MJ).
+- **Se le puso tope a `appliedCreditNotesTotal`**, que sumaba la NC completa sin mirar cuánto debía la factura: una NC de $39.222 sobre una factura de $22.491 la dejaba "pagada" y los **$16.731 de diferencia desaparecían sin dejar rastro**. Ahora el excedente sale por `sinRepartir` y la ficha de la NC lo avisa.
+- **Aplicado a la viva**: 4 sobrepagos cerrados por $668.825, las dos NC de Comercial Hispano repartidas (el depósito de $133.565 cuadra en $0), y las dos facturas del retiro dejaron de figurar anuladas — eran cobros reales del flete, pagados con el crédito. Sin asignar 188 → 183, parciales 60 → 56. **El gastado de JNC-Vitacura y Portofino quedó idéntico al peso**: esto es estado y trazabilidad, no plata.
+
 ## 2026-08-14 — Un solo "Muebles" y un solo "Artefactos": se unieron los dos juegos de categorías
 
 - **Había dos juegos de categorías raíz con nombres repetidos**, uno para lo que BLARQ compra (`appliesTo="recibida"`) y otro para lo que le cobra al cliente (`appliesTo="emitida"`). En los desplegables aparecían **dos "Muebles" y dos "Artefactos" idénticos**, sin forma de saber cuál era cuál. No eran duplicados por error — eran dos juegos a propósito — pero el nombre repetido los volvía indistinguibles.

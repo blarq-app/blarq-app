@@ -1,8 +1,18 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-15.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-17.
 
 ---
+
+- **La plata que vuelve del proveedor (2026-08-17, rama `worktree-pend-162-devoluciones-nc`, pendiente 162)**: dos casos con la misma raíz — plata que vuelve y la app no la sabe atar a su origen. **DATOS YA APLICADOS en la viva; el código está en la rama, falta PR y deploy.**
+  - **Sobrepago devuelto**: le pagás de más a un proveedor y te devuelve la diferencia. No se podía cerrar porque "Devolución (neto cero)" exigía que ningún movimiento tuviera factura pegada — y el pago grande ya estaba conciliado a la suya, que está bien. **El arreglo es cambiar sobre qué se hace la cuenta**: ya no sobre el monto entero del movimiento sino sobre su **parte libre**. El caso "volvió todo" queda como el mismo cálculo sin facturas de por medio. Campo nuevo `BankMovement.netZeroAmount`.
+  - **Nota de crédito partida**: una NC admitía UN solo destino. La de Comercial Hispano ($143.471) pagó la factura del retiro ($26.637) y el resto ($116.834) volvió en un depósito. Modo `split` con dos casilleros (`appliedAmount` / `refundAmount`). **MJ eligió dos casilleros fijos** por sobre una lista de N destinos: cubre el caso real con menos piezas.
+  - **GOTCHA de fondo, el que más importa**: `appliedCreditNotesTotal` sumaba la NC completa **sin mirar cuánto debía la factura**. Una NC de $39.222 sobre una factura de $22.491 la dejaba "pagada" y los **$16.731 de diferencia se perdían sin dejar rastro** — pasó de verdad con la NC de Portofino. Ahora hay tope y el excedente sale por `sinRepartir`, con aviso en la ficha de la NC.
+  - **Un mismo depósito puede traer NC de VARIAS obras** (el de $133.565 trae JNC-Vitacura y Portofino). Sale sin nada extra: cada NC apunta al mismo movimiento con su pedazo y el movimiento se salda con la suma.
+  - **Aplicado en la viva** con `scripts/fix-162-devoluciones.ts` (tiene dry-run): 4 sobrepagos cerrados por $668.825, las dos NC repartidas, el depósito cuadrado en $0, y **F-877855 y F-868724 dejaron de figurar anuladas** — eran cobros reales del flete y la manipulación, alguien las anuló para sacarlas del medio. Sin asignar 188 → 183, parciales 60 → 56.
+  - **Las 3 columnas nuevas ya están en la viva** (SQL aditivo en `prisma/sql/162-columnas-devoluciones.sql`, idempotente). Son nullable y el código viejo las ignora, así que la base ya está lista para el deploy.
+  - **Control §4.1**: el gastado de JNC-Vitacura ($38.263.061) y Portofino ($58.300.734) quedó **idéntico al peso**. `metrics.ts` no filtra por status, por eso cambiar "anulada" a "pagada" no mueve plata — es lo que hacía seguro este cambio.
+  - **Queda pendiente**: conecta con el **103** (sobrantes sin asignar). Bajó $668.825 de los $4,8M; el resto son 47 movimientos que no tienen arreglo automático. El de SODIMAC se cerró aunque la devolución vino de José Tomás y no del proveedor — **MJ lo confirmó como plata que volvió**.
 
 - **Categorías unidas + avisos con familia (2026-08-15, PR #402 en prod, pendientes 159 y 160)**: dos temas del mismo hilo. **EN PROD** (PR #402 mergeado el 2026-08-15): los datos ya estaban aplicados en la viva y el código quedó publicado.
   - **159 (texto puro)**: los avisos del Resumen dicen "Artefactos cocina / baño / iluminación" en vez de "Cocina / Baño / Iluminación" a secas. **Se mantiene "Baño", MJ descartó "Sanitarios"** — la rama de facturas se llama `Artefactos > Baño` y ahí va a buscar. Snapshot pre/post de 35 obras: ni un número se movió.

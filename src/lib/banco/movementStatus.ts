@@ -29,6 +29,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import { aporteAlMovimiento } from "@/lib/banco/ncSplit";
 
 export const MOV_STATUS = {
   SIN_ASIGNAR: "sin_asignar",
@@ -48,9 +49,17 @@ export function esModoExplicito(status: string | null | undefined): boolean {
 }
 
 /**
- * Parte DERIVABLE del status: qué dice la plata imputada.
- * Devuelve null cuando no hay nada imputado — ahí el status lo decide el
+ * Parte DERIVABLE del status: qué dice la plata ya explicada del movimiento.
+ * Devuelve null cuando no hay nada explicado — ahí el status lo decide el
  * estado de reposo (sin_asignar / sin_factura), no la imputación.
+ *
+ * "Explicada" son TRES cosas, no solo las facturas imputadas:
+ *   - Σ InvoicePayment.amountApplied  — lo que paga facturas,
+ *   - netZeroAmount                   — el sobrante que se neteó con su
+ *                                       devolución (ver saldadoDelMovimiento),
+ *   - las NC que volvieron por este movimiento (refundBankMovementId).
+ * Los tres son plata del movimiento que ya tiene explicación; lo que sobra
+ * después de los tres es lo que sigue pendiente.
  *
  * Tolerancia $1 (CLP no tiene decimales pero la API devuelve floats) — el
  * mismo umbral que usaban las 4 copias que este helper reemplaza.
@@ -62,6 +71,48 @@ export function statusPorImputacion(
   if (sumApplied <= 0) return null;
   if (sumApplied >= absAmount - 1) return MOV_STATUS.CONCILIADO;
   return MOV_STATUS.PARCIAL;
+}
+
+/**
+ * Cuánto del monto de un movimiento ya está explicado, sumando las tres vías
+ * (facturas imputadas + sobrante neteado + NC devueltas por acá). Es la cuenta
+ * que decide el status, y la misma que hay que usar para mostrar "cuánto le
+ * queda libre" — si la pantalla usa solo los pagos, un movimiento resuelto se
+ * ve con sobrante.
+ *
+ * Ojo con las NC: un mismo depósito puede traer NC de varias obras (el de
+ * Comercial Hispano trae la de JNC-Vitacura y la de Portofino), así que se
+ * suman TODAS las que apuntan a este movimiento, cada una con su pedazo.
+ */
+export async function saldadoDelMovimiento(
+  movementId: string,
+  db: Prisma.TransactionClient | typeof prisma = prisma
+): Promise<number> {
+  const [mov, ncs] = await Promise.all([
+    db.bankMovement.findUnique({
+      where: { id: movementId },
+      select: {
+        netZeroAmount: true,
+        payments: { select: { amountApplied: true } },
+      },
+    }),
+    db.invoice.findMany({
+      where: { refundBankMovementId: movementId },
+      select: {
+        totalAmount: true,
+        compensationType: true,
+        appliedToInvoiceId: true,
+        appliedAmount: true,
+        refundBankMovementId: true,
+        refundAmount: true,
+      },
+    }),
+  ]);
+  if (!mov) return 0;
+
+  const porPagos = mov.payments.reduce((s, p) => s + p.amountApplied, 0);
+  const porNC = ncs.reduce((s, nc) => s + aporteAlMovimiento(nc), 0);
+  return porPagos + (mov.netZeroAmount ?? 0) + porNC;
 }
 
 /**
@@ -97,10 +148,10 @@ export function statusAlCategorizar(
  *    sin_factura) se queda como está: un sueldo sin_factura no tiene pagos y
  *    eso no lo hace pendiente.
  *
- * Caso borde cubierto a propósito: un movimiento "conciliado" SIN pagos existe
- * legítimamente cuando lo salda una Nota de Crédito (compensar, bank_refund).
- * Este recompute solo lo alcanza si se borra esa NC — y ahí bajarlo a
- * sin_asignar es exactamente lo correcto.
+ * El movimiento que salda una Nota de Crédito (compensar, bank_refund) ya no es
+ * un caso borde a mano: saldadoDelMovimiento cuenta esas NC, así que un
+ * movimiento "conciliado" SIN pagos se deriva solo. Si la NC se borra o se
+ * despega, el recompute lo baja a sin_asignar, que es lo correcto.
  */
 export async function recomputeMovementStatus(
   movementId: string,
@@ -108,17 +159,12 @@ export async function recomputeMovementStatus(
 ): Promise<MovementStatus | null> {
   const mov = await db.bankMovement.findUnique({
     where: { id: movementId },
-    select: {
-      id: true,
-      amount: true,
-      status: true,
-      payments: { select: { amountApplied: true } },
-    },
+    select: { id: true, amount: true, status: true },
   });
   if (!mov) return null;
   if (esModoExplicito(mov.status)) return mov.status as MovementStatus;
 
-  const sumApplied = mov.payments.reduce((s, p) => s + p.amountApplied, 0);
+  const sumApplied = await saldadoDelMovimiento(movementId, db);
   const porImputacion = statusPorImputacion(sumApplied, Math.abs(mov.amount));
 
   let next: MovementStatus;

@@ -819,10 +819,12 @@ export default function CuadroResumenAvance({
               </tr>
 
               {/* TOTAL PAGOS — sin fondo propio a propósito. Antes iba en
-                  `bg-gray-50` (#F5F5F5); con la banda del AVANCE ahora clara
-                  (#EDEDEC) quedaban dos grises casi iguales, uno encima del
-                  otro, y la banda dejaba de distinguirse. Esta fila cede el
-                  peso y se queda con el filete: la que manda es la de abajo. */}
+                  `bg-gray-50` (#F5F5F5) y quedaba casi igual a la banda del
+                  AVANCE de abajo; con dos grises apilados la banda dejaba de
+                  distinguirse. Esta fila cede el peso y se queda con el filete:
+                  la que manda es la de abajo. (Con el AVANCE ya en greige el
+                  choque no volvería, pero la jerarquía sigue siendo la buena:
+                  una sola fila con fondo, y es la que hay que cobrar.) */}
               <tr className="border-t border-gray-300 font-semibold text-gray-600">
                 <td className="py-1.5 pr-2 text-left uppercase tracking-wide text-[10px]">Total pagos</td>
                 {conceptos.map((c) => (
@@ -834,35 +836,55 @@ export default function CuadroResumenAvance({
                 <td className="py-1.5 pl-2 border-l border-gray-200 text-right whitespace-nowrap">{formatCLP(totalPagado)}</td>
               </tr>
 
-              {/* AVANCE (a cobrar) — banda CLARA, % como texto plano.
+              {/* AVANCE (a cobrar) — banda GREIGE, % como texto plano.
                   Hasta 2026-08-17 esta banda iba en `bg-gray-900` (#2A2722)
                   con texto blanco. MJ, mirando Casa Los Algarrobos: "me parece
                   muy fuerte el negro" — en un documento que ve el cliente, un
-                  bloque casi negro cruzando el cuadro pesa de más. Se invirtió:
-                  fondo Banda (#EDEDEC, el tono que el Manual de Marca v2 define
-                  justo para bandas y filas) y letra oscura.
+                  bloque casi negro cruzando el cuadro pesa de más. Se invirtió
+                  a fondo Banda (#EDEDEC) con letra oscura.
 
-                  El peso lo hace ahora la TIPOGRAFÍA (semibold + el total en
-                  bold), no el color — regla de la casa (§3 de CLAUDE.md).
+                  2026-08-22: la Banda tampoco servía, pero por lo contrario.
+                  #EDEDEC es EXACTAMENTE el mismo tono que el encabezado de esta
+                  tabla — el `thead` no pinta color propio, así que hereda la
+                  regla global `table thead th { background: var(--color-banda) }`
+                  de globals.css. La fila que tiene que destacarse competía con
+                  el encabezado en vez de sobresalir. Se baja un peldaño en la
+                  MISMA escala del Manual v2: Greige (#C2BCB4). Además imprime
+                  mejor — #EDEDEC se iba en blanco en papel.
 
-                  Ojo con el contraste: esto se imprime. El fondo #EDEDEC puede
-                  desaparecer en papel, así que la fila NO puede depender de él
-                  para leerse — de ahí los filetes arriba y abajo, y que el
-                  texto vaya oscuro (gray-800 / gray-600), no gris claro. */}
-              <tr className="bg-banda text-gray-800 font-semibold border-y border-gray-300">
+                  El peso lo hace la TIPOGRAFÍA (semibold + el total en bold)
+                  reforzada por el fondo, no el color de la letra — §3 CLAUDE.md.
+
+                  Contraste sobre #C2BCB4 — medido sobre el DOM real, no a ojo
+                  (scripts/diag-cuadro-greige-capturas.ts lo imprime), porque
+                  esto se lee en pantalla Y en papel. El rótulo y los montos en
+                  gray-800 quedan en 6.5:1, de sobra. Los otros tres tonos de la
+                  fila SÍ hubo que subirlos un peldaño, porque el fondo más
+                  oscuro se les había acercado:
+                    · el % pasó de gray-600 a gray-700 — en gray-600 caía a
+                      3.4:1, bajo el mínimo AA de 4.5; ahora da 5.0:1;
+                    · el guión de "nada que cobrar" de gray-400 a gray-500, para
+                      conservar los ~2.1:1 que tenía sobre la banda vieja
+                      (discreto a propósito — §3, "el cero no ocupa espacio
+                      prominente" — pero no borrado);
+                    · los filetes verticales de gray-300 a gray-400, porque
+                      gray-300 (#CFCBC5) es más CLARO que el greige y se perdía
+                      adentro de la fila (1.17:1). Con gray-400 quedan en
+                      1.37:1, exactamente el mismo peso que tenían antes. */}
+              <tr className="bg-greige text-gray-800 font-semibold border-y border-gray-400">
                 <td className="py-2 pr-2 pl-1 text-left uppercase tracking-wide text-[10px]">Avance a cobrar</td>
                 {conceptos.map((c) => {
                   const cc = calc.porConcepto.get(c.key)!;
                   return (
                     <Fragment key={c.key}>
-                      <td className="py-2 px-2 border-l border-gray-300 text-left text-gray-600 font-normal">{avance[c.key] ?? 0}%</td>
+                      <td className="py-2 px-2 border-l border-gray-400 text-left text-gray-700 font-normal">{avance[c.key] ?? 0}%</td>
                       <td colSpan={2} className="py-2 px-2 text-right whitespace-nowrap">
-                        {hayQuePedir(cc.aPedir) ? formatCLP(cc.aPedir) : <span className="text-gray-400">—</span>}
+                        {hayQuePedir(cc.aPedir) ? formatCLP(cc.aPedir) : <span className="text-gray-500">—</span>}
                       </td>
                     </Fragment>
                   );
                 })}
-                <td className="py-2 pl-2 pr-1 border-l border-gray-300 text-right whitespace-nowrap font-bold">{formatCLP(totalAPedirMostrado)}</td>
+                <td className="py-2 pl-2 pr-1 border-l border-gray-400 text-right whitespace-nowrap font-bold">{formatCLP(totalAPedirMostrado)}</td>
               </tr>
 
               {/* SALDO PENDIENTE */}

@@ -836,31 +836,49 @@ export default function CuadroResumenAvance({
                 <td className="py-1.5 pl-2 border-l border-gray-200 text-right whitespace-nowrap">{formatCLP(totalPagado)}</td>
               </tr>
 
-              {/* AVANCE (a cobrar) — banda GREIGE, % como texto plano.
-                  Hasta 2026-08-17 esta banda iba en `bg-gray-900` (#2A2722)
-                  con texto blanco. MJ, mirando Casa Los Algarrobos: "me parece
-                  muy fuerte el negro" — en un documento que ve el cliente, un
-                  bloque casi negro cruzando el cuadro pesa de más. Se invirtió
-                  a fondo Banda (#EDEDEC) con letra oscura.
+              {/* AVANCE (a cobrar) — banda de un greige apagado, % como texto plano.
+                  Tres pasadas hasta llegar acá, y las tres las decidió MJ mirando
+                  el cuadro renderizado con datos reales (§4.10):
 
-                  2026-08-22: la Banda tampoco servía, pero por lo contrario.
-                  #EDEDEC es EXACTAMENTE el mismo tono que el encabezado de esta
-                  tabla — el `thead` no pinta color propio, así que hereda la
-                  regla global `table thead th { background: var(--color-banda) }`
-                  de globals.css. La fila que tiene que destacarse competía con
-                  el encabezado en vez de sobresalir. Se baja un peldaño en la
-                  MISMA escala del Manual v2: Greige (#C2BCB4). Además imprime
-                  mejor — #EDEDEC se iba en blanco en papel.
+                  1. Hasta 2026-08-17 iba en `bg-gray-900` (#2A2722) con texto
+                     blanco. MJ, mirando Casa Los Algarrobos: "me parece muy
+                     fuerte el negro" — en un documento que ve el cliente, un
+                     bloque casi negro cruzando el cuadro pesa de más. Se invirtió
+                     a fondo Banda (#EDEDEC) con letra oscura.
+                  2. La Banda tampoco servía, pero por lo contrario: #EDEDEC es
+                     EXACTAMENTE el mismo tono que el encabezado de esta tabla
+                     — el `thead` no pinta color propio, así que hereda la regla
+                     global `table thead th { background: var(--color-banda) }`
+                     de globals.css. La fila que tiene que destacarse competía
+                     con el encabezado. Se bajó a Greige (#C2BCB4).
+                  3. Greige destacaba bien pero MJ: "algo más gris que tan café".
+                     Y tenía razón: los neutros del Manual v2 están recoloreados
+                     al matiz cálido del isotipo a propósito, y sostenido sobre
+                     un área grande ese calor se lee marrón.
+
+                  DE DÓNDE SALE #BFBCB8: es el greige con la mitad del color —
+                  misma luminosidad exacta, la distancia entre canales cortada al
+                  medio (194/188/180, 14 puntos → 191/188/184, 7 puntos). Se
+                  eligió sobre un gris 100% neutro (#BDBDBD, que también se le
+                  mostró) para que la fila siga perteneciendo a la familia tibia:
+                  el texto y los bordes de alrededor SÍ son cálidos, y un neutro
+                  puro se lee de otra temperatura.
+
+                  NO es un tono del Manual de Marca y no se agregó a la paleta a
+                  propósito: es un derivado para esta fila, se usa acá y en ningún
+                  otro lado. Si algún día hay que reusarlo, ahí sí conviene
+                  bautizarlo en globals.css — antes no.
 
                   El peso lo hace la TIPOGRAFÍA (semibold + el total en bold)
                   reforzada por el fondo, no el color de la letra — §3 CLAUDE.md.
 
-                  Contraste sobre #C2BCB4 — medido sobre el DOM real, no a ojo
-                  (scripts/diag-cuadro-greige-capturas.ts lo imprime), porque
-                  esto se lee en pantalla Y en papel. El rótulo y los montos en
-                  gray-800 quedan en 6.5:1, de sobra. Los otros tres tonos de la
-                  fila SÍ hubo que subirlos un peldaño, porque el fondo más
-                  oscuro se les había acercado:
+                  Contraste sobre #BFBCB8 — medido sobre el DOM real, no a ojo
+                  (scripts/diag-cuadro-banda-variantes.ts lo imprime), porque esto
+                  se lee en pantalla Y en papel. El rótulo y los montos en gray-800
+                  quedan en 6.5:1, de sobra. Los otros tres tonos de la fila SÍ
+                  hubo que subirlos un peldaño al oscurecer el fondo, porque un
+                  fondo más oscuro se le acerca a TODO lo que vive adentro, no
+                  solo al texto principal:
                     · el % pasó de gray-600 a gray-700 — en gray-600 caía a
                       3.4:1, bajo el mínimo AA de 4.5; ahora da 5.0:1;
                     · el guión de "nada que cobrar" de gray-400 a gray-500, para
@@ -868,10 +886,14 @@ export default function CuadroResumenAvance({
                       (discreto a propósito — §3, "el cero no ocupa espacio
                       prominente" — pero no borrado);
                     · los filetes verticales de gray-300 a gray-400, porque
-                      gray-300 (#CFCBC5) es más CLARO que el greige y se perdía
+                      gray-300 (#CFCBC5) es más CLARO que este fondo y se perdía
                       adentro de la fila (1.17:1). Con gray-400 quedan en
-                      1.37:1, exactamente el mismo peso que tenían antes. */}
-              <tr className="bg-greige text-gray-800 font-semibold border-y border-gray-400">
+                      1.36:1, el mismo peso que tenían antes.
+
+                  El `data-banda-avance` es un enganche para los scripts de
+                  verificación: sin él la fila solo se puede agarrar por su color,
+                  que es justo lo que cambia en cada tanda de pruebas. */}
+              <tr data-banda-avance className="bg-[#BFBCB8] text-gray-800 font-semibold border-y border-gray-400">
                 <td className="py-2 pr-2 pl-1 text-left uppercase tracking-wide text-[10px]">Avance a cobrar</td>
                 {conceptos.map((c) => {
                   const cc = calc.porConcepto.get(c.key)!;

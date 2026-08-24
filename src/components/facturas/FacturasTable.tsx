@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { formatCLP, formatDate } from "@/lib/utils";
 import { invoiceStatusBadge } from "@/lib/facturas/statusBadge";
+import { contraparteDeFactura } from "@/lib/facturas/contraparte";
 import BulkAssignBar from "./BulkAssignBar";
 import {
   EditableCategoryCell,
@@ -33,7 +34,11 @@ type Invoice = {
   folioNumber: string | null;
   issueDate: string;
   businessName: string | null;
+  // Los dos RUT viajan porque cuál se muestra depende del tipo: emitida →
+  // rutReceiver (el cliente), recibida → rutIssuer (el proveedor). La regla
+  // vive en contraparteDeFactura().
   rutIssuer: string | null;
+  rutReceiver: string | null;
   totalAmount: number;
   status: string;
   origin: string;
@@ -155,6 +160,7 @@ export default function FacturasTable({
           const badge = invoiceStatusBadge(inv.status, {
             isCompensatedNc: inv.tipoDoc === 61 && !!inv.compensationType,
           });
+          const contraparte = contraparteDeFactura(inv);
           return (
             <div
               key={inv.id}
@@ -172,12 +178,19 @@ export default function FacturasTable({
 
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
-                    <Link
-                      href={`/facturas/${inv.id}?from=${encodeURIComponent(returnTo)}`}
-                      className="min-w-0 text-sm font-medium text-gray-900 leading-snug hover:underline"
-                    >
-                      {inv.businessName || inv.rutIssuer || "—"}
-                    </Link>
+                    <div className="min-w-0">
+                      <Link
+                        href={`/facturas/${inv.id}?from=${encodeURIComponent(returnTo)}`}
+                        className="block text-sm font-medium text-gray-900 leading-snug hover:underline"
+                      >
+                        {contraparte.nombre}
+                      </Link>
+                      {contraparte.rut ? (
+                        <div className="text-[11px] text-gray-500 tabular-nums">
+                          {contraparte.rut}
+                        </div>
+                      ) : null}
+                    </div>
                     <div className="text-right shrink-0">
                       <div className="text-sm font-medium text-gray-900 tabular-nums">
                         {formatCLP(inv.totalAmount)}
@@ -351,6 +364,7 @@ export default function FacturasTable({
         <tbody className="divide-y divide-gray-100">
           {invoices.map((inv) => {
             const isSelected = selected.has(inv.id);
+            const contraparte = contraparteDeFactura(inv);
             return (
               <tr
                 key={inv.id}
@@ -442,8 +456,13 @@ export default function FacturasTable({
                 <td className="px-4 py-2 text-gray-600 whitespace-nowrap">
                   {formatDate(inv.issueDate)}
                 </td>
-                <td className="px-4 py-2 text-gray-700 truncate max-w-[200px]">
-                  {inv.businessName || inv.rutIssuer || "—"}
+                <td className="px-4 py-2 text-gray-700 max-w-[200px]">
+                  <div className="truncate">{contraparte.nombre}</div>
+                  {contraparte.rut ? (
+                    <div className="text-[11px] text-gray-500 tabular-nums">
+                      {contraparte.rut}
+                    </div>
+                  ) : null}
                 </td>
                 <td className="px-4 py-2 max-w-[180px]">
                   <EditableProjectCell

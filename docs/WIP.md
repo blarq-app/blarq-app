@@ -1,8 +1,15 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-22.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-24.
 
 ---
+
+- **El RUT de la contraparte bajo el nombre (2026-08-24, PR #415)**: en la lista general de facturas y en la de cada proyecto, el RUT aparece debajo del nombre en chico y gris. **No es columna nueva** — la tabla ya tiene muchas.
+  - **Cuál RUT depende del tipo**: emitida → `rutReceiver` (el cliente), recibida → `rutIssuer` (el proveedor). En una emitida el emisor es siempre BLARQ y no aporta nada. La regla vive en **un solo lugar**, `src/lib/facturas/contraparte.ts`, en vez de repetirse en cada celda.
+  - **Son CUATRO los lugares donde se dibuja esa celda**, no dos: `FacturasTable.tsx` en vista tarjeta y en tabla, y `proyectos/[id]/facturas/page.tsx` en vista tarjeta y en tabla. Fácil arreglar dos y creer que está listo.
+  - **La lista general ni siquiera recibía `rutReceiver`** desde el server: `facturas/page.tsx` mapeaba solo `rutIssuer` al componente. La query lo traía (usa `include` + `omit: pdfContent`, o sea todos los scalars), lo que faltaba era pasarlo.
+  - **Sin razón social el RUT sube al renglón del nombre** en vez de repetirse arriba y abajo. Las ~20 facturas sin ningún RUT (gastos internacionales y boletas: Anthropic, Google Workspace) quedan con el guion de siempre — no se inventa nada.
+  - **GOTCHA del worktree, otra vez el desfase de la base dev**: la app ni cargaba, tiraba `P2022 "Invoice.appliedAmount does not exist"`. La base dev (`ep-solitary-mud`) está atrasada respecto al schema de `main`. Se agregaron **solo las 3 columnas faltantes** con `ADD COLUMN IF NOT EXISTS` (`Invoice.appliedAmount`, `Invoice.refundAmount`, `BankMovement.netZeroAmount`) en vez de aplicar el `migrate diff` completo, que **traía un `DROP COLUMN "ArtefactoCatalog"."clientPrice"`** de otra rama. El diff completo nunca se aplica tal cual.
 
 - **La banda del avance deja de competir con el encabezado (2026-08-22, PRs #412 y #413, los dos EN PROD)**: en la imagen del Cuadro Resumen que ve el cliente, la fila **AVANCE A COBRAR** iba en Banda `#EDEDEC`, **exactamente el mismo tono que el encabezado de la tabla** — el `thead` no pinta color propio y hereda la regla global `table thead th { background: var(--color-banda) }` de `globals.css`. La fila que tiene que destacarse quedaba igual que el encabezado. **Solo el render de exportación**; el de pantalla es el de las casillas editables (rojo) y no se toca.
   - **Terminó en `#BFBCB8`, en dos pasadas.** Primero Greige `#C2BCB4` (#412), el peldaño siguiente de la escala del Manual v2. Destacaba bien, pero MJ: *"algo más gris que tan café"* — y tenía razón: **los neutros del Manual v2 están recoloreados al matiz cálido del isotipo a propósito, y sostenido sobre un área grande ese calor se lee marrón.** `#BFBCB8` es el greige con **la mitad del color**: misma luminosidad exacta, la distancia entre canales cortada al medio (194/188/180, 14 puntos → 191/188/184, 7).

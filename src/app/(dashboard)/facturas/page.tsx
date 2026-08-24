@@ -467,7 +467,11 @@ export default async function FacturasPage({
               folioNumber: inv.folioNumber,
               issueDate: inv.issueDate.toISOString(),
               businessName: inv.businessName,
+              // Van los dos: la lista muestra el RUT de la contraparte, que en
+              // una emitida es el cliente (rutReceiver) y en una recibida el
+              // proveedor (rutIssuer).
               rutIssuer: inv.rutIssuer,
+              rutReceiver: inv.rutReceiver,
               totalAmount: inv.totalAmount,
               status: inv.status,
               origin: inv.origin,

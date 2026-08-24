@@ -6,6 +6,7 @@ import { formatCLP, formatDate } from "@/lib/utils";
 import ProjectFacturasFilters from "@/components/facturas/ProjectFacturasFilters";
 import ClickableInvoiceRow from "@/components/facturas/ClickableInvoiceRow";
 import { invoiceStatusBadge } from "@/lib/facturas/statusBadge";
+import { contraparteDeFactura } from "@/lib/facturas/contraparte";
 import {
   EditableCategoryCell,
   MoveProjectButton,
@@ -376,15 +377,23 @@ export default async function ProyectoFacturasPage({
               const badge = invoiceStatusBadge(inv.status, {
                 isCompensatedNc: inv.tipoDoc === 61 && !!inv.compensationType,
               });
+              const contraparte = contraparteDeFactura(inv);
               return (
                 <div key={inv.id} className="px-4 py-3">
                   <div className="flex items-start justify-between gap-3">
-                    <Link
-                      href={`/facturas/${inv.id}?from=${encodeURIComponent(returnTo)}`}
-                      className="min-w-0 text-sm font-medium text-gray-900 leading-snug hover:underline"
-                    >
-                      {inv.businessName || inv.rutIssuer || "—"}
-                    </Link>
+                    <div className="min-w-0">
+                      <Link
+                        href={`/facturas/${inv.id}?from=${encodeURIComponent(returnTo)}`}
+                        className="block text-sm font-medium text-gray-900 leading-snug hover:underline"
+                      >
+                        {contraparte.nombre}
+                      </Link>
+                      {contraparte.rut ? (
+                        <div className="text-[11px] text-gray-500 tabular-nums">
+                          {contraparte.rut}
+                        </div>
+                      ) : null}
+                    </div>
                     <div className="text-right shrink-0">
                       <div className="text-sm font-medium text-gray-900 tabular-nums">
                         {formatCLP(inv.totalAmount)}
@@ -567,7 +576,19 @@ export default async function ProyectoFacturasPage({
                     {formatDate(inv.issueDate)}
                   </td>
                   <td className="px-4 py-2 text-gray-700 max-w-[240px]">
-                    <div className="truncate">{inv.businessName || inv.rutIssuer || "—"}</div>
+                    {(() => {
+                      const contraparte = contraparteDeFactura(inv);
+                      return (
+                        <>
+                          <div className="truncate">{contraparte.nombre}</div>
+                          {contraparte.rut ? (
+                            <div className="text-[11px] text-gray-500 tabular-nums">
+                              {contraparte.rut}
+                            </div>
+                          ) : null}
+                        </>
+                      );
+                    })()}
                     <MoveProjectButton
                       invoiceId={inv.id}
                       currentProjectId={project.id}

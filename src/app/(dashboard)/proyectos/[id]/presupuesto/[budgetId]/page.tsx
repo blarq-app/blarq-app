@@ -5,6 +5,7 @@ import ObraEditor from "@/components/presupuesto/ObraEditor";
 import MueblesEditor from "@/components/presupuesto/MueblesEditor";
 import ArtefactosEditor from "@/components/presupuesto/ArtefactosEditor";
 import CoverFields from "@/components/presupuesto/CoverFields";
+import DescargasMaestro from "@/components/presupuesto/DescargasMaestro";
 import { getObraBaselineItems } from "@/lib/presupuesto/versionDiff";
 import {
   esTipoCondiciones,
@@ -95,25 +96,10 @@ export default async function PresupuestoDetailPage({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {budget.type === "obra" && (
-            <>
-              <a
-                href={`/api/presupuestos/${budget.id}/maestro?format=pdf`}
-                target="_blank"
-                className="border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
-                title="PDF con las partidas y cantidades, sin precios — para que el maestro cotice"
-              >
-                PDF maestro
-              </a>
-              <a
-                href={`/api/presupuestos/${budget.id}/maestro?format=xlsx`}
-                className="border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
-                title="Excel editable con fórmulas — el maestro completa P.U. y el TOTAL se calcula solo"
-              >
-                Excel maestro
-              </a>
-            </>
-          )}
+          {/* PDF y Excel del maestro. El tilde "con precios" decide si salen
+              en blanco (para que cotice) o con la mano de obra acordada (trato
+              cerrado) — por eso es un componente de cliente. */}
+          {budget.type === "obra" && <DescargasMaestro budgetId={budget.id} />}
           {/* Listado de herrajes para el mueblista (sin precios), solo si la
               cotización de muebles tiene herrajes cargados. */}
           {budget.type === "muebles" &&

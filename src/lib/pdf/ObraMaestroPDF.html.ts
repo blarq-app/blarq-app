@@ -1,11 +1,23 @@
 /**
  * PDF "Cotizacion Maestro": variante del Obra PDF para entregarle al
  * maestro que va a ejecutar la obra. Mismas partidas y cantidades que la
- * cotizacion al cliente, pero columnas P.U. y TOTAL vacias — el maestro
- * las completa con su propio precio.
+ * cotizacion al cliente.
  *
- * Sin totales, sin formas de pago, sin observaciones del cliente. Solo
- * el alcance de la obra para que el maestro cotice.
+ * Sale en DOS versiones, segun `conPrecios`:
+ *   - SIN precios (default): columnas P.U. y TOTAL vacias — el maestro las
+ *     completa con su propio precio. Es el documento para pedir cotizacion.
+ *   - CON precios: P.U. y TOTAL ya llenos con la MANO DE OBRA acordada, mas
+ *     un total general al pie. Es el documento para cuando el trato ya esta
+ *     cerrado y hay que dejar por escrito que se le paga por cada partida.
+ *
+ * OJO — el precio que va es `costLabor` (la mano de obra que BLARQ le paga al
+ * maestro), NUNCA el `unitPrice` que se le cobra al cliente. La diferencia
+ * entre los dos es material y margen de BLARQ: mostrarsela al maestro seria
+ * mostrarle el margen. `costLabor` es UNITARIO (mismo dato que el Estado de
+ * Pago usa como `laborUnitPrice`), asi que el total de la fila es
+ * costLabor x cantidad.
+ *
+ * En las dos versiones: sin formas de pago y sin observaciones del cliente.
  */
 
 import fs from "node:fs";
@@ -35,6 +47,10 @@ export interface ObraMaestroItemInput {
   descriptionMaestro: string | null;
   unit: string;
   quantity: number;
+  // Mano de obra UNITARIA que BLARQ le paga al maestro por esta partida.
+  // Solo se imprime cuando `conPrecios` esta prendido. Nunca el precio al
+  // cliente (ver nota en el encabezado del archivo).
+  costLabor: number | null;
 }
 
 export interface ObraMaestroHTMLInput {
@@ -50,6 +66,9 @@ export interface ObraMaestroHTMLInput {
   maestro: { name: string | null } | null;
   chapters: ChapterLike[];
   items: ObraMaestroItemInput[];
+  // false/undefined = documento para cotizar (P.U. y TOTAL en blanco).
+  // true = documento con la mano de obra acordada ya escrita.
+  conPrecios?: boolean;
 }
 
 function esc(s: string): string {
@@ -62,6 +81,14 @@ function esc(s: string): string {
 
 function fmtQty(n: number): string {
   return new Intl.NumberFormat("es-CL", { maximumFractionDigits: 2 }).format(n);
+}
+
+function fmtNum(n: number): string {
+  return Math.round(n).toLocaleString("es-CL");
+}
+
+function fmtMoney(n: number): string {
+  return "$ " + Math.round(n).toLocaleString("es-CL");
 }
 
 function fmtDate(d: string | Date): string {
@@ -166,8 +193,9 @@ const CSS = `
     letter-spacing: 0.02em;
   }
 
-  /* P.U. y TOTAL en blanco — ancho proporcional para que el maestro
-     escriba a mano si imprime. */
+  /* P.U. y TOTAL: en la version sin precios van en blanco (ancho
+     proporcional para que el maestro escriba a mano si imprime); en la
+     version con precios llevan la mano de obra acordada. */
   .col-item   { width: 5%;  text-align: center; white-space: nowrap; }
   .col-name   { width: 19%; text-align: left;   font-weight: 600; }
   .col-desc   { width: 40%; text-align: left;   font-weight: 400; }
@@ -185,7 +213,22 @@ const CSS = `
 
   tr { page-break-inside: avoid; }
 
-  /* Nota al pie: este PDF no incluye precios — el maestro los completa. */
+  /* Total general de mano de obra — solo en la version con precios. Mismo
+     trato tipografico que el resto: negro, bold, sin color decorativo. */
+  .partidas tr.total-row td {
+    border-top: 0.6pt solid #000;
+    border-bottom: 0.6pt solid #000;
+    font-weight: 700;
+    font-size: 6.4pt;
+    padding: 3px 3px;
+  }
+  .partidas tr.total-row td.total-label {
+    text-align: right;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* Nota al pie: explica cual de las dos versiones del documento es esta. */
   .footer-note {
     margin-top: 14px;
     font-size: 6pt;
@@ -198,6 +241,16 @@ const CSS = `
 
 export function renderObraMaestroHTML(data: ObraMaestroHTMLInput): string {
   const { project, budget, maestro, items } = data;
+  const conPrecios = data.conPrecios === true;
+
+  // Mano de obra por partida (unitaria x cantidad). Se calcula siempre; solo
+  // se imprime cuando conPrecios. Sin costLabor cargado, la partida vale 0 —
+  // se muestra igual (es del maestro, solo le falta el precio: mismo criterio
+  // que esSinManoDeObra, que ya filtro las que NO son suyas).
+  const totalManoObra = items.reduce(
+    (sum, it) => sum + (it.costLabor ?? 0) * it.quantity,
+    0
+  );
 
   // Capitulos en el MISMO orden y numeracion que la cotizacion (helper
   // compartido lib/presupuesto/chapters.ts, con reflow saltando vacios). Las
@@ -254,8 +307,14 @@ export function renderObraMaestroHTML(data: ObraMaestroHTMLInput): string {
             )}</td>
             <td class="col-unit">${esc(item.unit)}</td>
             <td class="col-qty">${fmtQty(item.quantity)}</td>
-            <td class="col-pu"></td>
-            <td class="col-total"></td>
+            <td class="col-pu">${
+              conPrecios ? fmtNum(item.costLabor ?? 0) : ""
+            }</td>
+            <td class="col-total">${
+              conPrecios
+                ? fmtMoney((item.costLabor ?? 0) * item.quantity)
+                : ""
+            }</td>
           </tr>`;
           })
           .join("")}
@@ -298,7 +357,9 @@ export function renderObraMaestroHTML(data: ObraMaestroHTMLInput): string {
       <div class="doc-block">
         <div class="doc-version-label">Version:</div>
         <div class="doc-title">${esc(budget.version)} COTIZACION</div>
-        <div class="doc-subtitle">MAESTRO — OBRA</div>
+        <div class="doc-subtitle">${
+          conPrecios ? "MAESTRO — OBRA · CON PRECIOS" : "MAESTRO — OBRA"
+        }</div>
       </div>
       <div class="field">
         <div class="label">Profesional a cargo</div>
@@ -329,12 +390,26 @@ export function renderObraMaestroHTML(data: ObraMaestroHTMLInput): string {
     </thead>
     <tbody>
       ${tableRows}
+      ${
+        conPrecios
+          ? `<tr class="total-row">
+               <td class="total-label" colspan="6">Total mano de obra</td>
+               <td class="col-total">${fmtMoney(totalManoObra)}</td>
+             </tr>`
+          : ""
+      }
     </tbody>
   </table>
 
   <div class="footer-note">
-    Este documento es el alcance de la obra para cotizacion del maestro.
-    Las columnas P.U. y TOTAL quedan en blanco para que el maestro las complete con sus precios.
+    ${
+      conPrecios
+        ? `Este documento es el alcance de la obra con los precios de mano de obra acordados.
+           P.U. es el precio unitario de mano de obra de cada partida; TOTAL es P.U. por la cantidad.
+           No incluye materiales.`
+        : `Este documento es el alcance de la obra para cotizacion del maestro.
+           Las columnas P.U. y TOTAL quedan en blanco para que el maestro las complete con sus precios.`
+    }
   </div>
 
 </body>

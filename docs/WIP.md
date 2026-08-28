@@ -1,8 +1,17 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-24.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-08-28.
 
 ---
+
+- **El alcance del maestro, también con precios (2026-08-28, rama `worktree-pend-172-maestro-con-precios`, pendiente 172)**: el PDF y el Excel del maestro salían siempre en blanco en las columnas P.U. y TOTAL — sirven para pedirle que cotice, no para cuando el trato ya está cerrado. Ahora el mismo endpoint acepta `?precios=1` y saca la otra mitad. **EN PROD** (PR #417, mergeado el 2026-08-28).
+  - **La regla dura: el precio que sale es `ObraItem.costLabor`, NUNCA el `unitPrice` del cliente.** En Casa Los Algarrobos, RETIRO PISO MADERA tiene M.O. $4.500 y P.U. cliente $4.950: esos $450 son materiales y margen de BLARQ. Si saliera el precio del cliente, MJ le estaría mostrando su margen al maestro. `costLabor` es **unitario** (el mismo dato que el EP guarda como `laborUnitPrice`), así que el total de la fila es `costLabor × cantidad`.
+  - **La cañería ya estaba**: la ruta ya leía `costLabor` para esconder las partidas sin mano de obra, solo que no se lo pasaba a los generadores. El cambio es un parámetro, el dato viajando, y las dos columnas llenas + un total general al pie.
+  - **Los dos documentos se distinguen en tres lugares** para que no se mande el equivocado: el encabezado ("MAESTRO — OBRA · CON PRECIOS"), la nota al pie, y el nombre del archivo (`BLARQ_Cotizacion_Maestro_CON_PRECIOS_...`).
+  - **En el Excel la fórmula sigue viva pero con el resultado ya resuelto**: la columna TOTAL mantiene `=E*F` (si alguien corrige una cantidad, se recalcula) y se guarda con su `result` calculado, así el número se ve al abrir el archivo aunque el visor no recalcule. Sin eso, en Vista previa de Mac o Drive las celdas se ven vacías.
+  - **En la barra quedó un tilde "con precios", no cuatro botones** — elegido por MJ sobre un mockup de tres opciones (tilde / cuatro botones / menú desplegable). Los dos botones de siempre y un tilde chico al lado que cambia el link de ambos; los títulos de ayuda cambian con el tilde. El estado no se guarda: arranca destildado en cada visita.
+  - **Verificado con datos reales de la viva** (`scripts/diag-172-maestro-con-precios.ts`, solo lectura): Casa Los Algarrobos V3, 55 partidas visibles, total mano de obra $20.448.800 (el total a precio cliente sería $39.127.291 y no aparece en ninguna parte del documento). La versión sin precios salió idéntica a la de antes. `scripts/diag-172-verificar-celdas.ts` confirma celda por celda que el Excel sin precios sigue con P.U. vacía y sin resultado.
+  - **Pendiente chico, no hecho a propósito**: la pantalla de cada maestro (`/proyectos/[id]/estados-pago/maestro/[maestroId]`) tiene un botón "Alcance PDF" que sigue saliendo solo sin precios. El endpoint ya soporta `maestroId` + `precios=1` juntos; falta decidir si ahí también va el tilde.
 
 - **El RUT de la contraparte bajo el nombre (2026-08-24, PR #415)**: en la lista general de facturas y en la de cada proyecto, el RUT aparece debajo del nombre en chico y gris. **No es columna nueva** — la tabla ya tiene muchas.
   - **Cuál RUT depende del tipo**: emitida → `rutReceiver` (el cliente), recibida → `rutIssuer` (el proveedor). En una emitida el emisor es siempre BLARQ y no aporta nada. La regla vive en **un solo lugar**, `src/lib/facturas/contraparte.ts`, en vez de repetirse en cada celda.

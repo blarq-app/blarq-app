@@ -1,8 +1,20 @@
 /**
  * Excel "Cotizacion Maestro": misma data y look del PDF Maestro, como
- * .xlsx editable. El maestro completa la columna P.U. y la columna
- * TOTAL se recalcula sola con `=Cantidad*P.U.` Al pie, una fila TOTAL
- * con SUM.
+ * .xlsx editable. Sale en DOS versiones, segun `conPrecios`:
+ *   - SIN precios (default): la columna P.U. va vacia para que el maestro la
+ *     complete, y TOTAL se recalcula sola con `=Cantidad*P.U.`
+ *   - CON precios: P.U. viene con la MANO DE OBRA acordada ya escrita
+ *     (`ObraItem.costLabor`, que es unitaria), y TOTAL con el resultado ya
+ *     calculado. Es el documento de cuando el trato esta cerrado.
+ * En las dos, al pie una fila TOTAL con SUM.
+ *
+ * OJO — el precio que va es SIEMPRE `costLabor` (lo que BLARQ le paga al
+ * maestro), NUNCA el `unitPrice` del cliente: la diferencia entre los dos es
+ * material y margen de BLARQ.
+ *
+ * Las formulas se guardan con su `result` ya resuelto para que el numero se
+ * vea al abrir el archivo aunque el visor no recalcule (Vista previa de Mac,
+ * Drive, etc.) — nunca un `#REF` ni una celda en blanco.
  *
  * Usa ExcelJS (no SheetJS) porque necesitamos estilos: logo BLARQ,
  * sombreados grises en headers/capitulos/sub-chapters, bordes finos
@@ -39,6 +51,9 @@ export interface ObraMaestroXLSXItemInput {
   descriptionMaestro: string | null;
   unit: string;
   quantity: number;
+  // Mano de obra UNITARIA que BLARQ le paga al maestro. Solo se escribe
+  // cuando `conPrecios` esta prendido.
+  costLabor: number | null;
 }
 
 export interface ObraMaestroXLSXInput {
@@ -47,6 +62,9 @@ export interface ObraMaestroXLSXInput {
   maestro: { name: string | null } | null;
   chapters: ChapterLike[];
   items: ObraMaestroXLSXItemInput[];
+  // false/undefined = para cotizar (P.U. vacia). true = con la mano de obra
+  // acordada ya escrita.
+  conPrecios?: boolean;
 }
 
 function fmtDate(d: string | Date): string {
@@ -94,6 +112,7 @@ export async function buildObraMaestroXLSX(
   data: ObraMaestroXLSXInput
 ): Promise<Buffer> {
   const { project, budget, maestro, items } = data;
+  const conPrecios = data.conPrecios === true;
 
   // Capitulos en el MISMO orden y numeracion que la cotizacion (helper
   // compartido lib/presupuesto/chapters.ts, con reflow saltando vacios).
@@ -160,7 +179,9 @@ export async function buildObraMaestroXLSX(
   ws.getRow(2).height = 22;
 
   ws.mergeCells("E3:G3");
-  ws.getCell("E3").value = "MAESTRO — OBRA";
+  ws.getCell("E3").value = conPrecios
+    ? "MAESTRO — OBRA · CON PRECIOS"
+    : "MAESTRO — OBRA";
   ws.getCell("E3").font = { name: "Calibri", size: 9, color: { argb: "FF808080" }, bold: true };
   ws.getCell("E3").alignment = { horizontal: "right", vertical: "middle" };
 
@@ -195,8 +216,9 @@ export async function buildObraMaestroXLSX(
 
   // ─── Nota explicativa ─────────────────────────────────────────────────
   ws.mergeCells("A9:G9");
-  ws.getCell("A9").value =
-    "Este documento es el alcance de la obra para cotizacion del maestro. Complete la columna P.U.; el TOTAL se calcula solo.";
+  ws.getCell("A9").value = conPrecios
+    ? "Este documento es el alcance de la obra con los precios de mano de obra acordados. P.U. es el precio unitario de mano de obra; el TOTAL es P.U. por la cantidad. No incluye materiales."
+    : "Este documento es el alcance de la obra para cotizacion del maestro. Complete la columna P.U.; el TOTAL se calcula solo.";
   ws.getCell("A9").font = { name: "Calibri", size: 8, italic: true, color: { argb: "FF555555" } };
   ws.getCell("A9").alignment = { horizontal: "left", vertical: "middle", wrapText: true };
   ws.getRow(9).height = 18;
@@ -217,6 +239,9 @@ export async function buildObraMaestroXLSX(
   // ─── Filas: capitulos + sub-chapters + items ─────────────────────────
   // Track row indexes (1-based) de los items para formula y SUM final.
   const itemRowIndices: number[] = [];
+  // Suma de la mano de obra acordada (0 en la version sin precios). Sirve para
+  // dejar resuelto el `result` del SUM de la fila TOTAL.
+  let totalManoObra = 0;
 
   let currentRow = HEADER_ROW + 1;
   for (const ch of chapters) {
@@ -270,9 +295,18 @@ export async function buildObraMaestroXLSX(
       // maestro le calce la cuenta con lo que ve escrito.
       const qty = Math.round(it.quantity * 100) / 100;
       itRow.getCell(5).value = qty;
-      // Col F (P.U.) la dejamos vacia para que el maestro tipee.
-      // Col G (TOTAL) lleva la formula =E*F.
-      itRow.getCell(7).value = { formula: `E${currentRow}*F${currentRow}`, result: 0 } as ExcelJS.CellFormulaValue;
+      // Col F (P.U.): vacia para que el maestro tipee, o la mano de obra
+      // acordada (redondeada a peso, como se paga).
+      // Col G (TOTAL): siempre la formula =E*F, asi sigue viva si alguien
+      // corrige una cantidad. El `result` va resuelto para que el numero se
+      // vea aunque el visor no recalcule.
+      const puManoObra = conPrecios ? Math.round(it.costLabor ?? 0) : 0;
+      if (conPrecios) itRow.getCell(6).value = puManoObra;
+      itRow.getCell(7).value = {
+        formula: `E${currentRow}*F${currentRow}`,
+        result: Math.round(qty * puManoObra),
+      } as ExcelJS.CellFormulaValue;
+      totalManoObra += Math.round(qty * puManoObra);
 
       // Estilos por columna
       const fontBase = { name: "Calibri" as const, size: 9 };
@@ -317,7 +351,7 @@ export async function buildObraMaestroXLSX(
   // ─── Fila TOTAL al pie ───────────────────────────────────────────────
   const totalRow = ws.getRow(currentRow);
   ws.mergeCells(`A${currentRow}:F${currentRow}`);
-  totalRow.getCell(1).value = "TOTAL";
+  totalRow.getCell(1).value = conPrecios ? "TOTAL MANO DE OBRA" : "TOTAL";
   totalRow.getCell(1).font = { name: "Calibri", size: 10, bold: true };
   totalRow.getCell(1).alignment = { horizontal: "right", vertical: "middle" };
   totalRow.getCell(1).border = BORDER_TOP_BOTTOM_BLACK;
@@ -327,7 +361,7 @@ export async function buildObraMaestroXLSX(
     const lastR = itemRowIndices[itemRowIndices.length - 1];
     totalRow.getCell(7).value = {
       formula: `SUM(G${firstR}:G${lastR})`,
-      result: 0,
+      result: totalManoObra,
     } as ExcelJS.CellFormulaValue;
   } else {
     totalRow.getCell(7).value = 0;

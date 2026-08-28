@@ -15,9 +15,16 @@ export const maxDuration = 60;
 
 /**
  * Export "Cotizacion Maestro" desde un presupuesto de obra. Mismos items
- * que la cotizacion al cliente, sin precios — para que el maestro cotice.
+ * que la cotizacion al cliente, en dos sabores:
+ *   - sin precios (default): para que el maestro cotice.
+ *   - `?precios=1`: con la MANO DE OBRA acordada (`ObraItem.costLabor`) ya
+ *     escrita, para mandarsela cuando el trato ya esta cerrado.
  *
- * GET /api/presupuestos/:id/maestro?format=pdf|xlsx
+ * OJO — el precio que se muestra es SIEMPRE `costLabor`, nunca el `unitPrice`
+ * que se le cobra al cliente: la diferencia entre los dos es material y margen
+ * de BLARQ, y no se le muestra al maestro.
+ *
+ * GET /api/presupuestos/:id/maestro?format=pdf|xlsx&maestroId=...&precios=1
  */
 export async function GET(
   request: NextRequest,
@@ -32,6 +39,9 @@ export async function GET(
     // Si viene maestroId, el alcance sale filtrado a las partidas de ese
     // maestro (un alcance limpio por contratista). Sin maestroId → todas.
     const maestroId = request.nextUrl.searchParams.get("maestroId");
+    // Con precios = el documento del trato cerrado. Sin el parametro, el de
+    // siempre (columnas en blanco para que el maestro cotice).
+    const conPrecios = request.nextUrl.searchParams.get("precios") === "1";
 
     if (format !== "pdf" && format !== "xlsx") {
       return NextResponse.json(
@@ -92,6 +102,10 @@ export async function GET(
     const maestroSuffix = maestroFiltrado
       ? "_" + maestroFiltrado.name.replace(/\s+/g, "_")
       : "";
+    // "CON_PRECIOS" en el nombre del archivo para que los dos documentos no
+    // se confundan en la carpeta de descargas y MJ no le mande el equivocado
+    // al maestro.
+    const preciosTag = conPrecios ? "CON_PRECIOS_" : "";
     const baseName =
       budget.project.name.replace(/\s+/g, "_") + maestroSuffix;
     const projectInput = {
@@ -114,6 +128,9 @@ export async function GET(
       descriptionMaestro: it.descriptionMaestro,
       unit: it.unit,
       quantity: it.quantity,
+      // Mano de obra unitaria. Se pasa siempre; los generadores solo la
+      // imprimen cuando conPrecios esta prendido.
+      costLabor: it.costLabor,
     }));
 
     if (format === "xlsx") {
@@ -123,8 +140,9 @@ export async function GET(
         maestro: maestroInput,
         chapters: chaptersInput,
         items: itemsInput,
+        conPrecios,
       });
-      const filename = `BLARQ_Cotizacion_Maestro_${baseName}_${budget.version}.xlsx`;
+      const filename = `BLARQ_Cotizacion_Maestro_${preciosTag}${baseName}_${budget.version}.xlsx`;
       const body = new Uint8Array(buffer.byteLength);
       body.set(buffer);
       return new NextResponse(body, {
@@ -143,6 +161,7 @@ export async function GET(
       maestro: maestroInput,
       chapters: chaptersInput,
       items: itemsInput,
+      conPrecios,
     });
     const footer = buildObraMaestroFooter(budget.version, budget.date);
     const pdfBuffer = await renderPDF(html, {
@@ -152,7 +171,7 @@ export async function GET(
       footerTemplate: footer,
       margin: { top: "12mm", bottom: "16mm", left: "12mm", right: "12mm" },
     });
-    const filename = `BLARQ_Cotizacion_Maestro_${baseName}_${budget.version}.pdf`;
+    const filename = `BLARQ_Cotizacion_Maestro_${preciosTag}${baseName}_${budget.version}.pdf`;
     const body = new Uint8Array(pdfBuffer.byteLength);
     body.set(pdfBuffer);
     return new NextResponse(body, {

@@ -10,6 +10,11 @@
  *     un total general al pie. Es el documento para cuando el trato ya esta
  *     cerrado y hay que dejar por escrito que se le paga por cada partida.
  *
+ * Cada capitulo cierra con su propia fila de SUBTOTAL. Con precios lleva la
+ * suma de la mano de obra de ese capitulo (la suma de todos da exacto el total
+ * al pie); sin precios la celda va en blanco, con su recuadro, para que el
+ * maestro la complete a mano.
+ *
  * OJO — el precio que va es `costLabor` (la mano de obra que BLARQ le paga al
  * maestro), NUNCA el `unitPrice` que se le cobra al cliente. La diferencia
  * entre los dos es material y margen de BLARQ: mostrarsela al maestro seria
@@ -180,6 +185,26 @@ const CSS = `
   }
   .partidas tr.chapter-row td.chapter-idx { text-align: center; }
 
+  /* Subtotal de cada capitulo, en una fila propia que lo cierra (la
+     convencion del presupuesto en papel: el numero cae donde uno termina de
+     leer el capitulo, no antes de empezarlo). Mas liviana que el total
+     general: gris claro, sin el doble filete que cierra el documento.
+     Sin precios la celda del monto va en blanco —con su recuadro— para que
+     el maestro la complete a mano cuando imprime. */
+  .partidas tr.chapter-subtotal-row td {
+    background: #F2F2F2;
+    font-weight: 700;
+    font-size: 5.8pt;
+    padding: 2px 3px;
+    border-bottom: 0.4pt solid #000;
+  }
+  .partidas tr.chapter-subtotal-row td.subtotal-label {
+    text-align: right;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .partidas tr.chapter-subtotal-row td.vacia { background: #FFF; }
+
   /* Fila separadora de sub-chapter (ej. "COCINA", "BANO"). Gris mas
      claro que el chapter, italic, sin bordes — separador visual sutil. */
   .partidas tr.sub-chapter-row td {
@@ -270,8 +295,17 @@ export function renderObraMaestroHTML(data: ObraMaestroHTMLInput): string {
     : `<div class="logo" style="line-height:44px;font-size:24pt;font-weight:700;letter-spacing:0.15em;">BLARQ</div>`;
 
   const tableRows = chapters
-    .map(
-      (ch) => `
+    .map((ch) => {
+      // Subtotal del capitulo = la mano de obra de SUS partidas (unitaria x
+      // cantidad, igual que el total al pie). Suma exactamente lo que el
+      // documento muestra: las partidas sin mano de obra ya vienen filtradas
+      // desde la ruta, y si viene ?maestroId= solo llegan las de ese maestro.
+      // Por eso la suma de los subtotales da exacto el total general.
+      const subtotal = ch.items.reduce(
+        (s, i) => s + (i.costLabor ?? 0) * i.quantity,
+        0
+      );
+      return `
         <tr class="chapter-row">
           <td class="col-item chapter-idx">${ch.index}</td>
           <td class="col-name">${esc(ch.label)}</td>
@@ -318,8 +352,16 @@ export function renderObraMaestroHTML(data: ObraMaestroHTMLInput): string {
           </tr>`;
           })
           .join("")}
-      `
-    )
+        <tr class="chapter-subtotal-row">
+          <td class="subtotal-label" colspan="6">Subtotal ${esc(ch.label)}</td>
+          ${
+            conPrecios
+              ? `<td class="col-total">${fmtMoney(subtotal)}</td>`
+              : `<td class="col-total vacia"></td>`
+          }
+        </tr>
+      `;
+    })
     .join("");
 
   const addressStr = project.address ? esc(project.address) : "POR CONFIRMAR";

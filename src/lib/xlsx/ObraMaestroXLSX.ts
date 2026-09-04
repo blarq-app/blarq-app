@@ -6,7 +6,9 @@
  *   - CON precios: P.U. viene con la MANO DE OBRA acordada ya escrita
  *     (`ObraItem.costLabor`, que es unitaria), y TOTAL con el resultado ya
  *     calculado. Es el documento de cuando el trato esta cerrado.
- * En las dos, al pie una fila TOTAL con SUM.
+ * En las dos, cada capitulo cierra con su fila SUBTOTAL y al pie va una fila
+ * TOTAL. En la version sin precios los subtotales tambien son formulas, asi
+ * que se llenan solos a medida que el maestro tipea sus P.U.
  *
  * OJO — el precio que va es SIEMPRE `costLabor` (lo que BLARQ le paga al
  * maestro), NUNCA el `unitPrice` del cliente: la diferencia entre los dos es
@@ -239,6 +241,10 @@ export async function buildObraMaestroXLSX(
   // ─── Filas: capitulos + sub-chapters + items ─────────────────────────
   // Track row indexes (1-based) de los items para formula y SUM final.
   const itemRowIndices: number[] = [];
+  // Filas donde queda el SUBTOTAL de cada capitulo. El TOTAL del pie suma
+  // ESTAS celdas y no el rango corrido de la columna G: con el rango, los
+  // subtotales quedaban adentro y la mano de obra se contaba dos veces.
+  const subtotalCells: string[] = [];
   // Suma de la mano de obra acordada (0 en la version sin precios). Sirve para
   // dejar resuelto el `result` del SUM de la fila TOTAL.
   let totalManoObra = 0;
@@ -264,6 +270,9 @@ export async function buildObraMaestroXLSX(
     // Zona DERIVADA por posicion (helper compartido): una partida sin zona
     // hereda la de arriba. El encabezado va en la primera partida de cada zona.
     const zoneRows = annotateZones(ch.items.map((i) => ({ ...i, total: 0 }))).rows;
+    // Filas de partida de ESTE capitulo, para el rango del subtotal.
+    const filasDelCapitulo: number[] = [];
+    let subtotalCapitulo = 0;
     zoneRows.forEach((row, idx) => {
       const it = row.item;
       // Fila separadora de sub-chapter al empezar una zona
@@ -307,6 +316,7 @@ export async function buildObraMaestroXLSX(
         result: Math.round(qty * puManoObra),
       } as ExcelJS.CellFormulaValue;
       totalManoObra += Math.round(qty * puManoObra);
+      subtotalCapitulo += Math.round(qty * puManoObra);
 
       // Estilos por columna
       const fontBase = { name: "Calibri" as const, size: 9 };
@@ -344,8 +354,47 @@ export async function buildObraMaestroXLSX(
       }
 
       itemRowIndices.push(currentRow);
+      filasDelCapitulo.push(currentRow);
       currentRow++;
     });
+
+    // ─── Subtotal del capitulo ──────────────────────────────────────────
+    // Va SIEMPRE como formula, tambien en la version sin precios: ahi las
+    // celdas de TOTAL de las partidas son `=Cantidad*P.U.` con el P.U. en
+    // blanco, asi que el subtotal arranca en 0 y se llena solo a medida que
+    // el maestro tipea sus precios. El `result` va resuelto para que el
+    // numero se vea al abrir el archivo aunque el visor no recalcule.
+    const rangoSubtotal =
+      filasDelCapitulo.length > 0
+        ? `SUM(G${filasDelCapitulo[0]}:G${
+            filasDelCapitulo[filasDelCapitulo.length - 1]
+          })`
+        : null;
+
+    // Fila propia al cierre del capitulo (la convencion del presupuesto en
+    // papel: el numero cae donde uno termina de leer el capitulo, no antes de
+    // empezarlo). Gris claro, mas liviana que el TOTAL general del pie.
+    const subRow = ws.getRow(currentRow);
+    ws.mergeCells(`A${currentRow}:F${currentRow}`);
+    subRow.getCell(1).value = `SUBTOTAL ${ch.label}`;
+    subRow.getCell(1).font = { name: "Calibri", size: 9, bold: true };
+    subRow.getCell(1).alignment = { horizontal: "right", vertical: "middle" };
+    subRow.getCell(1).fill = FILL_GRAY_SUBCHAPTER;
+    subRow.getCell(1).border = BORDER_THIN_BLACK;
+    if (rangoSubtotal) {
+      subRow.getCell(7).value = {
+        formula: rangoSubtotal,
+        result: subtotalCapitulo,
+      } as ExcelJS.CellFormulaValue;
+    }
+    subRow.getCell(7).font = { name: "Calibri", size: 9, bold: true };
+    subRow.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
+    subRow.getCell(7).numFmt = '"$"#,##0';
+    subRow.getCell(7).fill = FILL_GRAY_SUBCHAPTER;
+    subRow.getCell(7).border = BORDER_THIN_BLACK;
+    subRow.height = 16;
+    subtotalCells.push(`G${currentRow}`);
+    currentRow++;
   }
 
   // ─── Fila TOTAL al pie ───────────────────────────────────────────────
@@ -356,7 +405,16 @@ export async function buildObraMaestroXLSX(
   totalRow.getCell(1).alignment = { horizontal: "right", vertical: "middle" };
   totalRow.getCell(1).border = BORDER_TOP_BOTTOM_BLACK;
 
-  if (itemRowIndices.length > 0) {
+  // El TOTAL suma las celdas de SUBTOTAL de cada capitulo, NO el rango
+  // corrido G<primera>:G<ultima>. Con el rango corrido los subtotales de los
+  // capitulos —que ahora viven dentro de ese tramo— se contaban ademas de sus
+  // propias partidas, y el total salia casi al doble.
+  if (subtotalCells.length > 0) {
+    totalRow.getCell(7).value = {
+      formula: `SUM(${subtotalCells.join(",")})`,
+      result: totalManoObra,
+    } as ExcelJS.CellFormulaValue;
+  } else if (itemRowIndices.length > 0) {
     const firstR = itemRowIndices[0];
     const lastR = itemRowIndices[itemRowIndices.length - 1];
     totalRow.getCell(7).value = {

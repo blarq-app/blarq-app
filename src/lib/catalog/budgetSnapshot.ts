@@ -21,6 +21,17 @@
 import { prisma } from "@/lib/prisma";
 
 // Campos de ObraItem que viajan en la foto (todo lo que define la partida).
+//
+// `maestroId` y `noCobrado` se agregaron el 2026-09-04: antes no viajaban, y
+// como el restore BORRA y RECREA las partidas, "volver a lo enviado" se
+// llevaba puesta la asignación de maestros y la marca de plata absorbida.
+// Pasó de verdad en la V3 de Paseo del Sena (54 maestros perdidos de un
+// click). Las dos definen la partida: a quién se le paga, y si se le cobra
+// al cliente — no son marcas de trabajo.
+//
+// `revisado` NO viaja a propósito: es una marca interna de "esto ya lo
+// miramos", no parte de lo que se le mandó al cliente. Igual sobrevive al
+// restore, porque se preserva de la partida actual (ver `previos` abajo).
 function pickObraItem(it: {
   lineageId: string; chapterName: string; subChapter: string | null;
   itemNumber: string; name: string; descriptionCliente: string | null;
@@ -29,6 +40,7 @@ function pickObraItem(it: {
   costLabor: number | null; costSubcontract: number | null;
   costMargin: number | null; costTools: number | null; costLoss: number | null;
   sortOrder: number; catalogPartidaId: string | null; isCustomized: boolean;
+  maestroId: string | null; noCobrado: boolean;
   components: ComponentSnap[];
 }) {
   return { ...it };
@@ -98,7 +110,9 @@ export async function buildBudgetSnapshot(versionId: string) {
       costSubcontract: it.costSubcontract, costMargin: it.costMargin,
       costTools: it.costTools, costLoss: it.costLoss,
       sortOrder: it.sortOrder, catalogPartidaId: it.catalogPartidaId,
-      isCustomized: it.isCustomized, components,
+      isCustomized: it.isCustomized,
+      maestroId: it.maestroId, noCobrado: it.noCobrado,
+      components,
     });
   });
 
@@ -130,9 +144,40 @@ export async function restoreObraFromSnapshot(versionId: string) {
   if (!bv.sentSnapshot) throw new Error("Esta versión no tiene foto guardada (nunca se envió)");
   if (bv.type !== "obra") throw new Error("Volver a lo enviado está implementado solo para obra");
 
-  const snap = bv.sentSnapshot as unknown as Awaited<ReturnType<typeof buildBudgetSnapshot>>;
+  // Una foto guardada NO es necesariamente del formato de hoy: las anteriores
+  // al 2026-09-04 no traen `maestroId` ni `noCobrado`. El tipo lo dice para
+  // que el código esté obligado a contemplar que falten.
+  type SnapGuardado = Omit<Awaited<ReturnType<typeof buildBudgetSnapshot>>, "obraItems"> & {
+    obraItems: (Omit<
+      Awaited<ReturnType<typeof buildBudgetSnapshot>>["obraItems"][number],
+      "maestroId" | "noCobrado"
+    > & { maestroId?: string | null; noCobrado?: boolean })[];
+  };
+  const snap = bv.sentSnapshot as unknown as SnapGuardado;
 
   await prisma.$transaction(async (tx) => {
+    // ANTES de borrar, guardarse el maestro y las dos marcas de cada partida,
+    // indexados por lineageId. Sirven para dos cosas:
+    //
+    //   · `revisado` no viaja en la foto a propósito (es marca de trabajo, no
+    //     parte de lo enviado) y se preserva siempre desde acá.
+    //   · las fotos sacadas ANTES del 2026-09-04 no traen `maestroId` ni
+    //     `noCobrado`. Para esas, se preserva lo que la partida tiene hoy en
+    //     vez de dejarlo en blanco. Sin este respaldo, restaurar cualquier
+    //     foto vieja seguiría borrando los maestros — que es justamente el
+    //     problema que se está arreglando, y hoy casi todas las fotos
+    //     guardadas son viejas.
+    //
+    // Cuando la foto SÍ trae el dato, gana la foto: es lo que se envió.
+    const previos = new Map(
+      (
+        await tx.obraItem.findMany({
+          where: { budgetVersionId: versionId },
+          select: { lineageId: true, maestroId: true, noCobrado: true, revisado: true },
+        })
+      ).map((i) => [i.lineageId, i])
+    );
+
     // Borrar partidas actuales (cascade borra sus componentes).
     await tx.obraItem.deleteMany({ where: { budgetVersionId: versionId } });
 
@@ -165,6 +210,12 @@ export async function restoreObraFromSnapshot(versionId: string) {
 
     for (const it of snap.obraItems) {
       const chapterId = await resolverCapitulo(it.chapterName ?? "");
+      const previo = previos.get(it.lineageId);
+      // `?? previo` y no `||`: un maestroId null de una foto NUEVA es una
+      // decisión ("esta partida no tiene maestro") y debe respetarse. Lo que
+      // cae al previo es el `undefined` de las fotos viejas, que no opinaron.
+      const maestroId = it.maestroId !== undefined ? it.maestroId : (previo?.maestroId ?? null);
+      const noCobrado = it.noCobrado !== undefined ? it.noCobrado : (previo?.noCobrado ?? false);
       const created = await tx.obraItem.create({
         data: {
           budgetVersionId: versionId,
@@ -180,6 +231,10 @@ export async function restoreObraFromSnapshot(versionId: string) {
           costTools: it.costTools, costLoss: it.costLoss,
           sortOrder: it.sortOrder, catalogPartidaId: it.catalogPartidaId,
           isCustomized: it.isCustomized,
+          maestroId, noCobrado,
+          // La marca de revisión no es parte de lo enviado: sobrevive tal
+          // cual estaba, no se restaura desde la foto.
+          revisado: previo?.revisado ?? false,
         },
       });
       // Crear componentes; guardar localId -> id real para re-vincular pérdidas.

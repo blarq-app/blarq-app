@@ -95,10 +95,14 @@ export default async function PresupuestoPage({
   );
 
   function calcObraTotal(budget: (typeof obraVersions)[0]) {
-    const costoDirecto = budget.obraItems.reduce(
-      (sum, item) => sum + item.total,
-      0
-    );
+    // Las partidas que BLARQ absorbe (noCobrado) NO entran: no se le cobran
+    // al cliente, así que no son parte del total acordado. Mismo criterio que
+    // el PDF (api/presupuestos/[id]/pdf), el editor (ObraEditor,
+    // `itemsCobrables`) y metrics.ts — este era el único lugar que las sumaba,
+    // y mostraba de más en cualquier versión con una partida marcada.
+    const costoDirecto = budget.obraItems
+      .filter((item) => !item.noCobrado)
+      .reduce((sum, item) => sum + item.total, 0);
     const gg = costoDirecto * ((budget.ggPercentage || 0) / 100);
     const utilidad = costoDirecto * ((budget.utilityPercentage || 0) / 100);
     const neto = costoDirecto + gg + utilidad;

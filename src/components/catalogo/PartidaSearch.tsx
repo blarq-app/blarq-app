@@ -1132,16 +1132,35 @@ function PartidaRow({
             {partida.name}
           </button>
           {materialesSinCobrar(partida.components).length > 0 && (
-            <button
-              type="button"
-              onClick={onToggleExpand}
-              title={avisoSinCobrar(
-                materialesSinCobrar(partida.components),
-                partida.unit
-              )}
-              aria-label="Lleva un material que no se está cobrando"
-              className="h-2 w-2 shrink-0 rounded-full bg-amber-500 hover:ring-2 hover:ring-amber-200"
-            />
+            // Mismo globito propio que en el editor de obra (el `title` del
+            // navegador tarda demasiado en salir).
+            <span className="relative group/aviso shrink-0">
+              <button
+                type="button"
+                onClick={onToggleExpand}
+                aria-label="Lleva un material que no se está cobrando"
+                className="block h-2 w-2 rounded-full bg-amber-500 hover:ring-2 hover:ring-amber-200"
+              />
+              <span
+                role="tooltip"
+                className="pointer-events-none invisible group-hover/aviso:visible absolute left-0 top-4 z-50 w-80 whitespace-normal rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-[11px] font-normal normal-case leading-snug text-amber-900 shadow-sm"
+              >
+                {avisoSinCobrar(
+                  materialesSinCobrar(partida.components),
+                  partida.unit
+                )
+                  .split("\n")
+                  .map((linea, i) =>
+                    linea === "" ? (
+                      <span key={i} className="block h-1.5" />
+                    ) : (
+                      <span key={i} className="block">
+                        {linea}
+                      </span>
+                    )
+                  )}
+              </span>
+            </span>
           )}
         </div>
         {/* DESCRIPCIÓN PARA CLIENTE (la que va al PDF). Se edita INLINE acá

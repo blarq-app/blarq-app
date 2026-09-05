@@ -462,6 +462,18 @@ export default function ObraEditor({
   const [zoneDraft, setZoneDraft] = useState("");
   // Selección múltiple para asignar zona en bulk. MJ habilita checkbox por
   // fila, selecciona varias y aplica una zona desde la barra flotante.
+  // Globito del aviso de material sin cobrar. Va en estado y se dibuja al
+  // FINAL del componente, fuera de la tabla, porque las filas llevan `opacity`
+  // inline (dnd-kit, y el 0.6 de "revisada"): cualquier hijo de la fila hereda
+  // esa transparencia y además queda atrapado en su contexto de apilamiento,
+  // así que un globito dentro de la fila se veía translúcido y por debajo de
+  // las filas de más abajo.
+  const [avisoSinCobrarHover, setAvisoSinCobrarHover] = useState<{
+    texto: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [bulkZoneDraft, setBulkZoneDraft] = useState("");
   // Arrastre de partidas (orden manual). activeDragId = id de la fila que se
@@ -2080,11 +2092,20 @@ export default function ObraEditor({
                                   [item.id]: true,
                                 }))
                               }
-                              title={avisoSinCobrar(
-                                sinCobrar,
-                                item.unit,
-                                item.quantity
-                              )}
+                              onMouseEnter={(e) => {
+                                const r =
+                                  e.currentTarget.getBoundingClientRect();
+                                setAvisoSinCobrarHover({
+                                  texto: avisoSinCobrar(
+                                    sinCobrar,
+                                    item.unit,
+                                    item.quantity
+                                  ),
+                                  x: r.right,
+                                  y: r.bottom + 6,
+                                });
+                              }}
+                              onMouseLeave={() => setAvisoSinCobrarHover(null)}
                               aria-label="Lleva un material que no se está cobrando"
                               className="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500 hover:ring-2 hover:ring-amber-200"
                             />
@@ -3011,6 +3032,31 @@ export default function ObraEditor({
           >
             Limpiar
           </button>
+        </div>
+      )}
+
+      {/* Globito del aviso de material sin cobrar. `fixed` y fuera de la tabla
+          (ver el comentario del estado): así no hereda la transparencia de la
+          fila ni queda tapado por las filas de abajo. */}
+      {avisoSinCobrarHover && (
+        <div
+          role="tooltip"
+          style={{
+            left: avisoSinCobrarHover.x,
+            top: avisoSinCobrarHover.y,
+            transform: "translateX(-100%)",
+          }}
+          className="pointer-events-none fixed z-50 w-80 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-900 shadow-sm"
+        >
+          {avisoSinCobrarHover.texto.split("\n").map((linea, i) =>
+            linea === "" ? (
+              <span key={i} className="block h-1.5" />
+            ) : (
+              <span key={i} className="block">
+                {linea}
+              </span>
+            )
+          )}
         </div>
       )}
     </div>

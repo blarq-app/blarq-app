@@ -24,7 +24,12 @@ export interface ComponenteParaAviso {
   unitCost: number;
   // El material del catálogo, cuando la línea está enganchada a uno. Las
   // líneas escritas a mano vienen sin material y acá llegan null/undefined.
-  material?: { isProvision: boolean } | null;
+  // `isProvision` va opcional porque cada pantalla trae el material con un
+  // select distinto (el editor del desglose lo trae entero, la fila de la
+  // partida solo con este campo). Solo `=== true` apaga el aviso: si no vino,
+  // se avisa — más vale una marca de más que plata que se va sin que nadie
+  // la vea.
+  material?: { isProvision?: boolean | null } | null;
 }
 
 // Convención de MJ: una línea que empieza con "PROVISION …" es un artefacto

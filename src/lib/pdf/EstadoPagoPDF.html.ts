@@ -84,51 +84,39 @@ function clampPct(n: number): number {
 }
 
 /**
- * Celda de avance de una partida: barra en DOS TRAMOS (uno solo si ya llegó al
- * 100%) + leyenda de cada parte.
+ * Celda de avance de una partida: barra de UN SOLO TONO + leyenda con el
+ * desglose en texto.
  *
- * El tramo oscuro es lo que el maestro YA cobró en EPs cerrados anteriores; el
- * claro es lo que agrega este EP. Hasta acá la barra pintaba un solo tramo con
- * el acumulado, así que el maestro veía "66%" sin saber cuánto de eso ya le
- * habían pagado.
+ * La barra mide el acumulado y va entera del tono "ya pagado"; el reparto entre
+ * lo que el maestro ya cobró en EPs cerrados y lo que agrega ESTE EP lo cuenta
+ * la leyenda de abajo, con el porcentaje y el monto de cada parte.
  *
- * La leyenda omite la parte que no aplica: en el EP 1 no hay previo (un solo
- * tramo, una sola línea) y una partida fuera de alcance tiene previo pero no
- * suma nada nuevo.
+ * Antes la barra iba en dos tramos, uno oscuro y uno claro. Los dos grises se
+ * confundían —el claro (#CFCBC5) contra el riel vacío (#EEEDEC) es casi el
+ * mismo tono— y una barra COMPLETA se leía como si faltara pagar la mitad (lo
+ * dijo JT mirando un EP). La barra dice CUÁNTO, el texto dice de dónde viene.
+ *
+ * La leyenda omite la parte que no aplica: en el EP 1 no hay previo (una sola
+ * línea) y una partida fuera de alcance tiene previo pero no suma nada nuevo.
  */
 function avanceCelda(item: EPItemInput): string {
   const prev = clampPct(item.pctPrev);
   const total = clampPct(item.pctAccumulated);
   const nuevo = Math.max(0, total - prev);
-  // Partida ya completa: la barra va en UN SOLO BLOQUE, del tono de "ya pagado".
-  // Partida en dos tramos, el claro (#CFCBC5) es casi el mismo gris que el riel
-  // vacío (#EEEDEC), así que una barra LLENA se leía como si faltara la mitad por
-  // pagar — lo dijo JT mirando un EP.
-  //
-  // El redondeo tiene que ser el MISMO que el del número que se imprime al lado
-  // (total.toFixed(0)): una partida en 99,6% muestra "100%", y con `total >= 100`
-  // esa fila diría 100% con la barra partida, o sea el problema de vuelta igual.
-  const completa = Math.round(total) >= 100;
-  // Con un solo bloque los cuadraditos de la leyenda ya no apuntan a nada (serían
-  // dos colores para una barra de uno solo): queda el texto, sin marca.
-  const marca = (color: string) =>
-    completa ? "" : `<span class="marca" style="background:${color}"></span>`;
+  // Sin dos tramos, los cuadraditos de color de la leyenda ya no apuntan a nada:
+  // queda el texto solo, que es lo que el maestro lee de verdad (lleva el monto).
   const leyenda = [
     prev > 0
-      ? `<div>${marca("#8A7F6F")}ya pagado ${prev.toFixed(0)}% · ${fmtCLP(item.prevAmountPaid)}</div>`
+      ? `<div>ya pagado ${prev.toFixed(0)}% · ${fmtCLP(item.prevAmountPaid)}</div>`
       : "",
     nuevo > 0
-      ? `<div>${marca("#CFCBC5")}este EP ${nuevo.toFixed(0)}% · ${fmtCLP(item.amountThisEp)}</div>`
+      ? `<div>este EP ${nuevo.toFixed(0)}% · ${fmtCLP(item.amountThisEp)}</div>`
       : "",
   ].join("");
-  const tramos = completa
-    ? `<div class="avance-fill avance-fill-prev" style="width: 100%"></div>`
-    : `<div class="avance-fill avance-fill-prev" style="width: ${prev.toFixed(1)}%"></div>
-                  <div class="avance-fill avance-fill-nuevo" style="width: ${nuevo.toFixed(1)}%"></div>`;
   return `
               <div class="avance-cell">
                 <div class="avance-bar">
-                  ${tramos}
+                  <div class="avance-fill" style="width: ${total.toFixed(1)}%"></div>
                 </div>
                 <span class="avance-pct">${total.toFixed(0)}%</span>
               </div>
@@ -283,16 +271,14 @@ const CSS = `
     position: relative;
     display: flex;
   }
-  /* La barra va en DOS TRAMOS: el oscuro es lo que ya se le pagó al maestro en
-     EPs cerrados anteriores, el claro es lo que agrega ESTE EP. Antes pintaba
-     un solo tramo y el maestro no podía ver de dónde venía el acumulado. */
-  /* Greige de la marca (globals.css), no el naranja que había antes ni un
-     negro duro: Piedra para lo ya pagado y Greige para lo de este EP. Son los
-     MISMOS dos tonos que usa la barra de la pantalla, para que el PDF que
-     recibe el maestro y lo que ve MJ no se lean distinto. */
-  .avance-fill { height: 100%; }
-  .avance-fill-prev  { background: #8A7F6F; }
-  .avance-fill-nuevo { background: #CFCBC5; }
+  /* La barra va de UN SOLO TONO y mide el acumulado. Con dos tramos (uno oscuro
+     por lo ya pagado, uno claro por este EP) los grises se confundían entre sí
+     y con el riel vacío, y una barra llena parecía a medio pagar. El desglose
+     lo cuenta la leyenda de abajo, en texto y con el monto.
+     Piedra de la marca (globals.css), el MISMO tono que usa la barra de la
+     pantalla, para que el PDF que recibe el maestro y lo que ve MJ no se lean
+     distinto. */
+  .avance-fill { height: 100%; background: #8A7F6F; }
   .avance-pct {
     font-size: 6.5pt;
     font-variant-numeric: tabular-nums;
@@ -301,8 +287,9 @@ const CSS = `
     min-width: 28px;
     text-align: right;
   }
-  /* Leyenda debajo de la barra. Dos líneas cortas: no entra en una sola con el
-     ancho de la columna. Se omite la que no aplica (en el EP 1 no hay previo). */
+  /* Leyenda debajo de la barra: es la que dice de dónde viene el acumulado.
+     Dos líneas cortas, no entra en una sola con el ancho de la columna. Se
+     omite la que no aplica (en el EP 1 no hay previo). */
   .avance-leyenda {
     margin-top: 2px;
     font-size: 5.5pt;
@@ -311,13 +298,6 @@ const CSS = `
     color: #555;
     white-space: nowrap;
     text-align: center;
-  }
-  .avance-leyenda .marca {
-    display: inline-block;
-    width: 4px; height: 4px;
-    border-radius: 1px;
-    margin-right: 2px;
-    vertical-align: middle;
   }
 
   /* Out of scope row — sutil ámbar */

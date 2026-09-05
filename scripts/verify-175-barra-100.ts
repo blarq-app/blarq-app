@@ -1,9 +1,10 @@
 /**
- * Pendiente 175 — la barra de una partida al 100% va en UN SOLO BLOQUE.
+ * Pendiente 175 — la barra de avance va de UN SOLO TONO (el desglose lo cuenta
+ * el texto).
  *
  * Corre contra la base de DESARROLLO (ep-solitary-mud), nunca la viva, y ARMA
  * el escenario que hace falta: un EP 1 cerrado con avance parcial + un EP 2 en
- * borrador donde algunas partidas llegan al 100% (esas son las que hoy salen
+ * borrador donde algunas partidas llegan al 100% (esas son las que salían
  * partidas en dos tonos casi iguales) y otras quedan a medias, para que en la
  * misma pantalla se vean los dos casos.
  *
@@ -139,13 +140,12 @@ async function main() {
   });
   await page.waitForSelector("text=Total mano de obra");
 
-  // Un bloque entero = un div con w-full oscuro; dos tramos = divs con width en
-  // el style. Se cuentan para que quede constancia además de la foto.
-  const bloquesEnteros = await page.locator("div.bg-gray-500.w-full").count();
-  const tramosOscuros = await page.locator("div.bg-gray-500[style*='width']").count();
+  // Todas las barras tienen que ser del MISMO tono: un solo div oscuro con su
+  // ancho. Si aparece alguno claro, volvieron los dos tramos.
+  const barras = await page.locator("div.bg-gray-500[style*='width']").count();
   const tramosClaros = await page.locator("div.bg-gray-300[style*='width']").count();
-  console.log(`   barras de UN BLOQUE (100%): ${bloquesEnteros}`);
-  console.log(`   tramos oscuros parciales: ${tramosOscuros} · tramos claros: ${tramosClaros}`);
+  console.log(`   barras (un solo tono): ${barras}`);
+  console.log(`   tramos claros que quedaron: ${tramosClaros} (tiene que ser 0)`);
 
   await foto(page, `175-pantalla-${SUFIJO}`);
 

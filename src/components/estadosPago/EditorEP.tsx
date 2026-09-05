@@ -745,15 +745,16 @@ export default function EditorEP({
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
-// Barra de avance en DOS TRAMOS: el oscuro es lo que ya se le pagó al maestro
-// en EPs cerrados anteriores, el claro es lo que agrega ESTE EP. Antes era un
-// solo tramo y la pantalla decía "+$X este EP" sin decir de dónde venía.
+// Barra de avance de UN SOLO TONO: mide el acumulado de la partida. Cuánto de
+// eso ya se le pagó al maestro y cuánto agrega ESTE EP lo dicen los textos de
+// la fila (el "+$X este EP" de la columna acumulada) y el título al pasar por
+// encima, con el monto de cada parte.
 //
-// En el EP 1 no hay previo: queda un solo tramo claro, sin tramo oscuro vacío.
-// En una partida `outOfScope` pasa al revés — tiene previo pagado pero no suma
-// nada nuevo, así que queda solo el tramo oscuro.
+// Iba en dos tramos, uno oscuro por lo ya pagado y uno claro por lo nuevo. Los
+// dos grises se confundían entre sí y con el riel vacío, así que una barra
+// COMPLETA parecía a medio pagar. La barra dice CUÁNTO, el texto de dónde viene.
 //
-// Grises a propósito (§3): la jerarquía la da el TONO, no el color.
+// Gris a propósito (§3): la jerarquía la da el TONO, no el color.
 function BarraAvance({
   pctPrev,
   pctTotal,
@@ -779,28 +780,12 @@ function BarraAvance({
   ]
     .filter(Boolean)
     .join("  ·  ");
-  // Partida ya completa: un SOLO bloque del tono oscuro. Partida en dos tramos, el
-  // claro queda casi igual al riel vacío y una barra LLENA se lee como si faltara
-  // pagar la mitad. Se redondea igual que el porcentaje que se muestra (toFixed(0)),
-  // para que una partida en 99,6% —que dice "100%"— no salga partida.
-  const completa = Math.round(total) >= 100;
   return (
     <div
       className="mt-1 flex h-1.5 w-full overflow-hidden rounded-full bg-gray-100"
       title={detalle}
     >
-      {completa ? (
-        <div className="w-full bg-gray-500" />
-      ) : (
-        <>
-          {prev > 0 && (
-            <div className="bg-gray-500" style={{ width: `${prev}%` }} />
-          )}
-          {nuevo > 0 && (
-            <div className="bg-gray-300" style={{ width: `${nuevo}%` }} />
-          )}
-        </>
-      )}
+      <div className="bg-gray-500" style={{ width: `${total}%` }} />
     </div>
   );
 }

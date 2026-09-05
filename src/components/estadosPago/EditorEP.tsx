@@ -779,16 +779,27 @@ function BarraAvance({
   ]
     .filter(Boolean)
     .join("  ·  ");
+  // Partida ya completa: un SOLO bloque del tono oscuro. Partida en dos tramos, el
+  // claro queda casi igual al riel vacío y una barra LLENA se lee como si faltara
+  // pagar la mitad. Se redondea igual que el porcentaje que se muestra (toFixed(0)),
+  // para que una partida en 99,6% —que dice "100%"— no salga partida.
+  const completa = Math.round(total) >= 100;
   return (
     <div
       className="mt-1 flex h-1.5 w-full overflow-hidden rounded-full bg-gray-100"
       title={detalle}
     >
-      {prev > 0 && (
-        <div className="bg-gray-500" style={{ width: `${prev}%` }} />
-      )}
-      {nuevo > 0 && (
-        <div className="bg-gray-300" style={{ width: `${nuevo}%` }} />
+      {completa ? (
+        <div className="w-full bg-gray-500" />
+      ) : (
+        <>
+          {prev > 0 && (
+            <div className="bg-gray-500" style={{ width: `${prev}%` }} />
+          )}
+          {nuevo > 0 && (
+            <div className="bg-gray-300" style={{ width: `${nuevo}%` }} />
+          )}
+        </>
       )}
     </div>
   );

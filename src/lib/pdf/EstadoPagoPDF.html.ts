@@ -84,7 +84,8 @@ function clampPct(n: number): number {
 }
 
 /**
- * Celda de avance de una partida: barra en DOS TRAMOS + leyenda de cada parte.
+ * Celda de avance de una partida: barra en DOS TRAMOS (uno solo si ya llegó al
+ * 100%) + leyenda de cada parte.
  *
  * El tramo oscuro es lo que el maestro YA cobró en EPs cerrados anteriores; el
  * claro es lo que agrega este EP. Hasta acá la barra pintaba un solo tramo con
@@ -99,19 +100,35 @@ function avanceCelda(item: EPItemInput): string {
   const prev = clampPct(item.pctPrev);
   const total = clampPct(item.pctAccumulated);
   const nuevo = Math.max(0, total - prev);
+  // Partida ya completa: la barra va en UN SOLO BLOQUE, del tono de "ya pagado".
+  // Partida en dos tramos, el claro (#CFCBC5) es casi el mismo gris que el riel
+  // vacío (#EEEDEC), así que una barra LLENA se leía como si faltara la mitad por
+  // pagar — lo dijo JT mirando un EP.
+  //
+  // El redondeo tiene que ser el MISMO que el del número que se imprime al lado
+  // (total.toFixed(0)): una partida en 99,6% muestra "100%", y con `total >= 100`
+  // esa fila diría 100% con la barra partida, o sea el problema de vuelta igual.
+  const completa = Math.round(total) >= 100;
+  // Con un solo bloque los cuadraditos de la leyenda ya no apuntan a nada (serían
+  // dos colores para una barra de uno solo): queda el texto, sin marca.
+  const marca = (color: string) =>
+    completa ? "" : `<span class="marca" style="background:${color}"></span>`;
   const leyenda = [
     prev > 0
-      ? `<div><span class="marca" style="background:#8A7F6F"></span>ya pagado ${prev.toFixed(0)}% · ${fmtCLP(item.prevAmountPaid)}</div>`
+      ? `<div>${marca("#8A7F6F")}ya pagado ${prev.toFixed(0)}% · ${fmtCLP(item.prevAmountPaid)}</div>`
       : "",
     nuevo > 0
-      ? `<div><span class="marca" style="background:#CFCBC5"></span>este EP ${nuevo.toFixed(0)}% · ${fmtCLP(item.amountThisEp)}</div>`
+      ? `<div>${marca("#CFCBC5")}este EP ${nuevo.toFixed(0)}% · ${fmtCLP(item.amountThisEp)}</div>`
       : "",
   ].join("");
+  const tramos = completa
+    ? `<div class="avance-fill avance-fill-prev" style="width: 100%"></div>`
+    : `<div class="avance-fill avance-fill-prev" style="width: ${prev.toFixed(1)}%"></div>
+                  <div class="avance-fill avance-fill-nuevo" style="width: ${nuevo.toFixed(1)}%"></div>`;
   return `
               <div class="avance-cell">
                 <div class="avance-bar">
-                  <div class="avance-fill avance-fill-prev" style="width: ${prev.toFixed(1)}%"></div>
-                  <div class="avance-fill avance-fill-nuevo" style="width: ${nuevo.toFixed(1)}%"></div>
+                  ${tramos}
                 </div>
                 <span class="avance-pct">${total.toFixed(0)}%</span>
               </div>

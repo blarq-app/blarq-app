@@ -24,6 +24,10 @@ import { CSS } from "@dnd-kit/utilities";
 import MaterialAutocomplete from "./MaterialAutocomplete";
 import RichTextEditor from "@/components/presupuesto/RichTextEditor";
 import { sanitizeRichTextHtml, isRichTextEmpty } from "@/lib/richText";
+import {
+  materialesSinCobrar,
+  avisoSinCobrar,
+} from "@/lib/presupuesto/materialSinCobrar";
 
 // Unidades disponibles para una partida (las mismas que usa el editor inline).
 const PARTIDA_UNITS = ["M2", "ML", "UN", "GL", "M3", "KG", "DIA", "HR"];
@@ -38,6 +42,10 @@ interface Component {
   totalCost: number;
   referenceLink: string | null;
   materialId?: string | null;
+  // Tilde "es provisión" del material del catálogo — lo trae la API con
+  // `include: { material: true }`. Lo lee la marca ámbar de material sin
+  // cobrar para no marcar lo que está en cero a propósito.
+  material?: { isProvision: boolean } | null;
   sortOrder?: number;
   // Para componentes con unit="%":
   //   - perdida + appliedToComponentId → % de un material concreto.
@@ -1111,13 +1119,31 @@ function PartidaRow({
           </button>
           {num}
         </div>
-        <button
-          onClick={onToggleExpand}
-          className="text-left text-xs text-gray-900 uppercase font-medium truncate"
-          title={partida.name}
-        >
-          {partida.name}
-        </button>
+        {/* Nombre + la marca ámbar de "lleva un material que no se cobra".
+            Acá es donde nace el problema: la partida del catálogo se copia a
+            cada obra que la use, así que un material en cero se arrastra solo.
+            Mismo gesto que en el editor de obra: clic → abre el desglose. */}
+        <div className="flex items-center gap-1.5 min-w-0">
+          <button
+            onClick={onToggleExpand}
+            className="text-left text-xs text-gray-900 uppercase font-medium truncate"
+            title={partida.name}
+          >
+            {partida.name}
+          </button>
+          {materialesSinCobrar(partida.components).length > 0 && (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              title={avisoSinCobrar(
+                materialesSinCobrar(partida.components),
+                partida.unit
+              )}
+              aria-label="Lleva un material que no se está cobrando"
+              className="h-2 w-2 shrink-0 rounded-full bg-amber-500 hover:ring-2 hover:ring-amber-200"
+            />
+          )}
+        </div>
         {/* DESCRIPCIÓN PARA CLIENTE (la que va al PDF). Se edita INLINE acá
             mismo, igual que en las cotizaciones: un clic monta el editor de
             texto con formato (barra flotante) y al salir guarda y vuelve a la

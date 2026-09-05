@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { formatCLP } from "@/lib/utils";
 import { annotateZones } from "@/lib/presupuesto/zones";
 import {
+  materialesSinCobrar,
+  avisoSinCobrar,
+} from "@/lib/presupuesto/materialSinCobrar";
+import {
   groupByChapter,
   CAPITULOS_SUGERIDOS,
   SIN_CAPITULO_ID,
@@ -203,6 +207,10 @@ interface ObraItemComponent {
   unitCost: number;
   totalCost: number;
   materialId: string | null;
+  // Tilde "es provisión" del material del catálogo. Lo lee el aviso de
+  // material sin cobrar para no marcar las líneas que están en cero a
+  // propósito (ver materialSinCobrar.ts).
+  material?: { isProvision: boolean } | null;
   // Para reconstruir el total real del desglose (pérdida % sobre un material,
   // leyes % sobre la mano de obra, etc.) — espejo de recalcObraItem.ts.
   appliedToComponentId?: string | null;
@@ -1631,6 +1639,11 @@ export default function ObraEditor({
                     // cantidad y prenda alarmas falsas.
                     const realPorUnidad = porUnidadDesglose(item);
                     const descuadrada = estaDescuadrada(item, realPorUnidad);
+                    // Material escrito, con precio, pero en cantidad 0: se
+                    // compra y no se cobra. Marca ÁMBAR (atención, no error):
+                    // puede estar bien puesto, pero MJ tiene que decidirlo
+                    // ella. El criterio vive en materialSinCobrar.ts.
+                    const sinCobrar = materialesSinCobrar(item.components);
                     return (
                     <Fragment key={item.id}>
                     {showSubHeader && (
@@ -2052,6 +2065,28 @@ export default function ObraEditor({
                               title={`Este total (${formatCLP(item.total)}) quedó como una "foto" vieja: el precio unitario guardado (${formatCLP(item.unitPrice)}) no coincide con la suma de su desglose (${formatCLP(realPorUnidad ?? 0)} por ${item.unit}). Hacé clic para abrir el desglose y editá/confirmá una línea: así se recalcula y vuelve a coincidir.`}
                               aria-label="Total descuadrado respecto al desglose"
                               className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 hover:ring-2 hover:ring-red-200"
+                            />
+                          )}
+                          {/* Material escrito pero en cantidad 0 — se compra y
+                              no se cobra. Mismo gesto que el punto rojo (clic
+                              → abre el desglose), en ámbar porque es atención,
+                              no error: la línea puede estar así a propósito. */}
+                          {sinCobrar.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedItems((prev) => ({
+                                  ...prev,
+                                  [item.id]: true,
+                                }))
+                              }
+                              title={avisoSinCobrar(
+                                sinCobrar,
+                                item.unit,
+                                item.quantity
+                              )}
+                              aria-label="Lleva un material que no se está cobrando"
+                              className="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500 hover:ring-2 hover:ring-amber-200"
                             />
                           )}
                           {formatCLP(item.total)}

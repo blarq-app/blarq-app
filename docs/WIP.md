@@ -4,7 +4,7 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **La barra del avance va de un solo tono (2026-09-05, PR #423, pendiente 175)**: se lo dijo **JT** a MJ mirando un estado de pago — una partida ya pagada al 100% se veía **partida en dos tonos** y *"a primera vista pareciera que no se ha pagado todo"*. **Commiteado, PR abierto.**
+- **La barra del avance va de un solo tono (2026-09-05, PR #423, pendiente 175)**: se lo dijo **JT** a MJ mirando un estado de pago — una partida ya pagada al 100% se veía **partida en dos tonos** y *"a primera vista pareciera que no se ha pagado todo"*. **EN PROD** (mergeado el 2026-09-05).
   - **La causa está medida**: el tramo de "este EP" era `#CFCBC5` y el riel vacío `#EEEDEC`. Son casi el mismo gris, así que la mitad clara de una barra COMPLETA se leía como hueco.
   - **Terminó en un solo tono para TODAS las barras, en dos pasadas.** Primero se hizo lo pedido —un solo bloque solo cuando la partida llega al 100%—, y viéndolo MJ pidió el paso siguiente: *"dejaría la barra en 1 solo tono de gris, no con 2, confunde. y mantener el texto donde dice cuánto se está pagando en este EP"*. Tenía razón: con dos tramos, una partida en **90%** (80 previo + 10 nuevo) también mostraba un pedacito claro confundible con el riel. Un tono lo arregla en todos los casos, no solo en el 100%.
   - **La barra dice CUÁNTO, el texto dice de dónde viene**: el desglose se mantiene íntegro en el PDF (leyenda de dos líneas, con porcentaje y monto de cada parte) y en pantalla (el "+$X este EP" de la columna acumulada, más el título al pasar por encima). La barra ya no duplica ese dato.

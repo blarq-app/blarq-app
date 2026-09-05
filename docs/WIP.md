@@ -1,8 +1,17 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-09-04.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-09-05.
 
 ---
+
+- **La partida al 100% se dibuja de un solo bloque (2026-09-05, rama `fix/barra-avance-100-un-bloque`, pendiente 175)**: se lo dijo **JT** a MJ mirando un estado de pago — una partida ya pagada al 100% se veía **partida en dos tonos** y *"a primera vista pareciera que no se ha pagado todo"*. **Commiteado, PR abierto.**
+  - **La causa está medida**: el tramo de "este EP" es `#CFCBC5` y el riel vacío `#EEEDEC`. Son casi el mismo gris, así que la mitad clara de una barra COMPLETA se lee como hueco. MJ eligió la opción A de tres: **si llegó al 100%, un solo bloque del tono oscuro**; por debajo del 100%, los dos tramos de siempre.
+  - **Cambian los DOS lugares a la vez, a propósito**: el PDF que recibe el maestro (`EstadoPagoPDF.html.ts`, `avanceCelda`) y la pantalla del editor (`EditorEP.tsx`, `BarraAvance`). Están escritos para leerse igual; tocar uno solo rompe eso.
+  - **GOTCHA — el redondeo tiene que ser el MISMO que el del número que se imprime**: el porcentaje sale con `toFixed(0)`, así que una partida en 99,6% **muestra "100%"**. Con `total >= 100` esa fila habría quedado diciendo 100% con la barra partida — el problema idéntico, en las filas más difíciles de notar. Va `Math.round(total) >= 100`. (Mismo bug que ya mordió en el Cuadro Resumen con `hayQuePedir`.)
+  - **La leyenda pierde los cuadraditos cuando la barra es un bloque** (solo en el PDF; en pantalla la leyenda es el tooltip de texto y no tenía cuadraditos). Dos cuadraditos de colores distintos para una barra de un solo color apuntan a nada.
+  - **Cambia también la partida al 100% SIN previo** (el caso "EP 1"): antes salía de un solo tramo pero del tono CLARO, casi igual al riel vacío, así que se leía como VACÍA — el mismo problema al revés. Ahora va oscura como el resto. Se ve en las filas 3.3 y 3.4 del EP 4 de Sena.
+  - **No toca plata** (`src/lib/ep/calculations.ts` sin cambios) ni los tonos de marca: es solo cuántos tramos se dibujan.
+  - **Verificado con datos reales de la viva**: PDF de los **EP 3 y EP 4 de Paseo del Sena** (Jefrey Gómez) antes/después — el EP 4 tenía 47 partidas al 100%, 23 de ellas dibujadas en dos tramos. En pantalla, `scripts/verify-175-barra-100.ts` arma el escenario en la base **dev** por los endpoints reales (EP 1 cerrado al 60% + EP 2 que sube 3 partidas al 100%, deja una al 85% y una nueva al 100%) y cuenta las barras: 4 de un bloque, 3 tramos oscuros parciales, 1 claro.
 
 - **La V3 de Sena vuelve a lo que la clienta tiene en el correo (2026-09-03, PR #421, pendiente 174)**: reparación de **DATOS en la viva**, sin una línea de código de la app. El 3-sep el botón *"Volver a lo enviado"* dejó la V3 de obra de Paseo del Sena peor de lo que estaba. **APLICADO en la viva**, verificado contra el PDF.
   - **La causa: la foto y el PDF son de días distintos.** La versión se marcó "Enviada" el **7-ago 17:37** y ahí la app sacó la foto (`sentSnapshot`). El PDF que MJ le mandó a la clienta se generó el **10-ago 11:16**, tres días después, con ajustes que la foto nunca vio. Restaurar deshizo esos ajustes. **La foto es de cuando se apretó el botón, no de cuando se mandó el correo** — es la trampa de fondo.

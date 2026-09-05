@@ -1,8 +1,18 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-09-04.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-09-05.
 
 ---
+
+- **La barra del avance va de un solo tono (2026-09-05, PR #423, pendiente 175)**: se lo dijo **JT** a MJ mirando un estado de pago — una partida ya pagada al 100% se veía **partida en dos tonos** y *"a primera vista pareciera que no se ha pagado todo"*. **Commiteado, PR abierto.**
+  - **La causa está medida**: el tramo de "este EP" era `#CFCBC5` y el riel vacío `#EEEDEC`. Son casi el mismo gris, así que la mitad clara de una barra COMPLETA se leía como hueco.
+  - **Terminó en un solo tono para TODAS las barras, en dos pasadas.** Primero se hizo lo pedido —un solo bloque solo cuando la partida llega al 100%—, y viéndolo MJ pidió el paso siguiente: *"dejaría la barra en 1 solo tono de gris, no con 2, confunde. y mantener el texto donde dice cuánto se está pagando en este EP"*. Tenía razón: con dos tramos, una partida en **90%** (80 previo + 10 nuevo) también mostraba un pedacito claro confundible con el riel. Un tono lo arregla en todos los casos, no solo en el 100%.
+  - **La barra dice CUÁNTO, el texto dice de dónde viene**: el desglose se mantiene íntegro en el PDF (leyenda de dos líneas, con porcentaje y monto de cada parte) y en pantalla (el "+$X este EP" de la columna acumulada, más el título al pasar por encima). La barra ya no duplica ese dato.
+  - **Cambian los DOS lugares a la vez, a propósito**: `EstadoPagoPDF.html.ts` (`avanceCelda`) y `EditorEP.tsx` (`BarraAvance`). Están escritos para leerse igual; tocar uno solo rompe eso.
+  - **Quedaron sin uso y se sacaron** los cuadraditos de color de la leyenda del PDF (`.marca`) y el tono claro `.avance-fill-nuevo`. Los tonos de marca no cambian: la barra usa el mismo `#8A7F6F` de siempre.
+  - **Se cayó el caso borde del redondeo** que sí importaba en la primera pasada: el porcentaje se imprime con `toFixed(0)`, así que una partida en 99,6% muestra "100%" — con dos tramos había que decidir el corte con `Math.round`, y sin dos tramos la pregunta desaparece.
+  - **No toca plata** (`src/lib/ep/calculations.ts` sin cambios) ni las partidas sin avance (riel vacío y nada más, §3).
+  - **Verificado con datos reales de la viva**: PDF de los **EP 3 y EP 4 de Paseo del Sena** (Jefrey Gómez) antes/después — el EP 3 es el que mejor se mira, mezcla partidas al 100% con otras en 80/90/66% en la misma hoja. En pantalla, `scripts/verify-175-barra-100.ts` arma el escenario en la base **dev** por los endpoints reales y cuenta: 7 barras del mismo tono, **0 tramos claros**.
 
 - **La V3 de Sena vuelve a lo que la clienta tiene en el correo (2026-09-03, PR #421, pendiente 174)**: reparación de **DATOS en la viva**, sin una línea de código de la app. El 3-sep el botón *"Volver a lo enviado"* dejó la V3 de obra de Paseo del Sena peor de lo que estaba. **APLICADO en la viva**, verificado contra el PDF.
   - **La causa: la foto y el PDF son de días distintos.** La versión se marcó "Enviada" el **7-ago 17:37** y ahí la app sacó la foto (`sentSnapshot`). El PDF que MJ le mandó a la clienta se generó el **10-ago 11:16**, tres días después, con ajustes que la foto nunca vio. Restaurar deshizo esos ajustes. **La foto es de cuando se apretó el botón, no de cuando se mandó el correo** — es la trampa de fondo.

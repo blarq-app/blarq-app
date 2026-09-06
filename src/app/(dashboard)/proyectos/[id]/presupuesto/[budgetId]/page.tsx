@@ -40,7 +40,15 @@ export default async function PresupuestoDetailPage({
       obraChapters: { orderBy: { sortOrder: "asc" } },
       obraItems: {
         orderBy: { sortOrder: "asc" },
-        include: { components: { orderBy: { sortOrder: "asc" } } },
+        include: {
+          components: {
+            orderBy: { sortOrder: "asc" },
+            // `isProvision` del material: lo necesita el aviso de "material
+            // escrito pero no cobrado" para NO marcar las provisiones, que
+            // están en cantidad 0 a propósito (ver materialSinCobrar.ts).
+            include: { material: { select: { isProvision: true } } },
+          },
+        },
       },
       muebleChapters: {
         orderBy: { sortOrder: "asc" },

@@ -30,7 +30,15 @@ export async function GET(
         // Devolvemos también el desglose para que el editor recalcule la marca
         // de "descuadrado" tras editar (compara el total guardado contra la suma
         // del desglose). Sin esto, compararía contra un desglose viejo.
-        components: { orderBy: { sortOrder: "asc" } },
+        //
+        // Con `material.isProvision` porque el mismo desglose alimenta la marca
+        // ámbar de "material sin cobrar": si no viniera, al editar una partida
+        // el tilde de provisión se perdería y las provisiones empezarían a
+        // marcarse solas (ver materialSinCobrar.ts).
+        components: {
+          orderBy: { sortOrder: "asc" },
+          include: { material: { select: { isProvision: true } } },
+        },
       },
     });
     if (!item) {

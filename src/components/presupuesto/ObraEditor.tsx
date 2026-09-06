@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { formatCLP } from "@/lib/utils";
 import { annotateZones } from "@/lib/presupuesto/zones";
 import {
+  materialesSinCobrar,
+  avisoSinCobrar,
+} from "@/lib/presupuesto/materialSinCobrar";
+import {
   groupByChapter,
   CAPITULOS_SUGERIDOS,
   SIN_CAPITULO_ID,
@@ -203,6 +207,10 @@ interface ObraItemComponent {
   unitCost: number;
   totalCost: number;
   materialId: string | null;
+  // Tilde "es provisión" del material del catálogo. Lo lee el aviso de
+  // material sin cobrar para no marcar las líneas que están en cero a
+  // propósito (ver materialSinCobrar.ts).
+  material?: { isProvision: boolean } | null;
   // Para reconstruir el total real del desglose (pérdida % sobre un material,
   // leyes % sobre la mano de obra, etc.) — espejo de recalcObraItem.ts.
   appliedToComponentId?: string | null;
@@ -454,6 +462,18 @@ export default function ObraEditor({
   const [zoneDraft, setZoneDraft] = useState("");
   // Selección múltiple para asignar zona en bulk. MJ habilita checkbox por
   // fila, selecciona varias y aplica una zona desde la barra flotante.
+  // Globito del aviso de material sin cobrar. Va en estado y se dibuja al
+  // FINAL del componente, fuera de la tabla, porque las filas llevan `opacity`
+  // inline (dnd-kit, y el 0.6 de "revisada"): cualquier hijo de la fila hereda
+  // esa transparencia y además queda atrapado en su contexto de apilamiento,
+  // así que un globito dentro de la fila se veía translúcido y por debajo de
+  // las filas de más abajo.
+  const [avisoSinCobrarHover, setAvisoSinCobrarHover] = useState<{
+    texto: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [bulkZoneDraft, setBulkZoneDraft] = useState("");
   // Arrastre de partidas (orden manual). activeDragId = id de la fila que se
@@ -1631,6 +1651,11 @@ export default function ObraEditor({
                     // cantidad y prenda alarmas falsas.
                     const realPorUnidad = porUnidadDesglose(item);
                     const descuadrada = estaDescuadrada(item, realPorUnidad);
+                    // Material escrito, con precio, pero en cantidad 0: se
+                    // compra y no se cobra. Marca ÁMBAR (atención, no error):
+                    // puede estar bien puesto, pero MJ tiene que decidirlo
+                    // ella. El criterio vive en materialSinCobrar.ts.
+                    const sinCobrar = materialesSinCobrar(item.components);
                     return (
                     <Fragment key={item.id}>
                     {showSubHeader && (
@@ -2052,6 +2077,33 @@ export default function ObraEditor({
                               title={`Este total (${formatCLP(item.total)}) quedó como una "foto" vieja: el precio unitario guardado (${formatCLP(item.unitPrice)}) no coincide con la suma de su desglose (${formatCLP(realPorUnidad ?? 0)} por ${item.unit}). Hacé clic para abrir el desglose y editá/confirmá una línea: así se recalcula y vuelve a coincidir.`}
                               aria-label="Total descuadrado respecto al desglose"
                               className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 hover:ring-2 hover:ring-red-200"
+                            />
+                          )}
+                          {/* Material escrito pero en cantidad 0 — se compra y
+                              no se cobra. Mismo gesto que el punto rojo (clic
+                              → abre el desglose), en ámbar porque es atención,
+                              no error: la línea puede estar así a propósito. */}
+                          {sinCobrar.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedItems((prev) => ({
+                                  ...prev,
+                                  [item.id]: true,
+                                }))
+                              }
+                              onMouseEnter={(e) => {
+                                const r =
+                                  e.currentTarget.getBoundingClientRect();
+                                setAvisoSinCobrarHover({
+                                  texto: avisoSinCobrar(sinCobrar),
+                                  x: r.right,
+                                  y: r.bottom + 6,
+                                });
+                              }}
+                              onMouseLeave={() => setAvisoSinCobrarHover(null)}
+                              aria-label="Lleva un material que no se está cobrando"
+                              className="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500 hover:ring-2 hover:ring-amber-200"
                             />
                           )}
                           {formatCLP(item.total)}
@@ -2976,6 +3028,31 @@ export default function ObraEditor({
           >
             Limpiar
           </button>
+        </div>
+      )}
+
+      {/* Globito del aviso de material sin cobrar. `fixed` y fuera de la tabla
+          (ver el comentario del estado): así no hereda la transparencia de la
+          fila ni queda tapado por las filas de abajo. */}
+      {avisoSinCobrarHover && (
+        <div
+          role="tooltip"
+          style={{
+            left: avisoSinCobrarHover.x,
+            top: avisoSinCobrarHover.y,
+            transform: "translateX(-100%)",
+          }}
+          className="pointer-events-none fixed z-50 w-max max-w-sm rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] leading-snug text-amber-900 shadow-sm"
+        >
+          {avisoSinCobrarHover.texto.split("\n").map((linea, i) =>
+            linea === "" ? (
+              <span key={i} className="block h-1.5" />
+            ) : (
+              <span key={i} className="block">
+                {linea}
+              </span>
+            )
+          )}
         </div>
       )}
     </div>

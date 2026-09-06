@@ -62,6 +62,11 @@ export default function MaterialSearch({
     unit: "UN",
     netPrice: 0,
     referenceLink: "",
+    // Provisión: BLARQ lo instala pero NO lo provee (el artefacto va en la
+    // cotización de artefactos, aparte). Se edita acá porque es la salida
+    // para apagar el aviso ámbar de "material sin cobrar" cuando la línea
+    // está en cantidad 0 a propósito — ver materialSinCobrar.ts.
+    isProvision: false,
   });
 
   // New category state
@@ -468,6 +473,7 @@ export default function MaterialSearch({
       unit: mat.unit,
       netPrice: mat.netPrice,
       referenceLink: mat.referenceLink || "",
+      isProvision: mat.isProvision,
     });
   }
 
@@ -794,6 +800,24 @@ export default function MaterialSearch({
                           }
                           className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
                         />
+                        {/* Tildarlo apaga el aviso de "material sin cobrar" en
+                            TODAS las partidas que usen este material: es la
+                            forma de decirle a la app "este cero es a propósito"
+                            una sola vez, en vez de una por obra. */}
+                        <label className="mt-1.5 flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editMat.isProvision}
+                            onChange={(e) =>
+                              setEditMat({
+                                ...editMat,
+                                isProvision: e.target.checked,
+                              })
+                            }
+                            className="rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                          />
+                          Es provisión — BLARQ lo instala, no lo provee
+                        </label>
                       </td>
                       <td className="px-4 py-2">
                         <select

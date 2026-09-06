@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { formatCLP } from "@/lib/utils";
 import MoneyInput from "@/components/ui/MoneyInput";
 import MaterialAutocomplete from "@/components/catalogo/MaterialAutocomplete";
+import { materialesSinCobrar } from "@/lib/presupuesto/materialSinCobrar";
 
 interface Material {
   id: string;
@@ -411,6 +412,10 @@ export default function ObraItemComponentsEditor({
         </thead>
         <tbody>
           {orderForDisplay(comps).map((c) => {
+            // ¿Esta línea es un material escrito, con precio, pero en cantidad
+            // 0? O sea: se compra y no se cobra. Se marca en ámbar acá adentro
+            // para que la línea culpable se vea de una, no solo la partida.
+            const noSeCobra = materialesSinCobrar([c]).length > 0;
             const meta = typeMeta(c.type);
             const isPct = c.unit === "%";
             // Provisión al cliente: material marcado isProvision en el catálogo.
@@ -431,7 +436,7 @@ export default function ObraItemComponentsEditor({
                 key={c.id}
                 className={`border-b last:border-0 ${
                   dense ? "border-gray-100" : "border-gray-50"
-                }`}
+                } ${noSeCobra ? "bg-amber-50/70" : ""}`}
               >
                 <td className={`py-1 px-2 ${isNestedPerdida ? "pl-6" : ""}`}>
                   {isNestedPerdida && (
@@ -496,6 +501,19 @@ export default function ObraItemComponentsEditor({
                   ) : (
                     <span className="flex-1 min-w-0 text-gray-900">{c.description}</span>
                   )}
+                  {/* ANTES de la flecha ↗: si va después, la empuja hacia la
+                      izquierda y la flecha deja de estar alineada con las de
+                      las otras filas. Va pegada al NOMBRE y no al Tipo porque
+                      esa columna es angosta (w-28) y partía la etiqueta en
+                      dos renglones. */}
+                  {noSeCobra && (
+                    <span
+                      className="shrink-0 whitespace-nowrap rounded bg-amber-100 px-1 py-0.5 text-[9px] uppercase text-amber-800"
+                      title="En cantidad 0: no se le cobra al cliente."
+                    >
+                      no se cobra
+                    </span>
+                  )}
                   {c.referenceLink && (
                     <a
                       href={c.referenceLink}
@@ -538,12 +556,18 @@ export default function ObraItemComponentsEditor({
                           const v = parseFloat(e.target.value) || 0;
                           if (v !== c.quantity) patchComp(c.id, "quantity", v);
                         }}
-                        className="w-full bg-transparent text-right text-gray-900 tabular-nums"
+                        className={`w-full bg-transparent text-right tabular-nums ${
+                          noSeCobra ? "text-amber-700 font-medium" : "text-gray-900"
+                        }`}
                       />
                       {isPct && <span className="text-gray-400 text-[10px]">%</span>}
                     </div>
                   ) : (
-                    <span className="text-gray-700 tabular-nums">
+                    <span
+                      className={`tabular-nums ${
+                        noSeCobra ? "text-amber-700 font-medium" : "text-gray-700"
+                      }`}
+                    >
                       {c.quantity}
                       {isPct ? "%" : ""}
                     </span>

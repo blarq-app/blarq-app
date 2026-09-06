@@ -501,6 +501,19 @@ export default function ObraItemComponentsEditor({
                   ) : (
                     <span className="flex-1 min-w-0 text-gray-900">{c.description}</span>
                   )}
+                  {/* ANTES de la flecha ↗: si va después, la empuja hacia la
+                      izquierda y la flecha deja de estar alineada con las de
+                      las otras filas. Va pegada al NOMBRE y no al Tipo porque
+                      esa columna es angosta (w-28) y partía la etiqueta en
+                      dos renglones. */}
+                  {noSeCobra && (
+                    <span
+                      className="shrink-0 whitespace-nowrap rounded bg-amber-100 px-1 py-0.5 text-[9px] uppercase text-amber-800"
+                      title="En cantidad 0: no se le cobra al cliente."
+                    >
+                      no se cobra
+                    </span>
+                  )}
                   {c.referenceLink && (
                     <a
                       href={c.referenceLink}
@@ -511,16 +524,6 @@ export default function ObraItemComponentsEditor({
                     >
                       ↗
                     </a>
-                  )}
-                  {/* Va pegada al NOMBRE y no al Tipo: la columna Tipo es
-                      angosta (w-28) y la etiqueta se partía en dos renglones. */}
-                  {noSeCobra && (
-                    <span
-                      className="shrink-0 whitespace-nowrap rounded bg-amber-100 px-1 py-0.5 text-[9px] uppercase text-amber-800"
-                      title="En cantidad 0: no se le cobra al cliente."
-                    >
-                      no se cobra
-                    </span>
                   )}
                   </div>
                 </td>

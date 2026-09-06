@@ -14,8 +14,6 @@
 //
 // NO calcula plata ni toca metrics.ts: solo mira y avisa.
 
-import { formatCLP } from "@/lib/utils";
-
 export interface ComponenteParaAviso {
   type: string;
   description: string;
@@ -82,38 +80,20 @@ export function materialesSinCobrar<T extends ComponenteParaAviso>(
   );
 }
 
-// El texto que MJ lee al pasar el mouse por la marca ámbar. Vive acá y no en
-// cada pantalla para que el editor de obra y el catálogo digan LO MISMO — y
-// para que la salida (tildar el material como provisión) se explique siempre,
-// que es lo que hace que el aviso se pueda apagar en vez de que MJ aprenda a
-// ignorarlo.
+// El texto que MJ lee al pasar el mouse por la marca ámbar: SOLO qué material
+// está en cero. Nada más.
 //
-// `cantidad` es la de la partida en la obra: con ella se puede decir cuánta
-// plata es en concreto. En el catálogo no existe (la partida es por unidad),
-// así que ahí se omite esa frase en lugar de inventar un número.
-export function avisoSinCobrar(
-  sinCobrar: readonly ComponenteParaAviso[],
-  unidad: string,
-  cantidad?: number
-): string {
+// La primera versión explicaba también cuánta plata era y qué hacer para
+// apagar el aviso. MJ lo cortó (2026-09-05): "no es necesaria tanta
+// explicación, solamente decir que X está en cero". El precio ya está en el
+// desglose, que se abre con un clic en la misma marca.
+//
+// Vive acá y no en cada pantalla para que el editor de obra y el catálogo
+// digan lo mismo.
+export function avisoSinCobrar(sinCobrar: readonly ComponenteParaAviso[]): string {
   if (sinCobrar.length === 0) return "";
-
-  const cabeza =
-    sinCobrar.length === 1
-      ? `"${sinCobrar[0].description}" está en el desglose a ${formatCLP(
-          sinCobrar[0].unitCost
-        )} pero con cantidad 0: no se le está cobrando al cliente.`
-      : `${sinCobrar.length} materiales están en el desglose con cantidad 0, así que no se le cobran al cliente:\n${sinCobrar
-          .map((c) => `· ${c.description} — ${formatCLP(c.unitCost)}`)
-          .join("\n")}`;
-
-  const suma = sinCobrar.reduce((s, c) => s + (c.unitCost || 0), 0);
-  const plata =
-    cantidad && cantidad > 0
-      ? `\n\nSi llevara 1 por ${unidad}, serían ${formatCLP(
-          suma * cantidad
-        )} en esta partida.`
-      : "";
-
-  return `${cabeza}${plata}\n\nHacé clic para abrir el desglose. Si está así a propósito (BLARQ solo instala y el artefacto va aparte), tildá el material como provisión en el catálogo de materiales y deja de avisar.`;
+  if (sinCobrar.length === 1) return `${sinCobrar[0].description} está en cero.`;
+  return `${sinCobrar.length} materiales están en cero:\n${sinCobrar
+    .map((c) => `· ${c.description}`)
+    .join("\n")}`;
 }

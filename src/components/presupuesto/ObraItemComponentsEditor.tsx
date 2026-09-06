@@ -517,7 +517,7 @@ export default function ObraItemComponentsEditor({
                   {noSeCobra && (
                     <span
                       className="shrink-0 whitespace-nowrap rounded bg-amber-100 px-1 py-0.5 text-[9px] uppercase text-amber-800"
-                      title="Está escrito con su precio pero en cantidad 0: se compra y no se le cobra al cliente. Poné la cantidad, borrá la línea, o tildá el material como provisión en el catálogo si el cero es a propósito."
+                      title="En cantidad 0: no se le cobra al cliente."
                     >
                       no se cobra
                     </span>

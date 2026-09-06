@@ -2096,11 +2096,7 @@ export default function ObraEditor({
                                 const r =
                                   e.currentTarget.getBoundingClientRect();
                                 setAvisoSinCobrarHover({
-                                  texto: avisoSinCobrar(
-                                    sinCobrar,
-                                    item.unit,
-                                    item.quantity
-                                  ),
+                                  texto: avisoSinCobrar(sinCobrar),
                                   x: r.right,
                                   y: r.bottom + 6,
                                 });
@@ -3046,7 +3042,7 @@ export default function ObraEditor({
             top: avisoSinCobrarHover.y,
             transform: "translateX(-100%)",
           }}
-          className="pointer-events-none fixed z-50 w-80 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-900 shadow-sm"
+          className="pointer-events-none fixed z-50 w-max max-w-sm rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] leading-snug text-amber-900 shadow-sm"
         >
           {avisoSinCobrarHover.texto.split("\n").map((linea, i) =>
             linea === "" ? (

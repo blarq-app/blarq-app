@@ -1143,12 +1143,9 @@ function PartidaRow({
               />
               <span
                 role="tooltip"
-                className="pointer-events-none invisible group-hover/aviso:visible absolute left-0 top-4 z-50 w-80 whitespace-normal rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-[11px] font-normal normal-case leading-snug text-amber-900 shadow-sm"
+                className="pointer-events-none invisible group-hover/aviso:visible absolute left-0 top-4 z-50 w-max max-w-sm whitespace-normal rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-left text-[11px] font-normal normal-case leading-snug text-amber-900 shadow-sm"
               >
-                {avisoSinCobrar(
-                  materialesSinCobrar(partida.components),
-                  partida.unit
-                )
+                {avisoSinCobrar(materialesSinCobrar(partida.components))
                   .split("\n")
                   .map((linea, i) =>
                     linea === "" ? (

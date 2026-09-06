@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-09-05 — La app avisa cuando una partida lleva un material que no se está cobrando
+
+- **El agujero**: en una partida de la V4 de Paseo del Sena había un material escrito con su precio pero en **cantidad 0**. Suma $0, así que se compra igual y nadie lo cobra, y no había nada en pantalla que lo dijera. **No es un descuido de esa obra: nace en el CATÁLOGO y se arrastra** — 14 de 242 partidas del catálogo tienen un componente `material` en `quantity = 0`, y cada obra que usa esa partida hereda el cero (41 líneas en las versiones vigentes).
+- **Marca ámbar** en el editor de obra y en el catálogo de partidas, con el mismo gesto que el punto rojo de descuadre: clic → abre el desglose, y al pasar el mouse dice qué material está en cero. Adentro del desglose la línea culpable va marcada (fondo ámbar, etiqueta "no se cobra", la cantidad 0 en ámbar). No toca datos, ni `metrics.ts`, ni ningún PDF: solo dibuja.
+- **El criterio necesita DOS señales y vive en un solo archivo** (`src/lib/presupuesto/materialSinCobrar.ts`, fuente única para las dos pantallas, como `selectVersion.ts`): la descripción que empieza con `PROVISION`, y el tilde `isProvision` del material. Con la primera sola el aviso se equivocaba en **12 de 23** partidas — el foco proforma, el WC, la encimera y los accesorios de baño de Aguirre son provisiones escritas sin la palabra. Medir solo en el catálogo (donde la palabra acierta 100%) habría entregado ruido.
+- **`isProvision` ya existía en `MaterialCatalog` pero no era editable en ninguna pantalla**: se le agregó el tilde al catálogo de materiales. Es la salida para apagar el aviso de una vez para todas las obras, en vez de que MJ aprenda a ignorarlo.
+- **Aplicado a la viva**: `FOCO VALOR PROFORMA $25.000 IVA INCL` quedó tildado como provisión (`scripts/tildar-176-foco-proforma.ts`, dry-run + guarda por nombre). Marcas en las versiones vigentes 23 → 20. Ningún total se movió. **Queda pendiente para MJ** qué hacer con las 11 líneas reales: las placas de OSB de tabique (6 obras, $668.744 netos) y la cinta de enmascarar de limpieza (5 obras).
+
 ## 2026-08-18 — Dos rastros que faltaban: de qué es la devolución, y el aviso que mentía
 
 - **La pastilla "Devolución" no decía de qué era.** Un movimiento en neto cero mostraba la palabra y nada más: desde la devolución no se podía llegar al pago que cancela, ni desde el pago a su devolución. El dato estaba guardado —los dos comparten `netZeroGroupId`— pero ese campo **ni siquiera salía de la base**: no estaba en el `select` de la pantalla de movimientos.

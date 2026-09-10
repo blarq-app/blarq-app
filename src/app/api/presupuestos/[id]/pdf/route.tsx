@@ -22,6 +22,44 @@ import {
   parseCondiciones,
 } from "@/lib/presupuesto/condiciones";
 import { getPlantillaCondiciones } from "@/lib/presupuesto/condicionesPlantilla";
+import {
+  agruparConAlternativas,
+  soloPrincipales,
+} from "@/lib/presupuesto/muebleItems";
+
+// Lo que el PDF de muebles necesita de una partida (base o alternativa): sin
+// costos internos ni proveedor.
+function muebleItemParaPDF(i: {
+  itemNumber: string;
+  name: string;
+  descriptionGeneral: string | null;
+  quantity: number;
+  clientPriceIva: number;
+  details: { name: string; material: string }[];
+  herrajes: {
+    sector: string;
+    name: string;
+    measure: string | null;
+    finish: string | null;
+    quantity: number;
+  }[];
+}) {
+  return {
+    itemNumber: i.itemNumber,
+    name: i.name,
+    descriptionGeneral: i.descriptionGeneral,
+    quantity: i.quantity,
+    clientPriceIva: i.clientPriceIva,
+    details: i.details.map((d) => ({ name: d.name, material: d.material })),
+    herrajes: i.herrajes.map((h) => ({
+      sector: h.sector,
+      name: h.name,
+      measure: h.measure,
+      finish: h.finish,
+      quantity: h.quantity,
+    })),
+  };
+}
 
 // Forzar Node runtime (no edge) — Puppeteer/Chromium necesita Node.
 export const runtime = "nodejs";
@@ -134,7 +172,9 @@ export async function GET(
         budget: { version: budget.version, date: budget.date },
         chapters: budget.muebleChapters.map((ch) => ({
           name: ch.name,
-          herrajes: ch.items.flatMap((i) =>
+          // Solo las partidas base: los herrajes de una alternativa para el
+          // cliente todavía no son un pedido para el mueblista.
+          herrajes: soloPrincipales(ch.items).flatMap((i) =>
             i.herrajes.map((h) => ({
               sector: h.sector,
               name: h.name,
@@ -158,26 +198,15 @@ export async function GET(
           coverSubtitle: budget.coverSubtitle,
           coverNote: budget.coverNote,
         },
+        // Las partidas base van numeradas y suman; las alternativas para el
+        // cliente (pendiente 177) viajan colgadas de su base en `alternativas`
+        // y el PDF las dibuja debajo con la diferencia, fuera de los totales.
         chapters: budget.muebleChapters.map((ch) => ({
           chapterNumber: ch.chapterNumber,
           name: ch.name,
-          items: ch.items.map((i) => ({
-            itemNumber: i.itemNumber,
-            name: i.name,
-            descriptionGeneral: i.descriptionGeneral,
-            quantity: i.quantity,
-            clientPriceIva: i.clientPriceIva,
-            details: i.details.map((d) => ({
-              name: d.name,
-              material: d.material,
-            })),
-            herrajes: i.herrajes.map((h) => ({
-              sector: h.sector,
-              name: h.name,
-              measure: h.measure,
-              finish: h.finish,
-              quantity: h.quantity,
-            })),
+          items: agruparConAlternativas(ch.items).map(({ base, alternativas }) => ({
+            ...muebleItemParaPDF(base),
+            alternativas: alternativas.map(muebleItemParaPDF),
           })),
         })),
         paymentTerms: budget.paymentTerms.map((t) => ({

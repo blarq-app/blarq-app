@@ -6,6 +6,7 @@
 import type { Prisma } from "@prisma/client";
 import { formatCLP } from "@/lib/utils";
 import { selectVigente, selectVigentes } from "@/lib/projects/selectVersion";
+import { soloPrincipales } from "@/lib/presupuesto/muebleItems";
 
 // Forma del proyecto que necesitamos: con sus relaciones financieras.
 // Definida como tipo Prisma para que cualquier llamador haga el include
@@ -183,8 +184,11 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   // Muebles: subtotal (suma items) − descuento global del BudgetVersion.
   // El descuento se guarda como decimal (0.02 = 2%) en BudgetVersion y
   // aplica sobre subtotal c/IVA y subtotal neto por igual.
+  // Solo las partidas BASE: las alternativas para el cliente (pendiente 177)
+  // no suman ni acá ni en el costo por sub-concepto de más abajo, que reusa
+  // esta misma lista.
   const mueblesItems = muebles
-    ? muebles.muebleChapters.flatMap((c) => c.items)
+    ? soloPrincipales(muebles.muebleChapters.flatMap((c) => c.items))
     : [];
   const mueblesDiscount = (muebles?.discountPercentage ?? 0);
   const mueblesSubtotalIva = mueblesItems.reduce(

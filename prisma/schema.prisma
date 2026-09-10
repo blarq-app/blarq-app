@@ -469,6 +469,18 @@ model MuebleItem {
   // DERIVADO = Σ(costNet × cantidad) de sus líneas, y el header de costo queda
   // de solo lectura (lo maneja la lista de herrajes). Fase 2 herrajes 2026-06-22.
   kind               String  @default("mueble") // mueble | herrajes
+  // Alternativa PARA EL CLIENTE (pendiente 177, 2026-09-10). Si apunta a otra
+  // partida, ESTA es una alternativa de aquella: el mismo mueble en otro
+  // material o con otras características, con su propio precio, que el cliente
+  // ve al lado de la base con la diferencia de precio. Una alternativa es una
+  // partida completa (sub-líneas, costo, utilidad, cotizaciones de proveedor),
+  // pero NO suma en ningún total: los totales se calculan solo con las
+  // partidas base (alternativeOfId IS NULL), ver lib/presupuesto/muebleItems.ts.
+  // Un solo nivel: una alternativa no puede tener alternativas (lo valida la
+  // API). Borrar la base borra sus alternativas (cascade).
+  // No confundir con MuebleQuote: eso son cotizaciones de PROVEEDOR para el
+  // mismo mueble (costo interno, el cliente nunca las ve).
+  alternativeOfId    String?
   // Cálculo interno
   supplier           String?
   costDistributor    Float   @default(0) // Lo que paga BLARQ al proveedor
@@ -482,9 +494,12 @@ model MuebleItem {
   details            MuebleDetail[]
   quotes             MuebleQuote[]
   herrajes           MuebleHerraje[]
+  alternativeOf      MuebleItem?   @relation("MuebleAlternativas", fields: [alternativeOfId], references: [id], onDelete: Cascade)
+  alternativas       MuebleItem[]  @relation("MuebleAlternativas")
 
   @@index([budgetVersionId])
   @@index([chapterId])
+  @@index([alternativeOfId])
 }
 
 // Cotizaciones alternativas para un MuebleItem. Una está marcada como

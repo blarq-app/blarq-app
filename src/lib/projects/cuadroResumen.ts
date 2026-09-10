@@ -19,17 +19,21 @@
 
 import { conceptoDeFactura, desgloseDeCobro } from "@/lib/invoices/conceptoCobro";
 import { selectAnterior, selectVigentes } from "@/lib/projects/selectVersion";
+import { soloPrincipales } from "@/lib/presupuesto/muebleItems";
 
 // ── Tipos de entrada (estructuralmente compatibles con el include del resumen) ──
 // `noCobrado` es opcional en el tipo porque los callers arman el input con un
 // include amplio (`obraItems: true`) y no todos los tests lo pasan; ausente se
 // lee como false, que es el caso normal.
 type ObraItemLite = { total: number; noCobrado?: boolean };
+// `alternativeOfId` opcional por el mismo motivo: ausente se lee como partida
+// base (que suma). Las alternativas para el cliente no suman (pendiente 177).
 type MuebleItemLite = {
   quantity: number;
   costDistributor: number;
   clientPriceNet: number;
   clientPriceIva: number;
+  alternativeOfId?: string | null;
 };
 type ArtefactoItemLite = {
   subcategory: string;
@@ -195,7 +199,9 @@ function acordadoDeVersiones(
     0
   );
 
-  const mueblesItems = muebles.flatMap((b) => (b.muebleChapters ?? []).flatMap((c) => c.items));
+  const mueblesItems = soloPrincipales(
+    muebles.flatMap((b) => (b.muebleChapters ?? []).flatMap((c) => c.items)),
+  );
   const mueblesAcordado = mueblesItems.reduce((s, it) => s + it.clientPriceIva * it.quantity, 0);
   const mueblesUtilidad100 = mueblesItems.reduce(
     (s, it) => s + (it.clientPriceNet - it.costDistributor) * it.quantity,

@@ -16,6 +16,7 @@
 import type { Prisma } from "@prisma/client";
 import { conceptoDeFactura, desgloseDeCobro } from "@/lib/invoices/conceptoCobro";
 import { selectVigente, selectVigentes } from "@/lib/projects/selectVersion";
+import { soloPrincipales } from "@/lib/presupuesto/muebleItems";
 
 const projectFondoInclude = {
   invoices: {
@@ -44,7 +45,7 @@ const projectFondoInclude = {
   budgetVersions: {
     include: {
       obraItems: { select: { total: true, noCobrado: true, costMaterial: true, costLabor: true, costTools: true, costSubcontract: true, costLoss: true, quantity: true } },
-      muebleChapters: { include: { items: { select: { quantity: true, costDistributor: true, clientPriceNet: true, clientPriceIva: true } } } },
+      muebleChapters: { include: { items: { select: { quantity: true, costDistributor: true, clientPriceNet: true, clientPriceIva: true, alternativeOfId: true } } } },
       artefactoItems: { select: { clientPrice: true } },
     },
   },
@@ -104,7 +105,11 @@ export function computeFondoSueldos(p: ProjectWithFondo): FondoSueldosCalculo {
   }
 
   // ── Muebles ─────────────────────────────────────────────────────────
-  const muebleItems = muebles ? muebles.muebleChapters.flatMap((c) => c.items) : [];
+  // Solo partidas base: las alternativas para el cliente (pendiente 177) no
+  // generan utilidad ni acordado hasta que se hacen principales.
+  const muebleItems = muebles
+    ? soloPrincipales(muebles.muebleChapters.flatMap((c) => c.items))
+    : [];
   const utilMueblesTotal = muebleItems.reduce(
     (s, i) => s + (i.clientPriceNet - i.costDistributor) * i.quantity,
     0

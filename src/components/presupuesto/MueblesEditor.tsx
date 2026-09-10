@@ -24,6 +24,11 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import CondicionesEditor from "@/components/presupuesto/CondicionesEditor";
 import type { Condicion } from "@/lib/presupuesto/condiciones";
+import {
+  agruparConAlternativas,
+  soloPrincipales,
+  formatDiferencia,
+} from "@/lib/presupuesto/muebleItems";
 
 // Manija de arrastre ⋮⋮ — mismo glifo gris que el catálogo de herrajes. Solo el
 // handle lleva los listeners de useSortable (no la fila entera), para no romper
@@ -214,9 +219,21 @@ type MuebleItem = {
   sortOrder: number;
   // "mueble" (default) | "herrajes". Decide qué bloque se renderiza.
   kind: string;
+  // Si apunta a otra partida, ESTA es una alternativa PARA EL CLIENTE de
+  // aquella (pendiente 177): se dibuja anidada bajo su base con la diferencia
+  // de precio y no suma en ningún total. Distinto de `quotes` (cotizaciones de
+  // proveedor = costo interno, el cliente no las ve).
+  alternativeOfId: string | null;
   details: MuebleDetail[];
   quotes: MuebleQuote[];
   herrajes: MuebleHerraje[];
+};
+
+// Lo que un bloque de partida necesita saber cuando dibuja una ALTERNATIVA:
+// el total de su base (para la diferencia) y qué hacer si el cliente la elige.
+type AlternativaCtx = {
+  baseTotal: number;
+  onHacerPrincipal: () => void;
 };
 
 type MuebleChapter = {
@@ -265,7 +282,9 @@ export default function MueblesEditor({
   const [saving, setSaving] = useState(false);
 
   // ── Totales ──
-  const allItems = chapters.flatMap((c) => c.items);
+  // Solo las partidas base: las alternativas para el cliente no suman (mismo
+  // criterio que metrics.ts, el PDF y el resto — lib/presupuesto/muebleItems).
+  const allItems = soloPrincipales(chapters.flatMap((c) => c.items));
   const totalCostBlarq = allItems.reduce(
     (s, i) => s + i.costDistributor * i.quantity,
     0
@@ -821,15 +840,103 @@ export default function MueblesEditor({
   }
 
   async function deleteItem(chapterId: string, itemId: string) {
-    if (!confirm("¿Eliminar este item?")) return;
+    const item = chapters
+      .find((c) => c.id === chapterId)
+      ?.items.find((i) => i.id === itemId);
+    const alternativas =
+      chapters
+        .find((c) => c.id === chapterId)
+        ?.items.filter((i) => i.alternativeOfId === itemId).length ?? 0;
+    // Borrar la base borra sus alternativas (cascade en la base de datos):
+    // la confirmación lo dice para que no sea sorpresa.
+    const pregunta = item?.alternativeOfId
+      ? "¿Eliminar esta alternativa?"
+      : alternativas > 0
+        ? `¿Eliminar este item y ${alternativas === 1 ? "su alternativa" : `sus ${alternativas} alternativas`} para el cliente?`
+        : "¿Eliminar este item?";
+    if (!confirm(pregunta)) return;
     await fetch(`/api/presupuestos/${budgetId}/muebles/items/${itemId}`, {
       method: "DELETE",
     });
     setChapters((prev) =>
       prev.map((c) =>
-        c.id === chapterId ? { ...c, items: c.items.filter((i) => i.id !== itemId) } : c
+        c.id === chapterId
+          ? {
+              ...c,
+              items: c.items.filter(
+                (i) => i.id !== itemId && i.alternativeOfId !== itemId
+              ),
+            }
+          : c
       )
     );
+  }
+
+  // ── Alternativas para el cliente (pendiente 177) ──
+  // Nace como copia de la base (nombre, sub-líneas, costo…) para que MJ solo
+  // cambie lo que difiere. El POST devuelve la partida con sus relaciones.
+  async function addAlternativa(chapterId: string, baseId: string) {
+    const res = await fetch(`/api/presupuestos/${budgetId}/muebles/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ alternativeOfId: baseId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return alert(err.error ?? "Error al crear la alternativa");
+    }
+    const created: MuebleItem = await res.json();
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id === chapterId
+          ? {
+              ...c,
+              items: [
+                ...c.items,
+                {
+                  ...created,
+                  details: created.details ?? [],
+                  quotes: created.quotes ?? [],
+                  herrajes: created.herrajes ?? [],
+                },
+              ],
+            }
+          : c
+      )
+    );
+  }
+
+  // El cliente eligió la alternativa: se intercambian los papeles con la
+  // base (la base vieja queda como alternativa, no se borra). El back
+  // devuelve las partidas del capítulo completas y se reemplaza el estado.
+  async function hacerPrincipal(chapterId: string, itemId: string) {
+    const res = await fetch(
+      `/api/presupuestos/${budgetId}/muebles/items/${itemId}/hacer-principal`,
+      { method: "POST" }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return alert(err.error ?? "Error al hacer principal la alternativa");
+    }
+    const data: { items: MuebleItem[] } = await res.json();
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id === chapterId
+          ? {
+              ...c,
+              items: data.items.map((i) => ({
+                ...i,
+                details: i.details ?? [],
+                quotes: i.quotes ?? [],
+                herrajes: i.herrajes ?? [],
+              })),
+            }
+          : c
+      )
+    );
+    // Los totales del proyecto (acordado, fondo) cambian de verdad acá: se
+    // refresca lo que viene del server.
+    router.refresh();
   }
 
   // ── Detalles ──
@@ -1141,6 +1248,8 @@ export default function MueblesEditor({
           onAddHerrajePartida={() => addHerrajePartida(ch.id)}
           onUpdateItem={(itemId, patch) => updateItem(ch.id, itemId, patch)}
           onDeleteItem={(itemId) => deleteItem(ch.id, itemId)}
+          onAddAlternativa={(baseId) => addAlternativa(ch.id, baseId)}
+          onHacerPrincipal={(itemId) => hacerPrincipal(ch.id, itemId)}
           onUpdateHerrajePartida={(itemId, patch) =>
             updateHerrajePartida(ch.id, itemId, patch)
           }
@@ -1311,6 +1420,8 @@ function ChapterBlock({
   onAddHerrajePartida,
   onUpdateItem,
   onDeleteItem,
+  onAddAlternativa,
+  onHacerPrincipal,
   onAddDetail,
   onReorderDetails,
   onUpdateDetail,
@@ -1338,6 +1449,8 @@ function ChapterBlock({
   onAddHerrajePartida: () => void;
   onUpdateItem: (itemId: string, patch: Partial<MuebleItem>) => void;
   onDeleteItem: (itemId: string) => void;
+  onAddAlternativa: (baseId: string) => void;
+  onHacerPrincipal: (itemId: string) => void;
   onAddDetail: (itemId: string) => void;
   onReorderDetails: (itemId: string, orderedIds: string[]) => void;
   onUpdateDetail: (
@@ -1377,10 +1490,66 @@ function ChapterBlock({
   onDeleteHerraje: (itemId: string, herrajeId: string) => void;
   onReorderHerrajes: (itemId: string, orderedIds: string[]) => void;
 }) {
-  const subtotal = chapter.items.reduce(
-    (s, i) => s + i.clientPriceIva * i.quantity,
+  // Partidas base con sus alternativas colgadas. La lista numerada, el
+  // arrastre y el subtotal son de las base; las alternativas se dibujan bajo
+  // la suya y viajan con ella al arrastrar.
+  const grupos = agruparConAlternativas(chapter.items);
+  const subtotal = grupos.reduce(
+    (s, g) => s + g.base.clientPriceIva * g.base.quantity,
     0
   );
+
+  // Un bloque de partida (mueble o herrajes) con todos sus callbacks. Se usa
+  // para la base y para cada alternativa: la única diferencia es `alternativa`.
+  function renderBloque(
+    item: MuebleItem,
+    handle: React.ReactNode,
+    displayNumber: string,
+    alternativa?: AlternativaCtx
+  ) {
+    return item.kind === "herrajes" ? (
+      <HerrajePartidaBlock
+        item={item}
+        displayNumber={displayNumber}
+        budgetId={budgetId}
+        dragHandle={handle}
+        sensors={sensors}
+        alternativa={alternativa}
+        onUpdate={(patch) => onUpdateHerrajePartida(item.id, patch)}
+        onDelete={() => onDeleteItem(item.id)}
+        onHerrajeAdded={(line, updated) =>
+          onHerrajeAdded(item.id, line, updated)
+        }
+        onUpdateHerraje={(herrajeId, patch) =>
+          onUpdateHerraje(item.id, herrajeId, patch)
+        }
+        onDeleteHerraje={(herrajeId) => onDeleteHerraje(item.id, herrajeId)}
+        onReorderHerrajes={(orderedIds) =>
+          onReorderHerrajes(item.id, orderedIds)
+        }
+      />
+    ) : (
+      <ItemBlock
+        item={item}
+        displayNumber={displayNumber}
+        dragHandle={handle}
+        sensors={sensors}
+        alternativa={alternativa}
+        onUpdate={(patch) => onUpdateItem(item.id, patch)}
+        onDelete={() => onDeleteItem(item.id)}
+        onAddDetail={() => onAddDetail(item.id)}
+        onReorderDetails={(orderedIds) => onReorderDetails(item.id, orderedIds)}
+        onUpdateDetail={(detailId, patch) =>
+          onUpdateDetail(item.id, detailId, patch)
+        }
+        onDeleteDetail={(detailId) => onDeleteDetail(item.id, detailId)}
+        onAddQuote={() => onAddQuote(item.id)}
+        onUpdateQuote={(quoteId, patch) => onUpdateQuote(item.id, quoteId, patch)}
+        onDeleteQuote={(quoteId) => onDeleteQuote(item.id, quoteId)}
+        onActivateQuote={(quoteId) => onActivateQuote(item.id, quoteId)}
+      />
+    );
+  }
 
   // Sortable a nivel capítulo: la fila gris del encabezado es el nodo
   // arrastrable. El handle ⋮⋮ va al lado del número; solo el handle lleva los
@@ -1442,73 +1611,57 @@ function ChapterBlock({
         onDragEnd={(e: DragEndEvent) => {
           const { active, over } = e;
           if (!over || active.id === over.id) return;
-          const oldIdx = chapter.items.findIndex((i) => i.id === active.id);
-          const newIdx = chapter.items.findIndex((i) => i.id === over.id);
+          const bases = grupos.map((g) => g.base);
+          const oldIdx = bases.findIndex((i) => i.id === active.id);
+          const newIdx = bases.findIndex((i) => i.id === over.id);
           if (oldIdx < 0 || newIdx < 0) return;
-          const reordered = arrayMove(chapter.items, oldIdx, newIdx);
+          const reordered = arrayMove(bases, oldIdx, newIdx);
           onReorderItems(reordered.map((i) => i.id));
         }}
       >
         <SortableContext
-          items={chapter.items.map((i) => i.id)}
+          items={grupos.map((g) => g.base.id)}
           strategy={verticalListSortingStrategy}
         >
-          {chapter.items.map((item, itemIdx) => (
-            <SortableItemWrapper key={item.id} id={item.id}>
-              {(handle) =>
-                item.kind === "herrajes" ? (
-                  <HerrajePartidaBlock
-                    item={item}
-                    displayNumber={`${displayChapterNumber}.${itemIdx + 1}`}
-                    budgetId={budgetId}
-                    dragHandle={handle}
-                    sensors={sensors}
-                    onUpdate={(patch) => onUpdateHerrajePartida(item.id, patch)}
-                    onDelete={() => onDeleteItem(item.id)}
-                    onHerrajeAdded={(line, updated) =>
-                      onHerrajeAdded(item.id, line, updated)
-                    }
-                    onUpdateHerraje={(herrajeId, patch) =>
-                      onUpdateHerraje(item.id, herrajeId, patch)
-                    }
-                    onDeleteHerraje={(herrajeId) =>
-                      onDeleteHerraje(item.id, herrajeId)
-                    }
-                    onReorderHerrajes={(orderedIds) =>
-                      onReorderHerrajes(item.id, orderedIds)
-                    }
-                  />
-                ) : (
-                  <ItemBlock
-                    item={item}
-                    displayNumber={`${displayChapterNumber}.${itemIdx + 1}`}
-                    dragHandle={handle}
-                    sensors={sensors}
-                    onUpdate={(patch) => onUpdateItem(item.id, patch)}
-                    onDelete={() => onDeleteItem(item.id)}
-                    onAddDetail={() => onAddDetail(item.id)}
-                    onReorderDetails={(orderedIds) =>
-                      onReorderDetails(item.id, orderedIds)
-                    }
-                    onUpdateDetail={(detailId, patch) =>
-                      onUpdateDetail(item.id, detailId, patch)
-                    }
-                    onDeleteDetail={(detailId) =>
-                      onDeleteDetail(item.id, detailId)
-                    }
-                    onAddQuote={() => onAddQuote(item.id)}
-                    onUpdateQuote={(quoteId, patch) =>
-                      onUpdateQuote(item.id, quoteId, patch)
-                    }
-                    onDeleteQuote={(quoteId) => onDeleteQuote(item.id, quoteId)}
-                    onActivateQuote={(quoteId) =>
-                      onActivateQuote(item.id, quoteId)
-                    }
-                  />
-                )
-              }
-            </SortableItemWrapper>
-          ))}
+          {grupos.map(({ base, alternativas }, itemIdx) => {
+            const displayNumber = `${displayChapterNumber}.${itemIdx + 1}`;
+            const baseTotal = base.clientPriceIva * base.quantity;
+            return (
+              <SortableItemWrapper key={base.id} id={base.id}>
+                {(handle) => (
+                  <>
+                    {renderBloque(base, handle, displayNumber)}
+                    {/* Alternativas PARA EL CLIENTE, anidadas bajo su base.
+                        Sin manija: viajan con la base al arrastrar. */}
+                    {alternativas.map((alt) => (
+                      <div key={alt.id} className="bg-[#F7F6F4]">
+                        {renderBloque(alt, null, displayNumber, {
+                          baseTotal,
+                          onHacerPrincipal: () => onHacerPrincipal(alt.id),
+                        })}
+                      </div>
+                    ))}
+                    {/* Distinto del "+ Agregar cotización de otro proveedor"
+                        (costo interno, dentro de la banda roja): esto es lo
+                        que el cliente VE, con su diferencia de precio. */}
+                    <div className="grid grid-cols-[3rem_minmax(0,1fr)_5rem_8rem_2rem] gap-3 px-4 py-1 border-b border-gray-100">
+                      <div></div>
+                      <button
+                        onClick={() => onAddAlternativa(base.id)}
+                        className="text-[10px] text-gray-400 hover:text-gray-900 text-left"
+                        title="Otra opción del mismo mueble (otro material, otras características) que el cliente ve al lado con la diferencia de precio. No suma al total."
+                      >
+                        + Agregar alternativa para el cliente
+                      </button>
+                      <div></div>
+                      <div></div>
+                      <div></div>
+                    </div>
+                  </>
+                )}
+              </SortableItemWrapper>
+            );
+          })}
         </SortableContext>
       </DndContext>
 
@@ -1632,6 +1785,7 @@ function ItemBlock({
   onUpdateQuote,
   onDeleteQuote,
   onActivateQuote,
+  alternativa,
 }: {
   item: MuebleItem;
   // Número de partida DERIVADO por posición ("1.1", "1.2"…) al renderizar. No es
@@ -1640,6 +1794,9 @@ function ItemBlock({
   displayNumber: string;
   dragHandle: React.ReactNode;
   sensors: ReturnType<typeof useSensors>;
+  // Presente cuando este bloque dibuja una ALTERNATIVA para el cliente: sin
+  // número ni manija, rotulada, con la diferencia contra su base.
+  alternativa?: AlternativaCtx;
   onUpdate: (patch: Partial<MuebleItem>) => void;
   onDelete: () => void;
   onAddDetail: () => void;
@@ -1662,20 +1819,28 @@ function ItemBlock({
   const ROW_GRID = "grid grid-cols-[3rem_minmax(0,1fr)_5rem_8rem_2rem] items-baseline gap-3";
   return (
     <>
-      {/* Fila principal del item: manija + número, nombre, cantidad, total */}
+      {/* Fila principal del item: manija + número, nombre, cantidad, total.
+          Si es una ALTERNATIVA: sangría con "↳" en vez de número, rótulo,
+          botón "Hacer principal", y bajo el total la diferencia contra la base
+          (mismo gris sea + o −: es una elección, no bueno/malo). */}
       <div className={`${ROW_GRID} px-4 pt-2 pb-1 border-b border-gray-100`}>
-        <span className="flex items-center gap-1">
-          {dragHandle}
-          <span className="text-sm tabular-nums text-gray-700">
-            {displayNumber}
-          </span>
-        </span>
-        <input
-          type="text"
-          value={item.name}
-          onChange={(e) => onUpdate({ name: e.target.value.toUpperCase() })}
-          className="bg-transparent border-0 p-0 text-sm font-bold uppercase text-gray-900 outline-none"
+        <PrimeraCelda
+          dragHandle={dragHandle}
+          displayNumber={displayNumber}
+          alternativa={!!alternativa}
         />
+        <div className="flex items-center gap-2 min-w-0">
+          {alternativa && <RotuloAlternativa />}
+          <input
+            type="text"
+            value={item.name}
+            onChange={(e) => onUpdate({ name: e.target.value.toUpperCase() })}
+            className={`flex-1 min-w-0 bg-transparent border-0 p-0 text-sm font-bold uppercase outline-none ${alternativa ? "text-gray-700" : "text-gray-900"}`}
+          />
+          {alternativa && (
+            <BotonHacerPrincipal onClick={alternativa.onHacerPrincipal} />
+          )}
+        </div>
         <input
           type="number"
           step="0.01"
@@ -1685,13 +1850,14 @@ function ItemBlock({
           }
           className="bg-transparent border-0 p-0 text-center text-sm tabular-nums text-gray-700 outline-none"
         />
-        <span className="text-right text-sm font-bold tabular-nums text-gray-900">
-          {formatCLP(item.clientPriceIva * item.quantity)}
-        </span>
+        <TotalCelda
+          total={item.clientPriceIva * item.quantity}
+          baseTotal={alternativa?.baseTotal}
+        />
         <button
           onClick={onDelete}
           className="text-gray-400 hover:text-red-600 text-sm leading-none"
-          title="Eliminar item"
+          title={alternativa ? "Eliminar alternativa" : "Eliminar item"}
         >
           ✕
         </button>
@@ -2086,6 +2252,78 @@ function ItemBlock({
   );
 }
 
+// ─── Piezas compartidas por los dos bloques de partida ───────────────────────
+// Primera celda de la fila: manija + número para una partida base; para una
+// alternativa, la flecha "↳" que dice "cuelga de la de arriba".
+function PrimeraCelda({
+  dragHandle,
+  displayNumber,
+  alternativa,
+}: {
+  dragHandle: React.ReactNode;
+  displayNumber: string;
+  alternativa: boolean;
+}) {
+  if (alternativa) {
+    return (
+      <span className="flex items-center justify-end pr-1 text-gray-400 text-sm leading-none select-none">
+        ↳
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1">
+      {dragHandle}
+      <span className="text-sm tabular-nums text-gray-700">{displayNumber}</span>
+    </span>
+  );
+}
+
+function RotuloAlternativa() {
+  return (
+    <span className="shrink-0 text-[9px] uppercase tracking-wider text-gray-500 border border-gray-300 rounded-full px-1.5 py-px leading-tight">
+      Alternativa
+    </span>
+  );
+}
+
+function BotonHacerPrincipal({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="shrink-0 text-[10px] font-medium text-gray-600 border border-gray-300 rounded px-2 py-0.5 hover:bg-gray-100 hover:text-gray-900 whitespace-nowrap"
+      title="El cliente eligió esta opción: pasa a ser la partida principal (suma al total) y la actual queda como alternativa"
+    >
+      Hacer principal
+    </button>
+  );
+}
+
+// Total de la fila. En una alternativa, debajo va la diferencia contra la
+// base; si es cero no ocupa espacio.
+function TotalCelda({ total, baseTotal }: { total: number; baseTotal?: number }) {
+  if (baseTotal === undefined) {
+    return (
+      <span className="text-right text-sm font-bold tabular-nums text-gray-900">
+        {formatCLP(total)}
+      </span>
+    );
+  }
+  const diff = formatDiferencia(total - baseTotal, formatCLP);
+  return (
+    <span className="flex flex-col items-end leading-tight">
+      <span className="text-sm font-medium tabular-nums text-gray-700">
+        {formatCLP(total)}
+      </span>
+      {diff && (
+        <span className="text-[11px] tabular-nums text-gray-500" title="Diferencia contra la partida principal">
+          {diff}
+        </span>
+      )}
+    </span>
+  );
+}
+
 // ─── Partida de herrajes (kind="herrajes") ──────────────────────────────────
 // Bloque distinto al ItemBlock normal: no tiene componentes ni cotizaciones de
 // proveedor. Lista herrajes del catálogo AGRUPADOS por sector, con su cantidad
@@ -2096,6 +2334,7 @@ function HerrajePartidaBlock({
   budgetId,
   dragHandle,
   sensors,
+  alternativa,
   onUpdate,
   onDelete,
   onHerrajeAdded,
@@ -2109,6 +2348,7 @@ function HerrajePartidaBlock({
   budgetId: string;
   dragHandle: React.ReactNode;
   sensors: ReturnType<typeof useSensors>;
+  alternativa?: AlternativaCtx;
   onUpdate: (patch: {
     itemNumber?: string;
     name?: string;
@@ -2179,24 +2419,32 @@ function HerrajePartidaBlock({
 
   return (
     <>
-      {/* Fila de la partida: manija + número (editable), nombre, total. */}
+      {/* Fila de la partida: manija + número (editable), nombre, total. Como
+          alternativa para el cliente: "↳", rótulo, "Hacer principal" y la
+          diferencia bajo el total (ver ItemBlock). */}
       <div className={`${ROW_GRID} px-4 pt-2 pb-1 border-b border-gray-100`}>
-        <span className="flex items-center gap-1">
-          {dragHandle}
-          <span className="text-sm tabular-nums text-gray-700">
-            {displayNumber}
-          </span>
-        </span>
-        <input
-          type="text"
-          value={item.name}
-          onChange={(e) => onUpdate({ name: e.target.value.toUpperCase() })}
-          className="bg-transparent border-0 p-0 text-sm font-bold uppercase text-gray-900 outline-none"
+        <PrimeraCelda
+          dragHandle={dragHandle}
+          displayNumber={displayNumber}
+          alternativa={!!alternativa}
         />
+        <div className="flex items-center gap-2 min-w-0">
+          {alternativa && <RotuloAlternativa />}
+          <input
+            type="text"
+            value={item.name}
+            onChange={(e) => onUpdate({ name: e.target.value.toUpperCase() })}
+            className={`flex-1 min-w-0 bg-transparent border-0 p-0 text-sm font-bold uppercase outline-none ${alternativa ? "text-gray-700" : "text-gray-900"}`}
+          />
+          {alternativa && (
+            <BotonHacerPrincipal onClick={alternativa.onHacerPrincipal} />
+          )}
+        </div>
         <div></div>
-        <span className="text-right text-sm font-bold tabular-nums text-gray-900">
-          {formatCLP(item.clientPriceIva)}
-        </span>
+        <TotalCelda
+          total={item.clientPriceIva}
+          baseTotal={alternativa?.baseTotal}
+        />
         <button
           onClick={onDelete}
           className="text-gray-400 hover:text-red-600 text-sm leading-none"

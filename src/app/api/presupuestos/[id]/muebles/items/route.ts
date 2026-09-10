@@ -5,6 +5,12 @@ import { DEFAULT_HERRAJE_UTILITY } from "@/lib/presupuesto/muebleHerrajes";
 
 // Crear item bajo un capítulo de muebles. Auto-genera itemNumber tipo
 // "{chapter}.{n+1}" según items existentes en el capítulo.
+//
+// Con `alternativeOfId` crea una ALTERNATIVA PARA EL CLIENTE de esa partida
+// (pendiente 177): arranca como copia de la base — nombre, descripción,
+// cantidad, tipo, costo, utilidad, sub-líneas de materialidad y líneas de
+// herraje — para que MJ solo cambie lo que difiere (la melamina, la cubierta).
+// El capítulo se toma de la base. Una alternativa no suma en ningún total.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -15,6 +21,11 @@ export async function POST(
   try {
     const { id: budgetVersionId } = await params;
     const data = await request.json();
+
+    if (data.alternativeOfId) {
+      return crearAlternativa(budgetVersionId, String(data.alternativeOfId));
+    }
+
     if (!data.chapterId) {
       return NextResponse.json(
         { error: "chapterId requerido" },
@@ -24,7 +35,14 @@ export async function POST(
 
     const chapter = await prisma.muebleChapter.findUnique({
       where: { id: data.chapterId },
-      include: { items: { orderBy: { sortOrder: "desc" } } },
+      // Solo las partidas base cuentan para la numeración y la posición: las
+      // alternativas cuelgan de su base y no llevan número propio.
+      include: {
+        items: {
+          where: { alternativeOfId: null },
+          orderBy: { sortOrder: "desc" },
+        },
+      },
     });
     if (!chapter) {
       return NextResponse.json(
@@ -92,4 +110,98 @@ export async function POST(
       { status: 500 }
     );
   }
+}
+
+// Alternativa para el cliente: copia completa de la base, colgada de ella.
+// Devuelve la partida CON sus relaciones (details, quotes, herrajes) porque el
+// editor la mete tal cual en su estado.
+async function crearAlternativa(budgetVersionId: string, baseId: string) {
+  const base = await prisma.muebleItem.findUnique({
+    where: { id: baseId },
+    include: {
+      details: { orderBy: { sortOrder: "asc" } },
+      herrajes: { orderBy: { sortOrder: "asc" } },
+      alternativas: { select: { sortOrder: true }, orderBy: { sortOrder: "desc" } },
+    },
+  });
+  if (!base || base.budgetVersionId !== budgetVersionId) {
+    return NextResponse.json(
+      { error: "Partida base no encontrada" },
+      { status: 404 }
+    );
+  }
+  // Un solo nivel: la alternativa de una alternativa no existe. Si se quiere
+  // otra opción más, se cuelga de la MISMA base.
+  if (base.alternativeOfId) {
+    return NextResponse.json(
+      { error: "Una alternativa no puede tener alternativas: agregala sobre la partida principal" },
+      { status: 400 }
+    );
+  }
+
+  const nextSort =
+    base.alternativas.length > 0 ? base.alternativas[0].sortOrder + 1 : 0;
+
+  const alt = await prisma.muebleItem.create({
+    data: {
+      budgetVersionId,
+      chapterId: base.chapterId,
+      alternativeOfId: base.id,
+      // Mismo número que la base: no se muestra (el editor y el PDF la rotulan
+      // ALTERNATIVA), pero así queda claro de quién cuelga si se mira la base.
+      itemNumber: base.itemNumber,
+      name: base.name,
+      descriptionGeneral: base.descriptionGeneral,
+      quantity: base.quantity,
+      kind: base.kind,
+      supplier: base.supplier,
+      costDistributor: base.costDistributor,
+      utilityPercentage: base.utilityPercentage,
+      clientPriceNet: base.clientPriceNet,
+      clientPriceIva: base.clientPriceIva,
+      sortOrder: nextSort,
+      details: {
+        create: base.details.map((d) => ({
+          name: d.name,
+          material: d.material,
+          sortOrder: d.sortOrder,
+        })),
+      },
+      herrajes: {
+        create: base.herrajes.map((h) => ({
+          catalogId: h.catalogId,
+          sector: h.sector,
+          supplier: h.supplier,
+          name: h.name,
+          measure: h.measure,
+          finish: h.finish,
+          sku: h.sku,
+          quantity: h.quantity,
+          costNet: h.costNet,
+          sortOrder: h.sortOrder,
+        })),
+      },
+      // Igual que una partida nueva: arranca con su cotización de proveedor
+      // activa (costo interno propio; las de la base no se heredan).
+      ...(base.kind !== "herrajes" && {
+        quotes: {
+          create: {
+            supplier: base.supplier,
+            costDistributor: base.costDistributor,
+            utilityPercentage: base.utilityPercentage,
+            clientPriceNet: base.clientPriceNet,
+            clientPriceIva: base.clientPriceIva,
+            isSelected: true,
+            sortOrder: 0,
+          },
+        },
+      }),
+    },
+    include: {
+      details: { orderBy: { sortOrder: "asc" } },
+      quotes: { orderBy: { sortOrder: "asc" } },
+      herrajes: { orderBy: { sortOrder: "asc" } },
+    },
+  });
+  return NextResponse.json(alt);
 }

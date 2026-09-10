@@ -287,6 +287,14 @@ export async function POST(request: NextRequest) {
         //   proyecto, es la suma de sus líneas de catálogo).
         // En modo duplicar normal, copia todo tal cual.
         const isTemplate = !!data.resetQuantities;
+        // Alternativas para el cliente (pendiente 177): `alternativeOfId`
+        // apunta a una partida de la versión ORIGEN. Hay que re-enlazarla a la
+        // copia de su base en la versión nueva, y como el orden por sortOrder
+        // no garantiza que la base se copie antes que su alternativa, se
+        // resuelve en una segunda pasada con el mapa viejo→nuevo. Mismo tipo
+        // de omisión que dejó a los herrajes sin líneas al duplicar (#383).
+        const mapaItems = new Map<string, string>();
+        const alternativasPendientes: { nuevoId: string; baseViejaId: string }[] = [];
         const chapters = await prisma.muebleChapter.findMany({
           where: { budgetVersionId: previousVersion.id },
           orderBy: { sortOrder: "asc" },
@@ -364,6 +372,13 @@ export async function POST(request: NextRequest) {
                 sortOrder: item.sortOrder,
               },
             });
+            mapaItems.set(item.id, newItem.id);
+            if (item.alternativeOfId) {
+              alternativasPendientes.push({
+                nuevoId: newItem.id,
+                baseViejaId: item.alternativeOfId,
+              });
+            }
 
             // Líneas de herraje: se copian tal cual (sector, proveedor,
             // nombre, medida, terminación, SKU, cantidad, costo congelado y
@@ -414,6 +429,17 @@ export async function POST(request: NextRequest) {
               }
             }
           }
+        }
+        // Segunda pasada: cada alternativa copiada apunta a la COPIA de su
+        // base. Si la base no se copió (no debería pasar), la alternativa
+        // queda como partida base antes que colgada de un id de otra versión.
+        for (const p of alternativasPendientes) {
+          const nuevaBase = mapaItems.get(p.baseViejaId);
+          if (!nuevaBase) continue;
+          await prisma.muebleItem.update({
+            where: { id: p.nuevoId },
+            data: { alternativeOfId: nuevaBase },
+          });
         }
       }
 

@@ -43,6 +43,18 @@ export interface MuebleHerrajeInput {
   quantity: number;
 }
 
+// Alternativa PARA EL CLIENTE de una partida (pendiente 177): el mismo mueble
+// en otro material o con otras características, con su precio. Sale debajo de
+// la partida base con la diferencia; NO suma en el subtotal ni en el total.
+export interface MuebleAlternativaInput {
+  name: string;
+  descriptionGeneral: string | null;
+  quantity: number;
+  clientPriceIva: number;
+  details: MuebleDetailInput[];
+  herrajes?: MuebleHerrajeInput[];
+}
+
 export interface MuebleItemInput {
   itemNumber: string;
   name: string;
@@ -51,6 +63,18 @@ export interface MuebleItemInput {
   clientPriceIva: number;
   details: MuebleDetailInput[];
   herrajes?: MuebleHerrajeInput[];
+  alternativas?: MuebleAlternativaInput[];
+}
+
+// Cómo se muestran las alternativas. Los defaults son la forma elegida; las
+// otras opciones existen para poder renderizar las variantes y comparar.
+//   ubicacion: "bajo-partida" (al lado de lo que reemplaza) | "hoja-final"
+//              (una hoja "Alternativas" después del detalle).
+//   precio:    "completo" (precio c/IVA + diferencia) | "diferencia" (solo la
+//              diferencia contra la base).
+export interface AlternativasOpciones {
+  ubicacion?: "bajo-partida" | "hoja-final";
+  precio?: "completo" | "diferencia";
 }
 
 export interface MuebleChapterInput {
@@ -84,6 +108,7 @@ export interface MueblesHTMLInput {
   };
   chapters: MuebleChapterInput[];
   paymentTerms: PaymentTermInput[];
+  alternativas?: AlternativasOpciones;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -101,6 +126,15 @@ function fmtQty(n: number): string {
 
 function fmtMoney(n: number): string {
   return "$ " + Math.round(n).toLocaleString("es-CL");
+}
+
+// Diferencia de una alternativa contra su base: signo siempre (el menos
+// tipográfico alinea con el "+"), y el cero no se escribe. Del mismo gris en
+// los dos sentidos: no es "bueno/malo", es una elección del cliente.
+function fmtDiff(n: number): string {
+  const r = Math.round(n);
+  if (r === 0) return "";
+  return (r > 0 ? "+" : "−") + fmtMoney(Math.abs(r));
 }
 
 function fmtDate(d: string | Date): string {
@@ -201,6 +235,37 @@ const CSS = `
   .hmut { color: #AAA194; }
   .hqty { color: #776E60; font-variant-numeric: tabular-nums; letter-spacing: .05em; flex-shrink: 0; padding-left: 14pt; }
 
+  /* Alternativa para el cliente (pendiente 177). Misma grilla que la partida
+     (4.5% | 1fr | 13%) para que su precio caiga en la misma espina vertical
+     que los totales; la sangría y el filete a la izquierda dicen "cuelga de la
+     de arriba". Jerarquía por tipografía: un peldaño más claro que la base,
+     mismo gris para la diferencia sea + o −. */
+  .alt { display: grid; grid-template-columns: 4.5% 1fr 13%; align-items: start; padding: 2.5pt 0 2.5pt; break-inside: avoid; }
+  .alt-body { border-left: 2px solid #C2BCB4; padding-left: 10pt; margin-right: 10pt; }
+  .alt-kick { display: block; font-family: 'Hanken Grotesk', sans-serif; font-size: 4.8pt; letter-spacing: .18em; text-transform: uppercase; color: #8A8175; font-weight: 700; margin-bottom: 1.5pt; }
+  .alt-name { color: #5C5449; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 7pt; }
+  .alt-body .msub { color: #8A8175; }
+  /* Las sub-líneas de la alternativa caen en las MISMAS columnas que las de la
+     base, para que se comparen renglón contra renglón. Medido en el PDF
+     generado (rótulo de la base en 84,5pt, materialidad en 240,4pt): Chromium
+     imprime los pt del CSS a ~0,972, por eso los valores no son redondos. */
+  .alt-body .spec { margin: 1.5pt 0 0 15.1pt; padding: 0; border-left: none; }
+  .alt-body .specrow { grid-template-columns: 160.4pt 1fr; }
+  .alt-body .speclbl { color: #776E60; }
+  .alt-body .specval { color: #776E60; }
+  .alt-price { text-align: right; color: #5C5449; font-variant-numeric: tabular-nums; font-size: 7pt; font-weight: 700; padding-top: 6pt; }
+  .alt-diff { text-align: right; color: #8A8175; font-variant-numeric: tabular-nums; font-size: 6pt; margin-top: 1pt; }
+  .alt-diff.solo { font-size: 7pt; color: #5C5449; font-weight: 700; margin-top: 0; }
+  .alt-note { display: grid; grid-template-columns: 4.5% 1fr; padding: 0 0 3pt; }
+  .alt-note span { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 5.6pt; color: #8A8175; padding-left: 12pt; }
+
+  /* Hoja "Alternativas" al final (variante). La partida base va como
+     referencia en su fila normal y sus alternativas debajo. */
+  .althoja-ref { display: grid; grid-template-columns: 4.5% 1fr 13%; align-items: baseline; padding: 4pt 0 1.5pt; border-top: 1px solid #E1DFDD; margin-top: 4pt; }
+  .althoja-ref .mtt { color: #776E60; font-weight: 400; }
+  .althoja-ref .mpt { color: #5C5449; }
+  .althoja-ref .msub { margin-top: 1pt; }
+
   /* Cierre */
   .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 14mm; margin-top: 4mm; align-items: start; break-inside: avoid; }
   .blk-title { font-family: 'Hanken Grotesk', sans-serif; font-size: 7pt; letter-spacing: .2em; text-transform: uppercase; color: #36322C; font-weight: 400; border-bottom: 0.6px solid #C2BCB4; padding-bottom: 2.5pt; }
@@ -241,13 +306,74 @@ function renderHerrajes(herrajes?: MuebleHerrajeInput[]): string {
     .join("");
 }
 
+// Sub-líneas de materialidad (o líneas de herraje) de una partida o de una
+// alternativa: es lo que el cliente compara.
+function renderSpecBody(item: {
+  details: MuebleDetailInput[];
+  herrajes?: MuebleHerrajeInput[];
+}): string {
+  if (item.herrajes && item.herrajes.length > 0) return renderHerrajes(item.herrajes);
+  return item.details
+    .map(
+      (d) => `<div class="specrow"><span class="speclbl">${esc(d.name)}</span><span class="specval">${esc(d.material)}</span></div>`
+    )
+    .join("");
+}
+
+// Bloque de las alternativas de UNA partida base. `numero` es el de la base
+// ("1.1"), para decir a quién reemplaza. La nota va una sola vez por grupo.
+function renderAlternativas(
+  base: MuebleItemInput,
+  numero: string,
+  precio: NonNullable<AlternativasOpciones["precio"]>,
+): string {
+  const alts = base.alternativas ?? [];
+  if (alts.length === 0) return "";
+  const baseTotal = base.clientPriceIva * base.quantity;
+  const bloques = alts
+    .map((a) => {
+      const total = a.clientPriceIva * a.quantity;
+      const diff = fmtDiff(total - baseTotal);
+      const spec = renderSpecBody(a);
+      const precioHtml =
+        precio === "diferencia"
+          ? `<div class="alt-diff solo">${diff || fmtMoney(0)}</div>`
+          : `<div class="alt-price">${fmtMoney(total)}</div>${diff ? `<div class="alt-diff">${diff}</div>` : ""}`;
+      return `
+          <div class="alt">
+            <span></span>
+            <div class="alt-body">
+              <span class="alt-kick">Alternativa</span>
+              <span class="alt-name">${esc(a.name)}</span>${a.descriptionGeneral ? `<span class="msub">${esc(a.descriptionGeneral)}</span>` : ""}
+              ${spec ? `<div class="spec">${spec}</div>` : ""}
+            </div>
+            <div>${precioHtml}</div>
+          </div>`;
+    })
+    .join("");
+  const nota =
+    alts.length === 1
+      ? `No incluida en el total. Reemplaza a la partida ${numero} si se elige.`
+      : `No incluidas en el total. Cada una reemplaza a la partida ${numero} si se elige.`;
+  return `${bloques}
+          <div class="alt-note"><span></span><span>${nota}</span></div>`;
+}
+
 // ─── HTML render ────────────────────────────────────────────────────────────
 export function renderMueblesHTML(input: MueblesHTMLInput): string {
   const { project, budget, chapters, paymentTerms } = input;
+  const altUbicacion = input.alternativas?.ubicacion ?? "bajo-partida";
+  const altPrecio = input.alternativas?.precio ?? "completo";
 
+  // El total y los subtotales salen de las partidas base: `alternativas` es
+  // un campo aparte de cada partida y no entra en ninguna suma.
   const total = chapters
     .flatMap((c) => c.items)
     .reduce((sum, i) => sum + i.clientPriceIva * i.quantity, 0);
+
+  // Para la variante "hoja al final": las partidas con alternativas, con su
+  // número derivado, en el orden del documento.
+  const conAlternativas: { numero: string; item: MuebleItemInput }[] = [];
 
   const terms = paymentTerms.length > 0 ? paymentTerms : DEFAULT_PAYMENT_TERMS;
   const logo = assetDataUri("blarq-logo-horizontal-ink.png") || assetDataUri("logo-blarq.png");
@@ -277,21 +403,27 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
       const subtotal = items.reduce((s, i) => s + i.clientPriceIva * i.quantity, 0);
       const rows = items
         .map((item, itemIdx) => {
-          const specBody = item.herrajes && item.herrajes.length > 0
-            ? renderHerrajes(item.herrajes)
-            : item.details
-                .map(
-                  (d) => `<div class="specrow"><span class="speclbl">${esc(d.name)}</span><span class="specval">${esc(d.material)}</span></div>`
-                )
-                .join("");
+          const specBody = renderSpecBody(item);
+          const numero = `${chapterNumber}.${itemIdx + 1}`;
+          if ((item.alternativas?.length ?? 0) > 0) {
+            conAlternativas.push({ numero, item });
+          }
+          // Las alternativas van pegadas a su base (dentro del mismo bloque
+          // `partida`, que no se parte entre páginas) para que se comparen
+          // al lado. En la variante "hoja al final" acá no sale nada.
+          const altHtml =
+            altUbicacion === "bajo-partida"
+              ? renderAlternativas(item, numero, altPrecio)
+              : "";
           return `
           <div class="partida">
             <div class="mr">
-              <span class="mit">${chapterNumber}.${itemIdx + 1}</span>
+              <span class="mit">${numero}</span>
               <span><span class="mpt">${esc(item.name)}</span>${item.descriptionGeneral ? `<span class="msub">${esc(item.descriptionGeneral)}</span>` : ""}</span>
               <span class="mtt">${fmtMoney(item.clientPriceIva * item.quantity)}</span>
             </div>
             ${specBody ? `<div class="spec">${specBody}</div>` : ""}
+            ${altHtml}
           </div>`;
         })
         .join("");
@@ -376,6 +508,40 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
       ${renderCondicionesHTML(budget.conditions, "obs-list")}
     </div>
   </div>
+  ${altUbicacion === "hoja-final" && conAlternativas.length > 0 ? `
+  <!-- ALTERNATIVAS (variante: hoja aparte al final) -->
+  <div class="page">
+    <div class="wm">${iso ? `<img src="${iso}" style="width:70mm;opacity:.06;" />` : ""}</div>
+    <div class="pad-detail">
+      ${dhIso}
+      <div class="dhead">
+        <div>
+          <div class="kick">Cotización de muebles · alternativas</div>
+          <div class="proj">${esc(project.name)}</div>
+          <div class="psub">Opciones no incluidas en el total. Cada una reemplaza a la partida indicada si se elige.</div>
+        </div>
+        <div class="right">
+          <div class="ver">${esc(versionLarga)}</div>
+          <div class="doc">${esc(budget.version)} Cotización</div>
+          <div class="docsub">Alternativas</div>
+        </div>
+      </div>
+      <div class="mhd"><span>Ítem</span><span>Partida · Alternativa</span><span class="rt">Total</span></div>
+      ${conAlternativas
+        .map(
+          ({ numero, item }) => `
+      <div class="partida">
+        <div class="althoja-ref">
+          <span class="mit">${numero}</span>
+          <span><span class="mpt">${esc(item.name)}</span><span class="msub">Partida cotizada</span></span>
+          <span class="mtt">${fmtMoney(item.clientPriceIva * item.quantity)}</span>
+        </div>
+        ${renderAlternativas(item, numero, altPrecio)}
+      </div>`,
+        )
+        .join("")}
+    </div>
+  </div>` : ""}
 
 </body>
 </html>`;

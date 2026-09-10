@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { BUDGET_STATUSES, BudgetStatus, formatDate } from "@/lib/utils";
+import { soloPrincipales } from "@/lib/presupuesto/muebleItems";
 import Link from "next/link";
 import NuevaVersionButton from "@/components/presupuesto/NuevaVersionButton";
 import AprobarBudgetButton from "@/components/presupuesto/AprobarBudgetButton";
@@ -282,16 +283,16 @@ export default async function PresupuestoPage({
                 {muebleVersions.map((budget) => {
                   const status =
                     BUDGET_STATUSES[budget.status as BudgetStatus];
-                  // Total c/IVA = suma de clientPriceIva × quantity en todos
-                  // los items de todos los chapters. Aplica discountPercentage
-                  // si el ppto lo tiene cargado (cierre de deal).
-                  const subtotal = budget.muebleChapters.reduce(
-                    (s, c) =>
-                      s +
-                      c.items.reduce(
-                        (si, it) => si + it.clientPriceIva * it.quantity,
-                        0
-                      ),
+                  // Total c/IVA = suma de clientPriceIva × quantity en las
+                  // partidas BASE de todos los chapters (las alternativas
+                  // para el cliente no suman ni cuentan como item, pendiente
+                  // 177). Aplica discountPercentage si el ppto lo tiene
+                  // cargado (cierre de deal).
+                  const itemsBase = soloPrincipales(
+                    budget.muebleChapters.flatMap((c) => c.items)
+                  );
+                  const subtotal = itemsBase.reduce(
+                    (s, it) => s + it.clientPriceIva * it.quantity,
                     0
                   );
                   const discount = budget.discountPercentage ?? 0;
@@ -312,7 +313,7 @@ export default async function PresupuestoPage({
                         {formatDate(budget.date)}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
-                        {budget.muebleChapters.reduce((s, c) => s + c.items.length, 0)} items en {budget.muebleChapters.length} cap.
+                        {itemsBase.length} items en {budget.muebleChapters.length} cap.
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900 text-right font-medium">
                         {new Intl.NumberFormat("es-CL", {

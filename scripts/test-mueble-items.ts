@@ -10,6 +10,7 @@ import {
   agruparConAlternativas,
   diferenciaConBase,
   formatDiferencia,
+  soloLoQueCambia,
 } from "../src/lib/presupuesto/muebleItems";
 
 let pass = 0;
@@ -70,6 +71,28 @@ eq("fmt positivo", formatDiferencia(767_609, fmt), "+$767.609");
 eq("fmt negativo", formatDiferencia(-658_575, fmt), "−$658.575");
 eq("fmt cero", formatDiferencia(0, fmt), "");
 eq("fmt casi cero", formatDiferencia(0.4, fmt), "");
+
+// 7. Solo lo que cambia entre el desglose de la alternativa y el de la base.
+const baseDet = [
+  { name: "CUERPO INTERIOR", material: "MELAMINA BLANCA 18MM" },
+  { name: "FRENTE MUEBLE BASE", material: "MELAMINA VESTO GRIS" },
+  { name: "FRENTE MUEBLE MURAL", material: "MELAMINA VESTO GRIS" },
+  { name: "ZOCALO", material: "TERCIADO" },
+];
+const altDet = [
+  { name: "Cuerpo interior", material: "melamina blanca  18mm" }, // igual, salvo mayúsculas/espacios
+  { name: "FRENTE MUEBLE BASE", material: "MELAMINA GIZIR GRIS" },
+  { name: "FRENTE MUEBLE MURAL", material: "MELAMINA GIZIR GRIS" },
+  { name: "ZOCALO", material: "TERCIADO" },
+  { name: "TIRADORES", material: "PERFIL GOLA ALUMINIO" }, // nuevo en la alternativa
+];
+eq(
+  "cambian los dos frentes y el componente nuevo",
+  soloLoQueCambia(altDet, baseDet).map((d) => d.name),
+  ["FRENTE MUEBLE BASE", "FRENTE MUEBLE MURAL", "TIRADORES"],
+);
+eq("desglose idéntico → nada", soloLoQueCambia(baseDet, baseDet).length, 0);
+eq("base sin desglose → todo es cambio", soloLoQueCambia(altDet, []).length, 5);
 
 console.log(`${pass} ok, ${fail} fallas`);
 process.exit(fail > 0 ? 1 : 0);

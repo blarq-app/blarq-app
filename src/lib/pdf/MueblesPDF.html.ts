@@ -17,6 +17,7 @@ import path from "node:path";
 import { formatHerrajeName } from "@/lib/presupuesto/herrajeNombre";
 import { renderCondicionesHTML } from "@/lib/pdf/condicionesBlock";
 import type { Condicion } from "@/lib/presupuesto/condiciones";
+import { soloLoQueCambia } from "@/lib/presupuesto/muebleItems";
 
 const PROFESSIONAL = "MARÍA JOSÉ BLANCO";
 
@@ -68,12 +69,15 @@ export interface MuebleItemInput {
 
 // Cómo se muestran las alternativas. Los defaults son la forma elegida; las
 // otras opciones existen para poder renderizar las variantes y comparar.
-//   ubicacion: "bajo-partida" (al lado de lo que reemplaza) | "hoja-final"
-//              (una hoja "Alternativas" después del detalle).
+//   ubicacion: "bajo-partida" (lista bajo la partida: nombre, solo las
+//              sub-líneas que cambian, precio y diferencia) | "cuadro" (un
+//              cuadro comparativo bajo la partida: cotizada y alternativas en
+//              columnas, una fila por componente que cambia) | "hoja-final"
+//              (la lista, pero en una hoja "Alternativas" después del detalle).
 //   precio:    "completo" (precio c/IVA + diferencia) | "diferencia" (solo la
 //              diferencia contra la base).
 export interface AlternativasOpciones {
-  ubicacion?: "bajo-partida" | "hoja-final";
+  ubicacion?: "bajo-partida" | "cuadro" | "hoja-final";
   precio?: "completo" | "diferencia";
 }
 
@@ -235,29 +239,54 @@ const CSS = `
   .hmut { color: #AAA194; }
   .hqty { color: #776E60; font-variant-numeric: tabular-nums; letter-spacing: .05em; flex-shrink: 0; padding-left: 14pt; }
 
-  /* Alternativa para el cliente (pendiente 177). Misma grilla que la partida
-     (4.5% | 1fr | 13%) para que su precio caiga en la misma espina vertical
-     que los totales; la sangría y el filete a la izquierda dicen "cuelga de la
-     de arriba". Jerarquía por tipografía: un peldaño más claro que la base,
-     mismo gris para la diferencia sea + o −. */
-  .alt { display: grid; grid-template-columns: 4.5% 1fr 13%; align-items: start; padding: 2.5pt 0 2.5pt; break-inside: avoid; }
-  .alt-body { border-left: 2px solid #C2BCB4; padding-left: 10pt; margin-right: 10pt; }
-  .alt-kick { display: block; font-family: 'Hanken Grotesk', sans-serif; font-size: 4.8pt; letter-spacing: .18em; text-transform: uppercase; color: #8A8175; font-weight: 700; margin-bottom: 1.5pt; }
-  .alt-name { color: #5C5449; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 7pt; }
-  .alt-body .msub { color: #8A8175; }
-  /* Las sub-líneas de la alternativa caen en las MISMAS columnas que las de la
-     base, para que se comparen renglón contra renglón. Medido en el PDF
-     generado (rótulo de la base en 84,5pt, materialidad en 240,4pt): Chromium
-     imprime los pt del CSS a ~0,972, por eso los valores no son redondos. */
-  .alt-body .spec { margin: 1.5pt 0 0 15.1pt; padding: 0; border-left: none; }
+  /* Alternativas para el cliente (pendiente 177). Sin raya ni fondo: lo que
+     dice "cuelga de la partida de arriba" es la sangría (la MISMA del
+     desglose: el nombre de la alternativa arranca donde arrancan los rótulos
+     de las sub-líneas) y la tipografía un peldaño más chica y más clara. De
+     la alternativa se listan SOLO las sub-líneas que cambian respecto de la
+     base — el resto es idéntico. El precio cae en la misma espina vertical
+     que los totales; la diferencia va del mismo gris sea + o −.
+     Medidas en pt calibradas contra el PDF generado (rótulo del desglose en
+     84,5pt, materialidad en 240,4pt): Chromium imprime los pt del CSS a
+     ~0,972, por eso los valores no son redondos. */
+  .alts { margin-top: 5pt; }
+  .alts-kick { display: block; margin-left: calc(4.5% + 25.1pt); font-family: 'Hanken Grotesk', sans-serif; font-size: 4.8pt; letter-spacing: .18em; text-transform: uppercase; color: #8A8175; font-weight: 700; padding-bottom: 1pt; border-bottom: 0.5px solid #DCDAD6; margin-right: 0; }
+  /* Sin rayas entre alternativas: las separa el aire. El nombre y el precio
+     son bloques con la misma altura de línea para que queden a la misma
+     altura (inline, el nombre heredaba la línea del cuerpo y caía más abajo). */
+  .alt { display: grid; grid-template-columns: 4.5% 1fr 13%; align-items: start; padding: 4pt 0 1pt; break-inside: avoid; }
+  .alt-body { padding-left: 25.1pt; }
+  .alt-name { display: block; line-height: 1.2; color: #5C5449; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 6.5pt; }
+  .alt-body .msub { display: block; }
+  .alt-body .msub { color: #8A8175; margin-top: 1pt; }
+  .alt-body .spec { margin: 1.5pt 0 0; padding: 0; border-left: none; }
   .alt-body .specrow { grid-template-columns: 160.4pt 1fr; }
   .alt-body .speclbl { color: #776E60; }
-  .alt-body .specval { color: #776E60; }
-  .alt-price { text-align: right; color: #5C5449; font-variant-numeric: tabular-nums; font-size: 7pt; font-weight: 700; padding-top: 6pt; }
+  .alt-body .specval { color: #625A4F; }
+  .alt-igual { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 5.6pt; color: #8A8175; margin-top: 1pt; }
+  .alt-price { text-align: right; color: #5C5449; font-variant-numeric: tabular-nums; font-size: 6.5pt; font-weight: 700; line-height: 1.2; }
   .alt-diff { text-align: right; color: #8A8175; font-variant-numeric: tabular-nums; font-size: 6pt; margin-top: 1pt; }
-  .alt-diff.solo { font-size: 7pt; color: #5C5449; font-weight: 700; margin-top: 0; }
-  .alt-note { display: grid; grid-template-columns: 4.5% 1fr; padding: 0 0 3pt; }
-  .alt-note span { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 5.6pt; color: #8A8175; padding-left: 12pt; }
+  .alt-diff.solo { font-size: 6.5pt; color: #5C5449; font-weight: 700; margin-top: 0; }
+  .alt-note { display: grid; grid-template-columns: 4.5% 1fr; padding: 2pt 0 3pt; }
+  .alt-note span { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 5.6pt; color: #8A8175; padding-left: 25.1pt; }
+
+  /* Variante CUADRO: cotizada y alternativas en columnas, una fila por
+     componente que cambia, y al pie el total y la diferencia de cada una.
+     Misma sangría que el desglose; la primera columna (el componente) tiene el
+     ancho del rótulo del desglose para que las materialidades caigan donde
+     caen las de la partida. */
+  .cmp { margin: 5pt 0 3pt calc(4.5% + 25.1pt); break-inside: avoid; }
+  .cmp table { width: 100%; border-collapse: collapse; font-size: 5.8pt; line-height: 1.15; table-layout: fixed; }
+  .cmp th { text-align: left; font-family: 'Hanken Grotesk', sans-serif; font-size: 4.8pt; letter-spacing: .18em; text-transform: uppercase; color: #8A8175; font-weight: 700; padding: 0 8pt 2pt 0; border-bottom: 0.5px solid #C2BCB4; vertical-align: bottom; }
+  .cmp th .nm { display: block; font-family: 'Nunito Sans', sans-serif; font-size: 6.2pt; letter-spacing: .03em; color: #5C5449; margin-top: 1.5pt; font-weight: 700; }
+  .cmp th.lbl, .cmp td.lbl { width: 160.4pt; }
+  .cmp td { padding: 1.8pt 8pt 1.8pt 0; vertical-align: top; color: #625A4F; border-bottom: 1px solid #EBEAE9; }
+  .cmp td.lbl { letter-spacing: .06em; text-transform: uppercase; color: #5C5449; font-weight: 700; }
+  .cmp tr.tot td { border-bottom: none; padding-top: 3pt; padding-bottom: 0; font-weight: 700; color: #36322C; font-variant-numeric: tabular-nums; }
+  .cmp tr.tot td.lbl { color: #8A8175; font-weight: 700; }
+  .cmp tr.dif td { border-bottom: none; padding-top: 0.5pt; color: #8A8175; font-variant-numeric: tabular-nums; }
+  .cmp tr.dif td.lbl { color: #8A8175; font-weight: 700; }
+  .cmp-note { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 5.6pt; color: #8A8175; margin-top: 2.5pt; }
 
   /* Hoja "Alternativas" al final (variante). La partida base va como
      referencia en su fila normal y sus alternativas debajo. */
@@ -320,9 +349,24 @@ function renderSpecBody(item: {
     .join("");
 }
 
-// Bloque de las alternativas de UNA partida base. `numero` es el de la base
-// ("1.1"), para decir a quién reemplaza. La nota va una sola vez por grupo.
-function renderAlternativas(
+function notaAlternativas(cantidad: number, numero: string): string {
+  return cantidad === 1
+    ? `No incluida en el total. Reemplaza a la partida ${numero} si se elige.`
+    : `No incluidas en el total. Cada una reemplaza a la partida ${numero} si se elige.`;
+}
+
+// Las sub-líneas que cambian entre una alternativa y su base. Para una partida
+// de herrajes (líneas de catálogo, sin sub-líneas) no hay comparación posible
+// y se deja vacío: sale solo el nombre y el precio.
+function cambiosDe(a: MuebleAlternativaInput, base: MuebleItemInput): MuebleDetailInput[] {
+  return soloLoQueCambia(a.details, base.details);
+}
+
+// Lista de las alternativas de UNA partida base, debajo de su desglose: kicker
+// una vez, y por alternativa el nombre, solo las sub-líneas que cambian, el
+// precio y la diferencia. `numero` es el de la base ("1.1"), para decir a
+// quién reemplaza. La nota va una sola vez por grupo.
+function renderAlternativasLista(
   base: MuebleItemInput,
   numero: string,
   precio: NonNullable<AlternativasOpciones["precio"]>,
@@ -334,7 +378,21 @@ function renderAlternativas(
     .map((a) => {
       const total = a.clientPriceIva * a.quantity;
       const diff = fmtDiff(total - baseTotal);
-      const spec = renderSpecBody(a);
+      const cambios = cambiosDe(a, base);
+      const spec = cambios
+        .map(
+          (d) => `<div class="specrow"><span class="speclbl">${esc(d.name)}</span><span class="specval">${esc(d.material)}</span></div>`
+        )
+        .join("");
+      const descripcion =
+        a.descriptionGeneral && a.descriptionGeneral !== base.descriptionGeneral
+          ? `<span class="msub">${esc(a.descriptionGeneral)}</span>`
+          : "";
+      const cuerpo = spec
+        ? `<div class="spec">${spec}</div>`
+        : base.details.length > 0
+          ? `<div class="alt-igual">Misma materialidad que la partida cotizada.</div>`
+          : "";
       const precioHtml =
         precio === "diferencia"
           ? `<div class="alt-diff solo">${diff || fmtMoney(0)}</div>`
@@ -343,20 +401,104 @@ function renderAlternativas(
           <div class="alt">
             <span></span>
             <div class="alt-body">
-              <span class="alt-kick">Alternativa</span>
-              <span class="alt-name">${esc(a.name)}</span>${a.descriptionGeneral ? `<span class="msub">${esc(a.descriptionGeneral)}</span>` : ""}
-              ${spec ? `<div class="spec">${spec}</div>` : ""}
+              <span class="alt-name">${esc(a.name)}</span>${descripcion}
+              ${cuerpo}
             </div>
             <div>${precioHtml}</div>
           </div>`;
     })
     .join("");
-  const nota =
-    alts.length === 1
-      ? `No incluida en el total. Reemplaza a la partida ${numero} si se elige.`
-      : `No incluidas en el total. Cada una reemplaza a la partida ${numero} si se elige.`;
-  return `${bloques}
-          <div class="alt-note"><span></span><span>${nota}</span></div>`;
+  return `
+          <div class="alts">
+            <span class="alts-kick">${alts.length === 1 ? "Alternativa" : "Alternativas"}</span>
+            ${bloques}
+            <div class="alt-note"><span></span><span>${notaAlternativas(alts.length, numero)}</span></div>
+          </div>`;
+}
+
+// Cuadro comparativo: la partida cotizada y sus alternativas en columnas, una
+// fila por componente que cambia en alguna de ellas (en el orden del desglose
+// de la base; los componentes nuevos, al final), y al pie el total y la
+// diferencia. Es la forma en que un cliente compara materiales: renglón a
+// renglón, de un vistazo.
+function renderAlternativasCuadro(
+  base: MuebleItemInput,
+  numero: string,
+  precio: NonNullable<AlternativasOpciones["precio"]>,
+): string {
+  const alts = base.alternativas ?? [];
+  if (alts.length === 0) return "";
+  const baseTotal = base.clientPriceIva * base.quantity;
+
+  // Filas: unión de los componentes que cambian, con la clave normalizada.
+  const norm = (s: string) => s.trim().replace(/\s+/g, " ").toUpperCase();
+  const filas: string[] = [];
+  const vistas = new Set<string>();
+  const agregar = (nombre: string) => {
+    const k = norm(nombre);
+    if (!vistas.has(k)) {
+      vistas.add(k);
+      filas.push(nombre);
+    }
+  };
+  for (const d of base.details) {
+    if (alts.some((a) => cambiosDe(a, base).some((c) => norm(c.name) === norm(d.name)))) agregar(d.name);
+  }
+  for (const a of alts) for (const c of cambiosDe(a, base)) agregar(c.name);
+
+  const materialDe = (item: { details: MuebleDetailInput[] }, nombre: string) =>
+    item.details.find((d) => norm(d.name) === norm(nombre))?.material ?? "—";
+
+  const cabecera = `
+              <tr>
+                <th class="lbl"></th>
+                <th>Cotizada<span class="nm">${esc(base.name)}</span></th>
+                ${alts.map((a) => `<th>Alternativa<span class="nm">${esc(a.name)}</span></th>`).join("")}
+              </tr>`;
+  const cuerpo =
+    filas.length > 0
+      ? filas
+          .map(
+            (f) => `
+              <tr>
+                <td class="lbl">${esc(f)}</td>
+                <td>${esc(materialDe(base, f))}</td>
+                ${alts.map((a) => `<td>${esc(materialDe(a, f))}</td>`).join("")}
+              </tr>`
+          )
+          .join("")
+      : `
+              <tr>
+                <td class="lbl"></td>
+                <td colspan="${alts.length + 1}"><span class="alt-igual">Misma materialidad que la partida cotizada.</span></td>
+              </tr>`;
+  const totales =
+    precio === "diferencia"
+      ? `
+              <tr class="tot">
+                <td class="lbl">Diferencia</td>
+                <td>—</td>
+                ${alts.map((a) => `<td>${fmtDiff(a.clientPriceIva * a.quantity - baseTotal) || fmtMoney(0)}</td>`).join("")}
+              </tr>`
+      : `
+              <tr class="tot">
+                <td class="lbl">Total</td>
+                <td>${fmtMoney(baseTotal)}</td>
+                ${alts.map((a) => `<td>${fmtMoney(a.clientPriceIva * a.quantity)}</td>`).join("")}
+              </tr>
+              <tr class="dif">
+                <td class="lbl">Diferencia</td>
+                <td>—</td>
+                ${alts.map((a) => `<td>${fmtDiff(a.clientPriceIva * a.quantity - baseTotal) || "—"}</td>`).join("")}
+              </tr>`;
+  return `
+          <div class="cmp">
+            <table>
+              <thead>${cabecera}</thead>
+              <tbody>${cuerpo}${totales}</tbody>
+            </table>
+            <div class="cmp-note">${notaAlternativas(alts.length, numero)}</div>
+          </div>`;
 }
 
 // ─── HTML render ────────────────────────────────────────────────────────────
@@ -413,8 +555,10 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
           // al lado. En la variante "hoja al final" acá no sale nada.
           const altHtml =
             altUbicacion === "bajo-partida"
-              ? renderAlternativas(item, numero, altPrecio)
-              : "";
+              ? renderAlternativasLista(item, numero, altPrecio)
+              : altUbicacion === "cuadro"
+                ? renderAlternativasCuadro(item, numero, altPrecio)
+                : "";
           return `
           <div class="partida">
             <div class="mr">
@@ -536,7 +680,7 @@ export function renderMueblesHTML(input: MueblesHTMLInput): string {
           <span><span class="mpt">${esc(item.name)}</span><span class="msub">Partida cotizada</span></span>
           <span class="mtt">${fmtMoney(item.clientPriceIva * item.quantity)}</span>
         </div>
-        ${renderAlternativas(item, numero, altPrecio)}
+        ${renderAlternativasLista(item, numero, altPrecio)}
       </div>`,
         )
         .join("")}

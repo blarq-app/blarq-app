@@ -69,6 +69,25 @@ export function diferenciaConBase(
   );
 }
 
+// Sub-líneas de materialidad de la alternativa que CAMBIAN respecto de la
+// base: las que no existen en la base (por nombre) o tienen otra materialidad.
+// Es lo único que el cliente necesita leer de una alternativa — el resto del
+// desglose es idéntico y repetirlo entero solo estorba (feedback de MJ sobre
+// la primera versión del PDF). La comparación ignora mayúsculas y espacios.
+export type MuebleDetailLite = { name: string; material: string };
+
+function clave(s: string): string {
+  return s.trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+export function soloLoQueCambia<T extends MuebleDetailLite>(
+  alternativa: T[],
+  base: MuebleDetailLite[],
+): T[] {
+  const materialBase = new Map(base.map((d) => [clave(d.name), clave(d.material)]));
+  return alternativa.filter((d) => materialBase.get(clave(d.name)) !== clave(d.material));
+}
+
 // "+$767.609" / "−$658.575" / "" cuando no hay diferencia (el cero no ocupa
 // espacio). El signo menos es el tipográfico (U+2212), que alinea con el "+".
 export function formatDiferencia(

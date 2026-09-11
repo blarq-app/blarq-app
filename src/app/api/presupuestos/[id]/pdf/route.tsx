@@ -26,24 +26,35 @@ import {
   agruparConAlternativas,
   soloPrincipales,
 } from "@/lib/presupuesto/muebleItems";
+import { proveedorParaCliente } from "@/lib/presupuesto/herrajeMarca";
 
 // Lo que el PDF de muebles necesita de una partida (base o alternativa): sin
-// costos internos ni proveedor.
-function muebleItemParaPDF(i: {
-  itemNumber: string;
-  name: string;
-  descriptionGeneral: string | null;
-  quantity: number;
-  clientPriceIva: number;
-  details: { name: string; material: string }[];
-  herrajes: {
-    sector: string;
+// costos internos. Excepción pedida por MJ: en cada línea de HERRAJE sí sale
+// el proveedor (DPH/HBT), porque compra cada herraje a uno distinto y quiere
+// que el cliente lo vea. `marcas` es catalogId → brand del catálogo: la línea
+// no guarda la marca (es snapshot de nombre/medida/color/costo), se lee del
+// catálogo al generar el PDF y va delante del proveedor si es una marca de
+// verdad (ver proveedorParaCliente).
+function muebleItemParaPDF(
+  i: {
+    itemNumber: string;
     name: string;
-    measure: string | null;
-    finish: string | null;
+    descriptionGeneral: string | null;
     quantity: number;
-  }[];
-}) {
+    clientPriceIva: number;
+    details: { name: string; material: string }[];
+    herrajes: {
+      sector: string;
+      name: string;
+      measure: string | null;
+      finish: string | null;
+      quantity: number;
+      supplier: string;
+      catalogId: string | null;
+    }[];
+  },
+  marcas: Map<string, string | null>,
+) {
   return {
     itemNumber: i.itemNumber,
     name: i.name,
@@ -57,8 +68,34 @@ function muebleItemParaPDF(i: {
       measure: h.measure,
       finish: h.finish,
       quantity: h.quantity,
+      brand: proveedorParaCliente(
+        h.supplier,
+        h.catalogId ? marcas.get(h.catalogId) : null,
+      ),
     })),
   };
+}
+
+// catalogId → brand para todas las líneas de herraje de la versión, en una
+// sola consulta.
+async function marcasDeHerrajes(
+  chapters: { items: { herrajes: { catalogId: string | null }[] }[] }[],
+): Promise<Map<string, string | null>> {
+  const ids = Array.from(
+    new Set(
+      chapters
+        .flatMap((c) => c.items)
+        .flatMap((i) => i.herrajes)
+        .map((h) => h.catalogId)
+        .filter((id): id is string => !!id),
+    ),
+  );
+  if (ids.length === 0) return new Map();
+  const rows = await prisma.herrajeCatalog.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, brand: true },
+  });
+  return new Map(rows.map((r) => [r.id, r.brand]));
 }
 
 // Forzar Node runtime (no edge) — Puppeteer/Chromium necesita Node.
@@ -188,6 +225,7 @@ export async function GET(
       });
       filename = `BLARQ_Herrajes_Mueblista_${baseName}_${budget.version}.pdf`;
     } else if (budget.type === "muebles") {
+      const marcas = await marcasDeHerrajes(budget.muebleChapters);
       html = renderMueblesHTML({
         project: budget.project,
         budget: {
@@ -205,8 +243,8 @@ export async function GET(
           chapterNumber: ch.chapterNumber,
           name: ch.name,
           items: agruparConAlternativas(ch.items).map(({ base, alternativas }) => ({
-            ...muebleItemParaPDF(base),
-            alternativas: alternativas.map(muebleItemParaPDF),
+            ...muebleItemParaPDF(base, marcas),
+            alternativas: alternativas.map((a) => muebleItemParaPDF(a, marcas)),
           })),
         })),
         paymentTerms: budget.paymentTerms.map((t) => ({

@@ -42,6 +42,10 @@ export interface MuebleHerrajeInput {
   measure: string | null;
   finish: string | null;
   quantity: number;
+  // Proveedor (y marca, si es de verdad) que ve el cliente, ya armado con
+  // proveedorParaCliente: "DPH", "Blum · DPH". Opcional: las llamadas viejas
+  // no lo pasan.
+  brand?: string | null;
 }
 
 // Alternativa PARA EL CLIENTE de una partida (pendiente 177): el mismo mueble
@@ -229,6 +233,7 @@ const CSS = `
   .hrow { display: flex; justify-content: space-between; align-items: baseline; padding: 0.8pt 0; border-bottom: 1px solid #EBEAE9; font-size: 5.8pt; }
   .hrow:last-child { border-bottom: none; }
   .hname { color: #625A4F; }
+  .hbrand { color: #625A4F; font-weight: 700; letter-spacing: .03em; }
   .hmut { color: #AAA194; }
   .hqty { color: #776E60; font-variant-numeric: tabular-nums; letter-spacing: .05em; flex-shrink: 0; padding-left: 14pt; }
 
@@ -300,9 +305,13 @@ function renderHerrajes(herrajes?: MuebleHerrajeInput[]): string {
     .map((h) => {
       const spec = [h.measure, h.finish].filter(Boolean).join(" · ");
       const mut = spec ? ` <span class="hmut">· ${esc(spec)}</span>` : "";
+      // El proveedor del herraje (pedido de MJ, 2026-09-11: compra cada
+      // herraje a uno distinto y quiere que el cliente lo vea) va pegado al
+      // nombre, con su mismo peso. La medida y el color siguen atenuados.
+      const marca = h.brand ? ` <span class="hbrand">· ${esc(h.brand)}</span>` : "";
       // Nombre con la escritura homologada (pendiente 139) — el mismo helper
       // que usa el editor, para que el PDF y la pantalla no puedan divergir.
-      return `<div class="hrow"><span class="hname">${esc(formatHerrajeName(h.name))}${mut}</span><span class="hqty">${fmtQty(h.quantity)} UN</span></div>`;
+      return `<div class="hrow"><span class="hname">${esc(formatHerrajeName(h.name))}${marca}${mut}</span><span class="hqty">${fmtQty(h.quantity)} UN</span></div>`;
     })
     .join("");
 }

@@ -199,6 +199,19 @@ export default function AddHerrajeFromCatalog({
       const res = await fetch(`/api/catalogo/artefactos/extract?url=${encodeURIComponent(nuevo.referenceLink.trim())}`);
       const data = await res.json();
       if (!res.ok) return setError(data.error || "No se pudo extraer del link.");
+      // Sin precio casi siempre es que el link no es de un producto sino de
+      // una búsqueda o una categoría de la tienda (le pasó a MJ con
+      // ".../searchiqit?s=pomo": trajo el logo y "DAP DUCASSE"). Se avisa en
+      // vez de dejar el costo vacío en silencio.
+      const sinPrecio = data.clientPrice == null && data.listPrice == null;
+      const pareceBusqueda = /search|busca|\?s=|\/\d+-[a-z-]+$/i.test(nuevo.referenceLink) && sinPrecio;
+      if (sinPrecio) {
+        setError(
+          pareceBusqueda
+            ? "Ese link parece una búsqueda o una categoría de la tienda, no un producto: abrí el producto y copiá el link de su página."
+            : "El link no trajo precio: revisá que sea la página del producto y cargá el costo a mano.",
+        );
+      }
       setNuevo((prev) => ({
         ...prev,
         name: prev.name.trim() ? prev.name : (data.name ?? "").toString().toUpperCase(),

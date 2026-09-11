@@ -526,6 +526,58 @@ model MuebleQuote {
 // Detalle de componentes bajo un MuebleItem.
 // Ej. para 1.1 MUEBLES: CUERPO INTERIOR / TRASERA / FRENTE BASE / FRENTE MURAL / ZOCALO,
 // cada uno con su materialidad ("MELAMINA BLANCA 18MM, TAPACANTO PVC 0,4MM").
+// ─── Plantillas de muebles (pendiente de MJ, 2026-09-11) ──────────────────
+// Cada MUEBLES nuevo nacía vacío y MJ tipeaba CUERPO INTERIOR / FRENTES /
+// ZÓCALO cada vez. Las plantillas son SUYAS y viven en la base (no en el
+// código): se guardan desde una partida o un capítulo ya armado ("Guardar
+// como plantilla") y se usan al agregar ("desde plantilla"). Guardan la
+// ESTRUCTURA — nombre, descripción, tipo, componentes con su materialidad,
+// margen y proveedor de referencia — nunca precios: eso es de cada proyecto.
+// Semilla inicial: el itemizado de Casa Los Algarrobos.
+
+// Un capítulo tipo ("Cocina", "Baño", "Walking closet") con sus partidas.
+model MuebleChapterTemplate {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items     MuebleItemTemplate[]
+}
+
+// Una partida tipo. Puede colgar de un capítulo tipo o ser suelta
+// (chapterTemplateId null): "Cubiertas" sirve en cualquier capítulo.
+model MuebleItemTemplate {
+  id                 String   @id @default(cuid())
+  chapterTemplateId  String?
+  name               String   // "MUEBLES", "HERRAJES", "CUBIERTAS"
+  kind               String   @default("mueble") // mueble | herrajes
+  descriptionGeneral String?
+  supplier           String?  // referencia (CARLOS, GIACOMO), se puede cambiar
+  utilityPercentage  Float?   // margen de arranque (0.47 = 47%); null = default
+  sortOrder          Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  chapterTemplate    MuebleChapterTemplate? @relation(fields: [chapterTemplateId], references: [id], onDelete: Cascade)
+  details            MuebleItemTemplateDetail[]
+
+  @@index([chapterTemplateId])
+}
+
+model MuebleItemTemplateDetail {
+  id         String @id @default(cuid())
+  templateId String
+  name       String // "CUERPO INTERIOR"
+  material   String // "Melamina Blanca 18mm, trasera 15mm, tapacanto 1mm"
+  sortOrder  Int    @default(0)
+
+  template   MuebleItemTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+}
+
 model MuebleDetail {
   id        String  @id @default(cuid())
   itemId    String

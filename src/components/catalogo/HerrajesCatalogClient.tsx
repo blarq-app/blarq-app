@@ -36,7 +36,7 @@ export interface HerrajeItem {
   detail: string | null;
   // Texto libre: DPH, HBT o cualquier otro proveedor (ver herrajeProveedores.ts).
   supplier: string;
-  category: "cajon" | "corredera" | "bisagra" | "despensa" | "accesorio";
+  category: "cajon" | "corredera" | "bisagra" | "despensa" | "tirador" | "accesorio";
   subgroup: string | null; // carpeta dentro de la categoría (null = "Otros")
   measure: string | null; // ej. "500mm"
   finish: string | null; // color / terminación
@@ -86,6 +86,7 @@ const CATEGORY_OPTIONS = [
   "corredera",
   "bisagra",
   "despensa",
+  "tirador",
   "accesorio",
 ] as const;
 type Category = (typeof CATEGORY_OPTIONS)[number];
@@ -94,6 +95,7 @@ const CATEGORY_LABELS: Record<Category, string> = {
   corredera: "Correderas",
   bisagra: "Bisagras",
   despensa: "Despensas",
+  tirador: "Tiradores", // pomos y tiradores sueltos (ej. Ducasse); pedida por MJ 2026-09-11
   accesorio: "Accesorios", // basureros, organizadores, repuestos del sistema
 };
 

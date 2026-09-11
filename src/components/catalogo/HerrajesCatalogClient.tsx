@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
 import { fileToThumbnailDataUrl } from "@/lib/imageThumbnail";
 import {
+  OTRO_PROVEEDOR,
+  normalizarProveedor,
+  proveedoresDe,
+} from "@/lib/presupuesto/herrajeProveedores";
+import {
   DndContext,
   closestCenter,
   KeyboardSensor,
@@ -29,7 +34,8 @@ export interface HerrajeItem {
   id: string;
   name: string;
   detail: string | null;
-  supplier: "HBT" | "DPH";
+  // Texto libre: DPH, HBT o cualquier otro proveedor (ver herrajeProveedores.ts).
+  supplier: string;
   category: "cajon" | "corredera" | "bisagra" | "despensa" | "accesorio";
   subgroup: string | null; // carpeta dentro de la categoría (null = "Otros")
   measure: string | null; // ej. "500mm"
@@ -71,7 +77,8 @@ interface PriceReviewRow {
 }
 
 // ── Pestañas por proveedor ────────────────────────────────────────────────
-const SUPPLIER_OPTIONS: ("DPH" | "HBT")[] = ["DPH", "HBT"];
+// Ya no son fijas: DPH y HBT más cualquier proveedor que exista en el catálogo
+// (se calculan de los items, ver `supplierOptions` en el componente).
 
 // ── Categorías dentro de cada proveedor (encabezado de sección) ───────────
 const CATEGORY_OPTIONS = [
@@ -254,7 +261,12 @@ export default function HerrajesCatalogClient({
 }) {
   const router = useRouter();
   const [items, setItems] = useState<HerrajeItem[]>(initialItems);
-  const [activeTab, setActiveTab] = useState<"DPH" | "HBT">("DPH");
+  const [activeTab, setActiveTab] = useState<string>("DPH");
+  // Pestañas: los fijos + los proveedores que ya tienen herrajes cargados.
+  const supplierOptions = useMemo(() => proveedoresDe(items), [items]);
+  // El desplegable de proveedor del formulario está en "Otro…": el nombre se
+  // escribe en un campo de texto al lado.
+  const [proveedorOtro, setProveedorOtro] = useState(false);
   const [adding, setAdding] = useState(false);
   // Búsqueda por texto libre dentro de la pestaña: cada palabra tiene que
   // aparecer (AND) en nombre, detalle, marca, medida, color, sku o categoría.
@@ -280,7 +292,7 @@ export default function HerrajesCatalogClient({
   const [newItem, setNewItem] = useState({
     name: "",
     detail: "",
-    supplier: "DPH" as "DPH" | "HBT",
+    supplier: "DPH" as string,
     category: "cajon" as Category,
     subgroup: "",
     measure: "",
@@ -308,9 +320,10 @@ export default function HerrajesCatalogClient({
 
   // ── Conteo por pestaña (universo completo, sin filtros) ────────────────
   const countsByTab = useMemo(() => {
-    const c: Record<string, number> = { DPH: 0, HBT: 0 };
+    const c: Record<string, number> = {};
     for (const it of items) {
-      if (c[it.supplier] !== undefined) c[it.supplier]++;
+      const s = normalizarProveedor(it.supplier);
+      c[s] = (c[s] ?? 0) + 1;
     }
     return c;
   }, [items]);
@@ -555,6 +568,11 @@ export default function HerrajesCatalogClient({
       setError("El nombre es obligatorio.");
       return;
     }
+    const supplier = normalizarProveedor(newItem.supplier);
+    if (!supplier) {
+      setError("Escribí el nombre del proveedor.");
+      return;
+    }
     setError(null);
     try {
       const res = await fetch("/api/catalogo/herrajes", {
@@ -562,7 +580,7 @@ export default function HerrajesCatalogClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newItem.name,
-          supplier: newItem.supplier,
+          supplier,
           category: newItem.category,
           subgroup: newItem.subgroup || undefined,
           detail: newItem.detail || undefined,
@@ -583,7 +601,9 @@ export default function HerrajesCatalogClient({
       }
       const created = await res.json();
       setItems((prev) => [...prev, created]);
+      // Si el proveedor es nuevo, su pestaña aparece con este herraje.
       setActiveTab(created.supplier);
+      setProveedorOtro(false);
       setNewItem(blankForm());
       setAdding(false);
       router.refresh();
@@ -597,6 +617,7 @@ export default function HerrajesCatalogClient({
     setAdding(false);
     setEditingId(null);
     setError(null);
+    setProveedorOtro(false);
     setNewItem(blankForm());
   }
 
@@ -895,8 +916,8 @@ export default function HerrajesCatalogClient({
       </datalist>
 
       {/* Pestañas por proveedor */}
-      <div className="flex items-center gap-2 mb-4">
-        {SUPPLIER_OPTIONS.map((s) => {
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        {supplierOptions.map((s) => {
           const active = activeTab === s;
           return (
             <button
@@ -1077,22 +1098,42 @@ export default function HerrajesCatalogClient({
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
                 Proveedor *
               </label>
-              <select
-                value={newItem.supplier}
-                onChange={(e) =>
-                  setNewItem({
-                    ...newItem,
-                    supplier: e.target.value as "DPH" | "HBT",
-                  })
-                }
-                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500 bg-white"
-              >
-                {SUPPLIER_OPTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
+              {/* Los proveedores que ya existen más "Otro…", que abre un campo
+                  para escribir uno nuevo (pedido de MJ: herrajes que le vende
+                  Carlos itemizados, de marcas a las que ella no tiene acceso).
+                  Al guardar el primero, aparece su pestaña. */}
+              <div className="flex gap-1.5">
+                <select
+                  value={proveedorOtro ? OTRO_PROVEEDOR : newItem.supplier}
+                  onChange={(e) => {
+                    if (e.target.value === OTRO_PROVEEDOR) {
+                      setProveedorOtro(true);
+                      setNewItem({ ...newItem, supplier: "" });
+                    } else {
+                      setProveedorOtro(false);
+                      setNewItem({ ...newItem, supplier: e.target.value });
+                    }
+                  }}
+                  className={`${proveedorOtro ? "w-24" : "w-full"} px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500 bg-white`}
+                >
+                  {supplierOptions.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                  <option value={OTRO_PROVEEDOR}>Otro…</option>
+                </select>
+                {proveedorOtro && (
+                  <input
+                    autoFocus
+                    type="text"
+                    value={newItem.supplier}
+                    onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })}
+                    placeholder="Nombre del proveedor"
+                    className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-gray-500"
+                  />
+                )}
+              </div>
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">

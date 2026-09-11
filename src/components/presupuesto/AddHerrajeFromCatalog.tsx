@@ -77,6 +77,7 @@ const CATEGORY_OPTIONS = [
   "corredera",
   "bisagra",
   "despensa",
+  "tirador",
   "accesorio",
 ] as const;
 const CATEGORY_LABELS: Record<string, string> = {
@@ -84,6 +85,9 @@ const CATEGORY_LABELS: Record<string, string> = {
   corredera: "Correderas",
   bisagra: "Bisagras",
   despensa: "Despensas",
+  // Pedida por MJ (2026-09-11) para los pomos y tiradores sueltos (Ducasse),
+  // que antes caían en Accesorios.
+  tirador: "Tiradores",
   accesorio: "Accesorios",
 };
 
@@ -165,7 +169,7 @@ export default function AddHerrajeFromCatalog({
   // es una línea a mano solo de esta partida (para lo que se compra una vez).
   const [guardarEnCatalogo, setGuardarEnCatalogo] = useState(true);
   const [avisoNuevo, setAvisoNuevo] = useState<string | null>(null);
-  const [nuevo, setNuevo] = useState({
+  const NUEVO_VACIO = {
     name: "",
     category: "accesorio" as (typeof CATEGORY_OPTIONS)[number],
     measure: "",
@@ -173,8 +177,42 @@ export default function AddHerrajeFromCatalog({
     brand: "",
     sku: "",
     costNet: "",
-  });
+    // Link del producto en la tienda: con "Extraer" trae nombre, marca, foto
+    // y precio (queda como costo), igual que en el catálogo de herrajes.
+    referenceLink: "",
+    imageUrl: "",
+    detail: "",
+  };
+  const [nuevo, setNuevo] = useState(NUEVO_VACIO);
   const [guardandoNuevo, setGuardandoNuevo] = useState(false);
+  const [extrayendo, setExtrayendo] = useState(false);
+
+  // Mismo endpoint y mismo criterio que el catálogo de herrajes: el nombre se
+  // sugiere solo si está vacío (no pisa lo que MJ escribió), el precio de
+  // VENTA de hoy queda como costo si no había uno, y la foto y la marca se
+  // toman siempre.
+  async function extraerDeLink() {
+    if (!nuevo.referenceLink.trim()) return setError("Pegá el link del producto primero.");
+    setExtrayendo(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/catalogo/artefactos/extract?url=${encodeURIComponent(nuevo.referenceLink.trim())}`);
+      const data = await res.json();
+      if (!res.ok) return setError(data.error || "No se pudo extraer del link.");
+      setNuevo((prev) => ({
+        ...prev,
+        name: prev.name.trim() ? prev.name : (data.name ?? "").toString().toUpperCase(),
+        brand: data.brand ?? prev.brand,
+        imageUrl: data.imageUrl ?? prev.imageUrl,
+        detail: data.name ?? prev.detail,
+        costNet: prev.costNet ? prev.costNet : String(data.clientPrice ?? data.listPrice ?? ""),
+      }));
+    } catch {
+      setError("No se pudo extraer del link.");
+    } finally {
+      setExtrayendo(false);
+    }
+  }
 
   function abrirNuevo() {
     setNuevoProveedor(supplier);
@@ -237,7 +275,7 @@ export default function AddHerrajeFromCatalog({
         onAdded(data.line, data.item);
         setAvisoNuevo(`"${name}" quedó en la partida (solo en esta cotización, no en el catálogo).`);
         setNuevoAbierto(false);
-        setNuevo({ name: "", category: nuevo.category, measure: "", finish: "", brand: "", sku: "", costNet: "" });
+        setNuevo({ ...NUEVO_VACIO, category: nuevo.category });
         return;
       }
 
@@ -254,6 +292,9 @@ export default function AddHerrajeFromCatalog({
           brand: nuevo.brand.trim() || null,
           sku: nuevo.sku.trim() || null,
           costNet,
+          referenceLink: nuevo.referenceLink.trim() || null,
+          imageUrl: nuevo.imageUrl.trim() || null,
+          detail: nuevo.detail.trim() || null,
         }),
       });
       if (!resCat.ok) {
@@ -277,7 +318,7 @@ export default function AddHerrajeFromCatalog({
       //    (el back snapshotea nombre/medida/color/costo desde el catálogo).
       await handleAdd(creado);
       setNuevoAbierto(false);
-      setNuevo({ name: "", category: nuevo.category, measure: "", finish: "", brand: "", sku: "", costNet: "" });
+      setNuevo({ ...NUEVO_VACIO, category: nuevo.category });
     } catch {
       setError("No se pudo guardar el herraje.");
     } finally {
@@ -490,9 +531,43 @@ export default function AddHerrajeFromCatalog({
               </span>
             </label>
           </div>
-          <div className="grid grid-cols-[minmax(0,2fr)_7rem_6rem_6rem_6rem_6rem_6.5rem] gap-2 text-xs">
+          {/* Atajo, igual que en el catálogo: pegar el link del producto y
+              extraer nombre, marca, foto y precio (queda como costo). */}
+          <div className="flex items-center gap-2 mb-2 text-xs">
             <input
               autoFocus
+              type="url"
+              value={nuevo.referenceLink}
+              onChange={(e) => setNuevo({ ...nuevo, referenceLink: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  extraerDeLink();
+                }
+              }}
+              placeholder="Link del producto en la tienda (https://…) — opcional"
+              className="flex-1 px-2 py-1.5 border border-gray-300 rounded outline-none focus:border-gray-500"
+            />
+            <button
+              type="button"
+              onClick={extraerDeLink}
+              disabled={extrayendo || !nuevo.referenceLink.trim()}
+              className="text-xs font-medium text-gray-700 border border-gray-300 rounded px-2.5 py-1.5 hover:bg-white hover:border-gray-400 disabled:opacity-40 whitespace-nowrap"
+              title="Trae nombre, marca, foto y precio del producto; el precio queda como costo neto"
+            >
+              {extrayendo ? "Buscando…" : "Extraer"}
+            </button>
+            {nuevo.imageUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={imgSrc(nuevo.imageUrl)}
+                alt=""
+                className="w-8 h-8 object-contain bg-white border border-gray-200 rounded"
+              />
+            )}
+          </div>
+          <div className="grid grid-cols-[minmax(0,2fr)_7rem_6rem_6rem_6rem_6rem_6.5rem] gap-2 text-xs">
+            <input
               type="text"
               value={nuevo.name}
               onChange={(e) => setNuevo({ ...nuevo, name: e.target.value })}

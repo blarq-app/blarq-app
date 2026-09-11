@@ -33,6 +33,7 @@ const ALLOWED_HOSTS = [
   "kitchenhouse.cl", // Kitchen House sirve las mismas fotos por su dominio (/cdn/shop/...), p.ej. al usar "Extraer"
   "dph.cl", // Catálogo de herrajes DPH (Shopify) — fotos por cdn.shopify.com, pero por las dudas
   "hbt.cl", // Catálogo de herrajes HBT (Magento) — fotos en hbt.cl/media/catalog/product/...
+  "dapducasse.cl", // Ducasse (PrestaShop) — pomos y tiradores sueltos; fotos en dapducasse.cl/<id>-home_default/...
 ];
 
 const BROWSER_UA =

@@ -1631,31 +1631,47 @@ function ChapterBlock({
                 {(handle) => (
                   <>
                     {renderBloque(base, handle, displayNumber)}
-                    {/* Alternativas PARA EL CLIENTE, anidadas bajo su base.
-                        Sin manija: viajan con la base al arrastrar. */}
-                    {alternativas.map((alt) => (
-                      <div key={alt.id} className="bg-[#F7F6F4]">
-                        {renderBloque(alt, null, displayNumber, {
-                          baseTotal,
-                          onHacerPrincipal: () => onHacerPrincipal(alt.id),
-                        })}
+                    {/* Alternativas PARA EL CLIENTE, anidadas bajo su base en
+                        un grupo con fondo greige y rótulo propio, para que no
+                        se lean como una partida más después de la banda roja
+                        de costo interno de la base (a MJ la confundía). Sin
+                        manija: viajan con la base al arrastrar. */}
+                    <div className={alternativas.length > 0 ? "bg-[#F1F0EE] border-b border-gray-200" : ""}>
+                      {alternativas.length > 0 && (
+                        <div className="grid grid-cols-[3rem_minmax(0,1fr)_5rem_8rem_2rem] gap-3 px-4 pt-2 pb-0.5">
+                          <div></div>
+                          <span className="text-[9px] uppercase tracking-wider text-gray-500">
+                            Alternativas para el cliente · no suman al total
+                          </span>
+                          <div></div>
+                          <div></div>
+                          <div></div>
+                        </div>
+                      )}
+                      {alternativas.map((alt) => (
+                        <div key={alt.id}>
+                          {renderBloque(alt, null, displayNumber, {
+                            baseTotal,
+                            onHacerPrincipal: () => onHacerPrincipal(alt.id),
+                          })}
+                        </div>
+                      ))}
+                      {/* Distinto del "+ Agregar cotización de otro proveedor"
+                          (costo interno, dentro de la banda roja): esto es lo
+                          que el cliente VE, con su diferencia de precio. */}
+                      <div className="grid grid-cols-[3rem_minmax(0,1fr)_5rem_8rem_2rem] gap-3 px-4 py-1">
+                        <div></div>
+                        <button
+                          onClick={() => onAddAlternativa(base.id)}
+                          className="text-[10px] text-gray-400 hover:text-gray-900 text-left"
+                          title="Otra opción del mismo mueble (otro material, otras características) que el cliente ve al lado con la diferencia de precio. No suma al total."
+                        >
+                          + Agregar alternativa para el cliente
+                        </button>
+                        <div></div>
+                        <div></div>
+                        <div></div>
                       </div>
-                    ))}
-                    {/* Distinto del "+ Agregar cotización de otro proveedor"
-                        (costo interno, dentro de la banda roja): esto es lo
-                        que el cliente VE, con su diferencia de precio. */}
-                    <div className="grid grid-cols-[3rem_minmax(0,1fr)_5rem_8rem_2rem] gap-3 px-4 py-1 border-b border-gray-100">
-                      <div></div>
-                      <button
-                        onClick={() => onAddAlternativa(base.id)}
-                        className="text-[10px] text-gray-400 hover:text-gray-900 text-left"
-                        title="Otra opción del mismo mueble (otro material, otras características) que el cliente ve al lado con la diferencia de precio. No suma al total."
-                      >
-                        + Agregar alternativa para el cliente
-                      </button>
-                      <div></div>
-                      <div></div>
-                      <div></div>
                     </div>
                   </>
                 )}
@@ -1975,11 +1991,14 @@ function ItemBlock({
       {/* Costo interno — colapsado por default. Cuando se expande, muestra el
           panel de cálculo del proveedor activo + tabla de comparativa.
           Pintado en rojo burdeo para señalar visualmente que es info
-          INTERNA (no va al PDF del cliente). Utilidad sigue en verde. */}
-      <div className="px-4 py-1.5 border-b border-red-200 bg-gray-50">
+          INTERNA (no va al PDF del cliente). Utilidad sigue en verde.
+          En una ALTERNATIVA la banda no va: una sola banda roja por partida
+          (la de la base). Su costo interno queda como una línea chica,
+          sangrada a la columna de la partida, del mismo rojo. */}
+      <div className={alternativa ? BANDA_COSTO_ALT : BANDA_COSTO}>
         <button
           onClick={() => setShowCost((v) => !v)}
-          className="text-[11px] text-red-800 hover:text-red-900 flex items-center gap-1.5 w-full text-left"
+          className={alternativa ? BOTON_COSTO_ALT : BOTON_COSTO}
         >
           <span className="inline-block w-3">{showCost ? "▾" : "▸"}</span>
           <span className="font-medium">Costo interno</span>
@@ -2253,6 +2272,16 @@ function ItemBlock({
 }
 
 // ─── Piezas compartidas por los dos bloques de partida ───────────────────────
+// La banda de "Costo interno" de una partida base (rojo burdeo, ancho
+// completo) y su versión para una ALTERNATIVA: sin banda, una línea chica
+// sangrada a la columna de la partida, mismo rojo (sigue siendo interno).
+const BANDA_COSTO = "px-4 py-1.5 border-b border-red-200 bg-gray-50";
+const BOTON_COSTO =
+  "text-[11px] text-red-800 hover:text-red-900 flex items-center gap-1.5 w-full text-left";
+const BANDA_COSTO_ALT = "pl-[4.75rem] pr-4 pt-0.5 pb-2";
+const BOTON_COSTO_ALT =
+  "text-[10px] text-red-800/80 hover:text-red-900 flex items-center gap-1.5 w-full text-left";
+
 // Primera celda de la fila: manija + número para una partida base; para una
 // alternativa, la flecha "↳" que dice "cuelga de la de arriba".
 function PrimeraCelda({
@@ -2584,11 +2613,13 @@ function HerrajePartidaBlock({
           (no va al PDF del cliente); la utilidad sigue en verde.
           - Modo MANUAL (sin líneas del catálogo): proveedor + costo editables.
           - Modo itemizado (con líneas): el costo lo derivan las líneas (solo
-            lectura); el margen sigue editable. */}
-      <div className="px-4 py-1.5 border-b border-red-200 bg-gray-50">
+            lectura); el margen sigue editable.
+          En una ALTERNATIVA va como línea chica sangrada, sin banda (ver
+          ItemBlock). */}
+      <div className={alternativa ? BANDA_COSTO_ALT : BANDA_COSTO}>
         <button
           onClick={() => setShowCost((v) => !v)}
-          className="text-[11px] text-red-800 hover:text-red-900 flex items-center gap-1.5 w-full text-left"
+          className={alternativa ? BOTON_COSTO_ALT : BOTON_COSTO}
         >
           <span className="inline-block w-3">{showCost ? "▾" : "▸"}</span>
           <span className="font-medium">Costo interno</span>

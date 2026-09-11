@@ -134,7 +134,7 @@ lib/
 
 - `BudgetVersion` — V1, V2, V3 por proyecto. Tipo: `obra | muebles | artefactos`.
 - `ObraItem` — líneas del presupuesto Obra. `lineageId` para identidad estable a través de versiones.
-- `MuebleChapter` + `MuebleItem` + `MuebleQuote` + `MuebleDetail` — Muebles tienen jerarquía propia (capítulo → item → cotización por proveedor → detalle).
+- `MuebleChapter` + `MuebleItem` + `MuebleQuote` + `MuebleDetail` — Muebles tienen jerarquía propia (capítulo → item → cotización por proveedor → detalle). Desde 2026-09-10 un `MuebleItem` puede ser **alternativa para el cliente** de otro (`alternativeOfId`, un solo nivel): el mismo mueble en otro material con su precio, que el cliente ve al lado de la base con la diferencia. **No suma en ningún total** — el criterio único vive en `src/lib/presupuesto/muebleItems.ts` (`soloPrincipales`) y lo usan los seis lugares que suman muebles. No confundir con `MuebleQuote` (cotizaciones de proveedor, costo interno).
 - `ArtefactoItem` — Artefactos en estructura plana.
 - `PartidaCatalog` + `PartidaComponent` — catálogo global de partidas (206 al día) con desglose por tipo de concepto: `material | labor | margin | tool | loss | subcontract`.
 - `MaterialCatalog` + `MaterialPriceOffer` + `MaterialPriceHistory`.

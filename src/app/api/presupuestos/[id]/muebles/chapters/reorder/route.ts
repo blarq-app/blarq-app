@@ -32,11 +32,17 @@ export async function PATCH(
       );
     }
 
-    // Items de cada capítulo (para renumerar el prefijo), ordenados.
+    // Items de cada capítulo (para renumerar el prefijo), ordenados. Solo las
+    // partidas BASE: las alternativas para el cliente no llevan número propio
+    // ni posición en la lista (cuelgan de su base).
     const chapters = await prisma.muebleChapter.findMany({
       where: { budgetVersionId, id: { in: orderedIds } },
       include: {
-        items: { orderBy: { sortOrder: "asc" }, select: { id: true } },
+        items: {
+          where: { alternativeOfId: null },
+          orderBy: { sortOrder: "asc" },
+          select: { id: true },
+        },
       },
     });
     const byId = new Map(chapters.map((c) => [c.id, c]));

@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-09-10 — Alternativas para el cliente dentro de una cotización de muebles
+
+- **El problema**: la cocina de Candelaria se cotizó en tres melaminas (Vesto / Gizir / Egger) y eran **tres versiones enteras** con tres PDFs donde cambiaba UNA partida; tocar los herrajes o la cubierta era tocarlo tres veces. Ahora una partida puede tener **alternativas para el cliente** (`MuebleItem.alternativeOfId`): el mismo mueble en otro material, con su precio, que el cliente ve **debajo de la base con la diferencia** en un solo PDF.
+- **La alternativa ES una partida completa** (sub-líneas de materialidad, costo, utilidad, sus propias cotizaciones de proveedor), colgada de la base, un solo nivel. Nace como **copia de la base** para cambiar solo lo que difiere. **No se confunde con las cotizaciones de proveedor** (`MuebleQuote`): eso es costo interno y el cliente nunca lo ve.
+- **Regla dura: la alternativa no suma en ningún total.** El criterio vive en UN archivo (`src/lib/presupuesto/muebleItems.ts` → `soloPrincipales`) y lo usan los **seis** lugares que suman muebles: `metrics.ts`, `cuadroResumen.ts`, `fondoSueldos.ts`, el PDF, la lista de versiones (total y conteo de items) y el editor. Snapshot de `metrics.ts` main vs nuevo sobre 4 proyectos (Sena, Aguirre, BLARQ, Candelaria): 0 diferencias.
+- **"Hacer principal"**: cuando el cliente elige, se intercambian los papeles (la base vieja queda como alternativa, no se borra). **Duplicar versión** copia las alternativas y las re-enlaza a la copia de su base (segunda pasada con mapa viejo→nuevo, la omisión que ya mordió con los herrajes en #383). Borrar la base borra sus alternativas (cascade, con confirmación).
+- **Schema**: columna nueva `MuebleItem.alternativeOfId` + índice + FK self-relation con cascade. A la viva va como SQL idempotente `prisma/sql/177-mueble-alternativas.sql` (`scripts/aplicar-177-columna.ts <env>`), **ANTES del deploy**: el cliente Prisma nuevo pide la columna en todo `findMany` de muebles. Regresión pura en `scripts/test-mueble-items.ts` (18 casos).
+
 ## 2026-09-05 — La app avisa cuando una partida lleva un material que no se está cobrando
 
 - **El agujero**: en una partida de la V4 de Paseo del Sena había un material escrito con su precio pero en **cantidad 0**. Suma $0, así que se compra igual y nadie lo cobra, y no había nada en pantalla que lo dijera. **No es un descuido de esa obra: nace en el CATÁLOGO y se arrastra** — 14 de 242 partidas del catálogo tienen un componente `material` en `quantity = 0`, y cada obra que usa esa partida hereda el cero (41 líneas en las versiones vigentes).

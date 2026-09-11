@@ -215,10 +215,17 @@ const CSS = `
   .msub { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; color: #776E60; font-size: 5.7pt; display: block; margin-top: 2pt; }
   .mtt { text-align: right; color: #36322C; font-variant-numeric: tabular-nums; font-size: 7pt; font-weight: 700; }
 
-  .spec { margin: 1pt 0 3pt 7%; padding: 1pt 0 1pt 12pt; border-left: 2px solid #E1DFDD; }
+  /* Desglose de la partida. Sin la raya vertical (la sacó MJ el 2026-09-11:
+     "ensucia") — se conserva el ancho que ocupaba para que nada se corra. */
+  .spec { margin: 1pt 0 3pt 7%; padding: 1pt 0 1pt calc(12pt + 2px); }
   .specrow { display: grid; grid-template-columns: 34% 1fr; padding: 0; font-size: 5.8pt; line-height: 1.08; }
   .speclbl { letter-spacing: .06em; text-transform: uppercase; color: #5C5449; font-weight: 700; }
   .specval { color: #625A4F; }
+  /* Una línea SIN rótulo (ej. los herrajes cargados como lista: "CAJONERAS
+     SAMET…") ocupa las dos columnas y arranca a la izquierda, con la
+     tipografía del rótulo. Si no, quedaba colgando en la columna de la
+     materialidad con un hueco delante. */
+  .speclbl:empty + .specval { grid-column: 1 / -1; letter-spacing: .06em; text-transform: uppercase; color: #5C5449; font-weight: 700; }
   .hrow { display: flex; justify-content: space-between; align-items: baseline; padding: 0.8pt 0; border-bottom: 1px solid #EBEAE9; font-size: 5.8pt; }
   .hrow:last-child { border-bottom: none; }
   .hname { color: #625A4F; }

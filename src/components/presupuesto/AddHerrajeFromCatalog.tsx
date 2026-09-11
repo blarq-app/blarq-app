@@ -102,11 +102,15 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default function AddHerrajeFromCatalog({
   budgetId,
   itemId,
+  empezarEnNuevo = false,
   onAdded,
   onClose,
 }: {
   budgetId: string;
   itemId: string;
+  // "Crear uno nuevo" desde la partida: la ventana arranca con el formulario
+  // de alta abierto en vez de la lista.
+  empezarEnNuevo?: boolean;
   onAdded: (line: MuebleHerrajeLine, item: UpdatedItem) => void;
   onClose: () => void;
 }) {
@@ -125,6 +129,115 @@ export default function AddHerrajeFromCatalog({
   const [addingId, setAddingId] = useState<string | null>(null);
   const [addedCount, setAddedCount] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
+
+  // "+ Nuevo herraje" (pedido de MJ, 2026-09-11): un herraje que no está en el
+  // catálogo se carga acá mismo y de una vez queda en las dos partes — en el
+  // catálogo (para que la próxima cotización lo encuentre y el revisador de
+  // precios lo vigile) y en la partida. El proveedor es la pestaña activa.
+  const [nuevoAbierto, setNuevoAbierto] = useState(empezarEnNuevo);
+  // Tilde "Guardar en el catálogo" (opción 3, pedida por MJ): prendido, el
+  // herraje queda en el catálogo del proveedor y entra a la partida; apagado,
+  // es una línea a mano solo de esta partida (para lo que se compra una vez).
+  const [guardarEnCatalogo, setGuardarEnCatalogo] = useState(true);
+  const [avisoNuevo, setAvisoNuevo] = useState<string | null>(null);
+  const [nuevo, setNuevo] = useState({
+    name: "",
+    category: "accesorio" as (typeof CATEGORY_OPTIONS)[number],
+    measure: "",
+    finish: "",
+    brand: "",
+    sku: "",
+    costNet: "",
+  });
+  const [guardandoNuevo, setGuardandoNuevo] = useState(false);
+
+  function abrirNuevo() {
+    setNuevo((n) => ({
+      ...n,
+      // Si hay un filtro de categoría puesto, el herraje nuevo casi seguro es
+      // de esa categoría; y el texto buscado suele ser el nombre.
+      category: (filterCategory as (typeof CATEGORY_OPTIONS)[number]) || n.category,
+      name: n.name || query.trim(),
+    }));
+    setError(null);
+    setNuevoAbierto(true);
+  }
+
+  async function guardarNuevo() {
+    const name = nuevo.name.trim();
+    const costNet = Number(String(nuevo.costNet).replace(/\./g, "").replace(",", "."));
+    if (!name) return setError("El herraje necesita un nombre.");
+    if (!Number.isFinite(costNet) || costNet < 0) return setError("El costo neto tiene que ser un número.");
+    setGuardandoNuevo(true);
+    setError(null);
+    setAvisoNuevo(null);
+    try {
+      if (!guardarEnCatalogo) {
+        // Línea A MANO, solo de esta partida: el back la acepta sin catalogId
+        // y guarda los campos tal cual (nombre, medida, color, SKU, costo).
+        const res = await fetch(
+          `/api/presupuestos/${budgetId}/muebles/items/${itemId}/herrajes`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              supplier,
+              name,
+              measure: nuevo.measure.trim() || null,
+              finish: nuevo.finish.trim() || null,
+              sku: nuevo.sku.trim() || null,
+              costNet,
+              quantity: 1,
+            }),
+          }
+        );
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          setError(j.error || "No se pudo agregar el herraje a la partida.");
+          return;
+        }
+        const data = await res.json();
+        onAdded(data.line, data.item);
+        setAvisoNuevo(`"${name}" quedó en la partida (solo en esta cotización, no en el catálogo).`);
+        setNuevoAbierto(false);
+        setNuevo({ name: "", category: nuevo.category, measure: "", finish: "", brand: "", sku: "", costNet: "" });
+        return;
+      }
+
+      // 1) Al catálogo, con el proveedor de la pestaña activa.
+      const resCat = await fetch(`/api/catalogo/herrajes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          supplier,
+          category: nuevo.category,
+          measure: nuevo.measure.trim() || null,
+          finish: nuevo.finish.trim() || null,
+          brand: nuevo.brand.trim() || null,
+          sku: nuevo.sku.trim() || null,
+          costNet,
+        }),
+      });
+      if (!resCat.ok) {
+        const j = await resCat.json().catch(() => ({}));
+        setError(j.error || "No se pudo guardar el herraje en el catálogo.");
+        return;
+      }
+      const creado: HerrajeCatalogItem = await resCat.json();
+      // Aparece en la lista de esta pestaña sin recargar, marcado como agregado.
+      setItems((prev) => [creado, ...prev]);
+      // 2) A la partida, por el mismo camino que cualquier herraje del catálogo
+      //    (el back snapshotea nombre/medida/color/costo desde el catálogo).
+      await handleAdd(creado);
+      setNuevoAbierto(false);
+      setNuevo({ name: "", category: nuevo.category, measure: "", finish: "", brand: "", sku: "", costNet: "" });
+    } catch {
+      setError("No se pudo guardar el herraje.");
+    } finally {
+      setGuardandoNuevo(false);
+    }
+  }
 
   // Se trae el catálogo del proveedor activo cada vez que cambia la pestaña.
   // El filtrado por categoría/texto es local.
@@ -272,6 +385,110 @@ export default function AddHerrajeFromCatalog({
         )}
       </div>
 
+      {/* Alta de un herraje que no está en el catálogo. Queda en el catálogo
+          del proveedor activo y entra a la partida de una vez. */}
+      {nuevoAbierto && (
+        <div className="mb-3 bg-white border border-gray-300 rounded px-3 py-2.5">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-700">
+              Nuevo herraje en {supplier}
+            </span>
+            <label className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={guardarEnCatalogo}
+                onChange={(e) => setGuardarEnCatalogo(e.target.checked)}
+                className="accent-gray-900"
+              />
+              Guardar en el catálogo de {supplier}
+              <span className="text-gray-400">
+                {guardarEnCatalogo
+                  ? "· queda para las próximas cotizaciones"
+                  : "· solo en esta partida"}
+              </span>
+            </label>
+          </div>
+          <div className="grid grid-cols-[minmax(0,2fr)_7rem_6rem_6rem_6rem_6rem_6.5rem] gap-2 text-xs">
+            <input
+              autoFocus
+              type="text"
+              value={nuevo.name}
+              onChange={(e) => setNuevo({ ...nuevo, name: e.target.value })}
+              placeholder="Nombre (ej. Corredera oculta extensión total)"
+              className="px-2 py-1.5 border border-gray-300 rounded outline-none focus:border-gray-500"
+            />
+            <select
+              value={nuevo.category}
+              onChange={(e) =>
+                setNuevo({ ...nuevo, category: e.target.value as (typeof CATEGORY_OPTIONS)[number] })
+              }
+              className="px-2 py-1.5 border border-gray-300 rounded outline-none focus:border-gray-500 cursor-pointer"
+              title="Categoría"
+            >
+              {CATEGORY_OPTIONS.map((c) => (
+                <option key={c} value={c}>
+                  {CATEGORY_LABELS[c]}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={nuevo.measure}
+              onChange={(e) => setNuevo({ ...nuevo, measure: e.target.value })}
+              placeholder="Medida"
+              className="px-2 py-1.5 border border-gray-300 rounded outline-none focus:border-gray-500"
+            />
+            <input
+              type="text"
+              value={nuevo.finish}
+              onChange={(e) => setNuevo({ ...nuevo, finish: e.target.value })}
+              placeholder="Color"
+              className="px-2 py-1.5 border border-gray-300 rounded outline-none focus:border-gray-500"
+            />
+            <input
+              type="text"
+              value={nuevo.brand}
+              onChange={(e) => setNuevo({ ...nuevo, brand: e.target.value })}
+              placeholder="Marca"
+              className="px-2 py-1.5 border border-gray-300 rounded outline-none focus:border-gray-500"
+            />
+            <input
+              type="text"
+              value={nuevo.sku}
+              onChange={(e) => setNuevo({ ...nuevo, sku: e.target.value })}
+              placeholder="SKU"
+              className="px-2 py-1.5 border border-gray-300 rounded outline-none focus:border-gray-500"
+            />
+            <input
+              type="text"
+              inputMode="numeric"
+              value={nuevo.costNet}
+              onChange={(e) => setNuevo({ ...nuevo, costNet: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") guardarNuevo();
+              }}
+              placeholder="Costo neto"
+              className="px-2 py-1.5 border border-gray-300 rounded text-right tabular-nums outline-none focus:border-gray-500"
+            />
+          </div>
+          <div className="mt-2 flex items-center justify-end gap-2">
+            <button
+              onClick={() => setNuevoAbierto(false)}
+              className="text-xs text-gray-600 px-3 py-1.5 hover:text-gray-900"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={guardarNuevo}
+              disabled={guardandoNuevo || addingId !== null}
+              className="text-xs font-medium bg-gray-900 text-white px-3 py-1.5 rounded hover:bg-gray-700 disabled:opacity-50"
+            >
+              {guardandoNuevo ? "Guardando…" : "Guardar y agregar"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Lista de resultados del catálogo */}
       <div className="max-h-64 overflow-y-auto bg-white border border-gray-200 rounded">
         {loading && (
@@ -280,7 +497,15 @@ export default function AddHerrajeFromCatalog({
         {!loading && results.length === 0 && (
           <div className="px-3 py-4 text-xs text-gray-500 text-center">
             No hay herrajes en {supplier}
-            {query || filterCategory ? " con esa búsqueda o filtro" : ""}.
+            {query || filterCategory ? " con esa búsqueda o filtro" : ""}.{" "}
+            {!nuevoAbierto && (
+              <button
+                onClick={abrirNuevo}
+                className="text-gray-700 underline hover:text-gray-900"
+              >
+                Cargarlo como nuevo herraje
+              </button>
+            )}
           </div>
         )}
         {!loading &&
@@ -363,12 +588,28 @@ export default function AddHerrajeFromCatalog({
           {error}
         </div>
       )}
+      {avisoNuevo && !error && (
+        <div className="mt-3 text-xs text-gray-700 bg-white border border-gray-200 rounded px-2 py-1.5">
+          {avisoNuevo}
+        </div>
+      )}
 
-      {/* Cerrar el modal (sigue abierto para sumar varios). */}
+      {/* Pie: alta de un herraje nuevo + cerrar (sigue abierto para sumar varios). */}
       <div className="mt-3 flex items-center justify-between gap-4">
-        <span className="text-[10px] text-gray-400">
-          Entra con cantidad 1. La cantidad se ajusta en la línea de la partida.
-        </span>
+        <div className="flex items-center gap-3">
+          {!nuevoAbierto && (
+            <button
+              onClick={abrirNuevo}
+              className="text-xs font-medium text-gray-700 border border-gray-300 rounded px-2.5 py-1 hover:bg-white hover:border-gray-400"
+              title={`Cargar un herraje que no está en el catálogo de ${supplier}: queda en el catálogo y entra a la partida`}
+            >
+              + Nuevo herraje
+            </button>
+          )}
+          <span className="text-[10px] text-gray-400">
+            Entra con cantidad 1. La cantidad se ajusta en la línea de la partida.
+          </span>
+        </div>
         <button
           onClick={onClose}
           className="text-xs text-gray-600 px-3 py-1.5 hover:text-gray-900"

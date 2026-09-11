@@ -2405,6 +2405,8 @@ function HerrajePartidaBlock({
   onReorderHerrajes: (orderedIds: string[]) => void;
 }) {
   const [showCatalog, setShowCatalog] = useState(false);
+  // true = la ventana se abre directo en "Nuevo herraje" ("Crear uno nuevo").
+  const [catalogoEnNuevo, setCatalogoEnNuevo] = useState(false);
   // Costo interno colapsable, IGUAL que muebles/cubiertas. Arranca ABIERTO
   // cuando la partida está vacía (modo manual: hay que tipear proveedor+costo);
   // si ya tiene líneas del catálogo el costo lo derivan ellas, así que arranca
@@ -2589,15 +2591,39 @@ function HerrajePartidaBlock({
         ))
       )}
 
-      {/* Botón "Agregar del catálogo" + modal */}
+      {/* Botones "Agregar del catálogo" y "Crear uno nuevo" + la ventana.
+          "Crear uno nuevo" (pedido de MJ, 2026-09-11) abre la misma ventana
+          directo en el formulario de alta: un herraje que no está en el
+          catálogo, con la opción de guardarlo ahí o dejarlo solo en esta
+          partida. */}
       <div className={`${ROW_GRID} px-4 pb-1 pt-1 border-b border-gray-100`}>
         <div></div>
-        <button
-          onClick={() => setShowCatalog((v) => !v)}
-          className="text-[10px] text-gray-400 hover:text-gray-900 text-left"
-        >
-          {showCatalog ? "Cerrar catálogo" : "Agregar del catálogo"}
-        </button>
+        <div className="flex items-center gap-2 text-[10px]">
+          <button
+            onClick={() => {
+              setCatalogoEnNuevo(false);
+              setShowCatalog((v) => !v);
+            }}
+            className="text-gray-400 hover:text-gray-900 text-left"
+          >
+            {showCatalog ? "Cerrar catálogo" : "Agregar del catálogo"}
+          </button>
+          {!showCatalog && (
+            <>
+              <span className="text-gray-300">·</span>
+              <button
+                onClick={() => {
+                  setCatalogoEnNuevo(true);
+                  setShowCatalog(true);
+                }}
+                className="text-gray-400 hover:text-gray-900 text-left"
+                title="Un herraje que no está en el catálogo: se carga a mano, y elegís si queda en el catálogo o solo en esta partida"
+              >
+                Crear uno nuevo
+              </button>
+            </>
+          )}
+        </div>
         <div></div>
         <div></div>
         <div></div>
@@ -2607,6 +2633,7 @@ function HerrajePartidaBlock({
         <AddHerrajeFromCatalog
           budgetId={budgetId}
           itemId={item.id}
+          empezarEnNuevo={catalogoEnNuevo}
           onAdded={(line, updated) =>
             onHerrajeAdded(line as MuebleHerraje, updated as Partial<MuebleItem>)
           }

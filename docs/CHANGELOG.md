@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-09-11 — Plantillas de muebles, herrajes de cualquier proveedor y herrajes nuevos desde la partida
+
+- **Plantillas de capítulos y partidas de muebles (PR #437)**: un capítulo o una partida ya armada se guarda como plantilla ("Guardar como plantilla", reemplaza por nombre) y al agregar se elige "desde plantilla": nace con componentes, materialidad, descripción, tipo, margen y proveedor de referencia, en $0. Tres tablas nuevas (`MuebleChapterTemplate`, `MuebleItemTemplate`, `MuebleItemTemplateDetail`), aplicadas a la viva con `scripts/aplicar-sql.ts`. Semilla: 4 capítulos tipo del itemizado real de Los Algarrobos. Las plantillas son de MJ y viven en la base, no en el código.
+- **Herrajes de cualquier proveedor (PR #436)**: las pestañas DPH/HBT dejaron de estar fijas — son los fijos más cualquier proveedor que exista en el catálogo (`herrajeProveedores.ts`). "Otro proveedor…" en el alta; al guardar el primero, nace su pestaña. Decisión: el proveedor sale en el PDF al cliente, así que NO se usa "Otros" como proveedor.
+- **Herraje nuevo desde la partida (PR #434)**: "Crear uno nuevo" al lado de "Agregar del catálogo", con tilde "Guardar en el catálogo" (default ON; apagado = línea a mano solo en esa partida).
+- **El proveedor de cada herraje en el PDF al cliente (PR #432)**: "Bisagra Cliptop … · Blum · HBT". MJ compra cada herraje a un proveedor distinto y quiere que el cliente lo vea. La marca real del catálogo va delante cuando existe.
+- **Editor de alternativas (PR #430)**: una sola banda roja de costo interno por partida; el grupo de alternativas en fondo greige con rótulo y línea entre alternativas. Resuelto por estructura, no con un cuarto color.
+
 ## 2026-09-10 — Alternativas para el cliente dentro de una cotización de muebles
 
 - **EN PROD el 2026-09-11 (PR #428).** La forma del PDF la eligió MJ en cuatro vueltas con el documento real de Candelaria: de la alternativa se listan **solo las sub-líneas que cambian** (`soloLoQueCambia`), bajo la partida, el bloque un peldaño más claro y sin negrita, sin raya ni fondo. Se descartaron: repetir el desglose entero, la raya vertical, la hoja aparte al final, el cuadro comparativo en columnas y la banda de fondo. De paso el desglose de TODAS las partidas perdió la raya vertical y las líneas sin rótulo (herrajes cargados como lista) arrancan en la columna izquierda.

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
 import AddHerrajeFromCatalog from "./AddHerrajeFromCatalog";
+import { MenuPlantillas, BotonGuardarPlantilla } from "./PlantillasMuebles";
 import { formatHerrajeName } from "@/lib/presupuesto/herrajeNombre";
 import {
   DndContext,
@@ -515,6 +516,54 @@ export default function MueblesEditor({
     if (!res.ok) return alert("Error al crear capítulo");
     const created: MuebleChapter = await res.json();
     setChapters([...chapters, { ...created, items: [] }]);
+  }
+
+  // Capítulo DESDE PLANTILLA: nace con sus partidas y componentes (sin
+  // precios). El back devuelve el capítulo completo con relaciones.
+  async function addChapterDesdePlantilla(templateId: string) {
+    const res = await fetch(`/api/presupuestos/${budgetId}/muebles/chapters`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ templateId }),
+    });
+    if (!res.ok) return alert("Error al crear el capítulo desde la plantilla");
+    const created: MuebleChapter = await res.json();
+    setChapters((prev) => [
+      ...prev,
+      {
+        ...created,
+        items: (created.items ?? []).map((i) => ({
+          ...i,
+          details: i.details ?? [],
+          quotes: i.quotes ?? [],
+          herrajes: i.herrajes ?? [],
+        })),
+      },
+    ]);
+  }
+
+  // Partida DESDE PLANTILLA dentro de un capítulo.
+  async function addItemDesdePlantilla(chapterId: string, templateId: string) {
+    const res = await fetch(`/api/presupuestos/${budgetId}/muebles/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chapterId, templateId }),
+    });
+    if (!res.ok) return alert("Error al crear la partida desde la plantilla");
+    const created: MuebleItem = await res.json();
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id === chapterId
+          ? {
+              ...c,
+              items: [
+                ...c.items,
+                { ...created, details: created.details ?? [], quotes: created.quotes ?? [], herrajes: created.herrajes ?? [] },
+              ],
+            }
+          : c
+      )
+    );
   }
 
   async function updateChapter(chapterId: string, patch: Partial<MuebleChapter>) {
@@ -1245,6 +1294,7 @@ export default function MueblesEditor({
           onUpdate={(patch) => updateChapter(ch.id, patch)}
           onDelete={() => deleteChapter(ch.id)}
           onAddItem={() => addItem(ch.id)}
+          onAddItemDesdePlantilla={(templateId) => addItemDesdePlantilla(ch.id, templateId)}
           onAddHerrajePartida={() => addHerrajePartida(ch.id)}
           onUpdateItem={(itemId, patch) => updateItem(ch.id, itemId, patch)}
           onDeleteItem={(itemId) => deleteItem(ch.id, itemId)}
@@ -1290,12 +1340,18 @@ export default function MueblesEditor({
           </SortableContext>
         </DndContext>
 
-        <button
-          onClick={addChapter}
-          className="text-xs text-gray-500 hover:text-gray-900 px-4 py-2 w-full text-left border-t border-gray-100"
-        >
-          + Agregar capítulo (ej. Cocina, Closet dormitorio, Walk-in)
-        </button>
+        {/* Capítulo nuevo vacío, o desde una plantilla de MJ (nace con sus
+            partidas y componentes armados, sin precios). */}
+        <div className="flex items-center gap-2 px-4 py-2 border-t border-gray-100 text-xs">
+          <button
+            onClick={addChapter}
+            className="text-gray-500 hover:text-gray-900 text-left"
+          >
+            + Agregar capítulo (ej. Cocina, Closet dormitorio, Walk-in)
+          </button>
+          <span className="text-gray-300">·</span>
+          <MenuPlantillas nivel="capitulo" onElegir={(id) => addChapterDesdePlantilla(id)} className="text-xs" />
+        </div>
       </div>
 
       {/* Resumen interno */}
@@ -1417,6 +1473,7 @@ function ChapterBlock({
   onUpdate,
   onDelete,
   onAddItem,
+  onAddItemDesdePlantilla,
   onAddHerrajePartida,
   onUpdateItem,
   onDeleteItem,
@@ -1446,6 +1503,7 @@ function ChapterBlock({
   onUpdate: (patch: Partial<MuebleChapter>) => void;
   onDelete: () => void;
   onAddItem: () => void;
+  onAddItemDesdePlantilla: (templateId: string) => void | Promise<void>;
   onAddHerrajePartida: () => void;
   onUpdateItem: (itemId: string, patch: Partial<MuebleItem>) => void;
   onDeleteItem: (itemId: string) => void;
@@ -1692,12 +1750,21 @@ function ChapterBlock({
           - "Partida de herrajes" = trae el catálogo (botón con borde, más
             visible) — MJ se confundía y nombraba un item normal "HERRAJES". */}
       <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between gap-4">
-        <button
-          onClick={onAddItem}
-          className="text-[11px] text-gray-400 hover:text-gray-900"
-        >
-          + Agregar item al capítulo (ej. Muebles, Cubiertas)
-        </button>
+        <div className="flex items-center gap-2 text-[11px]">
+          <button
+            onClick={onAddItem}
+            className="text-gray-400 hover:text-gray-900"
+          >
+            + Agregar item al capítulo (ej. Muebles, Cubiertas)
+          </button>
+          <span className="text-gray-300">·</span>
+          {/* Partida desde una plantilla de MJ (con componentes armados). */}
+          <MenuPlantillas nivel="partida" onElegir={(id) => onAddItemDesdePlantilla(id)} />
+          <span className="text-gray-300">·</span>
+          {/* Este capítulo, con sus partidas base y componentes, como
+              plantilla para otras cotizaciones. */}
+          <BotonGuardarPlantilla tipo="capitulo" id={chapter.id} nombreSugerido={chapter.name} />
+        </div>
         {/* El botón de crear partida de herrajes se muestra SOLO si el capítulo
             todavía no tiene una. Una vez creada, se suman más herrajes con
             "Agregar del catálogo" DENTRO de la partida (los sectores son
@@ -1980,15 +2047,22 @@ function ItemBlock({
         </SortableContext>
       </DndContext>
 
-      {/* Botón "+ Componente" en la columna PARTIDA */}
+      {/* Botón "+ Componente" en la columna PARTIDA; a la derecha, guardar la
+          partida (sin precios) como plantilla. Las alternativas no se guardan
+          como plantilla: la plantilla sale de la partida principal. */}
       <div className={`${ROW_GRID} px-4 pb-1 border-b border-gray-100`}>
         <div></div>
-        <button
-          onClick={onAddDetail}
-          className="text-[10px] text-gray-400 hover:text-gray-900 text-left"
-        >
-          + Componente
-        </button>
+        <div className="flex items-center justify-between gap-3 text-[10px]">
+          <button
+            onClick={onAddDetail}
+            className="text-gray-400 hover:text-gray-900 text-left"
+          >
+            + Componente
+          </button>
+          {!alternativa && (
+            <BotonGuardarPlantilla tipo="partida" id={item.id} nombreSugerido={item.name} />
+          )}
+        </div>
         <div></div>
         <div></div>
         <div></div>

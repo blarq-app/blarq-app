@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatCLP } from "@/lib/utils";
 import { formatHerrajeName } from "@/lib/presupuesto/herrajeNombre";
+import {
+  OTRO_PROVEEDOR,
+  PROVEEDORES_FIJOS,
+  normalizarProveedor,
+} from "@/lib/presupuesto/herrajeProveedores";
 
 // Para mostrar una imagen externa (DPH/HBT / CDN) sin que un bloqueador del
 // navegador la frene, la servimos por nuestro proxy. Las subidas (data:) van
@@ -63,7 +68,9 @@ interface UpdatedItem {
   [k: string]: unknown;
 }
 
-const SUPPLIER_OPTIONS = ["DPH", "HBT"] as const;
+// Pestañas de proveedor: arrancan con los fijos y se completan con lo que
+// devuelve /api/catalogo/herrajes/proveedores (DPH, HBT + los que existan).
+const SUPPLIER_OPTIONS = [...PROVEEDORES_FIJOS];
 // Categorías del catálogo de herrajes (mismo set que la pantalla del catálogo).
 const CATEGORY_OPTIONS = [
   "cajon",
@@ -114,9 +121,27 @@ export default function AddHerrajeFromCatalog({
   onAdded: (line: MuebleHerrajeLine, item: UpdatedItem) => void;
   onClose: () => void;
 }) {
-  const [supplier, setSupplier] = useState<(typeof SUPPLIER_OPTIONS)[number]>(
-    "DPH"
-  );
+  const [supplier, setSupplier] = useState<string>("DPH");
+  const [suppliers, setSuppliers] = useState<string[]>(SUPPLIER_OPTIONS);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/catalogo/herrajes/proveedores`);
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data) && data.length > 0) setSuppliers(data);
+      } catch {
+        // Sin red: quedan los fijos.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  // Proveedor del herraje NUEVO: por defecto la pestaña activa; "Otro…" abre
+  // un campo para escribir uno que todavía no existe (ej. Carlos).
+  const [nuevoProveedor, setNuevoProveedor] = useState<string>("");
+  const [nuevoProveedorOtro, setNuevoProveedorOtro] = useState(false);
   const [query, setQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
   const [items, setItems] = useState<HerrajeCatalogItem[]>([]);
@@ -152,6 +177,12 @@ export default function AddHerrajeFromCatalog({
   const [guardandoNuevo, setGuardandoNuevo] = useState(false);
 
   function abrirNuevo() {
+    setNuevoProveedor(supplier);
+    setNuevoProveedorOtro(false);
+    // El tilde vuelve a prendido cada vez: que un herraje quede fuera del
+    // catálogo es la excepción y se decide en cada alta, no se hereda de la
+    // anterior (en la prueba, el tercer alta salió sin catálogo por arrastre).
+    setGuardarEnCatalogo(true);
     setNuevo((n) => ({
       ...n,
       // Si hay un filtro de categoría puesto, el herraje nuevo casi seguro es
@@ -168,6 +199,12 @@ export default function AddHerrajeFromCatalog({
     const costNet = Number(String(nuevo.costNet).replace(/\./g, "").replace(",", "."));
     if (!name) return setError("El herraje necesita un nombre.");
     if (!Number.isFinite(costNet) || costNet < 0) return setError("El costo neto tiene que ser un número.");
+    // El proveedor del herraje nuevo: el elegido en el formulario (puede ser
+    // uno escrito a mano). Si quedó vacío, la pestaña activa.
+    const proveedor = normalizarProveedor(nuevoProveedor) || supplier;
+    if (nuevoProveedorOtro && !normalizarProveedor(nuevoProveedor)) {
+      return setError("Escribí el nombre del proveedor.");
+    }
     setGuardandoNuevo(true);
     setError(null);
     setAvisoNuevo(null);
@@ -181,7 +218,7 @@ export default function AddHerrajeFromCatalog({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              supplier,
+              supplier: proveedor,
               name,
               measure: nuevo.measure.trim() || null,
               finish: nuevo.finish.trim() || null,
@@ -204,13 +241,13 @@ export default function AddHerrajeFromCatalog({
         return;
       }
 
-      // 1) Al catálogo, con el proveedor de la pestaña activa.
+      // 1) Al catálogo, con el proveedor elegido en el formulario.
       const resCat = await fetch(`/api/catalogo/herrajes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
-          supplier,
+          supplier: proveedor,
           category: nuevo.category,
           measure: nuevo.measure.trim() || null,
           finish: nuevo.finish.trim() || null,
@@ -225,8 +262,17 @@ export default function AddHerrajeFromCatalog({
         return;
       }
       const creado: HerrajeCatalogItem = await resCat.json();
-      // Aparece en la lista de esta pestaña sin recargar, marcado como agregado.
-      setItems((prev) => [creado, ...prev]);
+      // Si el proveedor es nuevo, nace su pestaña y nos paramos en ella (el
+      // cambio de pestaña recarga la lista desde el servidor, donde ya está).
+      // Si es la pestaña activa, aparece en la lista sin recargar, marcado
+      // como agregado.
+      if (creado.supplier !== supplier) {
+        setSuppliers((prev) => (prev.includes(creado.supplier) ? prev : [...prev, creado.supplier]));
+        setSupplier(creado.supplier);
+        setFilterCategory(null);
+      } else {
+        setItems((prev) => [creado, ...prev]);
+      }
       // 2) A la partida, por el mismo camino que cualquier herraje del catálogo
       //    (el back snapshotea nombre/medida/color/costo desde el catálogo).
       await handleAdd(creado);
@@ -327,7 +373,7 @@ export default function AddHerrajeFromCatalog({
         </h3>
         <div className="flex items-center gap-1 text-[11px]">
           {/* Pestañas de proveedor: filtran el catálogo. */}
-          {SUPPLIER_OPTIONS.map((s) => (
+          {suppliers.map((s) => (
             <button
               key={s}
               onClick={() => {
@@ -390,9 +436,45 @@ export default function AddHerrajeFromCatalog({
       {nuevoAbierto && (
         <div className="mb-3 bg-white border border-gray-300 rounded px-3 py-2.5">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-700">
-              Nuevo herraje en {supplier}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-700">
+                Nuevo herraje
+              </span>
+              {/* Proveedor del herraje nuevo: los que existen + "Otro…" para
+                  escribir uno (ej. Carlos, que vende itemizado un herraje de
+                  una marca a la que MJ no tiene acceso). */}
+              <select
+                value={nuevoProveedorOtro ? OTRO_PROVEEDOR : nuevoProveedor}
+                onChange={(e) => {
+                  if (e.target.value === OTRO_PROVEEDOR) {
+                    setNuevoProveedorOtro(true);
+                    setNuevoProveedor("");
+                  } else {
+                    setNuevoProveedorOtro(false);
+                    setNuevoProveedor(e.target.value);
+                  }
+                }}
+                className="px-2 py-1 border border-gray-300 rounded text-xs outline-none focus:border-gray-500 cursor-pointer"
+                title="Proveedor del herraje"
+              >
+                {suppliers.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+                <option value={OTRO_PROVEEDOR}>Otro proveedor…</option>
+              </select>
+              {nuevoProveedorOtro && (
+                <input
+                  autoFocus
+                  type="text"
+                  value={nuevoProveedor}
+                  onChange={(e) => setNuevoProveedor(e.target.value)}
+                  placeholder="Nombre del proveedor (ej. Carlos)"
+                  className="w-56 px-2 py-1 border border-gray-300 rounded text-xs outline-none focus:border-gray-500"
+                />
+              )}
+            </div>
             <label className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -400,7 +482,7 @@ export default function AddHerrajeFromCatalog({
                 onChange={(e) => setGuardarEnCatalogo(e.target.checked)}
                 className="accent-gray-900"
               />
-              Guardar en el catálogo de {supplier}
+              Guardar en el catálogo
               <span className="text-gray-400">
                 {guardarEnCatalogo
                   ? "· queda para las próximas cotizaciones"

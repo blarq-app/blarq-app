@@ -2,6 +2,10 @@ import { prisma } from "@/lib/prisma";
 import HerrajesCatalogClient, {
   type HerrajeItem,
 } from "@/components/catalogo/HerrajesCatalogClient";
+import {
+  normalizarProveedor,
+  proveedoresDe,
+} from "@/lib/presupuesto/herrajeProveedores";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +20,12 @@ export default async function CatalogoHerrajesPage() {
   });
 
   const total = items.length;
-  const bySupplier = {
-    DPH: items.filter((i) => i.supplier === "DPH").length,
-    HBT: items.filter((i) => i.supplier === "HBT").length,
-  };
+  // Conteo por proveedor en el orden de las pestañas: DPH, HBT y los demás
+  // que existan (los proveedores ya no son dos fijos, ver herrajeProveedores).
+  const proveedores = proveedoresDe(items);
+  const conteo = proveedores
+    .map((s) => `${items.filter((i) => normalizarProveedor(i.supplier) === s).length} ${s}`)
+    .join(" · ");
 
   return (
     <div>
@@ -29,7 +35,7 @@ export default async function CatalogoHerrajesPage() {
             Catálogo de herrajes
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            {total} herrajes · {bySupplier.DPH} DPH · {bySupplier.HBT} HBT
+            {total} herrajes · {conteo}
           </p>
         </div>
       </div>

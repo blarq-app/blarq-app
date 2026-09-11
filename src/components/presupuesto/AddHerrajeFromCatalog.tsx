@@ -102,11 +102,15 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default function AddHerrajeFromCatalog({
   budgetId,
   itemId,
+  empezarEnNuevo = false,
   onAdded,
   onClose,
 }: {
   budgetId: string;
   itemId: string;
+  // "Crear uno nuevo" desde la partida: la ventana arranca con el formulario
+  // de alta abierto en vez de la lista.
+  empezarEnNuevo?: boolean;
   onAdded: (line: MuebleHerrajeLine, item: UpdatedItem) => void;
   onClose: () => void;
 }) {
@@ -130,7 +134,12 @@ export default function AddHerrajeFromCatalog({
   // catálogo se carga acá mismo y de una vez queda en las dos partes — en el
   // catálogo (para que la próxima cotización lo encuentre y el revisador de
   // precios lo vigile) y en la partida. El proveedor es la pestaña activa.
-  const [nuevoAbierto, setNuevoAbierto] = useState(false);
+  const [nuevoAbierto, setNuevoAbierto] = useState(empezarEnNuevo);
+  // Tilde "Guardar en el catálogo" (opción 3, pedida por MJ): prendido, el
+  // herraje queda en el catálogo del proveedor y entra a la partida; apagado,
+  // es una línea a mano solo de esta partida (para lo que se compra una vez).
+  const [guardarEnCatalogo, setGuardarEnCatalogo] = useState(true);
+  const [avisoNuevo, setAvisoNuevo] = useState<string | null>(null);
   const [nuevo, setNuevo] = useState({
     name: "",
     category: "accesorio" as (typeof CATEGORY_OPTIONS)[number],
@@ -161,7 +170,40 @@ export default function AddHerrajeFromCatalog({
     if (!Number.isFinite(costNet) || costNet < 0) return setError("El costo neto tiene que ser un número.");
     setGuardandoNuevo(true);
     setError(null);
+    setAvisoNuevo(null);
     try {
+      if (!guardarEnCatalogo) {
+        // Línea A MANO, solo de esta partida: el back la acepta sin catalogId
+        // y guarda los campos tal cual (nombre, medida, color, SKU, costo).
+        const res = await fetch(
+          `/api/presupuestos/${budgetId}/muebles/items/${itemId}/herrajes`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              supplier,
+              name,
+              measure: nuevo.measure.trim() || null,
+              finish: nuevo.finish.trim() || null,
+              sku: nuevo.sku.trim() || null,
+              costNet,
+              quantity: 1,
+            }),
+          }
+        );
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          setError(j.error || "No se pudo agregar el herraje a la partida.");
+          return;
+        }
+        const data = await res.json();
+        onAdded(data.line, data.item);
+        setAvisoNuevo(`"${name}" quedó en la partida (solo en esta cotización, no en el catálogo).`);
+        setNuevoAbierto(false);
+        setNuevo({ name: "", category: nuevo.category, measure: "", finish: "", brand: "", sku: "", costNet: "" });
+        return;
+      }
+
       // 1) Al catálogo, con el proveedor de la pestaña activa.
       const resCat = await fetch(`/api/catalogo/herrajes`, {
         method: "POST",
@@ -351,9 +393,20 @@ export default function AddHerrajeFromCatalog({
             <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-700">
               Nuevo herraje en {supplier}
             </span>
-            <span className="text-[10px] text-gray-400">
-              Se guarda en el catálogo y se agrega a la partida
-            </span>
+            <label className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={guardarEnCatalogo}
+                onChange={(e) => setGuardarEnCatalogo(e.target.checked)}
+                className="accent-gray-900"
+              />
+              Guardar en el catálogo de {supplier}
+              <span className="text-gray-400">
+                {guardarEnCatalogo
+                  ? "· queda para las próximas cotizaciones"
+                  : "· solo en esta partida"}
+              </span>
+            </label>
           </div>
           <div className="grid grid-cols-[minmax(0,2fr)_7rem_6rem_6rem_6rem_6rem_6.5rem] gap-2 text-xs">
             <input
@@ -533,6 +586,11 @@ export default function AddHerrajeFromCatalog({
       {error && (
         <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
           {error}
+        </div>
+      )}
+      {avisoNuevo && !error && (
+        <div className="mt-3 text-xs text-gray-700 bg-white border border-gray-200 rounded px-2 py-1.5">
+          {avisoNuevo}
         </div>
       )}
 

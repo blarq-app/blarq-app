@@ -1,22 +1,21 @@
 /**
- * Qué marca de un herraje se le muestra al CLIENTE.
+ * Qué se le muestra al CLIENTE junto a cada herraje: el PROVEEDOR de esa
+ * línea (DPH, HBT…), porque MJ compra cada herraje a un proveedor distinto y
+ * quiere que el cliente lo vea línea por línea (pedido del 2026-09-11, Los
+ * Algarrobos). Si el catálogo además trae una marca de verdad (Blum, Hettich…),
+ * va delante del proveedor; en la mayoría de las líneas de DPH el campo
+ * "marca" del catálogo repite el distribuidor y ahí no se duplica.
  *
- * El catálogo de herrajes trae `brand`, pero se cargó por tandas y en la
- * mayoría de las líneas de DPH la "marca" es el propio distribuidor ("DPH"),
- * que no es una marca: es a quién le compra BLARQ. Al cliente eso no le dice
- * nada (y le muestra un proveedor). Las marcas de verdad (Blum, Hettich…) sí
- * le importan: son las que reconoce y las que justifican el precio.
- *
- * Regla: la marca sale si existe y NO es el nombre del proveedor de la línea
- * (comparación sin mayúsculas ni espacios). Pura, sin base de datos.
+ * Pura, sin base de datos. Devuelve "" si no hay nada que mostrar.
  */
-export function marcaParaCliente(
-  brand: string | null | undefined,
+export function proveedorParaCliente(
   supplier: string | null | undefined,
-): string | null {
-  const b = (brand ?? "").trim();
-  if (!b) return null;
+  brand: string | null | undefined,
+): string {
   const s = (supplier ?? "").trim();
-  if (s && b.toUpperCase() === s.toUpperCase()) return null;
-  return b;
+  const b = (brand ?? "").trim();
+  const partes: string[] = [];
+  if (b && b.toUpperCase() !== s.toUpperCase()) partes.push(b);
+  if (s) partes.push(s);
+  return partes.join(" · ");
 }

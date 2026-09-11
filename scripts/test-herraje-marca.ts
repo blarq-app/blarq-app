@@ -1,12 +1,12 @@
 /**
- * Test de regresión de qué marca de herraje ve el cliente.
+ * Test de regresión de qué proveedor/marca de herraje ve el cliente.
  *   npx tsx scripts/test-herraje-marca.ts
  */
-import { marcaParaCliente } from "../src/lib/presupuesto/herrajeMarca";
+import { proveedorParaCliente } from "../src/lib/presupuesto/herrajeMarca";
 
 let pass = 0;
 let fail = 0;
-function eq(label: string, got: string | null, want: string | null) {
+function eq(label: string, got: string, want: string) {
   if (got === want) pass++;
   else {
     fail++;
@@ -14,12 +14,12 @@ function eq(label: string, got: string | null, want: string | null) {
   }
 }
 
-eq("marca real", marcaParaCliente("Blum", "DPH"), "Blum");
-eq("la marca es el proveedor → nada", marcaParaCliente("DPH", "DPH"), null);
-eq("mayúsculas/espacios no importan", marcaParaCliente(" dph ", "DPH"), null);
-eq("sin marca", marcaParaCliente(null, "HBT"), null);
-eq("marca vacía", marcaParaCliente("  ", "HBT"), null);
-eq("sin proveedor, con marca", marcaParaCliente("Hettich", null), "Hettich");
+eq("proveedor solo", proveedorParaCliente("DPH", null), "DPH");
+eq("marca del catálogo = proveedor → no se duplica", proveedorParaCliente("DPH", "DPH"), "DPH");
+eq("mayúsculas/espacios no importan", proveedorParaCliente("DPH", " dph "), "DPH");
+eq("marca real delante del proveedor", proveedorParaCliente("DPH", "Blum"), "Blum · DPH");
+eq("sin proveedor, con marca", proveedorParaCliente(null, "Hettich"), "Hettich");
+eq("nada", proveedorParaCliente("", "  "), "");
 
 console.log(`${pass} ok, ${fail} fallas`);
 process.exit(fail > 0 ? 1 : 0);

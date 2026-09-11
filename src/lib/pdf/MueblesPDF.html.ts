@@ -42,8 +42,9 @@ export interface MuebleHerrajeInput {
   measure: string | null;
   finish: string | null;
   quantity: number;
-  // Marca que ve el cliente (ya filtrada con marcaParaCliente: nunca el
-  // nombre del proveedor). Opcional: las llamadas viejas no la pasan.
+  // Proveedor (y marca, si es de verdad) que ve el cliente, ya armado con
+  // proveedorParaCliente: "DPH", "Blum · DPH". Opcional: las llamadas viejas
+  // no lo pasan.
   brand?: string | null;
 }
 
@@ -304,9 +305,9 @@ function renderHerrajes(herrajes?: MuebleHerrajeInput[]): string {
     .map((h) => {
       const spec = [h.measure, h.finish].filter(Boolean).join(" · ");
       const mut = spec ? ` <span class="hmut">· ${esc(spec)}</span>` : "";
-      // La marca (pedido de MJ, 2026-09-11) va pegada al nombre, con su mismo
-      // peso: es lo que el cliente reconoce. La medida y el color siguen
-      // atenuados detrás.
+      // El proveedor del herraje (pedido de MJ, 2026-09-11: compra cada
+      // herraje a uno distinto y quiere que el cliente lo vea) va pegado al
+      // nombre, con su mismo peso. La medida y el color siguen atenuados.
       const marca = h.brand ? ` <span class="hbrand">· ${esc(h.brand)}</span>` : "";
       // Nombre con la escritura homologada (pendiente 139) — el mismo helper
       // que usa el editor, para que el PDF y la pantalla no puedan divergir.

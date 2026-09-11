@@ -1648,8 +1648,14 @@ function ChapterBlock({
                           <div></div>
                         </div>
                       )}
-                      {alternativas.map((alt) => (
-                        <div key={alt.id}>
+                      {/* Una línea entre alternativa y alternativa (pedido de
+                          MJ): con tres seguidas no se veía dónde terminaba una
+                          y empezaba la otra. */}
+                      {alternativas.map((alt, altIdx) => (
+                        <div
+                          key={alt.id}
+                          className={altIdx > 0 ? "border-t border-gray-300 mt-1 pt-1" : ""}
+                        >
                           {renderBloque(alt, null, displayNumber, {
                             baseTotal,
                             onHacerPrincipal: () => onHacerPrincipal(alt.id),

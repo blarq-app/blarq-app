@@ -26,14 +26,15 @@ import {
   agruparConAlternativas,
   soloPrincipales,
 } from "@/lib/presupuesto/muebleItems";
-import { marcaParaCliente } from "@/lib/presupuesto/herrajeMarca";
+import { proveedorParaCliente } from "@/lib/presupuesto/herrajeMarca";
 
 // Lo que el PDF de muebles necesita de una partida (base o alternativa): sin
-// costos internos ni proveedor. `marcas` es catalogId → brand del catálogo de
-// herrajes: la línea de la cotización no guarda la marca (es un snapshot de
-// nombre/medida/color/costo), así que se lee del catálogo al generar el PDF.
-// Al cliente solo se le muestra si es una marca de verdad, no el proveedor
-// (ver marcaParaCliente).
+// costos internos. Excepción pedida por MJ: en cada línea de HERRAJE sí sale
+// el proveedor (DPH/HBT), porque compra cada herraje a uno distinto y quiere
+// que el cliente lo vea. `marcas` es catalogId → brand del catálogo: la línea
+// no guarda la marca (es snapshot de nombre/medida/color/costo), se lee del
+// catálogo al generar el PDF y va delante del proveedor si es una marca de
+// verdad (ver proveedorParaCliente).
 function muebleItemParaPDF(
   i: {
     itemNumber: string;
@@ -67,9 +68,9 @@ function muebleItemParaPDF(
       measure: h.measure,
       finish: h.finish,
       quantity: h.quantity,
-      brand: marcaParaCliente(
-        h.catalogId ? marcas.get(h.catalogId) : null,
+      brand: proveedorParaCliente(
         h.supplier,
+        h.catalogId ? marcas.get(h.catalogId) : null,
       ),
     })),
   };

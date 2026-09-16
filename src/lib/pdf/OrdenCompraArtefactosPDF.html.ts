@@ -138,7 +138,7 @@ const CSS = `
   .head .docsub { display: inline-block; font-family: 'Hanken Grotesk', sans-serif; font-weight: 500; font-size: 6.4pt; letter-spacing: .28em; text-transform: uppercase; color: #6C6B6B; margin-top: 5pt; border: 0.5px solid #B2ACA0; padding: 2.5pt 6pt 2.5pt 9pt; }
   .head .ver { font-size: 5.6pt; letter-spacing: .26em; text-transform: uppercase; color: #ADA599; font-weight: 700; margin-top: 6pt; }
 
-  /* Aclaración de que la hoja NO lleva precios a propósito. */
+  /* Descripción breve del contenido para el proveedor. */
   .nota { font-family: 'Spectral', serif; font-style: italic; font-weight: 300; font-size: 8pt; color: #78716A; margin-bottom: 4mm; }
 
   /* Banda del bloque/ambiente — misma gris del PDF al cliente. */
@@ -279,7 +279,7 @@ export function renderOrdenCompraArtefactosHTML(
     </div>
   </div>
 
-  <div class="nota">Listado de productos y cantidades, sin precios.</div>
+  <div class="nota">Listado de productos y cantidades.</div>
 
   ${
     items.length > 0

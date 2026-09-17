@@ -23,7 +23,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import MaterialAutocomplete from "./MaterialAutocomplete";
 import RichTextEditor from "@/components/presupuesto/RichTextEditor";
-import { sanitizeRichTextHtml, isRichTextEmpty } from "@/lib/richText";
+import { sanitizeRichTextHtml, isRichTextEmpty, richTextToPlainText } from "@/lib/richText";
 import {
   materialesSinCobrar,
   avisoSinCobrar,
@@ -1305,7 +1305,7 @@ function ViewPanel({
         </div>
         {partida.descriptionMaestro ? (
           <p className="text-xs text-gray-700 leading-snug whitespace-pre-wrap">
-            {partida.descriptionMaestro}
+            {richTextToPlainText(partida.descriptionMaestro)}
           </p>
         ) : (
           <p className="text-xs text-gray-400 italic">Sin descripción</p>

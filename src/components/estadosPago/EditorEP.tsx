@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatDate } from "@/lib/utils";
+import { richTextToPlainText } from "@/lib/richText";
 import { SenalGuardado, useSenalGuardado } from "@/components/banco/senalGuardado";
 import { groupEpItemsByChapter } from "@/lib/presupuesto/chapters";
 import { annotateZones } from "@/lib/presupuesto/zones";
@@ -545,7 +546,7 @@ export default function EditorEP({
                       </div>
                       {i.descriptionMaestro ? (
                         <div className="text-[11px] text-gray-500 leading-snug mt-0.5 whitespace-pre-wrap">
-                          {i.descriptionMaestro}
+                          {richTextToPlainText(i.descriptionMaestro)}
                         </div>
                       ) : (
                         <div className="text-[11px] text-gray-300 mt-0.5">—</div>

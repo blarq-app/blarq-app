@@ -1,8 +1,10 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-09-16.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-09-17.
 
 ---
+
+- **Descripciones del maestro sin HTML en pantalla (2026-09-17, aprobado para publicación)**: `EditorEP` y la vista de lectura de `PartidaSearch` aplican el helper existente `richTextToPlainText`, conservando `whitespace-pre-wrap`. Sin cambios en datos, PDF ni helper. Verificación local en navegador: descripciones limpias con saltos de línea, sin errores de JavaScript ni escrituras de datos. PDF anterior/posterior: texto y las dos páginas renderizadas idénticos. `git diff --check` y ESLint del catálogo correctos; el editor conserva un error de lint preexistente en `setDraft`, comprobado antes/después y fuera de alcance. Publicación autorizada por MJ el 2026-09-17.
 
 - **Orden de compra: quitar la aclaración «sin precios» (2026-09-16, rama `codex/oc-quitar-sin-precios`, aprobado por MJ)**: a pedido de MJ, la nota del PDF para el proveedor queda «Listado de productos y cantidades.». Aplica a cocina, sanitarios e iluminación; solo cambia el texto, conserva productos, cantidades y formato. Verificado el HTML de las tres categorías, PDF local renderizado con datos ilustrativos y ESLint del archivo. Trabajo en `/private/tmp/blarq-oc-quitar-sin-precios` para conservar los archivos locales pendientes de otras tareas en la carpeta principal. MJ revisó la vista previa y autorizó publicar el 2026-09-16.
 

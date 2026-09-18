@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-09-18 — El documento del maestro se arma eligiendo maestro y partidas
+
+- **PR #444**: "PDF maestro" / "Excel maestro" abren una ventana para elegir a qué maestro va el documento y tildar qué partidas hará (por capítulo, con conteo y "con precios" heredado), en vez de bajar el presupuesto entero. Sobre la versión que se mira, borrador incluido.
+- **La selección es solo para el documento**: no guarda reparto ni toca Estados de Pago. Precarga las partidas ya asignadas al maestro en esa versión, si las hay. Las sin mano de obra quedan apagadas y afuera (mismo criterio de siempre).
+- **Ruta**: `GET /api/presupuestos/[id]/maestro?items=…`; con selección explícita no se filtra por asignación guardada (una versión recién duplicada no tiene ninguna). Se valida pertenencia a la versión; selección vacía o inválida no descarga nada. Sin `items=` se mantiene el comportamiento anterior. Nueva `GET …/maestro/partidas` (solo lectura) para la ventana.
+
 ## 2026-09-11 — Plantillas de muebles, herrajes de cualquier proveedor y herrajes nuevos desde la partida
 
 - **Plantillas de capítulos y partidas de muebles (PR #437)**: un capítulo o una partida ya armada se guarda como plantilla ("Guardar como plantilla", reemplaza por nombre) y al agregar se elige "desde plantilla": nace con componentes, materialidad, descripción, tipo, margen y proveedor de referencia, en $0. Tres tablas nuevas (`MuebleChapterTemplate`, `MuebleItemTemplate`, `MuebleItemTemplateDetail`), aplicadas a la viva con `scripts/aplicar-sql.ts`. Semilla: 4 capítulos tipo del itemizado real de Los Algarrobos. Las plantillas son de MJ y viven en la base, no en el código.

@@ -114,6 +114,12 @@ const SUBCATEGORY_LABELS: Record<string, string> = {
   iluminacion: "Artefactos iluminación",
 };
 const SUBCATEGORY_ORDER = ["sanitario", "cocina", "iluminacion"];
+// Nombre corto de cada tipo, para las pestañas del editor.
+const SUBCATEGORY_SHORT: Record<string, string> = {
+  sanitario: "Sanitarios",
+  cocina: "Cocina",
+  iluminacion: "Iluminación",
+};
 
 const DEFAULT_PAYMENT = [
   { stage: "Anticipo", percentage: 60 },
@@ -176,6 +182,12 @@ export default function ArtefactosEditor({
   );
   const [saving, setSaving] = useState(false);
   const [showCost, setShowCost] = useState(false);
+  // Pestaña de tipo activa (pendiente 182, 2026-09-21): MJ pidió ver un tipo
+  // por vez —sanitarios, cocina o iluminación— porque bajar hasta cocina en una
+  // cotización larga era tedioso. "todo" muestra los tres bloques como antes.
+  // Solo filtra lo que se DIBUJA: los totales, los modales y el guardado
+  // siguen mirando todos los items.
+  const [tab, setTab] = useState<string>("todo");
   const [addingTo, setAddingTo] = useState<
     null | { subcategory: string; room: string }
   >(null);
@@ -953,8 +965,50 @@ export default function ArtefactosEditor({
         </div>
       </div>
 
+      {/* Pestañas por tipo: un bloque por vez o todos. Mismo dibujo que las
+          pestañas del proyecto (ProjectTabs) para que se lean igual. Cada una
+          lleva su conteo para saber, sin cambiar de pestaña, si hay algo ahí. */}
+      {subcats.length > 0 && (
+        <div className="flex items-center gap-1 border-b border-gray-200 mb-3">
+          {[{ key: "todo", label: "Todo", count: items.length }, ...SUBCATEGORY_ORDER.map((k) => ({
+            key: k,
+            label: SUBCATEGORY_SHORT[k],
+            count: subcatBuckets.get(k)?.length ?? 0,
+          }))].map((t) => {
+            const isActive = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={`px-3 py-2 text-sm transition-colors whitespace-nowrap border-b-2 ${
+                  isActive
+                    ? "border-gray-900 text-gray-900 font-medium"
+                    : "border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300"
+                }`}
+              >
+                {t.label}
+                {/* El cero no ocupa espacio prominente: sin conteo. */}
+                {t.count > 0 && (
+                  <span className={`ml-1.5 tabular-nums ${isActive ? "text-gray-500" : "text-gray-400"}`}>
+                    {t.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pestaña sin artefactos todavía: se dice, en vez de dejar el hueco. */}
+      {subcats.length > 0 && tab !== "todo" && !subcats.some((s) => s.key === tab) && (
+        <div className="bg-white rounded-xl border border-gray-200 px-6 py-8 text-center text-sm text-gray-500">
+          No hay artefactos de {(SUBCATEGORY_SHORT[tab] ?? tab).toLowerCase()} en esta cotización.
+        </div>
+      )}
+
       {/* Cada subcategoría es un bloque editorial cerrado */}
-      {subcats.map((sub) => (
+      {subcats.filter((sub) => tab === "todo" || sub.key === tab).map((sub) => (
         <div
           key={sub.key}
           className="bg-white rounded-xl border border-gray-200 overflow-hidden"
@@ -1361,6 +1415,7 @@ export default function ArtefactosEditor({
       {showAgregar && (
         <AgregarArtefactosModal
           initialRoom={agregarInitialRoom}
+          initialSub={tab === "todo" ? "sanitario" : tab}
           onAdd={addItemFromPayload}
           onClose={() => setShowAgregar(false)}
         />
@@ -1465,10 +1520,14 @@ function RoomBanner({
 // agregando; el modal queda abierto para sumar varios de una.
 function AgregarArtefactosModal({
   initialRoom = "bano_principal",
+  initialSub = "sanitario",
   onAdd,
   onClose,
 }: {
   initialRoom?: string;
+  // Tipo con el que abre (la pestaña activa del editor): si MJ está mirando
+  // cocina, lo que agrega es de cocina.
+  initialSub?: string;
   onAdd: (
     subcategory: string,
     room: string,
@@ -1478,7 +1537,7 @@ function AgregarArtefactosModal({
 }) {
   const [room, setRoom] = useState(initialRoom);
   const [customRoom, setCustomRoom] = useState("");
-  const [sub, setSub] = useState("sanitario");
+  const [sub, setSub] = useState(initialSub);
   const [count, setCount] = useState(0);
 
   // Ambiente efectivo: si MJ eligió "+ Otro ambiente…" usa el nombre que

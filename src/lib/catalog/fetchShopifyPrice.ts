@@ -25,7 +25,10 @@ const BROWSER_UA =
 // Tiendas Shopify con endpoint .js verificado con productos reales.
 // kitchenhouse.cl: verificada 2026-07-14 (Teka; el horno NEO HBB 4460 responde
 // compare_at_price 369990 / price 340990 = 8% dcto por la misma API).
-const SHOPIFY_PRICE_HOSTS = ["kitchenhouse.cl"];
+// verken.cl: verificada 2026-09-21 (secadores de toallas; el Siena 250 W Wifi
+// responde price 14999000 = $149.990, compare_at_price null = sin descuento,
+// featured_image en cdn.shopify.com). Pendiente 180.
+const SHOPIFY_PRICE_HOSTS = ["kitchenhouse.cl", "verken.cl"];
 
 export interface ShopifyPrice {
   listPrice: number; // precio lista original (compare_at_price; el tachado)

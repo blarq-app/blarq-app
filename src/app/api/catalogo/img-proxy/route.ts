@@ -11,31 +11,16 @@
  * GET /api/catalogo/img-proxy?u=<url de imagen externa, URL-encoded>
  *
  * Seguridad: solo se permiten hosts de tiendas conocidas (evita SSRF /
- * que se use como proxy abierto).
+ * que se use como proxy abierto). Cuáles son lo decide `tiendas.ts`: las de
+ * arranque más las que la app aprende sola al extraer un producto (pendiente
+ * 181) — antes la lista vivía acá y cada tienda nueva salía con la foto rota
+ * hasta que alguien la agregaba a mano.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
+import { hostPermitidoParaFotos } from "@/lib/catalog/tiendas";
 
 export const runtime = "nodejs";
-
-// Hosts permitidos (la tienda y su CDN de assets). Se acepta el host exacto
-// o cualquier subdominio.
-const ALLOWED_HOSTS = [
-  "mk.cl",
-  "vtexassets.com",
-  "vteximg.com.br",
-  "sodimac.cl",
-  "sodimac.com",
-  "easy.cl",
-  "falabella.com",
-  "scene7.com",
-  "cdn.shopify.com", // Kitchen House (Teka) — su tienda corre en Shopify
-  "kitchenhouse.cl", // Kitchen House sirve las mismas fotos por su dominio (/cdn/shop/...), p.ej. al usar "Extraer"
-  "dph.cl", // Catálogo de herrajes DPH (Shopify) — fotos por cdn.shopify.com, pero por las dudas
-  "hbt.cl", // Catálogo de herrajes HBT (Magento) — fotos en hbt.cl/media/catalog/product/...
-  "dapducasse.cl", // Ducasse (PrestaShop) — pomos y tiradores sueltos; fotos en dapducasse.cl/<id>-home_default/...
-  "verken.cl", // Verken (Shopify) — secadores de toallas; "Extraer" trae la foto por verken.cl/cdn/shop/files/... (pendiente 180)
-];
 
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
@@ -56,11 +41,10 @@ export async function GET(req: NextRequest) {
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     return new NextResponse("protocolo no permitido", { status: 400 });
   }
-  const host = url.hostname.replace(/^www\./, "");
-  const allowed = ALLOWED_HOSTS.some(
-    (a) => host === a || host.endsWith("." + a)
-  );
-  if (!allowed) return new NextResponse("host no permitido", { status: 403 });
+  const host = url.hostname.toLowerCase().replace(/^www\./, "");
+  if (!(await hostPermitidoParaFotos(host))) {
+    return new NextResponse("host no permitido", { status: 403 });
+  }
 
   try {
     const res = await fetch(url.toString(), {

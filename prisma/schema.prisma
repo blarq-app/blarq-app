@@ -578,6 +578,27 @@ model MuebleItemTemplateDetail {
   @@index([templateId])
 }
 
+// ==================== TIENDAS CONOCIDAS ====================
+//
+// Tiendas de las que MJ sacó algún producto con "Extraer" (pendiente 181,
+// 2026-09-21). Antes, cada tienda nueva exigía tocar DOS listas escritas en el
+// código (la del proxy de fotos y la de tiendas Shopify/VTEX), y hasta que
+// alguien lo hacía la foto salía rota sin aviso (pasó con Ducasse y con Verken).
+// Ahora la app aprende la tienda en el momento en que MJ extrae el primer
+// producto: anota el host, prueba si es Shopify o VTEX y anota también el host
+// del que viene la foto (el CDN). Las tiendas de arranque siguen en el código
+// (`src/lib/catalog/tiendas.ts`); esta tabla guarda las aprendidas.
+//
+// kind: shopify | vtex | generico (tienda) · cdn (solo sirve fotos)
+model KnownStore {
+  id        String   @id @default(cuid())
+  host      String   @unique // sin "www."
+  kind      String   @default("generico")
+  sampleUrl String?  // el link con el que se aprendió (para volver a verificar)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model MuebleDetail {
   id        String  @id @default(cuid())
   itemId    String

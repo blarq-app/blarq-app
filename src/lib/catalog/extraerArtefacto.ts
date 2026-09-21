@@ -21,6 +21,7 @@
 
 import { fetchArtefactoData } from "./fetchArtefactoData";
 import { leerPrecioWeb } from "./leerPrecioWeb";
+import { aprenderTienda, permitirHostDeFoto } from "./tiendas";
 
 export interface ArtefactoDesdeLink {
   source: string;
@@ -40,6 +41,11 @@ export interface ArtefactoDesdeLink {
 export async function extraerArtefactoDeLink(
   url: string
 ): Promise<ArtefactoDesdeLink | null> {
+  // Primero la app APRENDE la tienda (pendiente 181): si es nueva, prueba si
+  // tiene API de Shopify/VTEX y la anota. Va antes de leer el precio para que
+  // ya esta primera extracción salga por la API cuando la tienda la tiene.
+  await aprenderTienda(url);
+
   // Las dos lecturas en paralelo: son independientes y ninguna debe hacer
   // fallar a la otra (una tienda puede dar precio por API y bloquear el HTML,
   // o al revés).
@@ -49,6 +55,10 @@ export async function extraerArtefactoDeLink(
   ]);
 
   if (!data && !web) return null;
+
+  // El host de la foto (el CDN de la tienda) queda permitido para el proxy de
+  // imágenes; si no, la foto se guarda bien pero la pantalla la muestra rota.
+  await permitirHostDeFoto(data?.imageUrl);
 
   return {
     source: data?.source ?? new URL(url).hostname.replace(/^www\./, ""),

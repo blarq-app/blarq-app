@@ -18,8 +18,9 @@
  */
 
 import { fetchArtefactoData } from "./fetchArtefactoData";
-import { fetchVtexImage, isVtexStoreUrl } from "./fetchVtexPrice";
-import { fetchShopifyImage, isShopifyStoreUrl } from "./fetchShopifyPrice";
+import { fetchVtexImage } from "./fetchVtexPrice";
+import { fetchShopifyImage } from "./fetchShopifyPrice";
+import { plataformaDe } from "./tiendas";
 
 /**
  * ¿Este link de foto todavía carga como imagen?
@@ -61,8 +62,9 @@ export async function leerFotoWeb(url: string): Promise<string | null> {
 
   const candidatos: (string | null)[] = [];
 
-  if (isVtexStoreUrl(url)) candidatos.push(await fetchVtexImage(url));
-  else if (isShopifyStoreUrl(url)) candidatos.push(await fetchShopifyImage(url));
+  const plataforma = await plataformaDe(url);
+  if (plataforma === "vtex") candidatos.push(await fetchVtexImage(url));
+  else if (plataforma === "shopify") candidatos.push(await fetchShopifyImage(url));
 
   // El scraper genérico (og:image / JSON-LD) sirve de respaldo para las tiendas
   // con API y de camino único para el resto.

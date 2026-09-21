@@ -34,6 +34,7 @@ const ALLOWED_HOSTS = [
   "dph.cl", // Catálogo de herrajes DPH (Shopify) — fotos por cdn.shopify.com, pero por las dudas
   "hbt.cl", // Catálogo de herrajes HBT (Magento) — fotos en hbt.cl/media/catalog/product/...
   "dapducasse.cl", // Ducasse (PrestaShop) — pomos y tiradores sueltos; fotos en dapducasse.cl/<id>-home_default/...
+  "verken.cl", // Verken (Shopify) — secadores de toallas; "Extraer" trae la foto por verken.cl/cdn/shop/files/... (pendiente 180)
 ];
 
 const BROWSER_UA =

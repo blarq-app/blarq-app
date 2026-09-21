@@ -1,6 +1,6 @@
 /**
- * Lectura de precio de tiendas Shopify (kitchenhouse.cl) vía su endpoint
- * público de producto.
+ * Lectura de precio y foto de tiendas Shopify (kitchenhouse.cl, verken.cl…)
+ * vía su endpoint público de producto.
  *
  * Por qué: igual que VTEX (ver fetchVtexPrice), estas tiendas dibujan el precio
  * por JavaScript, así que el scraper genérico solo veía UN precio (el de venta)
@@ -15,41 +15,27 @@
  * descuento aplicado. Con esos dos sacamos el descuento del web
  * (discount = 1 − price/listPrice), igual que en MK.
  *
- * La lista de tiendas es EXPLÍCITA: solo se agregan las verificadas a mano
- * contra un producto real (mismo criterio que VTEX_PRICE_HOSTS).
+ * Qué tiendas son Shopify lo decide `tiendas.ts` (pendiente 181): las de
+ * arranque verificadas a mano — kitchenhouse.cl 2026-07-14 (el horno NEO HBB
+ * 4460 responde compare_at_price 369990 / price 340990 = 8% dcto), verken.cl
+ * 2026-09-21 (el Siena 250 W Wifi responde price 14999000 = $149.990, sin
+ * compare_at_price) — y las que la app aprende sola al extraer un producto,
+ * probando este mismo endpoint (`pareceShopify`).
  */
+
+import { plataformaDe } from "./tiendas";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
-
-// Tiendas Shopify con endpoint .js verificado con productos reales.
-// kitchenhouse.cl: verificada 2026-07-14 (Teka; el horno NEO HBB 4460 responde
-// compare_at_price 369990 / price 340990 = 8% dcto por la misma API).
-// verken.cl: verificada 2026-09-21 (secadores de toallas; el Siena 250 W Wifi
-// responde price 14999000 = $149.990, compare_at_price null = sin descuento,
-// featured_image en cdn.shopify.com). Pendiente 180.
-const SHOPIFY_PRICE_HOSTS = ["kitchenhouse.cl", "verken.cl"];
 
 export interface ShopifyPrice {
   listPrice: number; // precio lista original (compare_at_price; el tachado)
   price: number; // precio actual de venta (con el descuento del web aplicado)
 }
 
-function hostOf(url: string): string | null {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return null;
-  }
-}
-
-// ¿Es una URL de alguna tienda Shopify con endpoint de precios verificado?
-export function isShopifyStoreUrl(url: string): boolean {
-  const host = hostOf(url);
-  return (
-    host != null &&
-    SHOPIFY_PRICE_HOSTS.some((h) => host === h || host.endsWith("." + h))
-  );
+// ¿Es una URL de alguna tienda Shopify conocida (de arranque o aprendida)?
+export async function isShopifyStoreUrl(url: string): Promise<boolean> {
+  return (await plataformaDe(url)) === "shopify";
 }
 
 // De https://kitchenhouse.cl/products/<handle>[?variant=...] arma el .js del
@@ -67,9 +53,10 @@ function productJsonUrl(url: string): string | null {
 }
 
 // Pega al .js del producto y devuelve el JSON, o null. La misma respuesta trae
-// el precio Y las fotos, por eso la comparten precio e imagen.
+// el precio Y las fotos, por eso la comparten precio e imagen. No mira la
+// lista de tiendas: eso lo hace quien llama (`leerPrecioWeb`), y `pareceShopify`
+// necesita pegarle a una tienda que todavía no está en la lista.
 async function fetchShopifyProduct(url: string): Promise<Record<string, unknown> | null> {
-  if (!isShopifyStoreUrl(url)) return null;
   const api = productJsonUrl(url);
   if (!api) return null;
   try {
@@ -105,6 +92,16 @@ export async function fetchShopifyImage(url: string): Promise<string | null> {
         : null;
   if (!raw) return null;
   return raw.startsWith("//") ? `https:${raw}` : raw;
+}
+
+/**
+ * ¿Esta tienda expone la API de Shopify para ESTE producto? Es la verificación
+ * que antes se hacía a mano por tienda: si el .js responde con un precio
+ * válido, la tienda es Shopify y `tiendas.ts` la anota como tal.
+ */
+export async function pareceShopify(url: string): Promise<boolean> {
+  if (!productJsonUrl(url)) return false;
+  return (await fetchShopifyPrice(url)) != null;
 }
 
 export async function fetchShopifyPrice(url: string): Promise<ShopifyPrice | null> {

@@ -4,6 +4,11 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-09-21 — La app aprende sola las tiendas nuevas
+
+- **Tiendas conocidas (pendiente 181)**: hasta hoy cada tienda nueva exigía editar a mano dos listas en el código (la del proxy de fotos y la de tiendas Shopify/VTEX) y, hasta que alguien lo hacía, la foto del producto salía rota sin aviso (pasó con Ducasse y con Verken). Ahora, al apretar "Extraer" sobre un link de una tienda nueva, la app la anota en la tabla nueva `KnownStore`, prueba con ese mismo producto si tiene API de Shopify o VTEX (lo que antes se verificaba a mano) y anota también el dominio del que viene la foto. `src/lib/catalog/tiendas.ts` es la única lista: las de arranque en el código + las aprendidas en la base. Tabla aplicada a la viva con `prisma/sql/181-tiendas-conocidas.sql`. Test contra tiendas reales: `scripts/test-tiendas-conocidas.ts`.
+- **Verken (PR #447)**: primero se agregó a mano verken.cl (Shopify, el Siena 250 W Wifi responde $149.990 por API); fue el caso que originó lo de arriba.
+
 ## 2026-09-18 — El documento del maestro se arma eligiendo maestro y partidas
 
 - **PR #444**: "PDF maestro" / "Excel maestro" abren una ventana para elegir a qué maestro va el documento y tildar qué partidas hará (por capítulo, con conteo y "con precios" heredado), en vez de bajar el presupuesto entero. Sobre la versión que se mira, borrador incluido.

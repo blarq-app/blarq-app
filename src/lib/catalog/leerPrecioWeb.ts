@@ -24,14 +24,15 @@
  *             lista con descuento 0, pero marcado, para que quien lo use NO pise
  *             el descuento que ya tenga guardado y pueda avisarlo en pantalla.
  *
- * Para sumar una tienda: agregar el host a VTEX_PRICE_HOSTS o
- * SHOPIFY_PRICE_HOSTS (fetchVtexPrice.ts / fetchShopifyPrice.ts) después de
- * verificar a mano su API con un producto real.
+ * Qué tienda es de qué plataforma lo sabe `tiendas.ts` (pendiente 181): las
+ * de arranque y las que la app aprende sola cuando MJ extrae el primer producto
+ * de una tienda nueva. Ya no hay que sumar tiendas a mano.
  */
 
 import { fetchArtefactoData } from "./fetchArtefactoData";
-import { fetchVtexPrice, isVtexStoreUrl } from "./fetchVtexPrice";
-import { fetchShopifyPrice, isShopifyStoreUrl } from "./fetchShopifyPrice";
+import { fetchVtexPrice } from "./fetchVtexPrice";
+import { fetchShopifyPrice } from "./fetchShopifyPrice";
+import { plataformaDe } from "./tiendas";
 
 export interface PrecioWeb {
   /** Precio lista (el "tachado" cuando hay oferta). Con IVA. */
@@ -56,7 +57,9 @@ export interface PrecioWeb {
 export async function leerPrecioWeb(url: string): Promise<PrecioWeb | null> {
   if (!url || url.trim().length === 0) return null;
 
-  if (isVtexStoreUrl(url)) {
+  const plataforma = await plataformaDe(url);
+
+  if (plataforma === "vtex") {
     const vtex = await fetchVtexPrice(url);
     if (vtex) return armar(vtex.listPrice, vtex.price, true, "vtex");
     // Si la API falló, NO caemos al scraper: para estas tiendas el precio no
@@ -64,7 +67,7 @@ export async function leerPrecioWeb(url: string): Promise<PrecioWeb | null> {
     return null;
   }
 
-  if (isShopifyStoreUrl(url)) {
+  if (plataforma === "shopify") {
     const sh = await fetchShopifyPrice(url);
     if (sh) return armar(sh.listPrice, sh.price, true, "shopify");
     return null;

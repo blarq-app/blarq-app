@@ -9,7 +9,7 @@ const URL_SIENA =
   "https://www.verken.cl/products/calefactor-secador-de-toalla-electrico-para-bano-250w-mural-70cm-x-40cm-siena-blanco-1";
 
 async function main() {
-  console.log("isShopifyStoreUrl:", isShopifyStoreUrl(URL_SIENA));
+  console.log("isShopifyStoreUrl:", await isShopifyStoreUrl(URL_SIENA));
   const precio = await leerPrecioWeb(URL_SIENA);
   console.log("precio:", precio);
   const foto = await leerFotoWeb(URL_SIENA);

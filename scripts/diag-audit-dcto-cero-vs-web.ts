@@ -23,7 +23,7 @@ async function main() {
 
   for (const c of targets) {
     const link = c.referenceLink!;
-    const web = isVtexStoreUrl(link) ? await fetchVtexPrice(link) : isShopifyStoreUrl(link) ? await fetchShopifyPrice(link) : null;
+    const web = (await isVtexStoreUrl(link)) ? await fetchVtexPrice(link) : (await isShopifyStoreUrl(link)) ? await fetchShopifyPrice(link) : null;
     if (!web) { console.log(`SIN LECTURA | ${c.name} | ${link}`); continue; }
     const webDcto = web.listPrice > 0 ? Math.round((1 - web.price / web.listPrice) * 1000) / 10 : 0;
     const guardadaEsPrecioConDcto = Math.abs(c.listPrice - web.price) <= 5 && web.price < web.listPrice;

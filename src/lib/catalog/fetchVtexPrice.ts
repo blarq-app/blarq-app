@@ -13,18 +13,17 @@
  * (discount = 1 − Price/ListPrice), que es justo lo que MJ quiere que
  * aparezca solo en la columna Dcto.
  *
- * La lista de tiendas es EXPLÍCITA (no se le pega a cualquier dominio):
- * solo se agregan tiendas verificadas a mano contra un producto real.
+ * Qué tiendas son VTEX lo decide `tiendas.ts` (pendiente 181): las de arranque
+ * verificadas a mano — mk.cl 2026-06 (sesión precios artefactos), ledstudio.cl
+ * 2026-06-12 (los 3 productos del catálogo responden Price/ListPrice) — y las
+ * que la app aprende sola al extraer un producto, probando esta misma API
+ * (`pareceVtex`).
  */
+
+import { plataformaDe } from "./tiendas";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
-
-// Tiendas VTEX cuya API de precios está verificada con productos reales.
-// mk.cl: verificada 2026-06 (sesión precios artefactos).
-// ledstudio.cl: verificada 2026-06-12 (los 3 productos del catálogo
-// responden Price/ListPrice por la misma API que mk).
-const VTEX_PRICE_HOSTS = ["mk.cl", "ledstudio.cl"];
 
 export interface VtexPrice {
   listPrice: number; // precio lista original (sin descuento)
@@ -40,13 +39,9 @@ function hostOf(url: string): string | null {
   }
 }
 
-// ¿Es una URL de alguna tienda VTEX con API de precios verificada?
-export function isVtexStoreUrl(url: string): boolean {
-  const host = hostOf(url);
-  return (
-    host != null &&
-    VTEX_PRICE_HOSTS.some((h) => host === h || host.endsWith("." + h))
-  );
+// ¿Es una URL de alguna tienda VTEX conocida (de arranque o aprendida)?
+export async function isVtexStoreUrl(url: string): Promise<boolean> {
+  return (await plataformaDe(url)) === "vtex";
 }
 
 // Extrae el "linkText" (slug) de una URL de producto VTEX:
@@ -65,11 +60,13 @@ function slugFromUrl(url: string): string | null {
 
 // Pega a la API de catálogo de VTEX y devuelve el primer producto, o null.
 // La misma respuesta trae el precio Y las fotos, por eso la comparten
-// fetchVtexPrice y fetchVtexImage.
+// fetchVtexPrice y fetchVtexImage. No mira la lista de tiendas: eso lo hace
+// quien llama (`leerPrecioWeb`), y `pareceVtex` necesita pegarle a una tienda
+// que todavía no está en la lista.
 async function fetchVtexProduct(url: string): Promise<Record<string, unknown> | null> {
   const host = hostOf(url);
   const slug = slugFromUrl(url);
-  if (!host || !slug || !isVtexStoreUrl(url)) return null;
+  if (!host || !slug) return null;
   const api = `https://www.${host}/api/catalog_system/pub/products/search/${slug}/p`;
   try {
     const res = await fetch(api, {
@@ -108,6 +105,15 @@ export async function fetchVtexImage(url: string): Promise<string | null> {
   // (Verificado 2026-08-05 contra mkchile y byp: los dos hosts sirven el mismo
   // archivo con 200 image/jpeg.)
   return first.replace(/\.vteximg\.com\.br\//, ".vtexassets.com/");
+}
+
+/**
+ * ¿Esta tienda expone la API de VTEX para ESTE producto? Es la verificación
+ * que antes se hacía a mano por tienda: si la API responde con un precio
+ * válido, la tienda es VTEX y `tiendas.ts` la anota como tal.
+ */
+export async function pareceVtex(url: string): Promise<boolean> {
+  return (await fetchVtexPrice(url)) != null;
 }
 
 export async function fetchVtexPrice(url: string): Promise<VtexPrice | null> {

@@ -89,8 +89,11 @@ export async function POST(request: NextRequest) {
       // Incluimos también las facturas SIN RUT (proveedores internacionales):
       // su regla se guarda por nombre exacto. Antes se filtraban con
       // rutIssuer: { not: null } y nunca aprendían regla.
+      // Solo RECIBIDAS: en una emitida el emisor es BLARQ, y una regla con
+      // ese RUT alcanzaría a todas las facturas que emite BLARQ (pendiente
+      // 184, ver applyInvoiceRule).
       const facturas = await prisma.invoice.findMany({
-        where: { id: { in: body.invoiceIds } },
+        where: { id: { in: body.invoiceIds }, type: "recibida" },
         select: { rutIssuer: true, businessName: true },
       });
 

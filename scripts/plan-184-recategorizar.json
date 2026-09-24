@@ -1,0 +1,443 @@
+{
+ "facturas": [
+  {
+   "rut": "96792430-K",
+   "proveedor": "Sodimac",
+   "folio": "143349123",
+   "neto": 29578,
+   "desde": "Herramientas",
+   "hacia": "Materiales",
+   "motivo": "pintura"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1544505",
+   "neto": 27968,
+   "desde": "Subcontrato > Flete / Retiro escombros",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1540978",
+   "neto": 131134,
+   "desde": "Subcontrato > Flete / Retiro escombros",
+   "hacia": "Artefactos > Baño",
+   "motivo": "mezclada: categoría de lo que más pesa"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1527638",
+   "neto": 441828,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "mezclada: categoría de lo que más pesa"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1511181",
+   "neto": 7990,
+   "desde": "Materiales",
+   "hacia": "Subcontrato > Flete / Retiro escombros",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1478974",
+   "neto": 380515,
+   "desde": "Artefactos",
+   "hacia": "Artefactos > Cocina",
+   "motivo": "mezclada: categoría de lo que más pesa"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1472025",
+   "neto": 962424,
+   "desde": "Artefactos",
+   "hacia": "Materiales",
+   "motivo": "mezclada: categoría de lo que más pesa"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1432250",
+   "neto": 465604,
+   "desde": "Artefactos",
+   "hacia": "Materiales",
+   "motivo": "mezclada: categoría de lo que más pesa"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1394459",
+   "neto": 404693,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "230038",
+   "neto": 86341,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1382511",
+   "neto": 149622,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "mezclada: categoría de lo que más pesa"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1378718",
+   "neto": 1325590,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1378719",
+   "neto": 284146,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "228108",
+   "neto": 1325590,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1376917",
+   "neto": 49164,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "mezclada: categoría de lo que más pesa"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1376549",
+   "neto": 1383370,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "227748",
+   "neto": 128400,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "mezclada: categoría de lo que más pesa"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1373734",
+   "neto": 80571,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1373733",
+   "neto": 105453,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1372113",
+   "neto": 7990,
+   "desde": "Artefactos > Baño",
+   "hacia": "Subcontrato > Flete / Retiro escombros",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "226182",
+   "neto": 15117,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1365094",
+   "neto": 1463805,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "mezclada: categoría de lo que más pesa"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1365092",
+   "neto": 15117,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1352855",
+   "neto": 174415,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "mezclada: categoría de lo que más pesa"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1344260",
+   "neto": 1644458,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1343138",
+   "neto": 75782,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "221162",
+   "neto": 1282760,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1339908",
+   "neto": 241200,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1339049",
+   "neto": 912539,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "mezclada: categoría de lo que más pesa"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1333625",
+   "neto": 37729,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1327391",
+   "neto": 1444254,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1317663",
+   "neto": 1318388,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1317752",
+   "neto": 488807,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1317753",
+   "neto": 1586948,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "216206",
+   "neto": 1318388,
+   "desde": "Artefactos > Baño",
+   "hacia": "Materiales",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "77137860-9",
+   "proveedor": "Comercial K",
+   "folio": "1316342",
+   "neto": 28690,
+   "desde": "Artefactos > Baño",
+   "hacia": "Subcontrato > Flete / Retiro escombros",
+   "motivo": "producto 100% de una familia, cuadra al peso"
+  },
+  {
+   "rut": "78401710-9",
+   "proveedor": "Mobeli",
+   "folio": "3357",
+   "neto": 2195384,
+   "desde": "Muebles",
+   "hacia": "Muebles > Mueble",
+   "motivo": "fabricación de muebles"
+  },
+  {
+   "rut": "78401710-9",
+   "proveedor": "Mobeli",
+   "folio": "3342",
+   "neto": 3293076,
+   "desde": "Muebles",
+   "hacia": "Muebles > Mueble",
+   "motivo": "fabricación de muebles"
+  },
+  {
+   "rut": "78401710-9",
+   "proveedor": "Mobeli",
+   "folio": "3323",
+   "neto": 139938,
+   "desde": "Muebles > Herrajes",
+   "hacia": "Muebles > Mueble",
+   "motivo": "fabricación de muebles"
+  },
+  {
+   "rut": "78401710-9",
+   "proveedor": "Mobeli",
+   "folio": "3231",
+   "neto": 133800,
+   "desde": "Muebles > Herrajes",
+   "hacia": "Muebles > Mueble",
+   "motivo": "fabricación de muebles"
+  },
+  {
+   "rut": "78401710-9",
+   "proveedor": "Mobeli",
+   "folio": "3230",
+   "neto": 7835621,
+   "desde": "Muebles",
+   "hacia": "Muebles > Mueble",
+   "motivo": "fabricación de muebles"
+  },
+  {
+   "rut": "78401710-9",
+   "proveedor": "Mobeli",
+   "folio": "3186",
+   "neto": 6404592,
+   "desde": "Muebles > Herrajes",
+   "hacia": "Muebles > Mueble",
+   "motivo": "fabricación de muebles"
+  },
+  {
+   "rut": "78401710-9",
+   "proveedor": "Mobeli",
+   "folio": "3178",
+   "neto": 7761922,
+   "desde": "Muebles > Herrajes",
+   "hacia": "Muebles > Mueble",
+   "motivo": "fabricación de muebles"
+  },
+  {
+   "rut": "78401710-9",
+   "proveedor": "Mobeli",
+   "folio": "3109",
+   "neto": 840336,
+   "desde": "Muebles > Herrajes",
+   "hacia": "Muebles > Mueble",
+   "motivo": "fabricación de muebles"
+  },
+  {
+   "rut": "78401710-9",
+   "proveedor": "Mobeli",
+   "folio": "3108",
+   "neto": 5616490,
+   "desde": "Muebles > Herrajes",
+   "hacia": "Muebles > Mueble",
+   "motivo": "fabricación de muebles"
+  }
+ ],
+ "reglas": [
+  {
+   "rut": "77137860-9",
+   "accion": "borrar",
+   "nombre": "Comercial K"
+  },
+  {
+   "rut": "77398220-1",
+   "accion": "borrar",
+   "nombre": "MercadoLibre"
+  },
+  {
+   "rut": "81201000-K",
+   "accion": "borrar",
+   "nombre": "Cencosud"
+  },
+  {
+   "rut": "77270733-9",
+   "accion": "borrar",
+   "nombre": "RUT de BLARQ (aparece como Nicolás Cuevas)"
+  },
+  {
+   "rut": "78401710-9",
+   "accion": "categoria",
+   "hacia": "Muebles > Mueble",
+   "nombre": "Mobeli"
+  },
+  {
+   "rut": "80565900-9",
+   "accion": "categoria",
+   "hacia": "Materiales",
+   "nombre": "Yolito Balart"
+  }
+ ]
+}

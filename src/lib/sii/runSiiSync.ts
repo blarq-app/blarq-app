@@ -163,7 +163,9 @@ async function upsertInvoice(
     // el SII, acá se asigna la obra que indicaron. Corre DESPUÉS de la
     // regla por RUT: la regla por proveedor casi nunca trae proyecto (los
     // proveedores son transversales), así que la etiqueta es la que
-    // completa el centro de costo. applyTagToInvoice respeta lo ya seteado.
+    // completa el centro de costo. La obra de la etiqueta solo llena lo vacío;
+    // la CATEGORÍA de la etiqueta gana sobre la que puso la regla (lo que
+    // MJ/JT dijeron para esta factura manda — pendiente 184).
     await applyPendingTagsForInvoice(created.id).catch(() => 0);
     // Auto-conciliar contra movimientos bancarios sin asignar previos
     // del mismo RUT (caso típico: te pagaron, después llega la factura

@@ -1,5 +1,6 @@
 // Regresión del pendiente 184: la regla del proveedor se guarda SOLO cuando
-// MJ prende el tilde en el bulk-assign. Nada más la crea ni la cambia.
+// MJ prende el tilde en el bulk-assign. Nada más la crea ni la cambia. Y la
+// categoría dicha por Telegram gana sobre la que puso la regla.
 //
 // No toca ninguna base: reemplaza los métodos de prisma que usa
 // upsertInvoiceRule por una "base" en memoria. Uso:
@@ -8,6 +9,7 @@ import fs from "fs";
 import path from "path";
 import { prisma } from "../src/lib/prisma";
 import { upsertInvoiceRule } from "../src/lib/facturas/categorizationRules";
+import { applyTagToInvoice } from "../src/lib/facturas/pendingTags";
 
 type Inv = { rutIssuer: string | null; businessName: string | null; categoryId: string | null; projectId: string | null };
 type Rule = { id: string; rutIssuer: string | null; providerName: string | null; categoryId: string | null; projectId: string | null; hits: number };
@@ -20,7 +22,12 @@ const matches = (i: Inv | Rule, w: Record<string, unknown>) =>
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const p = prisma as any;
+let ultimoUpdate: Record<string, unknown> | null = null;
 p.invoice = {
+  update: async ({ data }: any) => {
+    ultimoUpdate = data;
+    return {};
+  },
   updateMany: async ({ where, data }: any) => {
     const hit = invoices.filter((i) => matches(i, where));
     hit.forEach((i) => Object.assign(i, data));
@@ -101,6 +108,18 @@ async function main() {
   check("el bulk-assign exige el tilde en true", bulk.includes("body.learnCategoryRule === true") && bulk.includes("body.learnProjectRule === true"));
   const barra = fs.readFileSync(path.join(raiz, "components/facturas/BulkAssignBar.tsx"), "utf8");
   check("el tilde de categoría parte apagado", barra.includes("useState(false);\n  const [learnProjectRule") || /learnCategoryRule, setLearnCategoryRule\] = useState\(false\)/.test(barra));
+
+  // 5. Telegram: "herramienta" gana sobre la categoría que puso la regla, y
+  //    la regla del proveedor no se toca. La obra solo llena lo vacío.
+  rules = [{ id: "r1", rutIssuer: SODIMAC, providerName: null, categoryId: "materiales", projectId: null, hits: 1 }];
+  ultimoUpdate = null;
+  let t = await applyTagToInvoice("f1", { projectId: "sena", categoryId: "materiales" }, "portofino", "herramientas");
+  check("Telegram: la categoría pasa a Herramientas", t.setCategory && ultimoUpdate?.["categoryId"] === "herramientas");
+  check("Telegram: la obra ya asignada no se mueve", !t.setProject && !("projectId" in (ultimoUpdate ?? {})));
+  check("Telegram: la regla sigue en Materiales", rules[0].categoryId === "materiales");
+  ultimoUpdate = null;
+  t = await applyTagToInvoice("f1", { projectId: null, categoryId: "herramientas" }, "portofino", "herramientas");
+  check("Telegram: misma categoría → no reescribe, llena la obra vacía", !t.setCategory && t.setProject);
 
   console.log(fallas === 0 ? "\nTodo OK" : `\n${fallas} falla(s)`);
   process.exit(fallas === 0 ? 0 : 1);

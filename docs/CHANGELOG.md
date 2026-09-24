@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-09-24 — La regla de un proveedor se guarda solo con el tilde
+
+- **Pendiente 184**: la regla de categoría de un proveedor se pisaba sola. La edición inline y el formulario de la factura la guardaban siempre, y el tilde "Guardar categoría en regla" del bulk-assign venía prendido: Sodimac quedó en "Herramientas" con 539 de 580 facturas en Materiales. Ahora la regla se crea o cambia **solo** con el tilde, que parte apagado y se apaga después de cada asignación. El "Deshacer" devuelve las reglas cambiadas a lo que tenían (antes las borraba). CLAUDE.md §4.5 reescrito.
+- **Pantalla de reglas** (`/facturas/reglas`): por regla, cómo están repartidas de verdad las facturas del proveedor, marca ámbar cuando la regla no es la mayoritaria, botón "Pasar regla a X" y pastillas Todas / No calzan / Proveedor mixto.
+- **Telegram**: la categoría que MJ le dice al bot gana sobre la que puso la regla (antes solo completaba lo vacío, y como el sync aplica la regla primero, "herramienta" se perdía). La obra sigue completando solo lo vacío; la regla no se toca.
+- Regresión: `scripts/test-reglas-solo-con-tilde.ts` (14 casos, sin base).
+
 ## 2026-09-21 — La app aprende sola las tiendas nuevas
 
 - **Tiendas conocidas (pendiente 181)**: hasta hoy cada tienda nueva exigía editar a mano dos listas en el código (la del proxy de fotos y la de tiendas Shopify/VTEX) y, hasta que alguien lo hacía, la foto del producto salía rota sin aviso (pasó con Ducasse y con Verken). Ahora, al apretar "Extraer" sobre un link de una tienda nueva, la app la anota en la tabla nueva `KnownStore`, prueba con ese mismo producto si tiene API de Shopify o VTEX (lo que antes se verificaba a mano) y anota también el dominio del que viene la foto. `src/lib/catalog/tiendas.ts` es la única lista: las de arranque en el código + las aprendidas en la base. Tabla aplicada a la viva con `prisma/sql/181-tiendas-conocidas.sql`. Test contra tiendas reales: `scripts/test-tiendas-conocidas.ts`.

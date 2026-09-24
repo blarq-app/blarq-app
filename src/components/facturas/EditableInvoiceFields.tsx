@@ -78,12 +78,9 @@ export function EditableCategoryCell({
         body: JSON.stringify({ categoryId: newCategoryId || null }),
       });
       if (!res.ok) throw new Error(await res.text());
-      const body = await res.json();
-      if (body.rule?.appliedRetroactively > 0) {
-        flash(`✓ guardado · regla aplicada a ${body.rule.appliedRetroactively} más`);
-      } else {
-        flash("✓ guardado");
-      }
+      // Cambiar la categoría acá no toca la regla del proveedor (pendiente
+      // 184): solo esta factura.
+      flash("✓ guardado");
       router.refresh();
     } catch (e) {
       console.error(e);

@@ -21,10 +21,18 @@ function projectLabel(p: Project) {
   return n != null ? `${n} · ${p.name}` : p.name;
 }
 
+type LearnedRule = {
+  ruleId: string;
+  created: boolean;
+  previousCategoryId: string | null;
+  previousProjectId: string | null;
+};
+
 // Action bar fixed-bottom que aparece cuando hay facturas seleccionadas
 // en /facturas. Dropdowns para asignar categoría + proyecto en bulk.
-// Si se asigna categoría, se crean reglas por RUT en paralelo (en el
-// endpoint), y se muestra un toast con "Deshacer" todas las reglas creadas.
+// Si MJ prende "Guardar categoría en regla" (o el de centro de costo), el
+// endpoint crea/cambia la regla del proveedor y se muestra un toast con
+// "Deshacer". Sin tilde no se toca ninguna regla (pendiente 184).
 export default function BulkAssignBar({
   selectedIds,
   selectedTypes,
@@ -45,19 +53,21 @@ export default function BulkAssignBar({
   const router = useRouter();
   const [projectId, setProjectId] = useState<string>("");
   const [categoryId, setCategoryId] = useState<string>("");
-  // Dos reglas independientes:
-  //   - Categoría: default ON. Easy = Materiales casi siempre — conviene
-  //     que se contagie a futuras facturas del mismo proveedor.
-  //   - Proyecto:  default OFF. La mayoría de los proveedores son
+  // Dos reglas independientes, las DOS parten apagadas: la regla del
+  // proveedor se guarda solo cuando MJ prende el tilde (pendiente 184). La
+  // de categoría partía prendida y pisaba reglas sin que ella lo decidiera.
+  //   - Proyecto: La mayoría de los proveedores son
   //     transversales a varias obras (Easy/Sodimac/MK). Solo prender
   //     cuando el proveedor identifica unívocamente al proyecto
   //     (Autopistas/Bencina/Patente → BLARQ siempre).
-  const [learnCategoryRule, setLearnCategoryRule] = useState(true);
+  const [learnCategoryRule, setLearnCategoryRule] = useState(false);
   const [learnProjectRule, setLearnProjectRule] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{
     message: string;
-    learnedRuleIds: string[];
+    // Reglas creadas o cambiadas en esta asignación, con lo que tenían antes,
+    // para que "Deshacer" las deje como estaban (no borrarlas enteras).
+    learned: LearnedRule[];
   } | null>(null);
 
   // Filtrar categorías según el tipo de las facturas seleccionadas.
@@ -92,9 +102,8 @@ export default function BulkAssignBar({
       else if (projectId) body.projectId = projectId;
       if (categoryId === "__none__") body.categoryId = null;
       else if (categoryId) body.categoryId = categoryId;
-      // Toggles separados — solo se mandan cuando difieren del default
-      // del endpoint (categoría=true, proyecto=false).
-      if (!learnCategoryRule) body.learnCategoryRule = false;
+      // Toggles separados — el endpoint aprende solo si vienen en true.
+      if (learnCategoryRule) body.learnCategoryRule = true;
       if (learnProjectRule) body.learnProjectRule = true;
 
       const res = await fetch("/api/facturas/bulk-assign", {
@@ -113,6 +122,8 @@ export default function BulkAssignBar({
         ruleId: string;
         created: boolean;
         updated: boolean;
+        previousCategoryId: string | null;
+        previousProjectId: string | null;
         businessName: string | null;
       }>;
       const created = newRules.filter((r) => r.created);
@@ -128,17 +139,19 @@ export default function BulkAssignBar({
         );
       }
 
-      const learnedRuleIds = newRules
-        .filter((r) => r.created || r.updated)
-        .map((r) => r.ruleId);
+      const learned = newRules.filter((r) => r.created || r.updated);
 
       setToast({
         message: `✓ ${data.updated} factura${data.updated !== 1 ? "s" : ""} asignada${data.updated !== 1 ? "s" : ""}${ruleParts.length ? " · " + ruleParts.join(" + ") : ""}`,
-        learnedRuleIds,
+        learned,
       });
       // Limpiar selección y refrescar lista
       setProjectId("");
       setCategoryId("");
+      // Los tildes vuelven a apagarse: guardar regla es una decisión por
+      // asignación, no algo que quede prendido para la siguiente.
+      setLearnCategoryRule(false);
+      setLearnProjectRule(false);
       onClear();
       router.refresh();
       // Auto-ocultar toast a los 12s (más largo de lo normal porque tiene "Deshacer")
@@ -149,16 +162,28 @@ export default function BulkAssignBar({
   }
 
   async function undoLearnedRules() {
-    if (!toast || toast.learnedRuleIds.length === 0) return;
+    if (!toast || toast.learned.length === 0) return;
     if (
       !confirm(
-        `¿Deshacer las ${toast.learnedRuleIds.length} regla${toast.learnedRuleIds.length !== 1 ? "s" : ""} creadas/cambiadas?\n\n(Las facturas que ya quedaron asignadas no se desasignan — solo se borran las reglas para futuras facturas.)`
+        `¿Deshacer las ${toast.learned.length} regla${toast.learned.length !== 1 ? "s" : ""} creadas/cambiadas?\n\n(Las facturas que ya quedaron asignadas no se desasignan — las reglas nuevas se borran y las cambiadas vuelven a lo que tenían.)`
       )
     )
       return;
     await Promise.all(
-      toast.learnedRuleIds.map((id) =>
-        fetch(`/api/facturas/reglas/${id}`, { method: "DELETE" })
+      toast.learned.map((r) =>
+        // Regla nueva → se borra. Regla que ya existía → vuelve a lo que
+        // tenía. Antes se borraban todas, y deshacer un cambio a la regla de
+        // Easy dejaba a Easy sin regla.
+        r.created
+          ? fetch(`/api/facturas/reglas/${r.ruleId}`, { method: "DELETE" })
+          : fetch(`/api/facturas/reglas/${r.ruleId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                categoryId: r.previousCategoryId,
+                projectId: r.previousProjectId,
+              }),
+            })
       )
     );
     setToast(null);
@@ -214,7 +239,7 @@ export default function BulkAssignBar({
           {categoryId && categoryId !== "__none__" && (
             <label
               className="text-xs flex items-center gap-1 text-gray-300 hover:text-white cursor-pointer select-none"
-              title="Si lo apagás, no se crea/actualiza la regla automática del proveedor. Útil para proveedores cuya categoría varía (caso MK)."
+              title="Prendelo solo si este proveedor va SIEMPRE a esta categoría: las próximas facturas suyas entrarán así. Apagado, la regla del proveedor no se toca."
             >
               <input
                 type="checkbox"
@@ -262,7 +287,7 @@ export default function BulkAssignBar({
       {toast && (
         <div className="bg-gray-900 text-white rounded-xl shadow-lg px-4 py-3 flex items-center gap-3 flex-wrap">
           <span className="text-sm">{toast.message}</span>
-          {toast.learnedRuleIds.length > 0 && (
+          {toast.learned.length > 0 && (
             <button
               onClick={undoLearnedRules}
               className="text-xs underline text-amber-300 hover:text-amber-200"

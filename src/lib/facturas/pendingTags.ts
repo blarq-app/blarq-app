@@ -114,8 +114,16 @@ export async function findInvoiceByRutFolio(
 }
 
 /**
- * Aplica directamente proyecto/categoría a una factura existente, sin pisar
- * lo ya asignado a mano. Devuelve qué se aplicó.
+ * Aplica proyecto/categoría de una etiqueta de Telegram a una factura
+ * existente. Devuelve qué se aplicó.
+ *
+ * - Proyecto: solo completa lo vacío (una obra ya asignada no se mueve desde
+ *   Telegram; el bot avisa y se cambia en la app).
+ * - Categoría: la de Telegram GANA sobre la que haya (pendiente 184). Es la
+ *   instrucción explícita de MJ/JT para ESTA factura, y la categoría que ya
+ *   tiene casi siempre la puso la regla del proveedor: con Sodimac en
+ *   Materiales, "herramienta" por Telegram se perdía, porque el sync aplica
+ *   la regla antes que la etiqueta. La regla del proveedor NO se toca.
  */
 export async function applyTagToInvoice(
   invoiceId: string,
@@ -124,9 +132,8 @@ export async function applyTagToInvoice(
   categoryId: string | null
 ): Promise<{ setProject: boolean; setCategory: boolean }> {
   const data: Record<string, unknown> = {};
-  // Solo completa lo vacío — respeta una asignación manual previa.
   if (projectId && !current.projectId) data.projectId = projectId;
-  if (categoryId && !current.categoryId) data.categoryId = categoryId;
+  if (categoryId && categoryId !== current.categoryId) data.categoryId = categoryId;
   if (Object.keys(data).length > 0) {
     await prisma.invoice.update({ where: { id: invoiceId }, data });
   }

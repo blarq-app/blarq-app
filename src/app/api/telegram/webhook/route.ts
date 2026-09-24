@@ -431,7 +431,9 @@ async function asignarDesdeTexto(
     if (!r.setProject && existing.projectId) {
       await sendMessage(
         chatId,
-        `Esa factura (${provLabel}, ${folioLabel}) ya tenía obra asignada. No la cambié.\nSi querés moverla, hacelo desde la app.`
+        `Esa factura (${provLabel}, ${folioLabel}) ya tenía obra asignada. No la cambié.\nSi querés moverla, hacelo desde la app.${
+          r.setCategory && category ? `\nLa categoría sí quedó en *${category.name}*.` : ""
+        }`
       );
     } else {
       await sendMessage(

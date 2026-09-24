@@ -13,8 +13,9 @@
 //
 // Aplicación:
 //   - Sync SII / POST factura: si el proveedor tiene regla, intenta auto-asignar.
-//   - Bulk assign / PUT factura: si MJ asigna manualmente, upsertea la regla
-//     con los campos que ella asignó.
+//   - Bulk assign CON el tilde prendido: upsertea la regla con los campos
+//     que MJ asignó. Es el ÚNICO camino que aprende (pendiente 184): la
+//     edición inline y el formulario de la factura nunca guardan regla.
 
 import { prisma } from "@/lib/prisma";
 
@@ -118,6 +119,13 @@ export async function applyInvoiceRule(
  *
  * Si no hay ni RUT ni nombre, no se puede identificar al proveedor: no crea
  * regla y devuelve todo en cero.
+ *
+ * Solo se llama desde el bulk-assign cuando MJ prende "Guardar categoría en
+ * regla" o "Guardar centro de costo en regla" (pendiente 184). Hasta
+ * 2026-09-24 también la llamaban la edición inline y el formulario, sin
+ * tilde: cada asignación pisaba la regla con la categoría de la última
+ * factura tocada y Sodimac quedó en "Herramientas" con 539 de 580 facturas
+ * en Materiales.
  */
 export async function upsertInvoiceRule(
   rutIssuer: string | null,
@@ -128,6 +136,10 @@ export async function upsertInvoiceRule(
   updated: boolean;
   ruleId: string | null;
   appliedRetroactively: number;
+  // Lo que tenía la regla antes de este cambio — para que el "Deshacer"
+  // del bulk-assign vuelva atrás en vez de borrar la regla entera.
+  previousCategoryId: string | null;
+  previousProjectId: string | null;
 }> {
   // Validar que al menos uno venga puesto (o sea valor no-undefined).
   if (data.categoryId === undefined && data.projectId === undefined) {
@@ -136,15 +148,25 @@ export async function upsertInvoiceRule(
 
   // Clave del proveedor. Si no hay RUT, la clave es el nombre exacto.
   const providerName = rutIssuer ? null : businessName;
+  const nada = {
+    created: false,
+    updated: false,
+    ruleId: null,
+    appliedRetroactively: 0,
+    previousCategoryId: null,
+    previousProjectId: null,
+  };
   if (!rutIssuer && !providerName) {
     // Ni RUT ni nombre → no identificamos al proveedor, no guardamos regla.
-    return { created: false, updated: false, ruleId: null, appliedRetroactively: 0 };
+    return nada;
   }
   const keyWhere = rutIssuer ? { rutIssuer } : { providerName: providerName! };
 
   const existing = await prisma.invoiceCategorizationRule.findUnique({
     where: keyWhere,
   });
+  const previousCategoryId = existing?.categoryId ?? null;
+  const previousProjectId = existing?.projectId ?? null;
 
   const ruleData: Record<string, unknown> = {};
   if (data.categoryId !== undefined) ruleData.categoryId = data.categoryId;
@@ -195,5 +217,10 @@ export async function upsertInvoiceRule(
     appliedRetroactively += r.count;
   }
 
-  return { ...result, appliedRetroactively };
+  return {
+    ...result,
+    appliedRetroactively,
+    previousCategoryId,
+    previousProjectId,
+  };
 }

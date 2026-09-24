@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import { upsertInvoiceRule } from "@/lib/facturas/categorizationRules";
 import { recomputeMovementsStatus } from "@/lib/banco/movementStatus";
 import { requireSession } from "@/lib/apiAuth";
 
@@ -40,12 +39,6 @@ export async function PUT(
     const iva = netAmount * 0.19;
     const totalAmount = netAmount + iva;
 
-    // Estado previo (para detectar si la categoría cambió).
-    const previous = await prisma.invoice.findUnique({
-      where: { id },
-      select: { type: true, categoryId: true, rutIssuer: true, businessName: true },
-    });
-
     const invoice = await prisma.invoice.update({
       where: { id },
       data: {
@@ -75,28 +68,11 @@ export async function PUT(
       },
     });
 
-    // Si la factura tiene categoría asignada, asegurar que exista una
-    // regla del proveedor y aplicarla retroactivamente a las demás facturas
-    // del mismo proveedor sin categoría. El proveedor se identifica por RUT,
-    // o por nombre exacto si no tiene RUT (internacional, ej. Google Workspace).
-    //
-    // IMPORTANTE: desde acá nunca se guarda PROYECTO como regla. La mayoría
-    // de los proveedores son transversales a varias obras (Easy/Sodimac/MK),
-    // y guardar proyecto como regla arrastra retroactivamente facturas a
-    // proyectos equivocados. Para los proveedores que sí van siempre al
-    // mismo proyecto (Autopistas/Bencina = BLARQ), MJ lo hace explícito
-    // desde el bulk-assign con el toggle "Guardar centro de costo en regla".
-    let rule: Awaited<ReturnType<typeof upsertInvoiceRule>> | null = null;
-    if ((invoice.rutIssuer || invoice.businessName) && invoice.categoryId) {
-      const r = await upsertInvoiceRule(
-        invoice.rutIssuer ?? null,
-        invoice.businessName ?? null,
-        { categoryId: invoice.categoryId }
-      ).catch(() => null);
-      if (r && (r.created || r.updated || r.appliedRetroactively > 0 || r.categorySkipped)) rule = r;
-    }
-
-    return NextResponse.json({ ...invoice, rule });
+    // Guardar la factura NO crea ni cambia la regla del proveedor (pendiente
+    // 184): la regla se aprende solo desde el bulk-assign con el tilde
+    // "Guardar categoría en regla" prendido. Antes cada edición pisaba la
+    // regla y Sodimac quedó en "Herramientas" sin que MJ lo decidiera.
+    return NextResponse.json(invoice);
   } catch (error) {
     console.error("Error updating invoice:", error);
     return NextResponse.json(
@@ -169,25 +145,9 @@ export async function PATCH(
       },
     });
 
-    // Edición inline: solo se aprende CATEGORÍA como regla, nunca proyecto.
-    // El proyecto desde inline es siempre puntual — para crear regla de
-    // "proveedor X siempre a obra Y" hay que ir al bulk-assign y prender
-    // el toggle "Guardar centro de costo en regla".
-    let rule: Awaited<ReturnType<typeof upsertInvoiceRule>> | null = null;
-    if (
-      (invoice.rutIssuer || invoice.businessName) &&
-      "categoryId" in updates &&
-      invoice.categoryId
-    ) {
-      const r = await upsertInvoiceRule(
-        invoice.rutIssuer ?? null,
-        invoice.businessName ?? null,
-        { categoryId: invoice.categoryId }
-      ).catch(() => null);
-      if (r && (r.created || r.updated || r.appliedRetroactively > 0 || r.categorySkipped)) rule = r;
-    }
-
-    return NextResponse.json({ ...invoice, rule });
+    // Edición inline: no aprende regla, ni de categoría ni de proyecto
+    // (pendiente 184). Ver el comentario del PUT.
+    return NextResponse.json(invoice);
   } catch (error) {
     console.error("Error patching invoice:", error);
     return NextResponse.json(

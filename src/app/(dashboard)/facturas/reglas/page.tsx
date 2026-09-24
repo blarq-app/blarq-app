@@ -118,18 +118,15 @@ export default async function FacturasReglasPage() {
       </div>
 
       <div className="bg-blue-50/40 border border-blue-100 rounded-lg p-3 mb-4 text-xs text-gray-700 leading-relaxed">
-        Cada vez que asignás categoría o centro de costo a una factura
-        recibida (manual, edición o bulk en /facturas), se guarda una regla{" "}
-        <span className="font-medium">proveedor → categoría / proyecto</span>.
-        El proveedor se reconoce por su RUT; los internacionales sin RUT
-        (Google Workspace, Anthropic…) se reconocen por su nombre exacto. Las
-        próximas facturas del mismo proveedor que entren por sync SII o
-        creación manual heredan estos valores automáticamente. Cada regla
-        puede tener categoría, proyecto, o ambos.
-        <br />
-        Si las facturas de un proveedor ya están en dos o más categorías, la
-        regla de categoría <span className="font-medium">no cambia sola</span>{" "}
-        al asignar: se cambia solo desde acá.
+        Una regla <span className="font-medium">proveedor → categoría / proyecto</span>{" "}
+        se guarda solo cuando la pedís: en /facturas, al asignar varias
+        facturas, prendiendo "Guardar categoría en regla" o "Guardar centro de
+        costo en regla". Cambiar la categoría de una factura suelta no toca la
+        regla. Las próximas facturas del mismo proveedor que entren por sync
+        SII heredan estos valores. El proveedor se reconoce por su RUT; los
+        internacionales sin RUT (Google Workspace, Anthropic…) por su nombre
+        exacto. Las marcadas en ámbar no coinciden con la categoría que tiene
+        la mayoría de sus facturas.
       </div>
 
       <InvoiceRulesTable

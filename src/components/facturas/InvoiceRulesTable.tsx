@@ -197,7 +197,7 @@ export default function InvoiceRulesTable({
       <div className="bg-white border border-gray-200 rounded-xl p-12 text-center text-gray-500">
         <p className="text-sm">Aún no hay reglas guardadas.</p>
         <p className="text-xs text-gray-400 mt-1">
-          Las reglas se crean solas cuando asignás categoría a una factura recibida.
+          Las reglas se guardan al asignar facturas en /facturas con el tilde "Guardar categoría en regla" prendido.
         </p>
       </div>
     );

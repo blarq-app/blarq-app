@@ -13,8 +13,9 @@
 //
 // Aplicación:
 //   - Sync SII / POST factura: si el proveedor tiene regla, intenta auto-asignar.
-//   - Bulk assign / PUT factura: si MJ asigna manualmente, upsertea la regla
-//     con los campos que ella asignó.
+//   - Bulk assign CON el tilde prendido: upsertea la regla con los campos
+//     que MJ asignó. Es el ÚNICO camino que aprende (pendiente 184): la
+//     edición inline y el formulario de la factura nunca guardan regla.
 
 import { prisma } from "@/lib/prisma";
 
@@ -33,29 +34,6 @@ export function providerInvoiceWhere(
   if (rutIssuer) return { rutIssuer };
   if (providerName) return { rutIssuer: null, businessName: providerName };
   return null; // sin RUT ni nombre no se puede identificar al proveedor
-}
-
-/**
- * Cuántas categorías DISTINTAS tienen hoy las facturas de un proveedor
- * (ignora las sin categoría). Si son 2 o más, el proveedor ya demostró ser
- * transversal: Sodimac es Materiales en 539 facturas y Herramientas en 37.
- *
- * Existe por el pendiente 184: antes, cada asignación manual pisaba la regla
- * con la categoría de la ÚLTIMA factura tocada, así que en un proveedor mixto
- * la regla cambiaba de dirección sola y sin aviso (Sodimac quedó apuntando a
- * Herramientas, el 6% de sus facturas, y las nuevas entraban mal).
- */
-export async function providerCategoryCount(
-  rutIssuer: string | null,
-  providerName: string | null
-): Promise<number> {
-  const provWhere = providerInvoiceWhere(rutIssuer, providerName);
-  if (!provWhere) return 0;
-  const g = await prisma.invoice.groupBy({
-    by: ["categoryId"],
-    where: { ...provWhere, categoryId: { not: null } },
-  });
-  return g.length;
 }
 
 /**
@@ -142,14 +120,12 @@ export async function applyInvoiceRule(
  * Si no hay ni RUT ni nombre, no se puede identificar al proveedor: no crea
  * regla y devuelve todo en cero.
  *
- * PROVEEDOR MIXTO (pendiente 184): todos los que llaman a esta función están
- * "aprendiendo" de una asignación manual (edición inline, formulario,
- * bulk-assign). Si las facturas del proveedor ya están en 2+ categorías, la
- * categoría NO se aprende: la regla existente se respeta tal cual, y si no
- * había regla no se crea una (sería la categoría de la última factura tocada,
- * que es justo el error). El cambio a propósito de la regla se hace desde la
- * pantalla de reglas, que no pasa por acá. Se avisa con `categorySkipped`.
- * El proyecto no entra en este criterio: ya es opt-in explícito (§4.5).
+ * Solo se llama desde el bulk-assign cuando MJ prende "Guardar categoría en
+ * regla" o "Guardar centro de costo en regla" (pendiente 184). Hasta
+ * 2026-09-24 también la llamaban la edición inline y el formulario, sin
+ * tilde: cada asignación pisaba la regla con la categoría de la última
+ * factura tocada y Sodimac quedó en "Herramientas" con 539 de 580 facturas
+ * en Materiales.
  */
 export async function upsertInvoiceRule(
   rutIssuer: string | null,
@@ -160,12 +136,10 @@ export async function upsertInvoiceRule(
   updated: boolean;
   ruleId: string | null;
   appliedRetroactively: number;
-  // Categoría que tenía la regla antes de este cambio — para que el
-  // "Deshacer" pueda volver atrás en vez de borrar la regla entera.
+  // Lo que tenía la regla antes de este cambio — para que el "Deshacer"
+  // del bulk-assign vuelva atrás en vez de borrar la regla entera.
   previousCategoryId: string | null;
-  // La categoría no se aprendió porque el proveedor es mixto. Trae en cuántas
-  // categorías están sus facturas, para el aviso.
-  categorySkipped: { categoryCount: number } | null;
+  previousProjectId: string | null;
 }> {
   // Validar que al menos uno venga puesto (o sea valor no-undefined).
   if (data.categoryId === undefined && data.projectId === undefined) {
@@ -180,7 +154,7 @@ export async function upsertInvoiceRule(
     ruleId: null,
     appliedRetroactively: 0,
     previousCategoryId: null,
-    categorySkipped: null,
+    previousProjectId: null,
   };
   if (!rutIssuer && !providerName) {
     // Ni RUT ni nombre → no identificamos al proveedor, no guardamos regla.
@@ -192,28 +166,7 @@ export async function upsertInvoiceRule(
     where: keyWhere,
   });
   const previousCategoryId = existing?.categoryId ?? null;
-
-  // Proveedor mixto: sacar la categoría de lo que se aprende. Se mide DESPUÉS
-  // de guardar la factura, así que incluye la asignación que se acaba de
-  // hacer: 10 facturas en Materiales y MJ pone una en Herramientas → quedan 2
-  // categorías → la regla sigue en Materiales. Y al revés: si MJ lleva todas
-  // a la misma categoría, vuelve a ser 1 y la regla se aprende normal.
-  let categorySkipped: { categoryCount: number } | null = null;
-  if (data.categoryId) {
-    const categoryCount = await providerCategoryCount(rutIssuer, providerName);
-    if (categoryCount >= 2) {
-      categorySkipped = { categoryCount };
-      data = { ...data, categoryId: undefined };
-      if (data.projectId === undefined) {
-        return {
-          ...nada,
-          ruleId: existing?.id ?? null,
-          previousCategoryId,
-          categorySkipped,
-        };
-      }
-    }
-  }
+  const previousProjectId = existing?.projectId ?? null;
 
   const ruleData: Record<string, unknown> = {};
   if (data.categoryId !== undefined) ruleData.categoryId = data.categoryId;
@@ -268,6 +221,6 @@ export async function upsertInvoiceRule(
     ...result,
     appliedRetroactively,
     previousCategoryId,
-    categorySkipped,
+    previousProjectId,
   };
 }

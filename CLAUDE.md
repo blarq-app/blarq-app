@@ -62,11 +62,13 @@ Si una decisión razonable tiene 2+ opciones (estructura de datos, UX, naming), 
 
 Las facturas que llegan del SII por sync **se auto-asignan** a categoría y/o proyecto **si existe una regla activa** para el `rutIssuer` (modelo `InvoiceCategorizationRule`).
 
-**Cómo se aprenden las reglas (cambio 2026-05-14):**
+**Cómo se aprenden las reglas (cambio 2026-09-24): SOLO con el tilde.**
 
-- **Categoría — default ON.** Cuando MJ asigna categoría a una factura (bulk-assign o edición inline), se crea/actualiza la regla del proveedor con esa categoría. Útil: Easy = Materiales siempre, Sodimac = Materiales siempre. El toggle "Guardar categoría en regla" en el bulk-assign permite apagarlo caso a caso (ej. MK que a veces es Materiales, a veces Artefactos).
-- **Centro de costo (proyecto) — default OFF.** Las reglas NO guardan proyecto por default. La mayoría de los proveedores son transversales (Easy/Sodimac/MK compran para muchas obras), y guardar proyecto como regla arrastra retroactivamente facturas a obras equivocadas. Solo se guarda proyecto en la regla cuando MJ explícitamente prende el toggle "Guardar centro de costo en regla" en el bulk-assign. Caso de uso real: Autopistas/Bencina/Patente → BLARQ siempre.
-- **Edición inline (click en la celda de proyecto/categoría desde la lista)**: nunca aprende proyecto como regla. Solo aprende categoría. Para crear regla de "proveedor X → siempre obra Y" hay que ir al bulk-assign y prender el toggle.
+- La regla de un proveedor se crea o cambia **únicamente** en el bulk-assign de `/facturas`, cuando MJ prende "Guardar categoría en regla" y/o "Guardar centro de costo en regla". Los **dos tildes parten apagados** y se vuelven a apagar después de cada asignación.
+- **Edición inline** (click en la celda desde la lista) y **formulario de la factura**: nunca tocan la regla, ni de categoría ni de proyecto. Cambian solo esa factura.
+- Cambio a propósito de una regla existente: desde la pantalla de reglas (`/facturas/reglas`), que muestra cómo están repartidas de verdad las facturas de cada proveedor y marca en ámbar las reglas que no coinciden con la categoría mayoritaria.
+- El "Deshacer" del bulk-assign borra las reglas nuevas y devuelve las cambiadas a lo que tenían.
+- Regresión: `scripts/test-reglas-solo-con-tilde.ts`.
 
 Una regla puede tener categoría, proyecto, o ambos. Al aplicarse (sync SII o asignación manual), solo completa los campos vacíos en la factura — no pisa asignaciones manuales previas. Al crear/actualizar regla con proyecto, hay aplicación retroactiva al RUT (facturas viejas sin proyecto se asignan al de la regla) — por eso el default OFF para proyecto.
 
@@ -74,6 +76,7 @@ Una regla puede tener categoría, proyecto, o ambos. Al aplicarse (sync SII o as
 - Hasta 2026-05-09: sync nunca auto-asignaba nada — todo quedaba `null` esperando catalogación manual.
 - 2026-05-09: introducción del motor de reglas + project rules. Toggle único "Guardar regla" cubría categoría y proyecto.
 - 2026-05-14: separados en dos toggles (categoría default ON, proyecto default OFF). Inline edit deja de aprender proyecto como regla. Motivo: facturas de Easy se contagiaban a Portofino por arrastre retroactivo.
+- 2026-09-24 (pendiente 184): la regla se guarda solo con el tilde, que parte apagado. Inline y formulario dejan de aprender categoría. Motivo: cada asignación manual pisaba la regla con la categoría de la última factura tocada; Sodimac quedó en "Herramientas" con 539 de 580 facturas en Materiales, y las nuevas entraban mal. MJ: "para que la app aprenda una regla es apretando ese botón, si no, no se debería guardar".
 
 ### 4.6 Placeholders ↔ null
 

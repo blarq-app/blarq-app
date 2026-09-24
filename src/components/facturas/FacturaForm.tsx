@@ -78,15 +78,6 @@ export default function FacturaForm({
   const [v, setV] = useState<FacturaFormValues>(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Toast de regla creada/actualizada (solo en edit con cambio de categoría)
-  const [ruleToast, setRuleToast] = useState<{
-    ruleId: string;
-    created: boolean;
-    updated: boolean;
-    appliedRetroactively: number;
-    categoryName: string;
-    businessName: string;
-  } | null>(null);
 
   // ── Buscar la factura referenciada por folio ────────────────────────────
   // El desplegable trae las 50 facturas más recientes del mismo proveedor. Con
@@ -234,38 +225,13 @@ export default function FacturaForm({
         setError(j.error || "Error al guardar");
         return;
       }
-      const responseData = await res.json().catch(() => ({}));
-      // Si el backend creó/actualizó una regla por RUT, mostrar toast con
-      // "Deshacer" antes de navegar. Si no hay regla, navegar de una.
-      if (responseData.rule && (responseData.rule.created || responseData.rule.updated)) {
-        const cat = categories.find((c) => c.id === v.categoryId);
-        setRuleToast({
-          ruleId: responseData.rule.ruleId,
-          created: !!responseData.rule.created,
-          updated: !!responseData.rule.updated,
-          appliedRetroactively: responseData.rule.appliedRetroactively ?? 0,
-          categoryName: cat?.name ?? "—",
-          businessName: v.businessName || v.rutIssuer || "—",
-        });
-      } else {
-        router.push(returnTo);
-        router.refresh();
-      }
+      // Guardar la factura ya no crea ni cambia la regla del proveedor
+      // (pendiente 184) — eso es solo desde el bulk-assign con el tilde.
+      router.push(returnTo);
+      router.refresh();
     } finally {
       setSaving(false);
     }
-  }
-
-  async function dismissRuleToast(undo: boolean) {
-    if (!ruleToast) return;
-    if (undo) {
-      await fetch(`/api/facturas/reglas/${ruleToast.ruleId}`, { method: "DELETE" }).catch(
-        () => {}
-      );
-    }
-    setRuleToast(null);
-    router.push(returnTo);
-    router.refresh();
   }
 
   async function remove() {
@@ -524,37 +490,6 @@ export default function FacturaForm({
       {error && (
         <div className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
           {error}
-        </div>
-      )}
-
-      {ruleToast && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white rounded-xl shadow-xl px-4 py-3 flex items-center gap-3 max-w-[calc(100vw-2rem)]">
-          <span className="text-sm">
-            ✓ Factura guardada · regla {ruleToast.created ? "creada" : "actualizada"}:{" "}
-            <span className="font-medium">{ruleToast.businessName.slice(0, 30)}</span>
-            <span className="text-gray-400 mx-1">→</span>
-            <span className="font-medium">{ruleToast.categoryName}</span>
-            {ruleToast.appliedRetroactively > 0 && (
-              <span className="text-emerald-300 ml-2">
-                · +{ruleToast.appliedRetroactively} factura
-                {ruleToast.appliedRetroactively !== 1 ? "s" : ""} anterior
-                {ruleToast.appliedRetroactively !== 1 ? "es" : ""} categorizada
-                {ruleToast.appliedRetroactively !== 1 ? "s" : ""} también
-              </span>
-            )}
-          </span>
-          <button
-            onClick={() => dismissRuleToast(true)}
-            className="text-xs underline text-amber-300 hover:text-amber-200"
-          >
-            Deshacer regla
-          </button>
-          <button
-            onClick={() => dismissRuleToast(false)}
-            className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded"
-          >
-            OK
-          </button>
         </div>
       )}
 

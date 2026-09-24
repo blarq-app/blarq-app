@@ -11,7 +11,8 @@ import { requireSession } from "@/lib/apiAuth";
 //     invoiceIds: string[],
 //     projectId?: string | null,         // null para sin asignar; undefined para no tocar
 //     categoryId?: string | null,        // idem
-//     learnCategoryRule?: boolean,       // default true: guarda categoría en la regla del RUT
+//     learnCategoryRule?: boolean,       // default FALSE: solo guarda categoría en la regla
+//                                        // del proveedor si MJ prende el tilde (pendiente 184)
 //     learnProjectRule?: boolean,        // default FALSE: solo guardar proyecto en regla
 //                                        // cuando el proveedor SIEMPRE va al mismo proyecto
 //                                        // (Autopistas/Bencina/Patente = BLARQ). Para
@@ -60,21 +61,23 @@ export async function POST(request: NextRequest) {
       ruleId: string | null;
       created: boolean;
       updated: boolean;
-      categorySkipped: { categoryCount: number } | null;
       previousCategoryId: string | null;
+      previousProjectId: string | null;
       rutIssuer: string | null;
       businessName: string | null;
     }> = [];
 
-    // Aprender reglas — dos toggles independientes:
-    //   - categoría: default ON. Easy = Materiales casi siempre, conviene
-    //     que se contagie a futuras facturas del mismo proveedor.
+    // Aprender reglas — dos toggles independientes, los DOS default OFF:
+    //   - categoría: solo si MJ prende "Guardar categoría en regla". Era
+    //     default ON hasta 2026-09-24 (pendiente 184): con el tilde prendido
+    //     de antemano, cada asignación pisaba la regla sin que MJ lo decidiera
+    //     y Sodimac quedó en "Herramientas" con 539 de 580 en Materiales.
     //   - proyecto: default OFF. La mayoría de los proveedores son
     //     transversales (Easy compra para muchas obras). Solo prendelo
     //     cuando el proveedor identifica unívocamente al proyecto
     //     (ej. Autopistas → BLARQ siempre).
     const learnCat =
-      body.learnCategoryRule !== false &&
+      body.learnCategoryRule === true &&
       typeof body.categoryId === "string" &&
       body.categoryId.length > 0;
     const learnProj =
@@ -110,9 +113,9 @@ export async function POST(request: NextRequest) {
             ruleId: r.ruleId,
             created: r.created,
             updated: r.updated,
-            // Proveedor mixto: la categoría no se aprendió (pendiente 184).
-            categorySkipped: r.categorySkipped,
+            // Para que "Deshacer" vuelva la regla a lo que tenía.
             previousCategoryId: r.previousCategoryId,
+            previousProjectId: r.previousProjectId,
             rutIssuer: inv.rutIssuer ?? null,
             businessName: inv.businessName ?? null,
           });

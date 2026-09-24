@@ -86,21 +86,14 @@ export async function PUT(
     // proyectos equivocados. Para los proveedores que sí van siempre al
     // mismo proyecto (Autopistas/Bencina = BLARQ), MJ lo hace explícito
     // desde el bulk-assign con el toggle "Guardar centro de costo en regla".
-    let rule:
-      | {
-          ruleId: string | null;
-          created: boolean;
-          updated: boolean;
-          appliedRetroactively: number;
-        }
-      | null = null;
+    let rule: Awaited<ReturnType<typeof upsertInvoiceRule>> | null = null;
     if ((invoice.rutIssuer || invoice.businessName) && invoice.categoryId) {
       const r = await upsertInvoiceRule(
         invoice.rutIssuer ?? null,
         invoice.businessName ?? null,
         { categoryId: invoice.categoryId }
       ).catch(() => null);
-      if (r && (r.created || r.updated || r.appliedRetroactively > 0)) rule = r;
+      if (r && (r.created || r.updated || r.appliedRetroactively > 0 || r.categorySkipped)) rule = r;
     }
 
     return NextResponse.json({ ...invoice, rule });
@@ -180,14 +173,7 @@ export async function PATCH(
     // El proyecto desde inline es siempre puntual — para crear regla de
     // "proveedor X siempre a obra Y" hay que ir al bulk-assign y prender
     // el toggle "Guardar centro de costo en regla".
-    let rule:
-      | {
-          ruleId: string | null;
-          created: boolean;
-          updated: boolean;
-          appliedRetroactively: number;
-        }
-      | null = null;
+    let rule: Awaited<ReturnType<typeof upsertInvoiceRule>> | null = null;
     if (
       (invoice.rutIssuer || invoice.businessName) &&
       "categoryId" in updates &&
@@ -198,7 +184,7 @@ export async function PATCH(
         invoice.businessName ?? null,
         { categoryId: invoice.categoryId }
       ).catch(() => null);
-      if (r && (r.created || r.updated || r.appliedRetroactively > 0)) rule = r;
+      if (r && (r.created || r.updated || r.appliedRetroactively > 0 || r.categorySkipped)) rule = r;
     }
 
     return NextResponse.json({ ...invoice, rule });

@@ -60,6 +60,8 @@ export async function POST(request: NextRequest) {
       ruleId: string | null;
       created: boolean;
       updated: boolean;
+      categorySkipped: { categoryCount: number } | null;
+      previousCategoryId: string | null;
       rutIssuer: string | null;
       businessName: string | null;
     }> = [];
@@ -108,6 +110,9 @@ export async function POST(request: NextRequest) {
             ruleId: r.ruleId,
             created: r.created,
             updated: r.updated,
+            // Proveedor mixto: la categoría no se aprendió (pendiente 184).
+            categorySkipped: r.categorySkipped,
+            previousCategoryId: r.previousCategoryId,
             rutIssuer: inv.rutIssuer ?? null,
             businessName: inv.businessName ?? null,
           });

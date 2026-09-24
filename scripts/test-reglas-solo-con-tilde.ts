@@ -8,7 +8,7 @@
 import fs from "fs";
 import path from "path";
 import { prisma } from "../src/lib/prisma";
-import { upsertInvoiceRule } from "../src/lib/facturas/categorizationRules";
+import { upsertInvoiceRule, applyInvoiceRule } from "../src/lib/facturas/categorizationRules";
 import { applyTagToInvoice } from "../src/lib/facturas/pendingTags";
 
 type Inv = { rutIssuer: string | null; businessName: string | null; categoryId: string | null; projectId: string | null };
@@ -23,7 +23,9 @@ const matches = (i: Inv | Rule, w: Record<string, unknown>) =>
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const p = prisma as any;
 let ultimoUpdate: Record<string, unknown> | null = null;
+let facturaUnica: Record<string, unknown> | null = null;
 p.invoice = {
+  findUnique: async () => facturaUnica,
   update: async ({ data }: any) => {
     ultimoUpdate = data;
     return {};
@@ -120,6 +122,18 @@ async function main() {
   ultimoUpdate = null;
   t = await applyTagToInvoice("f1", { projectId: null, categoryId: "herramientas" }, "portofino", "herramientas");
   check("Telegram: misma categoría → no reescribe, llena la obra vacía", !t.setCategory && t.setProject);
+
+  // 6. Emitidas: el emisor es BLARQ, nunca se les aplica ni aprende regla.
+  const BLARQ = "77270733-9";
+  rules = [{ id: "r1", rutIssuer: BLARQ, providerName: null, categoryId: "muebles", projectId: null, hits: 1 }];
+  facturaUnica = { id: "e1", type: "emitida", categoryId: null, projectId: null, rutIssuer: BLARQ, businessName: "CLIENTE" };
+  ultimoUpdate = null;
+  let a = await applyInvoiceRule("e1");
+  check("emitida: no toma la regla (un EP de obra no entra como Muebles)", !a.applied && ultimoUpdate === null);
+  facturaUnica = { id: "f9", type: "recibida", categoryId: null, projectId: null, rutIssuer: BLARQ, businessName: "X" };
+  a = await applyInvoiceRule("f9");
+  check("recibida: sí toma la regla", a.applied && ultimoUpdate?.["categoryId"] === "muebles");
+  check("el bulk-assign solo aprende de recibidas", bulk.includes('type: "recibida"'));
 
   console.log(fallas === 0 ? "\nTodo OK" : `\n${fallas} falla(s)`);
   process.exit(fallas === 0 ? 0 : 1);

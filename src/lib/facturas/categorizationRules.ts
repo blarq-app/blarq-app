@@ -39,8 +39,13 @@ export function providerInvoiceWhere(
 /**
  * Aplica la regla guardada para el RUT emisor de una factura, si existe.
  * Completa categoría y/o proyecto solo si en la factura están vacíos.
- * Funciona para facturas recibidas y emitidas (las emitidas casi siempre
- * usan project rules — porque el cliente RUT identifica el proyecto).
+ * Solo para facturas RECIBIDAS. En una emitida el emisor (rutIssuer) es
+ * siempre BLARQ, así que una regla "por proveedor" sería una regla para TODAS
+ * las facturas que emite BLARQ: pasó (pendiente 184) — la regla
+ * "NICOLAS CUEVAS → Muebles" quedó guardada con el RUT de BLARQ y cualquier
+ * emitida sin categoría, incluso un EP de obra, entraba como Muebles. En las
+ * emitidas la categoría es el concepto del cobro (Cuadro Resumen, sueldos) y
+ * la pone MJ a mano.
  *
  * Devuelve detalle de qué se aplicó.
  */
@@ -62,7 +67,7 @@ export async function applyInvoiceRule(
       businessName: true,
     },
   });
-  if (!inv) return { applied: false };
+  if (!inv || inv.type === "emitida") return { applied: false };
 
   // Buscar la regla del proveedor: por RUT si lo tiene, si no por nombre
   // exacto (proveedor internacional sin RUT).

@@ -68,6 +68,7 @@ Las facturas que llegan del SII por sync **se auto-asignan** a categoría y/o pr
 - **Edición inline** (click en la celda desde la lista) y **formulario de la factura**: nunca tocan la regla, ni de categoría ni de proyecto. Cambian solo esa factura.
 - Cambio a propósito de una regla existente: desde la pantalla de reglas (`/facturas/reglas`), que muestra cómo están repartidas de verdad las facturas de cada proveedor y marca en ámbar las reglas que no coinciden con la categoría mayoritaria.
 - El "Deshacer" del bulk-assign borra las reglas nuevas y devuelve las cambiadas a lo que tenían.
+- **Nunca para facturas EMITIDAS**: en una emitida el emisor (`rutIssuer`) es siempre BLARQ, así que una regla ahí alcanzaría a todas las facturas que emite BLARQ. Ni se aplica ni se aprende. La categoría de una emitida (concepto del cobro) la pone MJ a mano.
 - Regresión: `scripts/test-reglas-solo-con-tilde.ts`.
 
 Una regla puede tener categoría, proyecto, o ambos. Al aplicarse (sync SII o asignación manual), solo completa los campos vacíos en la factura — no pisa asignaciones manuales previas. Al crear/actualizar regla con proyecto, hay aplicación retroactiva al RUT (facturas viejas sin proyecto se asignan al de la regla) — por eso el default OFF para proyecto.

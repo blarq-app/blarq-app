@@ -9,7 +9,9 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 - **Pendiente 184**: la regla de categoría de un proveedor se pisaba sola. La edición inline y el formulario de la factura la guardaban siempre, y el tilde "Guardar categoría en regla" del bulk-assign venía prendido: Sodimac quedó en "Herramientas" con 539 de 580 facturas en Materiales. Ahora la regla se crea o cambia **solo** con el tilde, que parte apagado y se apaga después de cada asignación. El "Deshacer" devuelve las reglas cambiadas a lo que tenían (antes las borraba). CLAUDE.md §4.5 reescrito.
 - **Pantalla de reglas** (`/facturas/reglas`): por regla, cómo están repartidas de verdad las facturas del proveedor, marca ámbar cuando la regla no es la mayoritaria, botón "Pasar regla a X" y pastillas Todas / No calzan / Proveedor mixto.
 - **Telegram**: la categoría que MJ le dice al bot gana sobre la que puso la regla (antes solo completaba lo vacío, y como el sync aplica la regla primero, "herramienta" se perdía). La obra sigue completando solo lo vacío; la regla no se toca.
-- Regresión: `scripts/test-reglas-solo-con-tilde.ts` (14 casos, sin base).
+- **Emitidas fuera del motor de reglas**: en una emitida el emisor es BLARQ; la regla "NICOLAS CUEVAS → Muebles" había quedado con ese RUT y cualquier emitida sin categoría entraba como Muebles. Ya no se aplican ni se aprenden reglas de emitidas.
+- **Datos (viva)**: 45 documentos recategorizados leyendo el PDF del SII (Comercial K, Mobeli, Sodimac) y 6 reglas ordenadas. Detalle en WIP.
+- Regresión: `scripts/test-reglas-solo-con-tilde.ts` (17 casos, sin base).
 
 ## 2026-09-21 — La app aprende sola las tiendas nuevas
 

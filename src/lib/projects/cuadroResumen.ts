@@ -19,6 +19,7 @@
 
 import { conceptoDeFactura, desgloseDeCobro } from "@/lib/invoices/conceptoCobro";
 import { selectAnterior, selectVigentes } from "@/lib/projects/selectVersion";
+import { computeObraBudgetTotals } from "@/lib/projects/metrics";
 import { soloPrincipales } from "@/lib/presupuesto/muebleItems";
 
 // ── Tipos de entrada (estructuralmente compatibles con el include del resumen) ──
@@ -48,6 +49,7 @@ type BudgetVersionLite = {
   updatedAt: Date;
   ggPercentage: number | null;
   utilityPercentage: number | null;
+  discountAmount?: number;
   obraItems?: ObraItemLite[];
   muebleChapters?: { items: MuebleItemLite[] }[];
   artefactoItems?: ArtefactoItemLite[];
@@ -107,7 +109,7 @@ export type PagoRow = {
 };
 
 export type CuadroResumenData = {
-  conceptos: ConceptoCuadro[]; // solo los que tienen acordado > 0
+  conceptos: ConceptoCuadro[]; // incluye obra rebajada a cero para conservar sus pagos
   pagos: PagoRow[];
   totalAcordado: number;
   totalPagado: number;
@@ -188,10 +190,7 @@ function acordadoDeVersiones(
     (b.obraItems ?? []).reduce((ss, it) => (it.noCobrado ? ss : ss + it.total), 0);
 
   const obraAcordado = obras.reduce((s, b) => {
-    const cd = costoDirectoCobrable(b);
-    const gg = (b.ggPercentage ?? 0) / 100;
-    const util = (b.utilityPercentage ?? 0) / 100;
-    return s + cd * (1 + gg + util) * 1.19;
+    return s + computeObraBudgetTotals(b).totalFinal;
   }, 0);
   // Utilidad OBRA al 100% = GG total (lo que se traspasa a sueldos).
   const obraUtilidad100 = obras.reduce(
@@ -340,7 +339,9 @@ export function computeCuadroResumen(input: CuadroResumenInput): CuadroResumenDa
     { key: "iluminacion", label: "Art. Iluminación", acordado: iluminacionAcordado, fecha: artefactosDate, generaSueldo: false, utilidad100: 0, pagado: 0, avancePct: 0, saldo: 0 },
     { key: "muebles", label: "Muebles", acordado: mueblesAcordado, fecha: mueblesDate, generaSueldo: true, utilidad100: mueblesUtilidad100, pagado: 0, avancePct: 0, saldo: 0 },
   ];
-  const conceptos = conceptosAll.filter((c) => c.acordado > 0);
+  // Una rebaja total no puede esconder los abonos que ya recibió la obra.
+  const obraConDescuento = obrasVigentes.some((b) => (b.discountAmount ?? 0) > 0);
+  const conceptos = conceptosAll.filter((c) => c.acordado > 0 || (c.key === "obra" && obraConDescuento));
   for (const c of conceptos) {
     c.pagado = pagos.reduce((s, r) => s + r.porConcepto[c.key].monto, 0);
     c.avancePct = c.acordado > 0 ? c.pagado / c.acordado : 0;

@@ -1,3 +1,4 @@
+import { computeObraBudgetTotals } from "@/lib/projects/metrics";
 /**
  * Foto (snapshot) de una versión de presupuesto al enviarla/cerrarla.
  *
@@ -122,6 +123,7 @@ export async function buildBudgetSnapshot(versionId: string) {
     ggPercentage: bv.ggPercentage,
     utilityPercentage: bv.utilityPercentage,
     discountPercentage: bv.discountPercentage,
+    discountAmount: bv.discountAmount,
     observations: bv.observations,
     obraItems,
     // Registro (sin restauración por ahora):
@@ -147,7 +149,8 @@ export async function restoreObraFromSnapshot(versionId: string) {
   // Una foto guardada NO es necesariamente del formato de hoy: las anteriores
   // al 2026-09-04 no traen `maestroId` ni `noCobrado`. El tipo lo dice para
   // que el código esté obligado a contemplar que falten.
-  type SnapGuardado = Omit<Awaited<ReturnType<typeof buildBudgetSnapshot>>, "obraItems"> & {
+  type SnapGuardado = Omit<Awaited<ReturnType<typeof buildBudgetSnapshot>>, "obraItems" | "discountAmount"> & {
+    discountAmount?: number;
     obraItems: (Omit<
       Awaited<ReturnType<typeof buildBudgetSnapshot>>["obraItems"][number],
       "maestroId" | "noCobrado"
@@ -268,15 +271,24 @@ export async function restoreObraFromSnapshot(versionId: string) {
     }
 
     // Restaurar campos de la versión.
-    await tx.budgetVersion.update({
+    const restored = await tx.budgetVersion.update({
       where: { id: versionId },
       data: {
         ggPercentage: snap.ggPercentage,
         utilityPercentage: snap.utilityPercentage,
         discountPercentage: snap.discountPercentage,
+        // Las fotos anteriores a esta función no tenían descuento fijo.
+        discountAmount: snap.discountAmount ?? 0,
         observations: snap.observations,
       },
+      include: { obraItems: true },
     });
+    const { totalFinal } = computeObraBudgetTotals(restored);
+    const terms = await tx.paymentTerm.findMany({ where: { budgetVersionId: versionId } });
+    for (const term of terms) {
+      await tx.paymentTerm.update({ where: { id: term.id }, data: { amount: totalFinal * term.percentage / 100 } });
+    }
+
   }, { timeout: 120000, maxWait: 20000 });
 
   return { restoredItems: snap.obraItems.length };

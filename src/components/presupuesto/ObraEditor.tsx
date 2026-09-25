@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, Fragment, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { computeObraBudgetTotals } from "@/lib/projects/metrics";
+import ObraDiscountField from "@/components/presupuesto/ObraDiscountField";
 import { formatCLP } from "@/lib/utils";
 import { annotateZones } from "@/lib/presupuesto/zones";
 import {
@@ -352,6 +354,7 @@ interface Budget {
   conditions: Condicion[];
   ggPercentage: number | null;
   utilityPercentage: number | null;
+  discountAmount?: number;
   obraChapters: Chapter[];
   obraItems: ObraItem[];
   paymentTerms: PaymentTerm[];
@@ -421,9 +424,11 @@ export default function ObraEditor({
       ),
     [items, baselineItems]
   );
-  const [ggPercent, setGgPercent] = useState(initialBudget.ggPercentage || 20);
+  const [discountAmount, setDiscountAmount] = useState(initialBudget.discountAmount ?? 0);
+  const [savingDiscount, setSavingDiscount] = useState(false);
+  const [ggPercent, setGgPercent] = useState(initialBudget.ggPercentage ?? 20);
   const [utilPercent, setUtilPercent] = useState(
-    initialBudget.utilityPercentage || 5
+    initialBudget.utilityPercentage ?? 5
   );
   const [paymentTerms, setPaymentTerms] = useState<
     { stage: string; percentage: number }[]
@@ -574,12 +579,26 @@ export default function ObraEditor({
     (sum, item) => (item.noCobrado ? sum + item.total : sum),
     0
   );
-  const costoDirecto = itemsCobrables.reduce((sum, item) => sum + item.total, 0);
-  const gastosGenerales = costoDirecto * (ggPercent / 100);
-  const utilidad = costoDirecto * (utilPercent / 100);
-  const neto = costoDirecto + gastosGenerales + utilidad;
-  const iva = neto * 0.19;
-  const totalConIva = neto + iva;
+  const { costoDirecto, gastosGenerales, utilidad, neto, iva,
+    totalOriginal: totalConIva, totalFinal } = computeObraBudgetTotals({
+      obraItems: items, ggPercentage: ggPercent, utilityPercentage: utilPercent, discountAmount,
+    });
+
+  async function saveDiscount(value: number) {
+    setSavingDiscount(true);
+    try {
+      const response = await fetch(`/api/presupuestos/${initialBudget.id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ discountAmount: value }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "No se pudo guardar el descuento.");
+      }
+      setDiscountAmount(value);
+      router.refresh();
+    } finally { setSavingDiscount(false); }
+  }
 
   // Agrupar por capítulo. La regla (orden de capítulos, orden de partidas
   // adentro, numeración salteando los vacíos, y el rescate de las partidas
@@ -1403,27 +1422,30 @@ export default function ObraEditor({
   async function handleSaveConfig() {
     setSaving(true);
     try {
-      await fetch(`/api/presupuestos/${initialBudget.id}`, {
+      const configResponse = await fetch(`/api/presupuestos/${initialBudget.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ggPercentage: ggPercent,
           utilityPercentage: utilPercent,
+          discountAmount,
         }),
       });
+      if (!configResponse.ok) throw new Error("No se pudo guardar la configuración.");
 
-      await fetch(`/api/presupuestos/${initialBudget.id}/forma-pago`, {
+      const termsResponse = await fetch(`/api/presupuestos/${initialBudget.id}/forma-pago`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           terms: paymentTerms.map((t) => ({
             stage: t.stage,
             percentage: t.percentage,
-            amount: (totalConIva * t.percentage) / 100,
+            amount: (totalFinal * t.percentage) / 100,
           })),
         }),
       });
 
+      if (!termsResponse.ok) throw new Error("No se pudo guardar la forma de pago.");
       router.refresh();
     } catch {
       alert("Error al guardar");
@@ -2818,9 +2840,14 @@ export default function ObraEditor({
               <span className="text-gray-600">IVA (19%)</span>
               <span className="font-medium tabular-nums">{formatCLP(iva)}</span>
             </div>
-            <div className="flex justify-between text-base font-bold border-t-2 border-gray-900 pt-2">
+            <div className="flex justify-between text-sm border-t border-gray-200 pt-2">
               <span>Total con IVA</span>
               <span className="tabular-nums">{formatCLP(totalConIva)}</span>
+            </div>
+            <ObraDiscountField value={discountAmount} totalOriginal={totalConIva} onSave={saveDiscount} />
+            <div className="flex justify-between text-base font-bold border-t border-gray-900 pt-2">
+              <span>Total final</span>
+              <span className="tabular-nums">{formatCLP(totalFinal)}</span>
             </div>
           </div>
         </div>
@@ -2882,7 +2909,7 @@ export default function ObraEditor({
                 </div>
               </div>
               <div className="col-span-3 text-sm text-right text-gray-600">
-                {formatCLP((totalConIva * term.percentage) / 100)}
+                {formatCLP((totalFinal * term.percentage) / 100)}
               </div>
               <div className="col-span-1">
                 <button
@@ -2966,7 +2993,7 @@ export default function ObraEditor({
           <div className="flex items-end">
             <button
               onClick={handleSaveConfig}
-              disabled={saving}
+              disabled={saving || savingDiscount}
               className="bg-gray-900 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
             >
               {saving ? "Guardando..." : "Guardar Todo"}

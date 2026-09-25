@@ -126,6 +126,48 @@ const CATEGORY_TO_BREAKDOWN: Record<
   Pérdidas: "costLoss",
 };
 
+export type ObraBudgetInput = {
+  obraItems?: { total: number; noCobrado?: boolean }[];
+  ggPercentage?: number | null;
+  utilityPercentage?: number | null;
+  discountAmount?: number | null;
+};
+
+/** Total de venta de una versión de obra; nunca altera costos ni pagos. */
+export function computeObraBudgetTotals(budget: ObraBudgetInput) {
+  const costoDirecto = (budget.obraItems ?? []).reduce(
+    (sum, item) => item.noCobrado ? sum : sum + item.total, 0,
+  );
+  const gastosGenerales = costoDirecto * ((budget.ggPercentage ?? 0) / 100);
+  const utilidad = costoDirecto * ((budget.utilityPercentage ?? 0) / 100);
+  const neto = costoDirecto + gastosGenerales + utilidad;
+  const iva = neto * 0.19;
+  const totalOriginal = neto * 1.19;
+  // Un precio puede bajar después de pactar la rebaja. El total nunca es
+  // negativo; el editor pide revisar el importe si supera el presupuesto.
+  const requested = budget.discountAmount ?? 0;
+  const descuento = Number.isFinite(requested)
+    ? Math.min(Math.max(0, Math.round(requested)), Math.max(0, Math.round(totalOriginal)))
+    : 0;
+  // Sin rebaja conservamos los decimales históricos para no mover presupuestos.
+  const totalFinal = descuento > 0 ? Math.round(totalOriginal) - descuento : totalOriginal;
+  const netoFinal = descuento > 0 ? totalFinal / 1.19 : neto;
+  return { costoDirecto, gastosGenerales, utilidad, neto, iva, totalOriginal, descuento, totalFinal, netoFinal };
+}
+
+export function validateObraDiscount(value: unknown, totalOriginal: number): string | null {
+  if (!Number.isFinite(totalOriginal) || totalOriginal < 0) {
+    return "Revisá el total del presupuesto antes de aplicar un descuento.";
+  }
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    return "Ingresá un descuento en pesos enteros, igual o mayor que cero.";
+  }
+  if (value > Math.max(0, Math.round(totalOriginal))) {
+    return "El descuento no puede superar el total del presupuesto.";
+  }
+  return null;
+}
+
 export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetrics {
   // Selección de versión vigente — criterio único en selectVersion.ts: manda
   // UNA sola versión (la última enviada/aprobada). selectVigentes devuelve un
@@ -170,15 +212,12 @@ export function computeProjectMetrics(project: ProjectWithMetrics): ProjectMetri
   let obraNeto = 0;
   let obraTotal = 0;
   for (const o of obras) {
-    const cd = cobrables(o).reduce((s, i) => s + i.total, 0);
-    const gg = cd * ((o.ggPercentage ?? 0) / 100);
-    const util = cd * ((o.utilityPercentage ?? 0) / 100);
-    const neto = cd + gg + util;
-    obraCostoDirecto += cd;
-    obraGG += gg;
-    obraUtilidad += util;
-    obraNeto += neto;
-    obraTotal += neto * 1.19;
+    const totals = computeObraBudgetTotals(o);
+    obraCostoDirecto += totals.costoDirecto;
+    obraGG += totals.gastosGenerales;
+    obraUtilidad += totals.utilidad;
+    obraNeto += totals.netoFinal;
+    obraTotal += totals.totalFinal;
   }
 
   // Muebles: subtotal (suma items) − descuento global del BudgetVersion.

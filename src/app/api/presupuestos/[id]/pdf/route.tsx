@@ -180,6 +180,7 @@ export async function GET(
           date: budget.date,
           ggPercentage: budget.ggPercentage,
           utilityPercentage: budget.utilityPercentage,
+          discountAmount: budget.discountAmount,
           conditions: condiciones,
           coverTitle: budget.coverTitle,
           coverSubtitle: budget.coverSubtitle,

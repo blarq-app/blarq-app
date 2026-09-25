@@ -219,3 +219,9 @@ Si vas a tocar `metrics.ts`, `calculations.ts` o `fondoSueldos.ts`, correr los t
 - **Push a `main`** → Vercel detecta y deploya automático en ~2 min.
 - Build comprueba TypeScript estricto (la primera build fue rota por errores TS preexistentes en `scripts/`; hoy `tsconfig.json` excluye `scripts/`).
 - Variables sensibles (cert base64, DATABASE_URL prod) están en Vercel env vars, NO en repo. Vercel CLI autenticado en mac de MJ — futuros redeploys/env vars desde Claude se pueden hacer sin pedir nada.
+
+## Descuento comercial por versión de obra
+
+`BudgetVersion.discountAmount` guarda un monto fijo en CLP del total final, con cero por defecto. `computeObraBudgetTotals` en `projects/metrics.ts` centraliza el total de venta de obra y su neto después del descuento; lo consumen el editor, lista de versiones, cuadro de cobros y cuotas. El PDF conserva el desglose original y agrega la rebaja y el total final cuando corresponde. No representa un cobro ni un cambio de costo.
+
+Las versiones duplicadas en el mismo proyecto heredan el importe; las plantillas y las importaciones a otro proyecto no lo heredan. La foto enviada incluye el campo; restaurar una foto antigua que no lo trae implica descuento cero. Las cuotas se recalculan sobre el acuerdo guardado. Antes de desplegar esta función debe aplicarse `prisma/sql/descuento-obra.sql`.

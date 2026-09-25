@@ -1,3 +1,4 @@
+import { computeObraBudgetTotals } from "@/lib/projects/metrics";
 /**
  * HTML+CSS renderer del PDF de Obra.
  * Consumido por renderPDF() (Puppeteer). Se renderiza a A4 SIN márgenes
@@ -77,6 +78,7 @@ export interface ObraHTMLInput {
     date: string | Date;
     ggPercentage: number | null;
     utilityPercentage: number | null;
+    discountAmount?: number;
     // Textos de portada editables (null → default). coverTitle también alimenta
     // la bajada del encabezado del detalle.
     coverTitle?: string | null;
@@ -308,7 +310,10 @@ export function renderObraHTML(data: ObraHTMLInput): string {
   const utilidad = Math.round(costoDirecto * (utilPct / 100));
   const neto = costoDirecto + gg + utilidad;
   const iva = Math.round(neto * 0.19);
-  const total = neto + iva;
+  const obraTotals = computeObraBudgetTotals({ ...budget, obraItems: items });
+  const descuento = obraTotals.descuento;
+  const total = descuento > 0 ? Math.round(obraTotals.totalOriginal) : neto + iva;
+  const totalFinal = descuento > 0 ? obraTotals.totalFinal : total;
 
   // Capítulos en el MISMO orden y numeración que el editor: helper compartido
   // (lib/presupuesto/chapters.ts). Se saltan los vacíos y se renumera 1,2,3…
@@ -482,7 +487,10 @@ export function renderObraHTML(data: ObraHTMLInput): string {
             <div class="row"><span class="cl">Utilidades</span><span class="cp">${utilPct}%</span><span class="cv">${fmtMoney(utilidad)}</span></div>
             <div class="row"><span class="cl strong">Costo neto</span><span class="cp"></span><span class="cv strong">${fmtMoney(neto)}</span></div>
             <div class="row"><span class="cl">IVA</span><span class="cp">19%</span><span class="cv">${fmtMoney(iva)}</span></div>
-            <div class="row grand"><span class="cl">Costo total</span><span class="cv">${fmtMoney(total)}</span></div>
+            ${descuento > 0 ? `
+            <div class="row"><span class="cl">Total con IVA</span><span class="cp"></span><span class="cv">${fmtMoney(total)}</span></div>
+            <div class="row"><span class="cl">Descuento</span><span class="cp"></span><span class="cv">−${fmtMoney(descuento)}</span></div>` : ""}
+            <div class="row grand"><span class="cl">${descuento > 0 ? "Total final" : "Costo total"}</span><span class="cv">${fmtMoney(totalFinal)}</span></div>
           </div>
         </div>
       </div>

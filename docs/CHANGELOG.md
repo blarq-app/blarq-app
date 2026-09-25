@@ -4,7 +4,6 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
-
 ## 2026-09-25 — Descuento fijo al final del presupuesto de obra
 
 - Casilla “Descuento ($)” por versión, con guardado al salir del campo y “Total final”. Actualiza presupuesto, PDF, cuotas y saldo del cliente; no representa un pago ni cambia costos o EPs de maestros.

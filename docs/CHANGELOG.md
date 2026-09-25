@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-09-25 — Una línea de artefactos deja de seguir al catálogo solo cuando MJ fija el precio
+
+- **Pendiente 186**: en Casa Los Algarrobos V4, 30 líneas decían "no sigue al catálogo" y solo 5 eran decisión de MJ. Ahora aplicar el precio de la tienda web **no despega** la línea, y si estaba despegada la reconecta. Tipear un precio sigue despegando. "Comparar con mi catálogo" no cambia: no toca marcas. **El catálogo de artefactos está atrasado respecto de la tienda** (la grifería antique bronze, $38.000), y MJ verifica contra la web. Decisión en [ADR 2026-09-25](decisions/2026-09-25-artefactos-solo-mj-despega-la-linea.md).
+- **Resguardo del catálogo**: el PRECIO del catálogo baja a las cotizaciones solo cuando cambia, no en cada guardado del producto. Arreglar la foto o el link en el catálogo ya no le pisa a una cotización el precio de la tienda con uno viejo. Los datos del producto bajan siempre.
+- **El descuento de MJ, protegido de punta a punta**: en "Comparar con la tienda web" viene sin marcar y con el aviso "Este descuento lo pusiste vos". Duplicar una versión y "Volver a lo enviado" ya no le borran la marca (los 10% de Teka la perdieron al crear la V4). Aplicar solo la foto tampoco. El editor la muestra en negrita apenas se guarda.
+- **Resguardo MK**: una tienda con lectura directa de precios que no responde va a "No se pudieron leer", en vez de ofrecer (o aplicar sola, al traer de otra cotización) la oferta del día como si fuera la lista. MK cambió los links de todos sus productos; el arreglo de fondo queda aparte.
+- Regresión: `scripts/test-186-despegue.ts` (37 casos). Única corrección de datos: `scripts/aplicar-186-marca-descuento-perdida.ts` (marca del 10% en 6 Teka, $0).
+
 ## 2026-09-24 — La regla de un proveedor se guarda solo con el tilde
 
 - **Pendiente 184**: la regla de categoría de un proveedor se pisaba sola. La edición inline y el formulario de la factura la guardaban siempre, y el tilde "Guardar categoría en regla" del bulk-assign venía prendido: Sodimac quedó en "Herramientas" con 539 de 580 facturas en Materiales. Ahora la regla se crea o cambia **solo** con el tilde, que parte apagado y se apaga después de cada asignación. El "Deshacer" devuelve las reglas cambiadas a lo que tenían (antes las borraba). CLAUDE.md §4.5 reescrito.

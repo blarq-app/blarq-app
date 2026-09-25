@@ -26,6 +26,14 @@ export async function PUT(
     const updateLastCheck =
       data.listPrice !== undefined && data.listPrice !== null;
 
+    // Precio ANTES de guardar, para saber si este guardado lo cambió (ver la
+    // propagación de abajo). La pantalla manda el producto entero en cada
+    // guardado, así que mirar qué campos llegaron no alcanza.
+    const antes = await prisma.artefactoCatalog.findUnique({
+      where: { id },
+      select: { listPrice: true, discountPercent: true },
+    });
+
     const item = await prisma.artefactoCatalog.update({
       where: { id },
       data: {
@@ -64,16 +72,29 @@ export async function PUT(
     // catálogo es opt-in y no propaga solo). Para artefactos el flujo es como
     // ella arma el presupuesto: el maestro manda sobre los borradores.
     //
+    // El PRECIO baja solo si este guardado lo cambió (2026-09-25): arreglar la
+    // foto, el link o el costo de un producto ya no le pisa a las cotizaciones
+    // el precio de la tienda que MJ aplicó con el precio (quizás atrasado) del
+    // catálogo. Los datos del producto bajan siempre.
+    //
     // La lógica vive en lib (testeable sin servidor). Ver syncArtefactos.ts.
-    const lineasActualizadas = await propagateCatalogToBorradores(id, {
-      name: item.name,
-      detail: item.detail,
-      brand: item.brand,
-      listPrice: item.listPrice,
-      discountPercent: item.discountPercent,
-      referenceLink: item.referenceLink,
-      imageUrl: item.imageUrl,
-    });
+    const cambioElPrecio =
+      !antes ||
+      Math.abs(antes.listPrice - item.listPrice) > 0.01 ||
+      Math.abs((antes.discountPercent ?? 0) - (item.discountPercent ?? 0)) > 0.0001;
+    const lineasActualizadas = await propagateCatalogToBorradores(
+      id,
+      {
+        name: item.name,
+        detail: item.detail,
+        brand: item.brand,
+        listPrice: item.listPrice,
+        discountPercent: item.discountPercent,
+        referenceLink: item.referenceLink,
+        imageUrl: item.imageUrl,
+      },
+      { conPrecio: cambioElPrecio }
+    );
 
     return NextResponse.json({ ...item, lineasActualizadas });
   } catch (error) {

@@ -44,8 +44,10 @@ export async function GET(
         discountPercent: true,
         clientPrice: true,
         imageUrl: true,
-        // Para avisar en el modal cuáles tienen precio editado a mano.
+        // Para avisar en el modal cuáles tienen una decisión de MJ que aplicar
+        // la tienda pisaría: un precio fijo, o un descuento puesto por ella.
         priceOverridden: true,
+        discountOverridden: true,
       },
     });
 

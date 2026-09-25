@@ -31,7 +31,9 @@ export async function PUT(
     //
     //   priceOverridden    → MJ fijó un PRECIO a mano (la lista, o el precio al
     //                        cliente por fuera del descuento). El catálogo no
-    //                        vuelve a tocar esta línea. Es definitivo.
+    //                        vuelve a tocar esta línea hasta que ella misma le
+    //                        aplique el precio de la tienda (desde el
+    //                        2026-09-25 eso la vuelve a conectar).
     //   discountOverridden → MJ decidió el DESCUENTO. El catálogo sigue
     //                        actualizando el precio de lista y los datos del
     //                        producto, pero respeta ese porcentaje.
@@ -68,9 +70,38 @@ export async function PUT(
       referenceLink: data.referenceLink ?? null,
       imageUrl: data.imageUrl ?? null,
     };
-    const editoCampoCatalogo = !!prev && editoCampoDeCatalogo(prev, entrante);
+    // El precio que llega lo publica la TIENDA, no lo fijó MJ: lo manda
+    // "Comparar con la tienda web" al aplicar, en su propio campo y solo
+    // cuando de verdad se aplicó un precio (misma regla que las otras acciones
+    // de abajo: la fila entera viaja en cada guardado, así que mirando valores
+    // no se puede saber quién decidió el número).
+    //
+    // Hasta el 2026-09-25 aplicar desde la tienda DESPEGABA la línea, para que
+    // el catálogo no le pisara el precio. Resultado medido en Casa Los
+    // Algarrobos V4: 30 líneas despegadas y solo 5 eran decisión de MJ; las
+    // otras 20 quedaron clavadas en el precio del día en que se aplicó, sin
+    // recibir nunca más los cambios del catálogo. Tomar el número que publica
+    // la tienda no es una decisión comercial, así que ahora:
+    //   - no despega, y
+    //   - si la línea ya estaba despegada, la VUELVE A CONECTAR: el precio que
+    //     queda es el de la tienda, no uno que fijó MJ (decisión de MJ,
+    //     pendiente 186).
+    // Tipear un precio a mano sigue despegando, como siempre.
+    const precioDeLaTienda = data.precioDeLaTienda === true;
+    const editoCampoCatalogo =
+      !!prev && !precioDeLaTienda && editoCampoDeCatalogo(prev, entrante);
     const despego = !!prev && !prev.priceOverridden && editoCampoCatalogo;
-    const priceOverridden = prev?.priceOverridden || editoCampoCatalogo;
+    const priceOverridden = precioDeLaTienda
+      ? false
+      : prev?.priceOverridden || editoCampoCatalogo;
+    // Las copias del mismo producto (ver las dos sincronizaciones de abajo)
+    // reciben este mismo precio, así que quedan en el mismo estado que esta
+    // línea: fijas si MJ tipeó el precio, conectadas si vino de la tienda.
+    const marcaDeLasCopias = precioDeLaTienda
+      ? { priceOverridden: false }
+      : despego
+        ? { priceOverridden: true }
+        : {};
     // Volver al descuento de la tienda es una ACCIÓN explícita (la flechita de
     // la columna DCTO), y por eso viaja en su propio campo.
     //
@@ -146,7 +177,9 @@ export async function PUT(
     // Si esta edición despegó la línea, las copias del mismo producto en la
     // cotización también se despegan: recibieron el valor manual, así que el
     // catálogo tampoco debe volver a pisarlas (si no, quedarían inconsistentes
-    // con la línea editada en la próxima actualización del catálogo).
+    // con la línea editada en la próxima actualización del catálogo). Y al
+    // revés: si el precio vino de la tienda, las copias vuelven a seguir al
+    // catálogo junto con ella (`marcaDeLasCopias`).
     //
     // NUNCA se sincroniza: quantity, room, subcategory, sortOrder, catalogId.
     if (item.catalogId) {
@@ -167,7 +200,7 @@ export async function PUT(
           imageUrl: item.imageUrl,
           realCostBlarq: item.realCostBlarq,
           discountOverridden: item.discountOverridden,
-          ...(despego && { priceOverridden: true }),
+          ...marcaDeLasCopias,
         },
       });
     }
@@ -202,8 +235,9 @@ export async function PUT(
           imageUrl: item.imageUrl,
           discountOverridden: item.discountOverridden,
           // Si la edición despegó la línea, las gemelas por nombre también: ya
-          // tienen el valor manual y el catálogo no debe volver a pisarlas.
-          ...(despego && { priceOverridden: true }),
+          // tienen el valor manual y el catálogo no debe volver a pisarlas. Si
+          // el precio vino de la tienda, vuelven a seguir al catálogo con ella.
+          ...marcaDeLasCopias,
         },
       });
     }

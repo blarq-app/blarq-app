@@ -50,22 +50,42 @@ export interface CatalogArtefactoData {
  */
 export async function propagateCatalogToBorradores(
   catalogId: string,
-  cat: CatalogArtefactoData
+  cat: CatalogArtefactoData,
+  // `conPrecio: false` → baja solo los datos del producto (nombre, detalle,
+  // marca, link, foto), no el precio. Ver el comentario de abajo.
+  opciones: { conPrecio?: boolean } = {}
 ): Promise<number> {
   const descuento = cat.discountPercent ?? null;
-  const comun = {
+  const datosDelProducto = {
     name: cat.name,
     detail: cat.detail,
     brand: cat.brand,
-    listPrice: cat.listPrice,
     referenceLink: cat.referenceLink,
     imageUrl: cat.imageUrl,
   };
+  const comun = { ...datosDelProducto, listPrice: cat.listPrice };
   const base = {
     catalogId,
     priceOverridden: false,
     budgetVersion: { status: "borrador" as const },
   };
+
+  // El PRECIO baja solo cuando cambió el precio del catálogo (pendiente 186,
+  // 2026-09-25). Antes bajaba en CADA guardado del producto — arreglarle la
+  // foto, el link o el costo empujaba también su precio a las cotizaciones. Con
+  // el catálogo atrasado respecto de la tienda (la grifería Urban-N antique
+  // bronze estaba $38.000 abajo), eso le pisaba a una línea el precio de la
+  // tienda que MJ acababa de aplicar con uno viejo y más barato, sin aviso.
+  // Desde que aplicar la tienda ya no despega la línea, ese riesgo sería
+  // cotidiano. Los datos del producto sí bajan siempre: un link o una foto
+  // arreglados en el catálogo tienen que llegar a las cotizaciones.
+  if (opciones.conPrecio === false) {
+    const soloDatos = await prisma.artefactoItem.updateMany({
+      where: base,
+      data: datosDelProducto,
+    });
+    return soloDatos.count;
+  }
 
   // Grupo 1: el descuento lo manda la tienda.
   const conDctoDeTienda = await prisma.artefactoItem.updateMany({

@@ -133,6 +133,12 @@ interface ApplyPatch {
  *   contrario, así que acá NO se toca priceOverridden — el botón solo copia los
  *   valores elegidos y nada más. Si llega listPrice/discountPercent, se recalcula
  *   el clientPrice (misma convención que el editor).
+ *
+ *   Se evaluó que bajar el precio del catálogo VOLVIERA A CONECTAR la línea
+ *   (pendiente 186) y se descartó el 2026-09-25: el catálogo de artefactos está
+ *   atrasado respecto de la tienda (la grifería Urban-N antique bronze, $38.000
+ *   abajo), MJ casi no usa este botón y verifica contra la web. Conectar líneas
+ *   a un catálogo atrasado las expone a precios más baratos que la realidad.
  */
 export async function POST(
   request: NextRequest,

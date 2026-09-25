@@ -31,8 +31,9 @@ interface DiffResult {
 }
 
 // Cambio que el editor aplica a un item al bajar datos del catálogo.
-// El editor lo pasa por updateItem: listPrice + discountPercent recalculan
-// el clientPrice; realCostBlarq / imageUrl / referenceLink van directo.
+// El editor lo manda al POST .../actualizar-catalogo: listPrice +
+// discountPercent recalculan el clientPrice; realCostBlarq / imageUrl /
+// referenceLink van directo.
 export interface CatalogApplyPatch {
   itemId: string;
   listPrice?: number;

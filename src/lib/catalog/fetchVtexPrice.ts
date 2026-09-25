@@ -58,29 +58,73 @@ function slugFromUrl(url: string): string | null {
   }
 }
 
-// Pega a la API de catálogo de VTEX y devuelve el primer producto, o null.
-// La misma respuesta trae el precio Y las fotos, por eso la comparten
-// fetchVtexPrice y fetchVtexImage. No mira la lista de tiendas: eso lo hace
-// quien llama (`leerPrecioWeb`), y `pareceVtex` necesita pegarle a una tienda
-// que todavía no está en la lista.
-async function fetchVtexProduct(url: string): Promise<Record<string, unknown> | null> {
+// MK cambia el nombre de la URL, pero deja una redirección desde la antigua.
+// La API de VTEX no la sigue: con el slug viejo responde [] aunque la página
+// abra bien en el navegador. Solo probamos esta salida cuando la API confirma
+// que no encontró el producto, y solo aceptamos otra URL de la misma tienda.
+async function redirectedProductUrl(url: string): Promise<string | null> {
+  try {
+    const original = new URL(url);
+    if (original.protocol !== "https:") return null;
+    const host = hostOf(url);
+    let current = original;
+    for (let redirects = 0; redirects < 3; redirects++) {
+      const res = await fetch(current, {
+        method: "HEAD",
+        redirect: "manual",
+        headers: { "User-Agent": BROWSER_UA },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (![301, 302, 303, 307, 308].includes(res.status)) {
+        return res.ok && current.href !== original.href ? current.href : null;
+      }
+      const location = res.headers.get("location");
+      if (!location) return null;
+      const next = new URL(location, current);
+      if (next.protocol !== "https:" || next.port || hostOf(next.href) !== host) {
+        return null;
+      }
+      current = next;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function productBySlug(url: string): Promise<{
+  product: Record<string, unknown> | null;
+  missing: boolean;
+}> {
   const host = hostOf(url);
   const slug = slugFromUrl(url);
-  if (!host || !slug) return null;
+  if (!host || !slug) return { product: null, missing: false };
   const api = `https://www.${host}/api/catalog_system/pub/products/search/${slug}/p`;
   try {
     const res = await fetch(api, {
       headers: { "User-Agent": BROWSER_UA, Accept: "application/json" },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { product: null, missing: res.status === 404 };
     const data = (await res.json()) as unknown;
     // Producto dado de baja: la API responde 200 con un arreglo vacío.
-    if (!Array.isArray(data) || data.length === 0) return null;
-    return data[0] as Record<string, unknown>;
+    if (!Array.isArray(data)) return { product: null, missing: false };
+    if (data.length === 0) return { product: null, missing: true };
+    return { product: data[0] as Record<string, unknown>, missing: false };
   } catch {
-    return null;
+    return { product: null, missing: false };
   }
+}
+
+// La misma respuesta de VTEX trae precio y fotos. El segundo intento solo
+// ocurre para links antiguos que la tienda redirige a un producto vigente.
+async function fetchVtexProduct(url: string): Promise<Record<string, unknown> | null> {
+  const first = await productBySlug(url);
+  if (first.product || !first.missing) return first.product;
+  const redirected = await redirectedProductUrl(url);
+  if (!redirected || slugFromUrl(redirected) === slugFromUrl(url)) return null;
+  if (!/\/p\/?$/i.test(new URL(redirected).pathname)) return null;
+  return (await productBySlug(redirected)).product;
 }
 
 /**

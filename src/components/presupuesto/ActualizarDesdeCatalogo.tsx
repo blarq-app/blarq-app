@@ -31,8 +31,9 @@ interface DiffResult {
 }
 
 // Cambio que el editor aplica a un item al bajar datos del catálogo.
-// El editor lo pasa por updateItem: listPrice + discountPercent recalculan
-// el clientPrice; realCostBlarq / imageUrl / referenceLink van directo.
+// El editor lo manda al POST .../actualizar-catalogo: listPrice +
+// discountPercent recalculan el clientPrice (y vuelven a conectar la línea al
+// catálogo); realCostBlarq / imageUrl / referenceLink van directo.
 export interface CatalogApplyPatch {
   itemId: string;
   listPrice?: number;
@@ -388,6 +389,16 @@ export default function ActualizarDesdeCatalogo({
                     );
                   })}
                 </div>
+              )}
+              {/* Bajar el precio vuelve a conectar la línea (pendiente 186):
+                  si tenía un precio o un descuento fijado por MJ, queda el del
+                  catálogo y desde ahí se actualiza sola. Se avisa porque es lo
+                  único de este modal que cambia algo más que el número. */}
+              {rows.length > 0 && actionableCount > 0 && (
+                <p className="text-[10px] text-gray-500 mt-1.5">
+                  Al bajar el precio, la línea vuelve a seguir a tu catálogo:
+                  si tenía un precio o un descuento tuyo, queda el del catálogo.
+                </p>
               )}
             </>
           )}

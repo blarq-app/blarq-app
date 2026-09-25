@@ -28,6 +28,7 @@
 
 import { fetchArtefactoData } from "./fetchArtefactoData";
 import { leerPrecioWeb } from "./leerPrecioWeb";
+import { plataformaDe } from "./tiendas";
 
 // Item mínimo que necesitamos para revisar — calza con ArtefactoItem.
 export interface RevisableArtefacto {
@@ -43,10 +44,12 @@ export interface RevisableArtefacto {
   // deriva de lista × (1 − dcto).
   clientPrice?: number | null;
   imageUrl: string | null;
-  // "Despegado del catálogo": MJ editó el precio a mano en esta cotización.
-  // Solo viaja hasta la UI para avisar — la revisión igual lo compara.
-  // Opcional porque el flujo de duplicar (importar-de) no lo necesita.
+  // "No sigue al catálogo": la línea tiene un precio fijo. Solo viaja hasta la
+  // UI para avisar — la revisión igual lo compara. Opcional porque el flujo
+  // de duplicar (importar-de) no lo necesita.
   priceOverridden?: boolean;
+  // El descuento lo puso MJ. Igual que el anterior: solo para avisar.
+  discountOverridden?: boolean;
 }
 
 export interface ArtefactoOnlineDiff {
@@ -59,8 +62,10 @@ export interface ArtefactoOnlineDiff {
   currentDiscount: number; // decimal 0..1
   currentClientPrice: number; // lo que paga el cliente hoy (unitario)
   currentImageUrl: string | null;
-  // El precio de esta línea fue editado a mano (no sigue al catálogo).
+  // La línea no sigue al catálogo (tiene un precio fijo).
   priceOverridden: boolean;
+  // El descuento de la línea lo puso MJ, no la tienda.
+  discountOverridden: boolean;
   // Datos traídos de la tienda. null si no se pudo extraer nada.
   fetched: {
     listPrice: number | null;
@@ -138,6 +143,7 @@ export async function revisarArtefactosOnline(
         item.clientPrice ?? Math.round(item.listPrice * (1 - currentDiscount)),
       currentImageUrl: item.imageUrl,
       priceOverridden: item.priceOverridden ?? false,
+      discountOverridden: item.discountOverridden ?? false,
       fetched: null,
       error: null,
     };
@@ -152,6 +158,19 @@ export async function revisarArtefactosOnline(
       if (!web && (!data || (!data.imageUrl && !data.name && !data.listPrice))) {
         diff.error =
           "El link no respondió o el sitio no expone datos del producto.";
+        return diff;
+      }
+      // Tienda con API de precios (MK, Kitchen House…) cuya API no respondió:
+      // el número que muestra la página NO sirve. Suele ser la oferta del día,
+      // y tomarlo como lista le aplica el descuento guardado encima — el
+      // cliente queda pagando menos que en la tienda. `leerPrecioWeb` ya no cae
+      // al scraper por esto mismo, pero acá se colaba igual por `data`.
+      // Pasó en septiembre de 2026: MK cambió todos sus links, la API dejó de
+      // encontrar los productos por el link viejo, y el modal ofrecía (y
+      // "Traer de otra cotización" aplicaba solo) precios mal leídos.
+      if (!web && (await plataformaDe(link)) !== "generico") {
+        diff.error =
+          "La tienda no devolvió el precio: puede que haya cambiado el link del producto.";
         return diff;
       }
       diff.fetched = {

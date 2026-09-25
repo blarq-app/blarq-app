@@ -803,9 +803,13 @@ model ArtefactoItem {
   // 2026-06-18-artefactos-precios-catalogo-a-cotizacion). Mientras esté en
   // false, la línea SIGUE al catálogo: si MJ edita el precio maestro en
   // /catálogo (o aplica "Revisar precios"), esta línea se actualiza —pero
-  // solo si la cotización está en borrador—. Cuando MJ edita la línea a mano
-  // (precio, descuento, nombre, foto, etc.) se pone en true y el catálogo no
-  // la vuelve a pisar nunca. Es el equivalente, por línea, de
+  // solo si la cotización está en borrador—. Pasa a true SOLO cuando MJ tipea
+  // un precio en la cotización (la lista, o el precio al cliente por fuera del
+  // descuento), y desde ahí el catálogo no la pisa. NO despegan: el descuento
+  // (tiene su marca propia, discountOverridden, desde 2026-08-02), el nombre,
+  // la foto, ni aplicar el precio que publica la tienda. Vuelve a false al
+  // aplicarle el precio de la tienda o al bajarle el precio con "Comparar con
+  // mi catálogo" (pendiente 186, 2026-09-25). Es el equivalente, por línea, de
   // ObraItem.isCustomized. Las cotizaciones enviadas quedan congeladas por
   // estado (el catálogo solo toca borradores), igual que en obra.
   priceOverridden   Boolean @default(false)

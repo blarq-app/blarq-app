@@ -304,17 +304,32 @@ export default function ArtefactosEditor({
 
   // ── Mutaciones ───────────────────────────────────────────────────────
   async function persistItem(item: ArtefactoItem) {
-    await guardarItem(item);
+    const guardado = await guardarItem(item);
+    // Si MJ tipeó el descuento, el servidor lo marca como suyo. La columna
+    // DCTO lo muestra en negrita y con la vuelta a la tienda, pero se enteraba
+    // recién al recargar: el % quedaba gris, como si no fuera de ella. Solo se
+    // toma esa marca de la respuesta (un guardado normal únicamente la puede
+    // prender, así que una respuesta atrasada no pisa nada).
+    if (guardado && guardado.discountOverridden !== item.discountOverridden) {
+      setItems((prev) =>
+        prev.map((i) =>
+          i.id === item.id
+            ? { ...i, discountOverridden: guardado.discountOverridden }
+            : i
+        )
+      );
+    }
   }
 
-  // Guarda una línea y dice si lo logró. Separado de `persistItem` porque hay
-  // un caso donde el resultado IMPORTA: aplicar precios desde un modal. Ahí no
-  // alcanza con disparar el guardado y seguir — hay que esperarlo y avisar si
-  // falló (ver applyOnlinePatches).
+  // Guarda una línea y devuelve cómo quedó en la base (null si falló).
+  // Separado de `persistItem` porque hay un caso donde el resultado IMPORTA:
+  // aplicar precios desde un modal. Ahí no alcanza con disparar el guardado y
+  // seguir — hay que esperarlo, avisar si falló y mostrar lo que el servidor
+  // decidió (ver applyOnlinePatches).
   async function guardarItem(
     item: ArtefactoItem,
     extra?: Record<string, unknown>
-  ): Promise<boolean> {
+  ): Promise<ArtefactoItem | null> {
     try {
       const res = await fetch(
         `/api/presupuestos/${initialBudget.id}/artefactos/${item.id}`,
@@ -324,9 +339,10 @@ export default function ArtefactosEditor({
           body: JSON.stringify(extra ? { ...item, ...extra } : item),
         }
       );
-      return res.ok;
+      if (!res.ok) return null;
+      return (await res.json()) as ArtefactoItem;
     } catch {
-      return false;
+      return null;
     }
   }
 
@@ -453,9 +469,10 @@ export default function ArtefactosEditor({
   // Aplica los cambios que vienen del modal "Comparar con mi catálogo": baja
   // costo / precio a cliente / foto desde el producto del catálogo. Va por un
   // endpoint propio (NO el PUT por-ítem) para no disparar la heurística de
-  // "despegar del catálogo" — bajar del catálogo no despega la línea. Cada
-  // fila del modal es un ítem distinto (las copias del mismo producto en
-  // otros baños aparecen como filas propias), así que no hace falta propagar.
+  // "despegar del catálogo" — bajar del catálogo no despega la línea; al
+  // revés, bajar el PRECIO la vuelve a conectar (pendiente 186). Cada fila
+  // del modal es un ítem distinto (las copias del mismo producto en otros
+  // baños aparecen como filas propias), así que no hace falta propagar.
   async function applyCatalogPatches(patches: CatalogApplyPatch[]) {
     if (patches.length === 0) return;
     const res = await fetch(
@@ -481,6 +498,7 @@ export default function ArtefactosEditor({
           | "realCostBlarq"
           | "imageUrl"
           | "referenceLink"
+          | "discountOverridden"
         >
       >;
     };
@@ -500,12 +518,15 @@ export default function ArtefactosEditor({
   // tienda no publica descuento (no es VTEX ni Shopify), el modal no lo manda
   // y acá se conserva el guardado.
   //
-  // A diferencia de "Comparar con mi catálogo", esto SÍ va por `updateItem`
-  // (o sea, por el PUT por-ítem) y por lo tanto DESPEGA la línea del catálogo.
-  // Es lo correcto: el precio pasa a venir de la tienda, no del catálogo, así
-  // que si no se despegara, la próxima sincronización del catálogo lo pisaría
-  // en silencio. De paso `updateItem` recalcula el precio a cliente y propaga
-  // a las copias del mismo producto.
+  // Va por el PUT por-ítem (que además copia el precio a las copias del mismo
+  // producto en la cotización), avisando en campos propios qué de lo aplicado
+  // viene de la tienda. Hasta el 2026-09-25 esto DESPEGABA la línea del
+  // catálogo "para que la próxima sincronización no pisara el precio de la
+  // tienda"; el costo fue que las líneas quedaban clavadas en el precio de
+  // ese día, sin volver a recibir nada. Tomar el número que publica la tienda
+  // no es una decisión de MJ, así que ya no despega — y si la línea estaba
+  // despegada, la vuelve a conectar (pendiente 186). Lo único que despega es
+  // tipear un precio a mano.
   async function applyOnlinePatches(patches: ArtefactoPricePatch[]) {
     if (patches.length === 0) return;
 
@@ -522,7 +543,7 @@ export default function ArtefactosEditor({
     // Ahora: se arman las filas nuevas, se guardan ESPERANDO cada respuesta, y
     // recién después se refresca la pantalla y se avisa si algo falló.
     const porId = new Map(items.map((i) => [i.id, i]));
-    const nuevos: ArtefactoItem[] = [];
+    const nuevos: Array<{ item: ArtefactoItem; deLaTienda: Record<string, true> }> = [];
     for (const p of patches) {
       const base = porId.get(p.itemId);
       if (!base) continue;
@@ -533,17 +554,27 @@ export default function ArtefactosEditor({
       if (p.listPrice !== undefined || p.discountPercent !== undefined) {
         merged.clientPrice = calcClientPrice(merged.listPrice, merged.discountPercent);
       }
-      nuevos.push(merged);
+      // Qué de lo aplicado viene de la TIENDA (no es una decisión de MJ), cada
+      // cosa en su campo y SOLO si de verdad se aplicó:
+      //   precioDeLaTienda    → la lista: no despega la línea (y la reconecta).
+      //   descuentoDeLaTienda → el %: deja de ser "descuento propio".
+      // OJO, error que hubo acá: el aviso del descuento viajaba SIEMPRE, así
+      // que aplicar solo la FOTO —o solo la lista, en una tienda que no
+      // publica el descuento— le borraba a MJ la marca de su porcentaje sin
+      // que el porcentaje cambiara, y el catálogo se lo pisaba después.
+      const deLaTienda: Record<string, true> = {};
+      if (p.listPrice !== undefined) deLaTienda.precioDeLaTienda = true;
+      if (p.discountPercent !== undefined) deLaTienda.descuentoDeLaTienda = true;
+      nuevos.push({ item: merged, deLaTienda });
     }
 
     const fallaron: string[] = [];
     const guardados: ArtefactoItem[] = [];
-    for (const item of nuevos) {
-      // El descuento que se aplica acá viene de la TIENDA, no es una decisión
-      // de MJ: se avisa para que la línea no quede marcada como "descuento
-      // propio" y siga recibiendo los del catálogo.
-      const ok = await guardarItem(item, { descuentoDeLaTienda: true });
-      if (ok) guardados.push(item);
+    for (const { item, deLaTienda } of nuevos) {
+      const guardado = await guardarItem(item, deLaTienda);
+      // Se muestra lo que quedó en la base, no lo que se mandó: las marcas
+      // (ej. si el descuento sigue siendo de MJ) las decide el servidor.
+      if (guardado) guardados.push({ ...item, ...guardado });
       else fallaron.push(item.name);
     }
 

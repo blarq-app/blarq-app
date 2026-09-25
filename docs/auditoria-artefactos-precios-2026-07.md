@@ -32,7 +32,7 @@ Y hay una sexta vía silenciosa: **"Traer de otra cotización"** refresca los pr
 
 - Al **agregar** un artefacto del catálogo, la cotización guarda una **foto** de lista + descuento de ese momento.
 - Si después cambia el catálogo, el cambio **baja solo** a las cotizaciones en **borrador** cuyas líneas no estén "despegadas" (regla del ADR 2026-06-18). Las enviadas/aprobadas quedan congeladas.
-- Una línea se **despega** (`priceOverridden`) cuando MJ la edita a mano **o cuando aplica "Comparar con la tienda web"** (a propósito: el precio pasó a venir de la tienda). Despegada = el catálogo nunca más la toca.
+- Una línea se **despega** (`priceOverridden`) cuando MJ la edita a mano **o cuando aplica "Comparar con la tienda web"** (a propósito: el precio pasó a venir de la tienda). Despegada = el catálogo nunca más la toca. *(Cambió el 2026-09-25: aplicar la tienda ya no despega y reconecta, y "Comparar con mi catálogo" vuelve a conectar. Ver [ADR 2026-09-25](decisions/2026-09-25-artefactos-solo-mj-despega-la-linea.md).)*
 
 ### Cuál conviene usar, hoy
 
@@ -152,7 +152,7 @@ El rediseño de junio dejó en el catálogo un campo de precio a cliente explíc
 
 ### H5 — Menores / deuda que conviene conocer
 
-- **"Comparar con la tienda web" despega la línea al aplicar.** Es una decisión de diseño (el precio pasa a venir de la tienda), no un bug — pero combinada con H1 significa que aplicar desde ahí deja la línea con descuento viejo Y despegada, o sea que el catálogo tampoco la corrige después. El arreglo de H1 debería repensar si despegar sigue siendo lo correcto cuando lo aplicado es exactamente lista+dcto de la web.
+- **"Comparar con la tienda web" despega la línea al aplicar.** Es una decisión de diseño (el precio pasa a venir de la tienda), no un bug — pero combinada con H1 significa que aplicar desde ahí deja la línea con descuento viejo Y despegada, o sea que el catálogo tampoco la corrige después. El arreglo de H1 debería repensar si despegar sigue siendo lo correcto cuando lo aplicado es exactamente lista+dcto de la web. *(Resuelto el 2026-09-25: ya no despega. Ver [ADR 2026-09-25](decisions/2026-09-25-artefactos-solo-mj-despega-la-linea.md).)*
 - **3 links muertos o cambiados** en el catálogo que "Revisar precios" no puede leer (MAMPARA CORREDERA 130CM, GRIFO ARES ARK 938, DESAGÜE ANTIQUE BRONZE 60CM). Aparecen como "sin lectura" en cada revisión.
 - **byp.cl (2 productos) y las entradas sin link (11)** quedan siempre fuera de toda revisión automática.
 - En toda la base hay hoy 97 líneas de artefactos en cotizaciones en borrador; **24 están despegadas** — esas no las actualiza nada salvo edición manual. No es un problema en sí, pero explica por qué a veces "actualizar" parece no hacer nada.

@@ -292,7 +292,7 @@ interface ArtefactoSnap {
   discountPercent: number | null; clientPrice: number;
   realCostBlarq: number | null; referenceLink: string | null;
   imageUrl: string | null; catalogId: string | null;
-  priceOverridden?: boolean; sortOrder: number;
+  priceOverridden?: boolean; discountOverridden?: boolean; sortOrder: number;
 }
 
 /**
@@ -327,6 +327,10 @@ export async function restoreArtefactosFromSnapshot(versionId: string) {
           catalogId: it.catalogId,
           // Fotos viejas (anteriores al 2026-06-18) no tienen el flag → false.
           priceOverridden: it.priceOverridden ?? false,
+          // Idem la marca del descuento puesto por MJ (existe desde el
+          // 2026-08-02). No se restauraba: el porcentaje volvía, pero sin
+          // dueño, y el catálogo lo podía pisar.
+          discountOverridden: it.discountOverridden ?? false,
           sortOrder: it.sortOrder,
         },
       });

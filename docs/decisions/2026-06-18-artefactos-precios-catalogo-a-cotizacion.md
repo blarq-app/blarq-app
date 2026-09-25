@@ -2,6 +2,7 @@
 
 - **Fecha**: 2026-06-18
 - **Estado**: aceptado
+- **Ajustado por**: [2026-09-25](2026-09-25-artefactos-solo-mj-despega-la-linea.md) — hoy una línea se despega solo cuando MJ tipea un precio. Aplicar el precio de la tienda ya no despega (y reconecta), y "Comparar con mi catálogo" vuelve a conectar. Los puntos 2 y 3 de abajo describen la regla original.
 - **Autor**: MJ (decisión de negocio), implementado con Claude Code.
 
 ## Contexto

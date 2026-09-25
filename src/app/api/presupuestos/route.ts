@@ -468,9 +468,16 @@ export async function POST(request: NextRequest) {
               // copian. Sin imageUrl la cotización duplicada quedaba sin fotos
               // (bug reportado). Sin catalogId/priceOverridden se perdía el
               // vínculo al catálogo y el estado de precio editado a mano.
+              //
+              // La marca de "el descuento lo puso MJ" (discountOverridden)
+              // tampoco se copiaba hasta el 2026-09-25: el porcentaje pasaba a
+              // la versión nueva pero sin dueño, así que el catálogo lo iba a
+              // pisar con el de la tienda en la primera actualización. Pasó
+              // con los 10% de los Teka de Casa Los Algarrobos al crear la V4.
               imageUrl: item.imageUrl,
               catalogId: item.catalogId,
               priceOverridden: item.priceOverridden,
+              discountOverridden: item.discountOverridden,
               sortOrder: item.sortOrder,
             },
           });

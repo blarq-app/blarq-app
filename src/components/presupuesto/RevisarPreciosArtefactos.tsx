@@ -16,9 +16,13 @@ interface OnlineDiff {
   currentClientPrice: number;
   currentImageUrl: string | null;
   // La línea no sigue al catálogo. OJO: NO siempre es porque MJ la editó a
-  // mano — aplicar desde este mismo modal también despega, así que el aviso en
-  // pantalla no puede afirmar "editado a mano" (ver el comentario de abajo).
+  // mano — hasta el 2026-09-25 aplicar desde este mismo modal también
+  // despegaba, y esas líneas siguen marcadas; por eso el aviso en pantalla no
+  // puede afirmar "editado a mano" (ver el comentario de abajo).
   priceOverridden: boolean;
+  // El descuento lo puso MJ. Si la tienda publica el suyo, aplicar lo
+  // reemplaza: por eso esas filas también vienen sin marcar y con aviso.
+  discountOverridden: boolean;
   fetched: {
     listPrice: number | null;
     discount: number | null;
@@ -67,14 +71,21 @@ function pct(d: number): string {
  * Leer no toca nada. Aplicar es explícito: MJ marca fila por fila y recién
  * ahí se escribe. Los ítems "despegados" (que no siguen al catálogo) se
  * comparan igual, pero vienen SIN marcar y con aviso, para no pisar de
- * corrido un precio negociado (decisión de MJ, 2026-07-29).
+ * corrido un precio negociado (decisión de MJ, 2026-07-29). Lo mismo las
+ * líneas con un descuento puesto por MJ, cuando la tienda publica el suyo:
+ * aplicar se lo reemplazaría (decisión de MJ, 2026-09-25).
  *
- * OJO con el rótulo de esas filas: hasta el 2026-07-31 decía "Precio editado a
- * mano", y era engañoso. Aplicar desde ACÁ también despega la línea, así que
- * varias de las que mostraban ese cartel no las había editado nadie — las había
- * dejado así este mismo modal en su versión rota, que subía el precio a la
- * lista sin descuento. MJ lo reportó ("yo no escribí ese precio") y el texto
- * pasó a describir el estado, no una causa que la app no puede conocer.
+ * Aplicar el precio de la tienda NO despega la línea, y si estaba despegada
+ * la vuelve a conectar al catálogo (pendiente 186, 2026-09-25). Antes sí
+ * despegaba, y las líneas quedaban clavadas en el precio de ese día.
+ *
+ * OJO con el rótulo de las despegadas: hasta el 2026-07-31 decía "Precio
+ * editado a mano", y era engañoso. Aplicar desde ACÁ también despegaba la
+ * línea, así que varias de las que mostraban ese cartel no las había editado
+ * nadie — las había dejado así este mismo modal en su versión rota, que subía
+ * el precio a la lista sin descuento. MJ lo reportó ("yo no escribí ese
+ * precio") y el texto pasó a describir el estado, no una causa que la app no
+ * puede conocer. Las marcadas por el modal viejo siguen existiendo.
  *
  * ── Arreglo 2026-07-31 (auditoría de precios) ──────────────────────────────
  * Antes este modal comparaba SOLO el precio de lista. Cuando una tienda cambia
@@ -116,16 +127,16 @@ export default function RevisarPreciosArtefactos({
           return;
         }
         setResult(data);
-        // Pre-marcamos lo accionable, con una excepción: el precio de una
-        // línea despegada NO viene marcado (lo editó MJ a mano; pisarlo de
-        // corrido con "aplicar" sería perder un precio negociado).
+        // Pre-marcamos lo accionable, salvo el precio cuando aplicarlo pisaría
+        // una decisión de MJ (ver `pisaDecisionDeMJ`): perderla de corrido
+        // con "aplicar" sería perder un precio negociado.
         const initial: Record<string, { price: boolean; image: boolean }> = {};
         for (const d of (data as RevisarResult).diffs) {
           if (!d.fetched) continue;
           const { priceChanged, imageActionable } = clasificar(d);
           if (priceChanged || imageActionable) {
             initial[d.itemId] = {
-              price: priceChanged && !d.priceOverridden,
+              price: priceChanged && !pisaDecisionDeMJ(d),
               image: imageActionable,
             };
           }
@@ -381,11 +392,18 @@ export default function RevisarPreciosArtefactos({
                                     {pct(d.currentDiscount)} guardado.
                                   </div>
                                 )}
-                                {d.priceOverridden && (
+                                {d.priceOverridden ? (
                                   <div className="text-[10px] text-amber-700 mt-1 pl-6">
                                     Este precio no sigue al catálogo — marcalo
                                     si querés el de la tienda
                                   </div>
+                                ) : (
+                                  pisaDecisionDeMJ(d) && (
+                                    <div className="text-[10px] text-amber-700 mt-1 pl-6">
+                                      Este descuento lo pusiste vos — marcalo
+                                      si querés el de la tienda
+                                    </div>
+                                  )
                                 )}
                               </>
                             ) : (
@@ -427,9 +445,8 @@ export default function RevisarPreciosArtefactos({
                     })}
                   </div>
                   <p className="text-[10px] text-gray-500 mt-1.5">
-                    Lo que apliques pasa a seguir el precio de la tienda: esas
-                    líneas dejan de actualizarse con &ldquo;Comparar con mi
-                    catálogo&rdquo;.
+                    Lo que apliques sigue a tu catálogo: si después cambiás ese
+                    producto en el catálogo, la línea toma el precio de allá.
                   </p>
                 </div>
               )}
@@ -540,6 +557,19 @@ export default function RevisarPreciosArtefactos({
 }
 
 /**
+ * ¿Aplicar el precio de la tienda pisaría una decisión de MJ? Dos casos:
+ *   - la línea no sigue al catálogo (tiene un precio fijo), o
+ *   - el descuento lo puso ella y la tienda publica el suyo: aplicar lo
+ *     reemplaza. Si la tienda NO publica descuento, aplicar actualiza solo la
+ *     lista y conserva el de MJ, así que ahí no se pisa nada.
+ * Esas filas vienen sin marcar y con aviso; MJ decide.
+ */
+function pisaDecisionDeMJ(d: OnlineDiff): boolean {
+  if (d.priceOverridden) return true;
+  return d.discountOverridden && !!d.fetched?.discountKnown;
+}
+
+/**
  * ¿Qué tiene de accionable esta fila? El precio cambió si difiere la LISTA, el
  * DESCUENTO o lo que termina pagando el cliente — mirar solo la lista es lo que
  * hacía invisible un cambio de oferta (ver el comentario del componente).
@@ -567,7 +597,9 @@ function clasificar(d: OnlineDiff): {
     // La foto solo es accionable si de verdad es OTRA. MK y LED Studio
     // migraron su CDN (vteximg.com.br → vtexassets.com) y la misma imagen tiene
     // dos URLs: comparándolas como texto, el modal ofrecía "actualizar" fotos
-    // idénticas y aplicar eso DESPEGABA la línea del catálogo para siempre.
+    // idénticas, y aplicar eso DESPEGABA la línea del catálogo para siempre
+    // (hoy aplicar una foto ya no toca ninguna marca, pero ofrecer una foto
+    // idéntica sigue siendo ruido).
     imageActionable:
       !!f.imageUrl && !esLaMismaImagen(f.imageUrl, d.currentImageUrl),
   };

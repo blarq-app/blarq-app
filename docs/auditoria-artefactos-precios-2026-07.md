@@ -32,7 +32,7 @@ Y hay una sexta vía silenciosa: **"Traer de otra cotización"** refresca los pr
 
 - Al **agregar** un artefacto del catálogo, la cotización guarda una **foto** de lista + descuento de ese momento.
 - Si después cambia el catálogo, el cambio **baja solo** a las cotizaciones en **borrador** cuyas líneas no estén "despegadas" (regla del ADR 2026-06-18). Las enviadas/aprobadas quedan congeladas.
-- Una línea se **despega** (`priceOverridden`) cuando MJ la edita a mano **o cuando aplica "Comparar con la tienda web"** (a propósito: el precio pasó a venir de la tienda). Despegada = el catálogo nunca más la toca. *(Cambió el 2026-09-25: aplicar la tienda ya no despega y reconecta, y "Comparar con mi catálogo" vuelve a conectar. Ver [ADR 2026-09-25](decisions/2026-09-25-artefactos-solo-mj-despega-la-linea.md).)*
+- Una línea se **despega** (`priceOverridden`) cuando MJ la edita a mano **o cuando aplica "Comparar con la tienda web"** (a propósito: el precio pasó a venir de la tienda). Despegada = el catálogo nunca más la toca. *(Cambió el 2026-09-25: aplicar la tienda ya no despega y reconecta, y el precio del catálogo baja solo cuando cambia. Ver [ADR 2026-09-25](decisions/2026-09-25-artefactos-solo-mj-despega-la-linea.md).)*
 
 ### Cuál conviene usar, hoy
 

@@ -130,15 +130,15 @@ interface ApplyPatch {
  *   Aplica los valores del catálogo elegidos en el modal. A propósito NO pasa
  *   por el PUT por-ítem: ese tiene la heurística de "despegar" (priceOverridden)
  *   que marcaría la línea como editada a mano. Bajar del catálogo es lo
- *   contrario. Si llega listPrice/discountPercent, se recalcula el clientPrice
- *   (misma convención que el editor).
+ *   contrario, así que acá NO se toca priceOverridden — el botón solo copia los
+ *   valores elegidos y nada más. Si llega listPrice/discountPercent, se recalcula
+ *   el clientPrice (misma convención que el editor).
  *
- *   Bajar el PRECIO además VUELVE A CONECTAR la línea (pendiente 186, decidido
- *   con MJ el 2026-09-25): si MJ le dice "seguí al catálogo", que lo siga de
- *   verdad. Hasta entonces este botón no tocaba las marcas: bajaba el precio
- *   esa vez, pero la línea seguía despegada para siempre — no había ninguna
- *   forma de volver a conectarla. Bajar solo el costo o la foto no toca las
- *   marcas: ahí no se decidió nada sobre el precio.
+ *   Se evaluó que bajar el precio del catálogo VOLVIERA A CONECTAR la línea
+ *   (pendiente 186) y se descartó el 2026-09-25: el catálogo de artefactos está
+ *   atrasado respecto de la tienda (la grifería Urban-N antique bronze, $38.000
+ *   abajo), MJ casi no usa este botón y verifica contra la web. Conectar líneas
+ *   a un catálogo atrasado las expone a precios más baratos que la realidad.
  */
 export async function POST(
   request: NextRequest,
@@ -178,11 +178,6 @@ export async function POST(
         data.listPrice = listPrice;
         data.discountPercent = discountPercent;
         data.clientPrice = listPrice * (1 - discountPercent);
-        // El precio que queda es el del catálogo: la línea vuelve a seguirlo.
-        data.priceOverridden = false;
-        // Y si bajó el descuento, es el del catálogo (el de la tienda): deja de
-        // ser uno puesto por MJ y se refresca solo de nuevo.
-        if (p.discountPercent !== undefined) data.discountOverridden = false;
       }
 
       if (Object.keys(data).length === 0) continue;
@@ -198,9 +193,6 @@ export async function POST(
           realCostBlarq: true,
           imageUrl: true,
           referenceLink: true,
-          // La pantalla muestra en negrita el descuento puesto por MJ: tiene
-          // que enterarse de que dejó de serlo sin recargar.
-          discountOverridden: true,
         },
       });
       updated.push(item);

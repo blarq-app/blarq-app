@@ -32,8 +32,8 @@ export async function PUT(
     //   priceOverridden    → MJ fijó un PRECIO a mano (la lista, o el precio al
     //                        cliente por fuera del descuento). El catálogo no
     //                        vuelve a tocar esta línea hasta que ella misma le
-    //                        baje un precio de la tienda o del catálogo (desde
-    //                        el 2026-09-25 eso la vuelve a conectar).
+    //                        aplique el precio de la tienda (desde el
+    //                        2026-09-25 eso la vuelve a conectar).
     //   discountOverridden → MJ decidió el DESCUENTO. El catálogo sigue
     //                        actualizando el precio de lista y los datos del
     //                        producto, pero respeta ese porcentaje.

@@ -6,6 +6,11 @@
  * vez despegada no había forma de volver a conectarla. En Casa Los Algarrobos
  * V4 quedaron 30 despegadas y solo 5 eran decisión suya.
  *
+ * Lo que quedó (2026-09-25): aplicar la tienda no despega y reconecta;
+ * "Comparar con mi catálogo" NO toca marcas (el catálogo está atrasado
+ * respecto de la tienda y MJ verifica contra la web); y el PRECIO del catálogo
+ * baja a las cotizaciones solo cuando cambia, no en cada guardado.
+ *
  * Este test pega contra las rutas REALES, mandando lo mismo que manda el
  * editor (la fila completa + el campo de la acción), y revisa en la base cómo
  * quedaron las dos marcas:
@@ -210,22 +215,22 @@ async function main() {
     check("marcado como descuento de MJ", d.discountOverridden === true);
     check("la lista sigue al catálogo", d.priceOverridden === false);
 
-    // ── 8. "Comparar con mi catálogo" con el precio VUELVE A CONECTAR ────
+    // ── 8. "Comparar con mi catálogo" NO toca las marcas (como siempre) ──
+    // Se evaluó que reconectara y se descartó: el catálogo está atrasado
+    // respecto de la tienda, y MJ verifica contra la web.
     console.log("\n8. 'Comparar con mi catálogo' baja el precio a una línea despegada con descuento propio:");
     const p8 = await producto("ZZ186 OCHO", 200000, 0.3);
     const m = await linea({
       name: "ZZ186 OCHO", catalogId: p8.id, listPrice: 250000, discountPercent: 0.1,
       clientPrice: 225000, priceOverridden: true, discountOverridden: true,
     });
-    const r = (await pedir("POST", `/api/presupuestos/${bv.id}/artefactos/actualizar-catalogo`, {
+    await pedir("POST", `/api/presupuestos/${bv.id}/artefactos/actualizar-catalogo`, {
       patches: [{ itemId: m.id, listPrice: 200000, discountPercent: 0.3 }],
-    })) as { updated: Array<Record<string, unknown>> };
+    });
     d = await releer(m.id);
     check("toma el precio del catálogo", cerca(d.clientPrice, 140000), `${CLP(d.listPrice)} · ${PCT(d.discountPercent)} · ${CLP(d.clientPrice)}`);
-    check("vuelve a seguir al catálogo", d.priceOverridden === false);
-    check("el descuento vuelve a ser el de la tienda", d.discountOverridden === false);
-    const devuelta = r.updated.find((u) => u.id === m.id);
-    check("la respuesta trae la marca del descuento (la pantalla la usa)", devuelta?.discountOverridden === false);
+    check("sigue sin seguir al catálogo (no la reconecta)", d.priceOverridden === true);
+    check("la marca del descuento no se toca", d.discountOverridden === true);
 
     // ── 9. ...pero bajar solo el COSTO no toca las marcas ────────────────
     console.log("\n9. 'Comparar con mi catálogo' baja solo el COSTO:");
@@ -242,18 +247,30 @@ async function main() {
     check("sigue sin seguir al catálogo", d.priceOverridden === true);
     check("el descuento sigue siendo de MJ", d.discountOverridden === true);
 
-    // ── 10. Lo reconectado sigue al catálogo de verdad ───────────────────
-    console.log("\n10. Cambia el precio en el catálogo (lista 220.000, 30%):");
-    for (const p of [p2, p6, p8]) {
+    // ── 10. Resguardo: guardar el producto SIN cambiar su precio ─────────
+    // Antes cada guardado del catálogo bajaba el precio: arreglar la foto le
+    // pisaba a la cotización el precio de la tienda con el del catálogo (que
+    // puede estar atrasado). Ahora baja la foto y el precio se queda.
+    console.log("\n10. En el catálogo se cambia solo la FOTO del producto del caso 1:");
+    const cat1 = await prisma.artefactoCatalog.findUniqueOrThrow({ where: { id: p1.id } });
+    await pedir("PUT", `/api/catalogo/artefactos/${p1.id}`, { ...cat1, imageUrl: "https://ejemplo.cl/foto-arreglada.jpg" });
+    d = await releer(a.id);
+    check("la línea conserva el precio de la tienda", cerca(d.clientPrice, 82500), `${CLP(d.clientPrice)} (el catálogo dice ${CLP(cat1.listPrice * (1 - (cat1.discountPercent ?? 0)))})`);
+    check("pero recibe la foto nueva", d.imageUrl === "https://ejemplo.cl/foto-arreglada.jpg");
+
+    // ── 11. Cambiar el PRECIO en el catálogo sí baja a las conectadas ────
+    console.log("\n11. Cambia el PRECIO en el catálogo (lista 220.000, 30%):");
+    for (const p of [p1, p2, p6, p8]) {
       const cat = await prisma.artefactoCatalog.findUniqueOrThrow({ where: { id: p.id } });
       await pedir("PUT", `/api/catalogo/artefactos/${p.id}`, { ...cat, listPrice: 220000, discountPercent: 0.3 });
     }
+    check("la del caso 1 (precio de la tienda, conectada) lo toma", cerca((await releer(a.id)).clientPrice, 154000), CLP((await releer(a.id)).clientPrice));
     check("la reconectada desde la tienda (caso 2) lo toma", cerca((await releer(b.id)).clientPrice, 154000), CLP((await releer(b.id)).clientPrice));
-    check("la reconectada desde el catálogo (caso 8) lo toma", cerca((await releer(m.id)).clientPrice, 154000), CLP((await releer(m.id)).clientPrice));
+    check("la bajada con 'Comparar con mi catálogo' (caso 8) NO se mueve", cerca((await releer(m.id)).clientPrice, 140000), CLP((await releer(m.id)).clientPrice));
     check("la tipeada a mano (caso 6) NO se mueve", cerca((await releer(h.id)).clientPrice, 126000), CLP((await releer(h.id)).clientPrice));
 
-    // ── 11. Versión nueva: se copian LAS DOS marcas ──────────────────────
-    console.log("\n11. Se crea una versión nueva a partir de esta:");
+    // ── 12. Versión nueva: se copian LAS DOS marcas ──────────────────────
+    console.log("\n12. Se crea una versión nueva a partir de esta:");
     const v2 = (await pedir("POST", "/api/presupuestos", {
       projectId: proyecto.id, type: "artefactos", baseVersionId: bv.id,
     })) as { id: string };
@@ -262,8 +279,8 @@ async function main() {
     check("el descuento de MJ sigue marcado en la versión nueva", copiaDcto.discountOverridden === true);
     check("el precio tipeado sigue sin seguir al catálogo", copiaMano.priceOverridden === true);
 
-    // ── 12. "Volver a lo enviado" también devuelve las dos marcas ────────
-    console.log("\n12. Se envía la versión nueva, se toca, y se vuelve a lo enviado:");
+    // ── 13. "Volver a lo enviado" también devuelve las dos marcas ────────
+    console.log("\n13. Se envía la versión nueva, se toca, y se vuelve a lo enviado:");
     await pedir("PUT", `/api/presupuestos/${v2.id}`, { status: "enviado" });
     await prisma.artefactoItem.update({ where: { id: copiaDcto.id }, data: { discountOverridden: false } });
     await pedir("POST", `/api/presupuestos/${v2.id}/restaurar-enviado`);

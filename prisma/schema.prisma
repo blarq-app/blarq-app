@@ -808,8 +808,9 @@ model ArtefactoItem {
   // descuento), y desde ahí el catálogo no la pisa. NO despegan: el descuento
   // (tiene su marca propia, discountOverridden, desde 2026-08-02), el nombre,
   // la foto, ni aplicar el precio que publica la tienda. Vuelve a false al
-  // aplicarle el precio de la tienda o al bajarle el precio con "Comparar con
-  // mi catálogo" (pendiente 186, 2026-09-25). Es el equivalente, por línea, de
+  // aplicarle el precio de la tienda (pendiente 186, 2026-09-25); el PRECIO
+  // del catálogo baja solo cuando cambia el precio del catálogo, no en cada
+  // guardado del producto. Es el equivalente, por línea, de
   // ObraItem.isCustomized. Las cotizaciones enviadas quedan congeladas por
   // estado (el catálogo solo toca borradores), igual que en obra.
   priceOverridden   Boolean @default(false)

@@ -469,10 +469,9 @@ export default function ArtefactosEditor({
   // Aplica los cambios que vienen del modal "Comparar con mi catálogo": baja
   // costo / precio a cliente / foto desde el producto del catálogo. Va por un
   // endpoint propio (NO el PUT por-ítem) para no disparar la heurística de
-  // "despegar del catálogo" — bajar del catálogo no despega la línea; al
-  // revés, bajar el PRECIO la vuelve a conectar (pendiente 186). Cada fila
-  // del modal es un ítem distinto (las copias del mismo producto en otros
-  // baños aparecen como filas propias), así que no hace falta propagar.
+  // "despegar del catálogo" — bajar del catálogo no despega la línea. Cada
+  // fila del modal es un ítem distinto (las copias del mismo producto en
+  // otros baños aparecen como filas propias), así que no hace falta propagar.
   async function applyCatalogPatches(patches: CatalogApplyPatch[]) {
     if (patches.length === 0) return;
     const res = await fetch(
@@ -498,7 +497,6 @@ export default function ArtefactosEditor({
           | "realCostBlarq"
           | "imageUrl"
           | "referenceLink"
-          | "discountOverridden"
         >
       >;
     };

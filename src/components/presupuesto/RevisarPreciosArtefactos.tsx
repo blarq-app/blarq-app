@@ -445,8 +445,8 @@ export default function RevisarPreciosArtefactos({
                     })}
                   </div>
                   <p className="text-[10px] text-gray-500 mt-1.5">
-                    Lo que apliques sigue a tu catálogo: si después cambiás ese
-                    producto en el catálogo, la línea toma el precio de allá.
+                    Lo que apliques sigue conectado a tu catálogo: solo se
+                    mueve si después cambiás el precio de ese producto allá.
                   </p>
                 </div>
               )}

@@ -4,6 +4,14 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+
+## 2026-09-25 — Descuento fijo al final del presupuesto de obra
+
+- Casilla “Descuento ($)” por versión, con guardado al salir del campo y “Total final”. Actualiza presupuesto, PDF, cuotas y saldo del cliente; no representa un pago ni cambia costos o EPs de maestros.
+- Duplicar en el mismo proyecto conserva la rebaja; importar a otra obra empieza en cero. Las fotos enviadas incluyen el descuento y las anteriores a esta función se restauran sin él.
+- Columna `discountAmount` agregada con cero por defecto. Verificados los 36 proyectos y 76 presupuestos de la base viva: métricas idénticas antes/después y ningún descuento aplicado por la migración.
+- Pruebas locales de cálculo, persistencia, versiones, validaciones, navegador y PDF; build completo correcto.
+
 ## 2026-09-25 — Una línea de artefactos deja de seguir al catálogo solo cuando MJ fija el precio
 
 - **Pendiente 186**: en Casa Los Algarrobos V4, 30 líneas decían "no sigue al catálogo" y solo 5 eran decisión de MJ. Ahora aplicar el precio de la tienda web **no despega** la línea, y si estaba despegada la reconecta. Tipear un precio sigue despegando. "Comparar con mi catálogo" no cambia: no toca marcas. **El catálogo de artefactos está atrasado respecto de la tienda** (la grifería antique bronze, $38.000), y MJ verifica contra la web. Decisión en [ADR 2026-09-25](decisions/2026-09-25-artefactos-solo-mj-despega-la-linea.md).

@@ -60,6 +60,8 @@ export async function POST(request: NextRequest) {
       ggPercentage: number | null;
       utilityPercentage: number | null;
       discountPercentage: number | null;
+      discountAmount: number;
+      projectId: string;
       conditions: unknown;
     } | null = null;
     if (baseId) {
@@ -69,6 +71,8 @@ export async function POST(request: NextRequest) {
           ggPercentage: true,
           utilityPercentage: true,
           discountPercentage: true,
+          discountAmount: true,
+          projectId: true,
           conditions: true,
         },
       });
@@ -95,6 +99,9 @@ export async function POST(request: NextRequest) {
         ggPercentage: data.ggPercentage ?? basePrev?.ggPercentage ?? 20,
         utilityPercentage: data.utilityPercentage ?? basePrev?.utilityPercentage ?? 5,
         discountPercentage: data.discountPercentage ?? basePrev?.discountPercentage ?? 0,
+        // La rebaja pertenece al acuerdo de esa obra, no a una plantilla.
+        discountAmount: data.type === "obra" && !isTemplateMode && basePrev?.projectId === data.projectId
+          ? basePrev?.discountAmount ?? 0 : 0,
       },
     });
     if (baseId) {

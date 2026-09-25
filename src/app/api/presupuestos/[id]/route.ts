@@ -1,3 +1,4 @@
+import { computeObraBudgetTotals, validateObraDiscount } from "@/lib/projects/metrics";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { buildBudgetSnapshot } from "@/lib/catalog/budgetSnapshot";
@@ -57,9 +58,32 @@ export async function PUT(
     // createdAt; ver selectVersion.ts) — ya no se suman versiones aprobadas,
     // así que dejar una vieja aprobada no infla el total: gana la más nueva.
 
-    const budget = await prisma.budgetVersion.update({
-      where: { id },
-      data: updateData,
+    const current = await prisma.budgetVersion.findUnique({
+      where: { id }, include: { obraItems: true, paymentTerms: true },
+    });
+    if (!current) return NextResponse.json({ error: "Presupuesto no encontrado" }, { status: 404 });
+    if (data.discountAmount !== undefined) {
+      if (current.type !== "obra") {
+        return NextResponse.json({ error: "El descuento fijo está disponible solo para obra." }, { status: 400 });
+      }
+      const totals = computeObraBudgetTotals({ ...current,
+        ggPercentage: data.ggPercentage ?? current.ggPercentage,
+        utilityPercentage: data.utilityPercentage ?? current.utilityPercentage,
+      });
+      const error = validateObraDiscount(data.discountAmount, totals.totalOriginal);
+      if (error) return NextResponse.json({ error }, { status: 400 });
+      updateData.discountAmount = data.discountAmount;
+    }
+    const budget = await prisma.$transaction(async (tx) => {
+      const updated = await tx.budgetVersion.update({ where: { id }, data: updateData });
+      if (current.type === "obra" &&
+          (data.discountAmount !== undefined || data.ggPercentage !== undefined || data.utilityPercentage !== undefined)) {
+        const { totalFinal } = computeObraBudgetTotals({ ...updated, obraItems: current.obraItems });
+        for (const term of current.paymentTerms) {
+          await tx.paymentTerm.update({ where: { id: term.id }, data: { amount: totalFinal * term.percentage / 100 } });
+        }
+      }
+      return updated;
     });
 
     // Foto al enviar/cerrar (tarea 9): cuando la versión pasa a "enviado" se

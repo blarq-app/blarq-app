@@ -315,6 +315,54 @@ más, porque hay que definir la tipografía, las portadas y el tono.
 
 ---
 
+## 12. Segunda ronda (2026-09-26) — preguntas de MJ
+
+**¿Se puede conectar Gemini a Claude Code para los videos, como Nano Banana para los renders?** Sí, y
+es mejor que lo recomendado en §1 para el trabajo en el Mac (se me pasó en la primera ronda). La API de
+Gemini recibe un video y lo analiza con imagen y audio, citando segundos (formato MM:SS; muestrea 1
+cuadro por segundo y el audio completo). Un script dentro de la skill `contenido-reels` le mandaría cada
+clip a Gemini y Claude recibiría la descripción y la transcripción con tiempos: Claude deja de estar
+"sordo y viendo solo 12 cuadros". Costo estimado con un modelo Flash: centavos de dólar por visita (no
+verificado con la tarifa vigente). **Ojo**: en el nivel gratuito de la API, Google puede usar lo que se
+sube para mejorar sus productos; con casas de clientes, usar una clave con facturación activa. Veo
+(video generado) también está en la API, cobrado por segundo, solo para animar renders.
+Fuentes: https://ai.google.dev/gemini-api/docs/video-understanding
+
+**"Claude me edita en CapCut" (lo que se ve en TikTok).** No existe integración oficial: CapCut no
+tiene API pública de edición. Lo que hay son tres caminos:
+1. **Servidores MCP comunitarios** (sobre el proyecto abierto VectCutAPI/CapCutAPI) que escriben un
+   **borrador de proyecto de CapCut** en el disco: Claude pone los clips, cortes, textos y subtítulos, y
+   el proyecto aparece en CapCut de escritorio para terminarlo a mano. Es lo que muestran la mayoría de
+   los videos. Ventaja real frente al MP4 de `armar-borrador.sh`: la línea de tiempo queda editable. En
+   contra: el formato de CapCut es propietario y sin documentación (puede romperse con cada
+   actualización), requiere dejar corriendo un servidor en Python, y siguen los problemas de CapCut
+   (música sin licencia comercial, términos). Fuentes:
+   https://github.com/sun-guannan/VectCutAPI · https://aituber.app/blog/capcut-mcp-claude/ ·
+   https://note.com/usuke_work/n/n70d11cc63422?hl=en
+2. **Claude manejando el computador** (Cowork / uso del computador): Claude hace clic en la app de
+   CapCut. Posible, pero lento y frágil para una línea de tiempo.
+3. **Claude en Chrome** (extensión disponible para planes pagados desde 2026-08-26) sobre el editor web
+   de CapCut. No encontré a nadie haciéndolo bien.
+
+**¿Las historias sirven para crecer?** No para ganar seguidores: Instagram las muestra sobre todo a
+quienes ya siguen la cuenta. Sirven para mantener la relación y para que escriban por DM (ahí está la
+venta), y las destacadas por obra funcionan de portafolio para quien entra al perfil. Lo práctico: el
+mismo material de las historias, cosido en un reel de 20–30 s una vez por semana ("Obra en 30
+segundos"), sí llega a gente nueva.
+
+**Sin cara a cámara.** No es grave; en arquitectura la obra puede ser la protagonista. Progresión
+sugerida: fotos y video con texto en pantalla → manos y espaldas (MJ dibujando, JT midiendo) → voz en
+off sin cara → cara cuando den ganas. Con fotos: carruseles antes/después y reels de fotos con
+acercamiento lento (ya lo hace `armar-borrador.sh`), idealmente con uno o dos clips de video.
+
+**Por qué los números reales.** Es la primera pregunta de un cliente ("¿cuánto sale?"): el contenido
+que la responde atrae gente que de verdad está por remodelar, filtra a quien no le calza el presupuesto
+(menos cotizaciones que no llegan a nada), da confianza y se guarda y se reenvía (la señal que más pesa
+para llegar a gente nueva). Riesgos: la competencia lo ve, el cliente se ancla a un número, los precios
+cambian. Es opcional. Versiones suaves: "en qué se va la plata de una cocina" (reparto en % entre
+muebles, artefactos y obra), "qué encarece un baño", "desde $X". Nunca utilidad ni clientes
+identificables.
+
 ## Fuentes principales
 
 Consultadas el 2026-09-25 (fecha de publicación entre paréntesis cuando se conoce).

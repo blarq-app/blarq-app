@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-09-27 — MK: links nuevos y fotos rotas en catálogo y borradores
+
+- MK cambió el link de todos sus productos. La lectura que sigue la redirección (PR #455) se verificó con datos reales: «Comparar con la tienda web» en Casa Los Algarrobos V4 pasa de 31 a 4 sin poder leer; «Revisar precios» del catálogo y «Extraer» también leen con el link viejo. Los 103 links que redirigen van al mismo código de producto.
+- Datos aplicados en la viva con OK de MJ: 17 fotos rotas repuestas desde la tienda (catálogo 15, borradores 2) y 140 links pasados al link nuevo de MK (catálogo 92, borradores 48). Solo `imageUrl` y `referenceLink`; enviadas y aprobadas sin tocar; respaldo en `backups/`; foto de control de totales idéntica antes y después.
+- Scripts: `diag-mk-links-y-fotos.ts`, `fix-mk-fotos-rotas.ts`, `fix-mk-links-nuevos.ts` (dry-run por defecto, respaldo antes de escribir).
+
 ## 2026-09-25 — Descuento fijo al final del presupuesto de obra
 
 - Casilla “Descuento ($)” por versión, con guardado al salir del campo y “Total final”. Actualiza presupuesto, PDF, cuotas y saldo del cliente; no representa un pago ni cambia costos o EPs de maestros.

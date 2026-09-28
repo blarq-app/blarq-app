@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-09-28 — La flechita ↗ de herrajes en la cotización de muebles
+
+- **Pendiente 143**: cada línea de herraje de una partida lleva la ↗ al producto en la web del proveedor, igual que en artefactos. El link sale del catálogo por `catalogId` (`herrajeLinks.ts`); las líneas sin catálogo detrás no la muestran.
+- **"Comparar con la web"** en la partida: al lado del costo de cada línea DPH, "✓ web", el precio de hoy en ámbar si no calza, o "sin leer". Solo mira: no cambia ningún costo.
+- **Solo DPH se compara** (`PROVEEDORES_PRECIO_WEB`): HBT tiene precio negociado, no el público; DAPDUCASSE no se puede leer todavía. Los dos llevan flechita, no chequeo.
+- Regresión: `scripts/test-herraje-proveedores.ts` (14 casos).
+
 ## 2026-09-25 — Descuento fijo al final del presupuesto de obra
 
 - Casilla “Descuento ($)” por versión, con guardado al salir del campo y “Total final”. Actualiza presupuesto, PDF, cuotas y saldo del cliente; no representa un pago ni cambia costos o EPs de maestros.

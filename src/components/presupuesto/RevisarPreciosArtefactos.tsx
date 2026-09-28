@@ -15,6 +15,9 @@ interface OnlineDiff {
   currentDiscount: number; // decimal 0..1
   currentClientPrice: number;
   currentImageUrl: string | null;
+  // Links de tienda de los que salió la foto guardada de la línea (cajón de
+  // fotos). Opcional por si el servidor todavía no lo manda.
+  currentImageSources?: string[];
   // La línea no sigue al catálogo. OJO: NO siempre es porque MJ la editó a
   // mano — hasta el 2026-09-25 aplicar desde este mismo modal también
   // despegaba, y esas líneas siguen marcadas; por eso el aviso en pantalla no
@@ -600,7 +603,13 @@ function clasificar(d: OnlineDiff): {
     // idénticas, y aplicar eso DESPEGABA la línea del catálogo para siempre
     // (hoy aplicar una foto ya no toca ninguna marca, pero ofrecer una foto
     // idéntica sigue siendo ruido).
+    //
+    // Con el cajón de fotos (2026-09-27) la línea guarda una COPIA, cuyo link
+    // es de la app y nunca coincide con el de la tienda: se compara también
+    // contra los links de tienda de los que salió esa copia.
     imageActionable:
-      !!f.imageUrl && !esLaMismaImagen(f.imageUrl, d.currentImageUrl),
+      !!f.imageUrl &&
+      !esLaMismaImagen(f.imageUrl, d.currentImageUrl) &&
+      !(d.currentImageSources ?? []).some((s) => esLaMismaImagen(f.imageUrl, s)),
   };
 }

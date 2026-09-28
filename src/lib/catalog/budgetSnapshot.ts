@@ -20,6 +20,7 @@ import { computeObraBudgetTotals } from "@/lib/projects/metrics";
  */
 
 import { prisma } from "@/lib/prisma";
+import { copiasYaGuardadas } from "@/lib/fotos/guardarFoto";
 
 // Campos de ObraItem que viajan en la foto (todo lo que define la partida).
 //
@@ -324,6 +325,11 @@ export async function restoreArtefactosFromSnapshot(versionId: string) {
 
   const snap = bv.sentSnapshot as unknown as { artefactoItems?: ArtefactoSnap[] };
   const items = snap.artefactoItems ?? [];
+  // Las fotos de lo enviado antes del cajón de fotos (2026-09-27) son links de
+  // tienda, y MK los va matando. Si la app ya tiene la copia de esa foto, la
+  // línea vuelve con la copia: "Volver a lo enviado" no puede borrar fotos.
+  // Solo mira el cajón (no baja nada) y no toca la foto de lo enviado.
+  const copias = await copiasYaGuardadas(items.map((it) => it.imageUrl));
 
   await prisma.$transaction(async (tx) => {
     await tx.artefactoItem.deleteMany({ where: { budgetVersionId: versionId } });
@@ -335,7 +341,8 @@ export async function restoreArtefactosFromSnapshot(versionId: string) {
           detail: it.detail, brand: it.brand, quantity: it.quantity,
           listPrice: it.listPrice, discountPercent: it.discountPercent,
           clientPrice: it.clientPrice, realCostBlarq: it.realCostBlarq,
-          referenceLink: it.referenceLink, imageUrl: it.imageUrl,
+          referenceLink: it.referenceLink,
+          imageUrl: (it.imageUrl && copias.get(it.imageUrl)) || it.imageUrl,
           catalogId: it.catalogId,
           // Fotos viejas (anteriores al 2026-06-18) no tienen el flag → false.
           priceOverridden: it.priceOverridden ?? false,

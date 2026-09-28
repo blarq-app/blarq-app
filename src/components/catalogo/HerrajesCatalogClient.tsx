@@ -4,6 +4,7 @@ import { Fragment, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
 import { fileToThumbnailDataUrl } from "@/lib/imageThumbnail";
+import { linkEditableDeFoto } from "@/lib/fotos/linkFoto";
 import {
   OTRO_PROVEEDOR,
   normalizarProveedor,
@@ -695,8 +696,14 @@ export default function HerrajesCatalogClient({
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "Error al guardar");
       }
+      // La foto vuelve del servidor como copia guardada (cajón de fotos).
+      const guardado = await res.json().catch(() => null);
       setItems((prev) =>
-        prev.map((it) => (it.id === editingId ? { ...it, ...patch } : it))
+        prev.map((it) =>
+          it.id === editingId
+            ? { ...it, ...patch, ...(guardado && "imageUrl" in guardado ? { imageUrl: guardado.imageUrl } : {}) }
+            : it
+        )
       );
       setActiveTab(newItem.supplier);
       closeForm();
@@ -1293,9 +1300,9 @@ export default function HerrajesCatalogClient({
                 </label>
                 <input
                   type="url"
-                  value={
-                    newItem.imageUrl.startsWith("data:") ? "" : newItem.imageUrl
-                  }
+                  // Fotos guardadas en la app (subidas o copias del cajón de
+                  // fotos): el campo es solo para pegar un link nuevo.
+                  value={linkEditableDeFoto(newItem.imageUrl)}
                   onChange={(e) =>
                     setNewItem({ ...newItem, imageUrl: e.target.value })
                   }

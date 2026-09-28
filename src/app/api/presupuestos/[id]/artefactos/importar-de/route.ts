@@ -34,6 +34,7 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { revisarArtefactosOnline } from "@/lib/catalog/revisarArtefactos";
 import { requireSession } from "@/lib/apiAuth";
+import { guardarCopiaDeFoto } from "@/lib/fotos/guardarFoto";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -238,9 +239,10 @@ export async function POST(
           report.priceUpdated++;
         }
 
-        // Si el item venía sin imagen y la tienda tiene una, la traemos.
+        // Si el item venía sin imagen y la tienda tiene una, la traemos — como
+        // copia guardada en la app, no como link (cajón de fotos, 2026-09-27).
         if (!item.imageUrl && diff.fetched.imageUrl) {
-          updateData.imageUrl = diff.fetched.imageUrl;
+          updateData.imageUrl = await guardarCopiaDeFoto(diff.fetched.imageUrl);
           report.imageUpdated++;
         }
 

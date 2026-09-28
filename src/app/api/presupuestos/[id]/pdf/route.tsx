@@ -17,6 +17,7 @@ import {
   computeChangeMarkers,
 } from "@/lib/presupuesto/versionDiff";
 import { requireSession } from "@/lib/apiAuth";
+import { incrustarFotosGuardadas } from "@/lib/fotos/guardarFoto";
 import {
   esTipoCondiciones,
   parseCondiciones,
@@ -272,7 +273,7 @@ export async function GET(
         // Los items ya vienen ordenados por sortOrder (el orden que MJ arrastró
         // en el editor). La subcategoría vacía cuenta como "sanitario", igual
         // que en el editor y en el PDF al cliente.
-        items: budget.artefactoItems.filter(
+        items: (await incrustarFotosGuardadas(budget.artefactoItems)).filter(
           (it) => (it.subcategory || "sanitario") === subKey
         ),
       });
@@ -288,7 +289,10 @@ export async function GET(
           coverSubtitle: budget.coverSubtitle,
           coverNote: budget.coverNote,
         },
-        items: budget.artefactoItems,
+        // Las fotos guardadas en la app van incrustadas: el navegador que arma
+        // el PDF no tiene sesión para pedirlas, y así el PDF sale igual aunque
+        // la tienda haya cambiado sus fotos (cajón de fotos, 2026-09-27).
+        items: await incrustarFotosGuardadas(budget.artefactoItems),
         paymentTerms: budget.paymentTerms.map((t) => ({
           stage: t.stage,
           percentage: t.percentage,

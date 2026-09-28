@@ -2,6 +2,11 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { ensureArtefactoCatalog } from "@/lib/catalog/ensureArtefactoCatalog";
 import { requireSession } from "@/lib/apiAuth";
+import { guardarCopiaDeFoto } from "@/lib/fotos/guardarFoto";
+
+// Agregar una línea con foto nueva la baja y la guarda como copia (cajón de
+// fotos): puede tardar unos segundos si la tienda está lenta.
+export const maxDuration = 60;
 
 export async function POST(
   request: NextRequest,
@@ -13,6 +18,10 @@ export async function POST(
   try {
     const { id: budgetVersionId } = await params;
     const data = await request.json();
+    // Foto como copia en la app, no como link a la tienda (cajón de fotos,
+    // 2026-09-27). Antes de desplegar al catálogo, para que el catálogo nazca
+    // con la misma copia.
+    if (data.imageUrl) data.imageUrl = await guardarCopiaDeFoto(data.imageUrl);
 
     const allItems = await prisma.artefactoItem.findMany({
       where: { budgetVersionId },

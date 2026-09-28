@@ -31,6 +31,7 @@ import RevisarPreciosArtefactos, {
   type ArtefactoPricePatch,
 } from "./RevisarPreciosArtefactos";
 import { ROOM_ORDER, roomLabel } from "@/lib/presupuesto/ambientes";
+import { esFotoGuardada, linkEditableDeFoto } from "@/lib/fotos/linkFoto";
 import CondicionesEditor from "@/components/presupuesto/CondicionesEditor";
 import type { Condicion } from "@/lib/presupuesto/condiciones";
 
@@ -316,6 +317,24 @@ export default function ArtefactosEditor({
           i.id === item.id
             ? { ...i, discountOverridden: guardado.discountOverridden }
             : i
+        )
+      );
+    }
+    // La foto vuelve del servidor como COPIA guardada en la app (cajón de
+    // fotos, 2026-09-27), y el servidor se la puso también a las gemelas de
+    // esta línea. Se toma acá para esta línea y las que tenían la misma foto —
+    // solo si siguen con la foto que se mandó, así una respuesta atrasada no
+    // pisa una foto que MJ cambió después.
+    const fotoEnviada = item.imageUrl;
+    if (
+      guardado &&
+      fotoEnviada &&
+      guardado.imageUrl !== fotoEnviada &&
+      esFotoGuardada(guardado.imageUrl)
+    ) {
+      setItems((prev) =>
+        prev.map((i) =>
+          i.imageUrl === fotoEnviada ? { ...i, imageUrl: guardado.imageUrl } : i
         )
       );
     }
@@ -1904,6 +1923,11 @@ function ItemImageCell({
   const [open, setOpen] = useState(false);
   const [linkDraft, setLinkDraft] = useState(item.referenceLink ?? "");
   const [imgDraft, setImgDraft] = useState(item.imageUrl ?? "");
+  // Lo que se ve en el campo "URL de imagen". Va aparte de `imgDraft` porque
+  // una foto guardada en la app (copia o subida a mano) no muestra su link: el
+  // campo sirve solo para pegar uno nuevo, y dejarlo vacío conserva la foto
+  // (para sacarla está "Borrar imagen").
+  const [linkFoto, setLinkFoto] = useState(linkEditableDeFoto(item.imageUrl));
   const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1913,6 +1937,7 @@ function ItemImageCell({
   function openPopover() {
     setLinkDraft(item.referenceLink ?? "");
     setImgDraft(item.imageUrl ?? "");
+    setLinkFoto(linkEditableDeFoto(item.imageUrl));
     setError(null);
     setOpen(true);
   }
@@ -1941,7 +1966,10 @@ function ItemImageCell({
       // Aplicamos lo que vino del scraper. Si vienen vacíos algunos campos
       // (común en productos parcialmente catalogados), respetamos lo que
       // MJ ya tenía cargado.
-      if (data.imageUrl) setImgDraft(data.imageUrl);
+      if (data.imageUrl) {
+        setImgDraft(data.imageUrl);
+        setLinkFoto(data.imageUrl);
+      }
       const patch: Partial<ArtefactoItem> = {
         referenceLink: linkDraft,
         imageUrl: data.imageUrl ?? item.imageUrl ?? null,
@@ -1977,6 +2005,7 @@ function ItemImageCell({
   function handleClear() {
     setLinkDraft("");
     setImgDraft("");
+    setLinkFoto("");
     onUpdate({ referenceLink: null, imageUrl: null });
     setOpen(false);
   }
@@ -2054,13 +2083,18 @@ function ItemImageCell({
                 </label>
                 <input
                   type="url"
-                  value={imgDraft}
-                  onChange={(e) => setImgDraft(e.target.value)}
+                  value={linkFoto}
+                  onChange={(e) => {
+                    setLinkFoto(e.target.value);
+                    setImgDraft(e.target.value.trim() || item.imageUrl || "");
+                  }}
                   placeholder="https://…/imagen.jpg"
                   className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs outline-none focus:border-gray-500"
                 />
                 <p className="text-[10px] text-gray-500 mt-1">
-                  Pegá un link directo a una foto (.jpg / .png / .webp).
+                  {!linkFoto && (esFotoGuardada(imgDraft) || imgDraft.startsWith("data:"))
+                    ? "Foto guardada en la app: ya no depende de la tienda. Pegá un link solo si querés reemplazarla."
+                    : "Pegá un link directo a una foto (.jpg / .png / .webp). Al guardar, la app se queda con una copia."}
                 </p>
               </div>
 

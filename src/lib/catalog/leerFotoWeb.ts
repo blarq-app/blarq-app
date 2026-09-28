@@ -21,6 +21,7 @@ import { fetchArtefactoData } from "./fetchArtefactoData";
 import { fetchVtexImage } from "./fetchVtexPrice";
 import { fetchShopifyImage } from "./fetchShopifyPrice";
 import { plataformaDe } from "./tiendas";
+import { esFotoGuardada } from "@/lib/fotos/linkFoto";
 
 /**
  * ¿Este link de foto todavía carga como imagen?
@@ -30,14 +31,15 @@ import { plataformaDe } from "./tiendas";
  * de la imagen ya no existe, así que mirar solo el código no alcanzaría en
  * tiendas que devuelvan una página de error con 200.
  *
- * Las fotos embebidas (`data:…`) no viven en ningún servidor: siempre cargan.
+ * Las fotos embebidas (`data:…`) y las copias guardadas en la app
+ * (`/api/fotos/…`, cajón de fotos) no dependen de ninguna tienda: siempre cargan.
  * Ante un timeout o un error de red devuelve `true` — o sea, no la damos por
  * rota: preferimos dejar la foto guardada antes que pisarla por un problema
  * momentáneo de conexión.
  */
 export async function fotoSigueViva(imageUrl: string | null | undefined): Promise<boolean> {
   if (!imageUrl) return false;
-  if (imageUrl.startsWith("data:")) return true;
+  if (imageUrl.startsWith("data:") || esFotoGuardada(imageUrl)) return true;
   try {
     const r = await fetch(imageUrl, {
       method: "HEAD",

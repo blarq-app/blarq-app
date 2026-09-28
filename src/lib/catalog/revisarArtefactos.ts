@@ -29,6 +29,7 @@
 import { fetchArtefactoData } from "./fetchArtefactoData";
 import { leerPrecioWeb } from "./leerPrecioWeb";
 import { plataformaDe } from "./tiendas";
+import { origenesDeFotos } from "@/lib/fotos/guardarFoto";
 
 // Item mínimo que necesitamos para revisar — calza con ArtefactoItem.
 export interface RevisableArtefacto {
@@ -62,6 +63,10 @@ export interface ArtefactoOnlineDiff {
   currentDiscount: number; // decimal 0..1
   currentClientPrice: number; // lo que paga el cliente hoy (unitario)
   currentImageUrl: string | null;
+  // Si la foto de la línea es una copia guardada en la app (cajón de fotos,
+  // 2026-09-27): los links de tienda de los que salió. Sirven para reconocer
+  // que la foto que publica la tienda es la MISMA, aunque el link sea otro.
+  currentImageSources: string[];
   // La línea no sigue al catálogo (tiene un precio fijo).
   priceOverridden: boolean;
   // El descuento de la línea lo puso MJ, no la tienda.
@@ -128,6 +133,7 @@ export async function revisarArtefactosOnline(
     (i) => i.referenceLink && i.referenceLink.trim().length > 0
   );
   const skippedNoLink = items.length - conLink.length;
+  const origenes = await origenesDeFotos(conLink.map((i) => i.imageUrl));
 
   const diffs = await mapWithConcurrency(conLink, 5, async (item) => {
     const link = item.referenceLink as string;
@@ -142,6 +148,7 @@ export async function revisarArtefactosOnline(
       currentClientPrice:
         item.clientPrice ?? Math.round(item.listPrice * (1 - currentDiscount)),
       currentImageUrl: item.imageUrl,
+      currentImageSources: (item.imageUrl && origenes.get(item.imageUrl)) || [],
       priceOverridden: item.priceOverridden ?? false,
       discountOverridden: item.discountOverridden ?? false,
       fetched: null,

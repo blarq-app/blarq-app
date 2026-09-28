@@ -4,6 +4,7 @@ import { Fragment, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber, edadRevisionPrecio } from "@/lib/utils";
 import { fileToThumbnailDataUrl } from "@/lib/imageThumbnail";
+import { linkEditableDeFoto } from "@/lib/fotos/linkFoto";
 import {
   DndContext,
   closestCenter,
@@ -907,10 +908,17 @@ export default function ArtefactosCatalogClient({
       // hacía que la fila siguiera diciendo "revisado hace más de un mes"
       // después de actualizarla (le pasó a MJ con el portarrollo, 2026-08-03).
       const guardado = await res.json().catch(() => null);
+      // Idem la foto: el servidor la guarda como copia (cajón de fotos) y
+      // devuelve el link a esa copia.
       setItems((prev) =>
         prev.map((it) =>
           it.id === editingId
-            ? { ...it, ...patch, ...(guardado?.lastPriceCheck ? { lastPriceCheck: guardado.lastPriceCheck } : {}) }
+            ? {
+                ...it,
+                ...patch,
+                ...(guardado?.lastPriceCheck ? { lastPriceCheck: guardado.lastPriceCheck } : {}),
+                ...(guardado && "imageUrl" in guardado ? { imageUrl: guardado.imageUrl } : {}),
+              }
             : it
         )
       );
@@ -1684,7 +1692,10 @@ export default function ArtefactosCatalogClient({
                 </label>
                 <input
                   type="url"
-                  value={newItem.imageUrl.startsWith("data:") ? "" : newItem.imageUrl}
+                  // Las fotos guardadas en la app (subidas a mano o copias del
+                  // cajón de fotos) no muestran su link: el campo es para pegar
+                  // uno nuevo.
+                  value={linkEditableDeFoto(newItem.imageUrl)}
                   onChange={(e) =>
                     setNewItem({ ...newItem, imageUrl: e.target.value })
                   }

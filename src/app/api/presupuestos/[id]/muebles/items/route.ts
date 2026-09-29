@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
 import { DEFAULT_HERRAJE_UTILITY } from "@/lib/presupuesto/muebleHerrajes";
+import { itemsConLinkDeHerraje } from "@/lib/presupuesto/herrajeLinks";
 
 // Crear item bajo un capítulo de muebles. Auto-genera itemNumber tipo
 // "{chapter}.{n+1}" según items existentes en el capítulo.
@@ -259,5 +260,7 @@ async function crearAlternativa(budgetVersionId: string, baseId: string) {
       herrajes: { orderBy: { sortOrder: "asc" } },
     },
   });
-  return NextResponse.json(alt);
+  // Las líneas de herraje copiadas llevan su ↗ (link del catálogo).
+  const [altConLinks] = await itemsConLinkDeHerraje([alt]);
+  return NextResponse.json(altConLinks);
 }

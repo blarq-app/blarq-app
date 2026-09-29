@@ -12,6 +12,7 @@ import {
   parseCondiciones,
 } from "@/lib/presupuesto/condiciones";
 import { getPlantillaCondiciones } from "@/lib/presupuesto/condicionesPlantilla";
+import { conLink, linksDelCatalogo } from "@/lib/presupuesto/herrajeLinks";
 
 // Subcategorías de artefactos que pueden salir como orden de compra al
 // proveedor. El rótulo es el que usa MJ al hablar ("baño", no "sanitario").
@@ -79,7 +80,24 @@ export default async function PresupuestoDetailPage({
     (esTipoCondiciones(budget.type)
       ? await getPlantillaCondiciones(budget.type)
       : []);
-  const budgetConCondiciones = { ...budget, conditions: condiciones };
+  // Link del producto (la ↗) de cada línea de herraje: la línea no lo guarda,
+  // sale del catálogo por su catalogId (pendiente 143). Solo muebles.
+  const herrajeLinks =
+    budget.type === "muebles"
+      ? await linksDelCatalogo(
+          budget.muebleChapters.flatMap((ch) =>
+            ch.items.flatMap((i) => i.herrajes.map((h) => h.catalogId)),
+          ),
+        )
+      : new Map<string, string>();
+  const muebleChapters = budget.muebleChapters.map((ch) => ({
+    ...ch,
+    items: ch.items.map((i) => ({
+      ...i,
+      herrajes: i.herrajes.map((h) => conLink(h, herrajeLinks)),
+    })),
+  }));
+  const budgetConCondiciones = { ...budget, muebleChapters, conditions: condiciones };
 
   // Base de comparación entre versiones: items de la foto de la última versión
   // enviada al cliente (o null si no hay). El editor calcula las marcas al

@@ -47,6 +47,9 @@ export async function POST(
       sku: typeof data.sku === "string" ? data.sku : null,
       costNet: Number(data.costNet) || 0,
     };
+    // El link no se guarda en la línea (sale del catálogo, ver herrajeLinks):
+    // se devuelve junto a la línea para que la ↗ aparezca sin recargar.
+    let referenceLink: string | null = null;
     if (data.catalogId) {
       const cat = await prisma.herrajeCatalog.findUnique({
         where: { id: data.catalogId },
@@ -64,6 +67,7 @@ export async function POST(
       snap.finish = cat.finish;
       snap.sku = cat.sku;
       snap.costNet = cat.costNet;
+      referenceLink = cat.referenceLink?.trim() || null;
     }
     if (!snap.name || !snap.supplier) {
       return NextResponse.json(
@@ -105,7 +109,10 @@ export async function POST(
     }
     const updatedItem = await recomputeAndPersistHerrajeItem(itemId);
 
-    return NextResponse.json({ line, item: updatedItem });
+    return NextResponse.json({
+      line: { ...line, referenceLink },
+      item: updatedItem,
+    });
   } catch (error) {
     console.error("Error agregando herraje a la partida:", error);
     return NextResponse.json(

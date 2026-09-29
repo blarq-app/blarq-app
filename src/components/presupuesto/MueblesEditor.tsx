@@ -7,6 +7,10 @@ import AddHerrajeFromCatalog from "./AddHerrajeFromCatalog";
 import { MenuPlantillas, BotonGuardarPlantilla } from "./PlantillasMuebles";
 import { formatHerrajeName } from "@/lib/presupuesto/herrajeNombre";
 import {
+  seComparaConLaWeb,
+  motivoSinCompararWeb,
+} from "@/lib/presupuesto/herrajeProveedores";
+import {
   DndContext,
   closestCenter,
   KeyboardSensor,
@@ -131,6 +135,58 @@ function HerrajeNameInput({
   );
 }
 
+// Casilla de "Comparar con la web" en una línea de herraje (pendiente 143).
+// Ancho fijo para que la columna no baile entre líneas. Tres estados:
+//   - calza: "✓ web" en verde chico (confirmado). Es el caso normal en DPH, así
+//     que no ocupa espacio prominente.
+//   - distinto: el precio de hoy en ámbar (atención), con la diferencia en el
+//     title. NO cambia el costo: la línea está congelada y cambiarla es
+//     decisión de MJ.
+//   - sin leer: gris. Pasa en DPH cuando el producto tiene varias medidas y la
+//     línea no tiene SKU (el lector no adivina cuál es) — la ↗ sirve para
+//     mirarlo a mano.
+// precio=null = la línea no se compara (HBT, otro proveedor o sin link):
+// casilla vacía.
+function ResultadoWeb({
+  precio,
+  costNet,
+}: {
+  precio: PrecioWeb | null;
+  costNet: number;
+}) {
+  const base = "shrink-0 w-20 text-[10px] tabular-nums self-center";
+  if (!precio) return <span className={base} />;
+  if (precio.webCost == null) {
+    return (
+      <span
+        className={`${base} text-gray-400`}
+        title="No se pudo leer el precio en la web del proveedor. Abrí la ↗ para verlo."
+      >
+        sin leer
+      </span>
+    );
+  }
+  const delta = precio.webCost - costNet;
+  if (Math.abs(delta) < 1) {
+    return (
+      <span
+        className={`${base} text-green-700`}
+        title={`Calza con el precio de hoy en la web (${formatCLP(precio.webCost)})`}
+      >
+        ✓ web
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`${base} text-amber-700`}
+      title={`Hoy en la web: ${formatCLP(precio.webCost)} · en esta línea: ${formatCLP(costNet)} (${delta > 0 ? "+" : "−"}${formatCLP(Math.abs(delta))}). No se cambió nada.`}
+    >
+      web {formatCLP(precio.webCost)}
+    </span>
+  );
+}
+
 // Input numérico con separadores de miles. Sin foco muestra "5.488.460",
 // con foco muestra "5488460" para edición. onChange devuelve el número crudo.
 function ThousandsInput({
@@ -204,6 +260,17 @@ type MuebleHerraje = {
   quantity: number;
   costNet: number;
   sortOrder: number;
+  // Link del producto en la web del proveedor (la ↗). NO es columna de la
+  // línea: lo pega el server desde el catálogo por catalogId (herrajeLinks).
+  // null = línea sin catálogo detrás → sin flechita.
+  referenceLink?: string | null;
+};
+
+// Resultado de "Comparar con la web" para una línea (por catalogId). Sale de
+// /api/catalogo/herrajes/revisar-precios, que solo lee: no escribe nada.
+type PrecioWeb = {
+  webCost: number | null;
+  status: "ok" | "sin-precio" | "error";
 };
 
 type MuebleItem = {
@@ -2487,6 +2554,75 @@ function HerrajePartidaBlock({
   // colapsado mostrando el resumen.
   const [showCost, setShowCost] = useState(item.herrajes.length === 0);
 
+  // "Comparar con la web" (pendiente 143). Solo MIRA: trae el precio de hoy
+  // del proveedor y lo muestra al lado del costo de cada línea. No escribe el
+  // costo de nada — el de la línea está congelado y la partida lo deriva de
+  // ahí. null = todavía no se comparó (no se dibuja nada).
+  const [preciosWeb, setPreciosWeb] = useState<Record<string, PrecioWeb> | null>(
+    null
+  );
+  const [comparandoWeb, setComparandoWeb] = useState(false);
+  const [errorWeb, setErrorWeb] = useState<string | null>(null);
+
+  // Líneas que se comparan: DPH con catálogo y link. HBT tiene flechita pero
+  // NO chequeo (su costo es el precio negociado, no el público) — ver
+  // PROVEEDORES_PRECIO_WEB.
+  const comparables = item.herrajes.filter(
+    (h) => h.catalogId && h.referenceLink && seComparaConLaWeb(h.supplier)
+  );
+  // Proveedores con link que quedan fuera, para decir por qué (solo después
+  // de comparar: antes no hay nada que explicar).
+  const sinComparar = [
+    ...new Set(
+      item.herrajes
+        .filter((h) => h.referenceLink && !seComparaConLaWeb(h.supplier))
+        .map((h) => h.supplier)
+    ),
+  ];
+
+  async function compararConLaWeb() {
+    const ids = [...new Set(comparables.map((h) => h.catalogId as string))];
+    if (ids.length === 0) return;
+    setComparandoWeb(true);
+    setErrorWeb(null);
+    try {
+      const res = await fetch("/api/catalogo/herrajes/revisar-precios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data: {
+        rows: { id: string; webCost: number | null; status: PrecioWeb["status"] }[];
+      } = await res.json();
+      const porCatalogo: Record<string, PrecioWeb> = {};
+      for (const r of data.rows) {
+        porCatalogo[r.id] = { webCost: r.webCost, status: r.status };
+      }
+      setPreciosWeb(porCatalogo);
+    } catch (err) {
+      console.error("Error comparando herrajes con la web:", err);
+      setErrorWeb("No se pudo comparar con la web.");
+    } finally {
+      setComparandoWeb(false);
+    }
+  }
+
+  // Resumen de una línea al lado del botón: cuántas calzan, cuántas no.
+  const resumenWeb = (() => {
+    if (!preciosWeb) return null;
+    let calzan = 0;
+    let distintas = 0;
+    let sinLeer = 0;
+    for (const h of comparables) {
+      const p = preciosWeb[h.catalogId as string];
+      if (!p || p.webCost == null) sinLeer++;
+      else if (Math.abs(p.webCost - h.costNet) < 1) calzan++;
+      else distintas++;
+    }
+    return { calzan, distintas, sinLeer };
+  })();
+
   // Mismo grid que el resto de la tabla (item · partida · cantidad · total · ✕).
   const ROW_GRID =
     "grid grid-cols-[3rem_minmax(0,1fr)_5rem_8rem_2rem] items-baseline gap-3";
@@ -2624,6 +2760,21 @@ function HerrajePartidaBlock({
                             value={formatHerrajeName(h.name)}
                             onCommit={(name) => onUpdateHerraje(h.id, { name })}
                           />
+                          {/* Flechita ↗ al producto en la web del proveedor,
+                              IGUAL que en artefactos: mismo glifo, tamaño y
+                              lugar (pegada al nombre). Sin catálogo detrás no
+                              hay link y no se dibuja (pendiente 143). */}
+                          {h.referenceLink && (
+                            <a
+                              href={h.referenceLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="shrink-0 self-center text-xs text-gray-400 hover:text-gray-900 leading-none"
+                              title="Abrir el producto en la web del proveedor"
+                            >
+                              ↗
+                            </a>
+                          )}
                           {(h.measure || h.finish) && (
                             <span className="shrink-0 text-[10px] text-gray-500 self-center">
                               {[h.measure, h.finish]
@@ -2639,6 +2790,25 @@ function HerrajePartidaBlock({
                           <span className="shrink-0 w-16 text-[10px] text-right tabular-nums text-gray-400 self-center">
                             {formatCLP(h.costNet)}
                           </span>
+                          {/* Resultado de "Comparar con la web", solo después
+                              de comparar. La casilla va en TODAS las líneas
+                              (vacía en HBT / sin link) para que la columna
+                              no baile. */}
+                          {preciosWeb && (
+                            <ResultadoWeb
+                              precio={
+                                h.catalogId &&
+                                h.referenceLink &&
+                                seComparaConLaWeb(h.supplier)
+                                  ? preciosWeb[h.catalogId] ?? {
+                                      webCost: null,
+                                      status: "sin-precio",
+                                    }
+                                  : null
+                              }
+                              costNet={h.costNet}
+                            />
+                          )}
                         </div>
                         {/* Cantidad editable (commit al salir) + subtotal. */}
                         <HerrajeQtyInput
@@ -2695,6 +2865,42 @@ function HerrajePartidaBlock({
               >
                 Crear uno nuevo
               </button>
+              {/* Solo si hay algo que comparar (DPH con link). En una
+                  partida solo HBT el botón no se ofrece. */}
+              {comparables.length > 0 && (
+                <>
+                  <span className="text-gray-300">·</span>
+                  <button
+                    onClick={compararConLaWeb}
+                    disabled={comparandoWeb}
+                    className="text-gray-400 hover:text-gray-900 text-left disabled:cursor-wait"
+                    title="Lee el precio de hoy en la web del proveedor y lo muestra al lado del costo de cada línea. No cambia ningún costo. HBT no se compara: su costo es el precio negociado."
+                  >
+                    {comparandoWeb ? "Comparando con la web…" : "Comparar con la web"}
+                  </button>
+                </>
+              )}
+              {resumenWeb && !comparandoWeb && (
+                <span className="text-gray-400">
+                  <span className="text-gray-300">—</span>{" "}
+                  {[
+                    resumenWeb.calzan > 0 &&
+                      `${resumenWeb.calzan} ${resumenWeb.calzan === 1 ? "calza" : "calzan"}`,
+                    resumenWeb.distintas > 0 &&
+                      `${resumenWeb.distintas} ${resumenWeb.distintas === 1 ? "distinto" : "distintos"}`,
+                    resumenWeb.sinLeer > 0 &&
+                      `${resumenWeb.sinLeer} sin leer`,
+                    ...sinComparar.map(
+                      (s) => `${s} no se compara (${motivoSinCompararWeb(s)})`
+                    ),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              )}
+              {errorWeb && !comparandoWeb && (
+                <span className="text-amber-700">{errorWeb}</span>
+              )}
             </>
           )}
         </div>

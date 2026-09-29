@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
+import { itemsConLinkDeHerraje } from "@/lib/presupuesto/herrajeLinks";
 
 /**
  * "Hacer principal" una alternativa para el cliente (pendiente 177).
@@ -74,7 +75,9 @@ export async function POST(
         herrajes: { orderBy: { sortOrder: "asc" } },
       },
     });
-    return NextResponse.json({ items });
+    // El editor reemplaza su estado con esto: las líneas de herraje tienen
+    // que traer su ↗ (link del catálogo) o la flechita desaparece.
+    return NextResponse.json({ items: await itemsConLinkDeHerraje(items) });
   } catch (error) {
     console.error("Error al hacer principal la alternativa:", error);
     return NextResponse.json(

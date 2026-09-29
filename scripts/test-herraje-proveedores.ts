@@ -2,7 +2,12 @@
  * Test de regresión de las pestañas de proveedor de herrajes.
  *   npx tsx scripts/test-herraje-proveedores.ts
  */
-import { proveedoresDe, normalizarProveedor } from "../src/lib/presupuesto/herrajeProveedores";
+import {
+  proveedoresDe,
+  normalizarProveedor,
+  seComparaConLaWeb,
+  motivoSinCompararWeb,
+} from "../src/lib/presupuesto/herrajeProveedores";
 
 let pass = 0;
 let fail = 0;
@@ -19,6 +24,15 @@ eq("espacios sobrantes no crean duplicados", proveedoresDe([{ supplier: " Carlos
 eq("vacío se ignora", proveedoresDe([{ supplier: "" }, { supplier: "  " }]), ["DPH", "HBT"]);
 eq("mayúsculas NO se tocan (lo decide MJ)", proveedoresDe([{ supplier: "carlos" }, { supplier: "Carlos" }]), ["DPH", "HBT", "carlos", "Carlos"]);
 eq("normalizar", normalizarProveedor("  Carlos   Mueblista "), "Carlos Mueblista");
+
+// Comparar con la web (pendiente 143): solo DPH. HBT tiene precio negociado.
+eq("DPH se compara", seComparaConLaWeb("DPH"), true);
+eq("dph con espacios se compara", seComparaConLaWeb(" dph "), true);
+eq("HBT NO se compara", seComparaConLaWeb("HBT"), false);
+eq("Ducasse NO se compara", seComparaConLaWeb("DAPDUCASSE"), false);
+eq("vacío NO se compara", seComparaConLaWeb(""), false);
+eq("motivo HBT", motivoSinCompararWeb("HBT"), "precio negociado");
+eq("motivo otro", motivoSinCompararWeb("DAPDUCASSE"), "su web no se lee");
 
 console.log(`${pass} ok, ${fail} fallas`);
 process.exit(fail > 0 ? 1 : 0);

@@ -4,6 +4,13 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-09-29 — Alta de herrajes con pestañas y el costo del "Extraer" por proveedor
+
+- **Pendiente 188**: el alta de herrajes tiene arriba "Buscar en catálogo" | "Crear nuevo", igual que artefactos (antes "+ Nuevo herraje" quedaba escondido al pie).
+- **Costo del "Extraer" (plata)**: nueva ruta `api/catalogo/herrajes/extract`, usada por el alta en la partida y por el catálogo. Llena el costo solo con DPH y con el precio exacto de la variante; HBT (precio negociado) y Ducasse quedan con el costo vacío y un aviso. En DPH con varias medidas y sin SKU tampoco adivina (antes ponía el precio de otra variante).
+- Cuando el link no se puede leer, el mensaje dice el motivo real (bloqueo de la tienda, página inexistente, sin respuesta…) en vez de culpar al link.
+- Regresión: `scripts/test-herraje-proveedores.ts` (26 casos).
+
 ## 2026-09-29 — Las fotos de artefactos y herrajes se guardan como copia en la app (PR #461, en prod)
 
 - Antes se guardaba el link a la foto de la tienda; cuando MK cambiaba sus fotos el link moría y la foto desaparecía de la cotización y del PDF (59 líneas al 2026-09-27, casi todas en enviadas/aprobadas). Ahora cada foto se baja una vez, se achica a 600 px y se guarda en la tabla `FotoGuardada`; `imageUrl` apunta a `/api/fotos/<id>`. Decisión en [ADR 2026-09-27](decisions/2026-09-27-fotos-copia-en-la-app.md).

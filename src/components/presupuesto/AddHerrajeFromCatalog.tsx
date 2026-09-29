@@ -109,6 +109,14 @@ const CATEGORY_LABELS: Record<string, string> = {
  * El sector salió del alta por decisión de MJ (2026-08-08): lo va a retomar
  * aparte. Las líneas nuevas entran sin sector; las que YA tienen sector se
  * siguen mostrando agrupadas igual en la partida.
+ *
+ * DOS PESTAÑAS ARRIBA, "Buscar en catálogo" | "Crear nuevo", igual que el
+ * alta de artefactos (pendiente 188, 2026-09-29). Antes el alta de un herraje
+ * nuevo era un botón "+ Nuevo herraje" al PIE, debajo de la lista con scroll:
+ * con el catálogo de DPH entero MJ nunca lo veía y preguntó si la función
+ * existía. MJ: "debería estar en la misma lógica que los artefactos, que haya
+ * coherencia en el uso de la app". Las pestañas de proveedor (DPH, HBT…)
+ * bajan a la fila del buscador: filtran la lista, no son un modo.
  */
 export default function AddHerrajeFromCatalog({
   budgetId,
@@ -144,7 +152,7 @@ export default function AddHerrajeFromCatalog({
   }, []);
   // Proveedor del herraje NUEVO: por defecto la pestaña activa; "Otro…" abre
   // un campo para escribir uno que todavía no existe (ej. Carlos).
-  const [nuevoProveedor, setNuevoProveedor] = useState<string>("");
+  const [nuevoProveedor, setNuevoProveedor] = useState<string>("DPH");
   const [nuevoProveedorOtro, setNuevoProveedorOtro] = useState(false);
   const [query, setQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
@@ -186,17 +194,29 @@ export default function AddHerrajeFromCatalog({
   const [nuevo, setNuevo] = useState(NUEVO_VACIO);
   const [guardandoNuevo, setGuardandoNuevo] = useState(false);
   const [extrayendo, setExtrayendo] = useState(false);
+  // Por qué "Extraer" no llenó el costo (HBT negociado, DPH con varias
+  // medidas…). Se muestra bajo el formulario.
+  const [avisoCosto, setAvisoCosto] = useState<string | null>(null);
 
-  // Mismo endpoint y mismo criterio que el catálogo de herrajes: el nombre se
-  // sugiere solo si está vacío (no pisa lo que MJ escribió), el precio de
-  // VENTA de hoy queda como costo si no había uno, y la foto y la marca se
-  // toman siempre.
+  // "Extraer" de HERRAJES (pendiente 188): mismo endpoint que el catálogo de
+  // herrajes. El nombre se sugiere solo si está vacío (no pisa lo que MJ
+  // escribió); la foto y la marca se toman siempre. El COSTO lo decide el
+  // server: solo DPH y con el precio exacto de la variante; en HBT queda
+  // vacío porque el costo es el precio negociado, no el de la web. Si no lo
+  // llena, dice por qué (avisoCosto).
   async function extraerDeLink() {
     if (!nuevo.referenceLink.trim()) return setError("Pegá el link del producto primero.");
     setExtrayendo(true);
     setError(null);
+    setAvisoCosto(null);
     try {
-      const res = await fetch(`/api/catalogo/artefactos/extract?url=${encodeURIComponent(nuevo.referenceLink.trim())}`);
+      const proveedor = normalizarProveedor(nuevoProveedor) || supplier;
+      const qs = new URLSearchParams({
+        url: nuevo.referenceLink.trim(),
+        proveedor,
+        sku: nuevo.sku.trim(),
+      });
+      const res = await fetch(`/api/catalogo/herrajes/extract?${qs}`);
       const data = await res.json();
       if (!res.ok) return setError(data.error || "No se pudo extraer del link.");
       setNuevo((prev) => ({
@@ -205,8 +225,9 @@ export default function AddHerrajeFromCatalog({
         brand: data.brand ?? prev.brand,
         imageUrl: data.imageUrl ?? prev.imageUrl,
         detail: data.name ?? prev.detail,
-        costNet: prev.costNet ? prev.costNet : String(data.clientPrice ?? data.listPrice ?? ""),
+        costNet: prev.costNet ? prev.costNet : data.costNet != null ? String(data.costNet) : "",
       }));
+      setAvisoCosto(data.avisoCosto ?? null);
     } catch {
       setError("No se pudo extraer del link.");
     } finally {
@@ -229,6 +250,7 @@ export default function AddHerrajeFromCatalog({
       name: n.name || query.trim(),
     }));
     setError(null);
+    setAvisoCosto(null);
     setNuevoAbierto(true);
   }
 
@@ -410,10 +432,49 @@ export default function AddHerrajeFromCatalog({
     <div className="bg-gray-50 px-4 py-3 border-t border-gray-200">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-700">
-          Agregar herraje del catálogo
+          Agregar herraje
         </h3>
+        {/* Mismas dos pestañas que el alta de artefactos, siempre visibles. */}
         <div className="flex items-center gap-1 text-[11px]">
-          {/* Pestañas de proveedor: filtran el catálogo. */}
+          <button
+            onClick={() => {
+              setNuevoAbierto(false);
+              setError(null);
+            }}
+            className={`px-2 py-0.5 rounded ${
+              !nuevoAbierto
+                ? "bg-gray-900 text-white"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Buscar en catálogo
+          </button>
+          <button
+            onClick={() => {
+              if (!nuevoAbierto) abrirNuevo();
+            }}
+            className={`px-2 py-0.5 rounded ${
+              nuevoAbierto
+                ? "bg-gray-900 text-white"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Crear nuevo
+          </button>
+          <button
+            onClick={onClose}
+            className="ml-2 text-gray-400 hover:text-gray-900"
+            title="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+
+      {/* Buscar: proveedor (filtra el catálogo) + buscador + categoría */}
+      {!nuevoAbierto && (
+      <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-1 text-[11px] shrink-0">
           {suppliers.map((s) => (
             <button
               key={s}
@@ -427,22 +488,12 @@ export default function AddHerrajeFromCatalog({
                   ? "bg-gray-900 text-white"
                   : "text-gray-600 hover:text-gray-900"
               }`}
+              title={`Catálogo de ${s}`}
             >
               {s}
             </button>
           ))}
-          <button
-            onClick={onClose}
-            className="ml-2 text-gray-400 hover:text-gray-900"
-            title="Cerrar"
-          >
-            ×
-          </button>
         </div>
-      </div>
-
-      {/* Buscador + filtro de categoría */}
-      <div className="flex gap-2 mb-3">
         <input
           autoFocus
           type="text"
@@ -471,9 +522,10 @@ export default function AddHerrajeFromCatalog({
           </select>
         )}
       </div>
+      )}
 
-      {/* Alta de un herraje que no está en el catálogo. Queda en el catálogo
-          del proveedor activo y entra a la partida de una vez. */}
+      {/* "Crear nuevo": un herraje que no está en el catálogo. Queda en el
+          catálogo del proveedor elegido y entra a la partida de una vez. */}
       {nuevoAbierto && (
         <div className="mb-3 bg-white border border-gray-300 rounded px-3 py-2.5">
           <div className="flex items-center justify-between mb-2">
@@ -538,7 +590,10 @@ export default function AddHerrajeFromCatalog({
               autoFocus
               type="url"
               value={nuevo.referenceLink}
-              onChange={(e) => setNuevo({ ...nuevo, referenceLink: e.target.value })}
+              onChange={(e) => {
+                setNuevo({ ...nuevo, referenceLink: e.target.value });
+                setAvisoCosto(null);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
@@ -553,7 +608,7 @@ export default function AddHerrajeFromCatalog({
               onClick={extraerDeLink}
               disabled={extrayendo || !nuevo.referenceLink.trim()}
               className="text-xs font-medium text-gray-700 border border-gray-300 rounded px-2.5 py-1.5 hover:bg-white hover:border-gray-400 disabled:opacity-40 whitespace-nowrap"
-              title="Trae nombre, marca, foto y precio del producto; el precio queda como costo neto"
+              title="Trae nombre, marca y foto del producto. El costo solo se llena con DPH (su precio público es el costo); en HBT el costo es el negociado y se escribe a mano."
             >
               {extrayendo ? "Buscando…" : "Extraer"}
             </button>
@@ -628,6 +683,9 @@ export default function AddHerrajeFromCatalog({
               className="px-2 py-1.5 border border-gray-300 rounded text-right tabular-nums outline-none focus:border-gray-500"
             />
           </div>
+          {avisoCosto && (
+            <div className="mt-2 text-[11px] text-amber-700">{avisoCosto}</div>
+          )}
           <div className="mt-2 flex items-center justify-end gap-2">
             <button
               onClick={() => setNuevoAbierto(false)}
@@ -646,7 +704,8 @@ export default function AddHerrajeFromCatalog({
         </div>
       )}
 
-      {/* Lista de resultados del catálogo */}
+      {/* Lista de resultados del catálogo (pestaña "Buscar en catálogo") */}
+      {!nuevoAbierto && (
       <div className="max-h-64 overflow-y-auto bg-white border border-gray-200 rounded">
         {loading && (
           <div className="px-3 py-2 text-xs text-gray-500">Buscando…</div>
@@ -739,6 +798,7 @@ export default function AddHerrajeFromCatalog({
             );
           })}
       </div>
+      )}
 
       {error && (
         <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
@@ -751,22 +811,12 @@ export default function AddHerrajeFromCatalog({
         </div>
       )}
 
-      {/* Pie: alta de un herraje nuevo + cerrar (sigue abierto para sumar varios). */}
+      {/* Pie: cerrar (sigue abierto para sumar varios). El alta de un herraje
+          nuevo ya no está acá: es la pestaña "Crear nuevo" de arriba. */}
       <div className="mt-3 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          {!nuevoAbierto && (
-            <button
-              onClick={abrirNuevo}
-              className="text-xs font-medium text-gray-700 border border-gray-300 rounded px-2.5 py-1 hover:bg-white hover:border-gray-400"
-              title={`Cargar un herraje que no está en el catálogo de ${supplier}: queda en el catálogo y entra a la partida`}
-            >
-              + Nuevo herraje
-            </button>
-          )}
-          <span className="text-[10px] text-gray-400">
-            Entra con cantidad 1. La cantidad se ajusta en la línea de la partida.
-          </span>
-        </div>
+        <span className="text-[10px] text-gray-400">
+          Entra con cantidad 1. La cantidad se ajusta en la línea de la partida.
+        </span>
         <button
           onClick={onClose}
           className="text-xs text-gray-600 px-3 py-1.5 hover:text-gray-900"

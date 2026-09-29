@@ -54,6 +54,45 @@ export function seComparaConLaWeb(supplier: string): boolean {
   );
 }
 
+// Proveedor según el sitio del link, para los que conocemos. Sirve para no
+// depender solo del proveedor elegido en el formulario (que por defecto es la
+// pestaña activa y MJ puede no haber cambiado).
+const PROVEEDOR_POR_SITIO: Record<string, string> = {
+  "dph.cl": "DPH",
+  "hbt.cl": "HBT",
+  "dapducasse.cl": "DAPDUCASSE",
+};
+
+export function proveedorDelLink(link: string): string | null {
+  try {
+    const host = new URL(link.trim()).hostname.toLowerCase().replace(/^www\./, "");
+    return PROVEEDOR_POR_SITIO[host] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ¿El precio que trae "Extraer" puede quedar como COSTO del herraje nuevo?
+ * (pendiente 188, 2026-09-29 — esto es plata.)
+ *
+ * Solo si el precio público es lo que paga BLARQ, o sea DPH (misma lista que
+ * "Comparar con la web", PROVEEDORES_PRECIO_WEB). En HBT el costo es el
+ * precio NEGOCIADO: el Merivobox E se paga $64.000 y hbt.cl publica $89.990;
+ * llenar el costo con lo de la web lo cargaba $26.000 más caro sin avisar, y
+ * de ahí entraba derecho a la partida. Ducasse: 1 solo herraje en la base (su
+ * web publica lo mismo que el costo), muy poco para fiarse → como HBT.
+ *
+ * Tienen que calzar LAS DOS pistas: el proveedor del formulario Y el sitio
+ * del link. Un link de hbt.cl con la pestaña DPH olvidada no llena el costo,
+ * y tampoco un link de un sitio que no conocemos (el precio exacto de la
+ * variante solo se sabe leer en dph.cl).
+ */
+export function extraerLlenaCosto(proveedor: string, link: string): boolean {
+  const delSitio = proveedorDelLink(link);
+  return seComparaConLaWeb(proveedor) && delSitio != null && seComparaConLaWeb(delSitio);
+}
+
 // Por qué un proveedor NO se compara, en palabras de MJ (va en pantalla).
 export function motivoSinCompararWeb(supplier: string): string {
   return normalizarProveedor(supplier ?? "").toUpperCase() === "HBT"

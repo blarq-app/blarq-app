@@ -209,6 +209,32 @@ function extractGenericProductData(
 }
 
 async function fetchHtml(url: string): Promise<string | null> {
+  return (await fetchHtmlConMotivo(url)).html;
+}
+
+/**
+ * Por qué no se pudo leer una página (pendiente 188, 2026-09-29). Antes todo
+ * fallo daba el mismo "no se pudo abrir el link o el sitio no expone datos",
+ * que culpaba al link incluso cuando el link estaba bien y era la tienda la
+ * que no dejaba entrar al servidor.
+ *   - "bloqueado":     la tienda contestó que no (4xx salvo 404/410, o 503).
+ *   - "no-existe":     la página no existe (404/410).
+ *   - "sin-respuesta": no contestó dentro del plazo (25 s).
+ *   - "sin-conexion":  no se pudo ni conectar (DNS, conexión cortada).
+ *   - "error-tienda":  otro error de la tienda (500…).
+ *   - "sin-datos":     la página abrió pero no trae datos del producto.
+ */
+export type MotivoFalla =
+  | "bloqueado"
+  | "no-existe"
+  | "sin-respuesta"
+  | "sin-conexion"
+  | "error-tienda"
+  | "sin-datos";
+
+async function fetchHtmlConMotivo(
+  url: string
+): Promise<{ html: string | null; motivo: MotivoFalla | null; status: number | null }> {
   try {
     const res = await fetch(url, {
       headers: BROWSER_HEADERS,
@@ -220,10 +246,28 @@ async function fetchHtml(url: string): Promise<string | null> {
       // 25 s deja margen sin riesgo de que la función se corte por su cuenta.
       signal: AbortSignal.timeout(25000),
     });
-    if (!res.ok) return null;
-    return await res.text();
-  } catch {
-    return null;
+    if (!res.ok) {
+      // Cualquier rechazo 4xx que no sea "no existe" cuenta como bloqueo: los
+      // WAF no usan un código fijo (403, 406, 429, 451…). Verificado el
+      // 2026-09-29 desde el deploy: hbt.cl rechaza al servidor de Vercel en
+      // ~0,3 s (desde Santiago abre, en ~10 s) — es bloqueo, no demora.
+      const s = res.status;
+      const motivo: MotivoFalla =
+        s === 404 || s === 410
+          ? "no-existe"
+          : (s >= 400 && s < 500) || s === 503
+            ? "bloqueado"
+            : "error-tienda";
+      return { html: null, motivo, status: s };
+    }
+    return { html: await res.text(), motivo: null, status: res.status };
+  } catch (e) {
+    const nombre = e instanceof Error ? e.name : "";
+    return {
+      html: null,
+      motivo: nombre === "TimeoutError" || nombre === "AbortError" ? "sin-respuesta" : "sin-conexion",
+      status: null,
+    };
   }
 }
 
@@ -260,4 +304,24 @@ export async function fetchArtefactoData(
   const html = await fetchHtml(url);
   if (!html) return null;
   return extractGenericProductData(url, html, source);
+}
+
+/**
+ * Lo mismo que fetchArtefactoData, pero cuando falla dice POR QUÉ (ver
+ * MotivoFalla) y cuánto tardó. Lo usa el "Extraer" de herrajes para no culpar
+ * al link cuando es la tienda la que no deja entrar.
+ */
+export async function fetchArtefactoDataConMotivo(url: string): Promise<{
+  data: ArtefactoExtracted | null;
+  motivo: MotivoFalla | null;
+  status: number | null;
+  ms: number;
+}> {
+  const t0 = Date.now();
+  const r = await fetchHtmlConMotivo(url);
+  const ms = Date.now() - t0;
+  if (!r.html) return { data: null, motivo: r.motivo, status: r.status, ms };
+  const data = extractGenericProductData(url, r.html, inferSource(url));
+  const vacio = !data || (!data.imageUrl && !data.name && !data.listPrice);
+  return { data: vacio ? null : data, motivo: vacio ? "sin-datos" : null, status: r.status, ms };
 }

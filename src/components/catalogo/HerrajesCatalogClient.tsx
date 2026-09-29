@@ -308,6 +308,8 @@ export default function HerrajesCatalogClient({
     clientPrice: 0,
   });
   const [extractingForNew, setExtractingForNew] = useState(false);
+  // Por qué "Extraer" no llenó el costo (HBT negociado, DPH con varias medidas…).
+  const [avisoCostoNuevo, setAvisoCostoNuevo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // ── "Revisar precios" ─────────────────────────────────────────────────
@@ -712,9 +714,12 @@ export default function HerrajesCatalogClient({
     }
   }
 
-  // Extraer datos al pegar URL en el formulario de "nuevo". Reusa el endpoint
-  // genérico de artefactos: devuelve {name, brand, imageUrl, listPrice}. El
-  // listPrice extraído lo usamos como costo de partida (después MJ lo ajusta).
+  // Extraer datos al pegar URL en el formulario de "nuevo" (pendiente 188).
+  // Usa el extraer de HERRAJES, no el de artefactos: el de artefactos ponía el
+  // precio público como costo, y en HBT el costo es el precio NEGOCIADO
+  // (Merivobox E: $64.000 pagado vs $89.990 en hbt.cl). Ahora el costo lo
+  // decide el server: solo DPH y con el precio exacto de la variante; si no
+  // lo llena, dice por qué.
   async function handleExtractForNew() {
     if (!newItem.referenceLink) {
       setError("Pegá un link primero.");
@@ -722,12 +727,14 @@ export default function HerrajesCatalogClient({
     }
     setExtractingForNew(true);
     setError(null);
+    setAvisoCostoNuevo(null);
     try {
-      const res = await fetch(
-        `/api/catalogo/artefactos/extract?url=${encodeURIComponent(
-          newItem.referenceLink
-        )}`
-      );
+      const qs = new URLSearchParams({
+        url: newItem.referenceLink.trim(),
+        proveedor: newItem.supplier,
+        sku: (newItem.sku ?? "").trim(),
+      });
+      const res = await fetch(`/api/catalogo/herrajes/extract?${qs}`);
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "No se pudo extraer");
@@ -742,15 +749,11 @@ export default function HerrajesCatalogClient({
         imageUrl: data.imageUrl ?? prev.imageUrl,
         detail: data.name ?? prev.detail,
         brand: data.brand ?? prev.brand,
-        // El precio extraído lo cargamos como costo si todavía no había uno.
-        // Va el precio de VENTA de hoy (`clientPrice`), no la lista antes del
-        // descuento: el costo del herraje es lo que se paga de verdad. Desde el
-        // arreglo 2026-07-31 el endpoint distingue los dos; en las tiendas sin
-        // API vienen iguales, así que el comportamiento no cambia.
-        costNet: prev.costNet
-          ? prev.costNet
-          : (data.clientPrice ?? data.listPrice ?? prev.costNet),
+        // El costo SOLO si el server lo devolvió (DPH, variante exacta) y
+        // todavía no había uno escrito.
+        costNet: prev.costNet ? prev.costNet : (data.costNet ?? prev.costNet),
       }));
+      setAvisoCostoNuevo(data.avisoCosto ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");
     } finally {
@@ -1065,9 +1068,13 @@ export default function HerrajesCatalogClient({
               </button>
             </div>
             <p className="text-[10px] text-gray-500 mt-1">
-              Trae imagen, nombre, marca y precio (queda como costo). Después
-              podés ajustar.
+              Trae imagen, nombre y marca. El costo solo se llena con DPH (su
+              precio público es el costo); en HBT el costo es el negociado y se
+              escribe a mano.
             </p>
+            {avisoCostoNuevo && (
+              <p className="text-[11px] text-amber-700 mt-1">{avisoCostoNuevo}</p>
+            )}
           </div>
 
           {error && (

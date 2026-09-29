@@ -767,6 +767,29 @@ export default function MueblesEditor({
     patchItemTotals(chapterId, itemId, updated);
   }
 
+  // "Aplicar precios de la web" ya hizo el POST: el back devuelve TODAS las
+  // líneas de la partida (con su ↗) y los totales recalculados.
+  function onHerrajesActualizados(
+    chapterId: string,
+    itemId: string,
+    lines: MuebleHerraje[],
+    updated: Partial<MuebleItem>
+  ) {
+    setChapters((prev) =>
+      prev.map((c) =>
+        c.id !== chapterId
+          ? c
+          : {
+              ...c,
+              items: c.items.map((i) =>
+                i.id === itemId ? { ...i, herrajes: lines } : i
+              ),
+            }
+      )
+    );
+    patchItemTotals(chapterId, itemId, updated);
+  }
+
   // Editar cantidad o sector de una línea de herraje. El back devuelve la línea
   // y el item recalculado.
   async function updateHerraje(
@@ -1373,6 +1396,9 @@ export default function MueblesEditor({
           onHerrajeAdded={(itemId, line, updated) =>
             onHerrajeAdded(ch.id, itemId, line, updated)
           }
+          onHerrajesActualizados={(itemId, lines, updated) =>
+            onHerrajesActualizados(ch.id, itemId, lines, updated)
+          }
           onUpdateHerraje={(itemId, herrajeId, patch) =>
             updateHerraje(ch.id, itemId, herrajeId, patch)
           }
@@ -1556,6 +1582,7 @@ function ChapterBlock({
   onActivateQuote,
   onUpdateHerrajePartida,
   onHerrajeAdded,
+  onHerrajesActualizados,
   onUpdateHerraje,
   onDeleteHerraje,
   onReorderHerrajes,
@@ -1607,6 +1634,11 @@ function ChapterBlock({
     line: MuebleHerraje,
     updated: Partial<MuebleItem>
   ) => void;
+  onHerrajesActualizados: (
+    itemId: string,
+    lines: MuebleHerraje[],
+    updated: Partial<MuebleItem>
+  ) => void;
   onUpdateHerraje: (
     itemId: string,
     herrajeId: string,
@@ -1644,6 +1676,9 @@ function ChapterBlock({
         onDelete={() => onDeleteItem(item.id)}
         onHerrajeAdded={(line, updated) =>
           onHerrajeAdded(item.id, line, updated)
+        }
+        onHerrajesActualizados={(lines, updated) =>
+          onHerrajesActualizados(item.id, lines, updated)
         }
         onUpdateHerraje={(herrajeId, patch) =>
           onUpdateHerraje(item.id, herrajeId, patch)
@@ -2514,6 +2549,7 @@ function HerrajePartidaBlock({
   onUpdate,
   onDelete,
   onHerrajeAdded,
+  onHerrajesActualizados,
   onUpdateHerraje,
   onDeleteHerraje,
   onReorderHerrajes,
@@ -2535,6 +2571,11 @@ function HerrajePartidaBlock({
   onDelete: () => void;
   onHerrajeAdded: (
     line: MuebleHerraje,
+    updated: Partial<MuebleItem>
+  ) => void;
+  // "Aplicar precios de la web": TODAS las líneas de la partida + totales.
+  onHerrajesActualizados: (
+    lines: MuebleHerraje[],
     updated: Partial<MuebleItem>
   ) => void;
   onUpdateHerraje: (
@@ -2622,6 +2663,69 @@ function HerrajePartidaBlock({
     }
     return { calzan, distintas, sinLeer };
   })();
+
+  // "Aplicar precios de la web" — POR GRUPO (pedido de MJ, 2026-09-29: "no
+  // por línea, sino por grupo de herrajes"). Un solo botón pasa TODAS las
+  // líneas distintas de la partida al precio de hoy. El back vuelve a leer la
+  // web y solo toca DPH; acá solo se decide cuáles mandar y se pide confirmar,
+  // porque cambia el costo y con él el precio al cliente de la partida.
+  const [aplicandoWeb, setAplicandoWeb] = useState(false);
+  const [avisoAplicar, setAvisoAplicar] = useState<string | null>(null);
+  const distintasWeb = preciosWeb
+    ? comparables.filter((h) => {
+        const p = preciosWeb[h.catalogId as string];
+        return p?.webCost != null && Math.abs(p.webCost - h.costNet) >= 1;
+      })
+    : [];
+
+  async function aplicarPreciosWeb() {
+    if (!preciosWeb || distintasWeb.length === 0) return;
+    // Diferencia de COSTO (sin margen): el precio al cliente lo recalcula el
+    // back con el margen de la partida, no se duplica esa cuenta acá.
+    const delta = distintasWeb.reduce(
+      (s, h) =>
+        s + ((preciosWeb[h.catalogId as string].webCost as number) - h.costNet) * h.quantity,
+      0
+    );
+    const n = distintasWeb.length;
+    const ok = confirm(
+      `¿Pasar ${n === 1 ? "1 herraje" : `${n} herrajes`} al precio de hoy en la web?\n\n` +
+        `El costo de la partida ${delta >= 0 ? "sube" : "baja"} ${formatCLP(Math.abs(delta))} ` +
+        `y el precio al cliente se recalcula con el margen.\n\n` +
+        `No cambia el catálogo ni las líneas que calzan, las HBT o las sin leer.`
+    );
+    if (!ok) return;
+    setAplicandoWeb(true);
+    setAvisoAplicar(null);
+    try {
+      const res = await fetch(
+        `/api/presupuestos/${budgetId}/muebles/items/${item.id}/herrajes/aplicar-web`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lineIds: distintasWeb.map((h) => h.id) }),
+        }
+      );
+      if (!res.ok) throw new Error(await res.text());
+      const data: {
+        lines: MuebleHerraje[];
+        item: Partial<MuebleItem>;
+        resumen: { aplicadas: number; sinLeer: number };
+      } = await res.json();
+      onHerrajesActualizados(data.lines, data.item);
+      // Si la web no respondió al aplicar, esa línea quedó igual: se dice.
+      if (data.resumen.sinLeer > 0) {
+        setAvisoAplicar(
+          `${data.resumen.sinLeer} no se pudo leer al aplicar y quedó igual.`
+        );
+      }
+    } catch (err) {
+      console.error("Error aplicando precios de la web:", err);
+      setAvisoAplicar("No se pudieron aplicar los precios de la web.");
+    } finally {
+      setAplicandoWeb(false);
+    }
+  }
 
   // Mismo grid que el resto de la tabla (item · partida · cantidad · total · ✕).
   const ROW_GRID =
@@ -2900,6 +3004,26 @@ function HerrajePartidaBlock({
               )}
               {errorWeb && !comparandoWeb && (
                 <span className="text-amber-700">{errorWeb}</span>
+              )}
+              {/* Aplicar por grupo: solo si hay distintas. Más oscuro que el
+                  resto de la fila porque ESTE sí cambia plata. */}
+              {distintasWeb.length > 0 && !comparandoWeb && (
+                <>
+                  <span className="text-gray-300">·</span>
+                  <button
+                    onClick={aplicarPreciosWeb}
+                    disabled={aplicandoWeb}
+                    className="text-gray-700 font-medium hover:text-gray-900 text-left disabled:cursor-wait"
+                    title="Pasa todas las líneas distintas al precio de hoy en la web. Pide confirmar antes."
+                  >
+                    {aplicandoWeb
+                      ? "Aplicando…"
+                      : "Aplicar precios de la web"}
+                  </button>
+                </>
+              )}
+              {avisoAplicar && !aplicandoWeb && (
+                <span className="text-amber-700">{avisoAplicar}</span>
               )}
             </>
           )}

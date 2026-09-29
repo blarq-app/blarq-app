@@ -9,6 +9,7 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 - **Pendiente 143**: cada línea de herraje de una partida lleva la ↗ al producto en la web del proveedor, igual que en artefactos. El link sale del catálogo por `catalogId` (`herrajeLinks.ts`); las líneas sin catálogo detrás no la muestran.
 - **"Comparar con la web"** en la partida: al lado del costo de cada línea DPH, "✓ web", el precio de hoy en ámbar si no calza, o "sin leer". Solo mira: no cambia ningún costo.
 - **Solo DPH se compara** (`PROVEEDORES_PRECIO_WEB`): HBT tiene precio negociado, no el público; DAPDUCASSE no se puede leer todavía. Los dos llevan flechita, no chequeo.
+- **Aplicar por grupo (2026-09-29)**: "Aplicar precios de la web" pasa todas las líneas distintas de la partida al precio de hoy, con confirmación. El server vuelve a leer la web y solo toca DPH; recalcula la partida (cambia el precio al cliente). No toca el catálogo.
 - Regresión: `scripts/test-herraje-proveedores.ts` (14 casos).
 
 ## 2026-09-25 — Descuento fijo al final del presupuesto de obra

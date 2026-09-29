@@ -44,9 +44,15 @@ type FilaCatalogo = {
  *
  * Mirar no cambia nada. Aplicar cambia el costo de las líneas marcadas y la
  * partida se recalcula con su margen — por eso en una cotización YA ENVIADA
- * (cualquier estado que no sea borrador) se puede comparar, pero no aplicar:
- * decisión de MJ, "no se deben tocar cotizaciones ya enviadas". El back lo
- * vuelve a chequear.
+ * (cualquier estado que no sea borrador) la cotización no se toca: decisión
+ * de MJ, "no se deben tocar cotizaciones ya enviadas". El back lo vuelve a
+ * chequear.
+ *
+ * Opción "También en el catálogo de herrajes" (MJ: "sí aplicar en el
+ * catálogo, dar la opción"): parte APAGADA, como los tildes de regla de
+ * proveedor — el catálogo cambia solo si MJ lo marca. En una enviada es lo
+ * único que se puede hacer ("Actualizar en el catálogo"): deja el precio de
+ * hoy para las próximas cotizaciones sin tocar la que ya vio el cliente.
  */
 export default function RevisarPreciosHerrajes({
   budgetId,
@@ -68,6 +74,10 @@ export default function RevisarPreciosHerrajes({
   const [porCatalogo, setPorCatalogo] = useState<Record<string, FilaCatalogo>>({});
   const [sel, setSel] = useState<Record<string, boolean>>({});
   const [applying, setApplying] = useState(false);
+  const [alCatalogo, setAlCatalogo] = useState(false);
+  // Confirmación cuando solo se actualizó el catálogo (la ventana queda
+  // abierta: en la partida no cambia nada que se vea).
+  const [hecho, setHecho] = useState<string | null>(null);
 
   // Las que se comparan (DPH con catálogo y link) y las que no, con motivo.
   const comparables = useMemo(
@@ -133,16 +143,25 @@ export default function RevisarPreciosHerrajes({
 
   const marcados = distintos.filter(({ h }) => sel[h.id]);
 
+  // En una enviada lo único posible es el catálogo.
+  const aCotizacion = !cotizacionEnviada;
+  const aCatalogo = cotizacionEnviada || alCatalogo;
+
   async function handleApply() {
-    if (marcados.length === 0 || cotizacionEnviada) return;
+    if (marcados.length === 0) return;
     setApplying(true);
+    setHecho(null);
     try {
       const res = await fetch(
         `/api/presupuestos/${budgetId}/muebles/items/${itemId}/herrajes/aplicar-web`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ lineIds: marcados.map(({ h }) => h.id) }),
+          body: JSON.stringify({
+            lineIds: marcados.map(({ h }) => h.id),
+            cotizacion: aCotizacion,
+            catalogo: aCatalogo,
+          }),
         }
       );
       const data = await res.json();
@@ -150,14 +169,24 @@ export default function RevisarPreciosHerrajes({
         alert(data.error || "No se pudieron aplicar los precios de la web.");
         return;
       }
-      onApplied(data.lines, data.item);
-      // Si la web no respondió justo al aplicar, esa línea quedó igual.
-      if (data.resumen?.sinLeer > 0) {
-        alert(
-          `${data.resumen.sinLeer} herraje no se pudo leer al aplicar y quedó con su costo de antes.`
-        );
+      const r: { lineas: number; catalogo: number; sinLeer: number } = data.resumen;
+      // Si la web no respondió justo al aplicar, ese herraje quedó igual.
+      const avisoSinLeer =
+        r.sinLeer > 0
+          ? ` ${r.sinLeer} no se pudo leer al aplicar y quedó igual.`
+          : "";
+      if (r.lineas > 0) onApplied(data.lines, data.item);
+      if (aCotizacion) {
+        if (avisoSinLeer) alert(avisoSinLeer.trim());
+        onClose();
+        return;
       }
-      onClose();
+      setHecho(
+        (r.catalogo > 0
+          ? `Listo: ${r.catalogo === 1 ? "1 herraje quedó" : `${r.catalogo} herrajes quedaron`} al día en el catálogo.`
+          : "El catálogo ya tenía esos precios.") + avisoSinLeer
+      );
+      setSel({});
     } finally {
       setApplying(false);
     }
@@ -191,8 +220,9 @@ export default function RevisarPreciosHerrajes({
           </p>
           {cotizacionEnviada && (
             <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-3">
-              Esta cotización ya se envió al cliente: se puede comparar, pero
-              sus precios no se cambian.
+              Esta cotización ya se envió al cliente: sus precios no se
+              cambian. Lo que marques se puede dejar al día en el catálogo de
+              herrajes, para las próximas cotizaciones.
             </div>
           )}
         </div>
@@ -235,9 +265,7 @@ export default function RevisarPreciosHerrajes({
               {distintos.length > 0 && (
                 <div className="mb-5">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-2">
-                    {cotizacionEnviada
-                      ? "Distintos"
-                      : "Distintos — marcá qué aplicar"}
+                    Distintos — marcá qué aplicar
                   </div>
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
                     <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-3 px-3 py-2 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
@@ -283,21 +311,17 @@ export default function RevisarPreciosHerrajes({
                               {[detalle(h), h.supplier].filter(Boolean).join(" · ")}
                             </div>
                           </div>
-                          {cotizacionEnviada ? (
-                            precio
-                          ) : (
-                            <label className="flex items-start gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={!!sel[h.id]}
-                                onChange={() =>
-                                  setSel((p) => ({ ...p, [h.id]: !p[h.id] }))
-                                }
-                                className="accent-gray-900 mt-0.5"
-                              />
-                              {precio}
-                            </label>
-                          )}
+                          <label className="flex items-start gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!sel[h.id]}
+                              onChange={() =>
+                                setSel((p) => ({ ...p, [h.id]: !p[h.id] }))
+                              }
+                              className="accent-gray-900 mt-0.5"
+                            />
+                            {precio}
+                          </label>
                         </div>
                       );
                     })}
@@ -305,8 +329,8 @@ export default function RevisarPreciosHerrajes({
                   {!cotizacionEnviada && (
                     <p className="text-[10px] text-gray-500 mt-1.5">
                       Aplicar cambia el costo de esta cotización y la partida se
-                      recalcula con su margen. El catálogo de herrajes no se
-                      toca.
+                      recalcula con su margen. El catálogo de herrajes cambia
+                      solo si marcás la opción de abajo.
                     </p>
                   )}
                 </div>
@@ -394,26 +418,47 @@ export default function RevisarPreciosHerrajes({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between gap-4">
           <span className="text-xs text-gray-500">
-            {!loading && !cotizacionEnviada && distintos.length > 0
-              ? `${marcados.length} de ${distintos.length} marcados`
-              : ""}
+            {hecho ? (
+              <span className="text-green-700">{hecho}</span>
+            ) : !loading && distintos.length > 0 ? (
+              `${marcados.length} de ${distintos.length} marcados`
+            ) : (
+              ""
+            )}
           </span>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3">
+            {/* La opción del catálogo, apagada de entrada. En una enviada no
+                hace falta: el catálogo es lo único que se puede tocar. */}
+            {!cotizacionEnviada && distintos.length > 0 && (
+              <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={alCatalogo}
+                  onChange={(e) => setAlCatalogo(e.target.checked)}
+                  className="accent-gray-900"
+                />
+                También en el catálogo de herrajes
+              </label>
+            )}
             <button
               onClick={onClose}
               className="text-xs text-gray-600 px-3 py-2 hover:text-gray-900"
             >
               Cerrar
             </button>
-            {!cotizacionEnviada && (
+            {distintos.length > 0 && (
               <button
                 onClick={handleApply}
                 disabled={loading || applying || marcados.length === 0}
                 className="text-xs bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
               >
-                {applying ? "Aplicando…" : "Aplicar cambios marcados"}
+                {applying
+                  ? "Aplicando…"
+                  : cotizacionEnviada
+                    ? "Actualizar en el catálogo"
+                    : "Aplicar cambios marcados"}
               </button>
             )}
           </div>

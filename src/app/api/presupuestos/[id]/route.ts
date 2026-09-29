@@ -2,8 +2,13 @@ import { computeObraBudgetTotals, validateObraDiscount } from "@/lib/projects/me
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { buildBudgetSnapshot } from "@/lib/catalog/budgetSnapshot";
+import { copiarFotosDeVersion } from "@/lib/fotos/guardarFoto";
 import { requireSession } from "@/lib/apiAuth";
 import { parseCondiciones } from "@/lib/presupuesto/condiciones";
+
+// "Marcar como enviada" copia las fotos de artefactos que sigan siendo links de
+// tienda (cajón de fotos): con tiendas lentas puede tardar unos segundos.
+export const maxDuration = 60;
 
 // Actualizar presupuesto (observaciones, GG%, utilidad%, estado)
 export async function PUT(
@@ -93,6 +98,11 @@ export async function PUT(
     // El deslinkado del catálogo ya lo da el status ≠ borrador (el sync solo
     // toca borradores) — la foto es el respaldo, no el candado.
     if (data.status === "enviado" || data.status === "aprobado") {
+      // Antes de la foto de lo enviado, toda foto de artefacto que siga siendo
+      // un link de tienda pasa a su copia guardada (cajón de fotos,
+      // 2026-09-27). Así lo que vio el cliente no desaparece cuando MK cambia
+      // sus fotos, ni en la cotización ni en "Volver a lo enviado".
+      if (current.type === "artefactos") await copiarFotosDeVersion(id);
       const necesitaFoto =
         data.status === "enviado" ||
         !(await prisma.budgetVersion.findUnique({

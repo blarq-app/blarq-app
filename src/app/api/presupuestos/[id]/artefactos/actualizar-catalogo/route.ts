@@ -16,6 +16,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
+import { copiasYaGuardadas } from "@/lib/fotos/guardarFoto";
 
 export const runtime = "nodejs";
 
@@ -64,6 +65,16 @@ export async function GET(
     });
     const catById = new Map(cats.map((c) => [c.id, c]));
 
+    // Cajón de fotos (2026-09-27): un link de tienda y la copia guardada de esa
+    // misma foto son LA MISMA foto aunque el texto sea distinto. Mientras
+    // convivan (líneas o productos todavía no copiados), se comparan por la
+    // copia a la que llevan, para no ofrecer "actualizar" una foto idéntica.
+    const copias = await copiasYaGuardadas([
+      ...linked.map((i) => i.imageUrl),
+      ...cats.map((c) => c.imageUrl),
+    ]);
+    const fotoReal = (u: string | null) => (u && copias.get(u)) || u;
+
     // Cuántos ítems quedaron linkeados a un catalogId que ya no existe
     // (producto borrado del catálogo) — no se pueden actualizar.
     let skippedCatalogGone = 0;
@@ -98,7 +109,8 @@ export async function GET(
             clientPrice: catClient,
             listPrice: cat.listPrice,
             discountPercent: catDiscount,
-            imageUrl: cat.imageUrl,
+            imageUrl:
+              fotoReal(cat.imageUrl) === fotoReal(it.imageUrl) ? it.imageUrl : cat.imageUrl,
             referenceLink: cat.referenceLink,
           },
         },

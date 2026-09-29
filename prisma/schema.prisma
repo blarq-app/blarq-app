@@ -601,6 +601,40 @@ model KnownStore {
   updatedAt DateTime @updatedAt
 }
 
+// ==================== CAJÓN DE FOTOS ====================
+//
+// Copia de las fotos de artefactos y herrajes, guardada en la app (2026-09-27).
+//
+// Por qué: hasta ahora `imageUrl` guardaba el LINK a la foto en el servidor de
+// la tienda. MK vuelve a subir sus fotos cada uno o dos meses, el link viejo da
+// 404 y la foto desaparece de la cotización y del PDF (MJ: "de repente se me
+// desaparecían las fotos en una cotización"). Al 2026-09-27 había 59 líneas con
+// la foto muerta, casi todas en cotizaciones enviadas o aprobadas.
+//
+// Cómo funciona: cuando una foto entra a la app se baja una vez, se achica a
+// 600 px (JPEG, ~18 KB) y se guarda acá. La línea, el catálogo y el herraje
+// pasan a guardar solo un link corto a esta copia (`/api/fotos/<id>`), así que
+// ninguna pantalla se pone más pesada: los bytes viven solo en esta tabla y no
+// se cargan en ninguna query de UI (ADR 2026-06-12, no cargar bytes pesados).
+//
+// Una sola copia por foto distinta (`hash`): el mismo WC en el catálogo y en
+// diez cotizaciones es una sola fila. `sourceUrls` son los links de tienda que
+// esta copia reemplaza — incluidos links ya muertos cuya foto se recuperó —,
+// para no volver a bajarla y para reconocer "es la misma foto" al comparar con
+// la tienda. La foto de una fila NUNCA cambia: una foto nueva es otra fila.
+model FotoGuardada {
+  id         String   @id @default(cuid())
+  hash       String   @unique // sha256 de los bytes guardados
+  sourceUrls String[] @default([])
+  mime       String   // "image/jpeg"
+  width      Int
+  height     Int
+  bytes      Bytes
+  createdAt  DateTime @default(now())
+
+  @@index([sourceUrls], type: Gin)
+}
+
 model MuebleDetail {
   id        String  @id @default(cuid())
   itemId    String

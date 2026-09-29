@@ -14,6 +14,10 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { requireSession } from "@/lib/apiAuth";
+import { guardarCopiaDeFoto } from "@/lib/fotos/guardarFoto";
+
+// El alta con foto la baja y la guarda como copia (cajón de fotos).
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   const gate = await requireSession();
@@ -69,6 +73,9 @@ export async function POST(request: NextRequest) {
     });
     const nextSortOrder = (last?.sortOrder ?? 0) + 1;
 
+    // Foto como copia en la app, no como link a la tienda (cajón de fotos,
+    // 2026-09-27; MJ pidió lo mismo para los herrajes).
+    const imageUrl = await guardarCopiaDeFoto(data.imageUrl ?? null);
     const item = await prisma.herrajeCatalog.create({
       data: {
         name: data.name,
@@ -81,7 +88,7 @@ export async function POST(request: NextRequest) {
         brand: data.brand ?? null,
         sku: data.sku ?? null,
         referenceLink: data.referenceLink ?? null,
-        imageUrl: data.imageUrl ?? null,
+        imageUrl,
         costNet: data.costNet ?? 0,
         clientPrice: data.clientPrice ?? null,
         sortOrder: nextSortOrder,

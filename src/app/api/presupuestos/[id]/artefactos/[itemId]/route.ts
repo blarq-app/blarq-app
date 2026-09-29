@@ -2,6 +2,11 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
 import { editoCampoDeCatalogo, editoElDescuento } from "@/lib/catalog/syncArtefactos";
+import { guardarCopiaDeFoto } from "@/lib/fotos/guardarFoto";
+
+// Guardar una foto nueva la baja de la tienda y la guarda como copia (cajón de
+// fotos): puede tardar unos segundos si la tienda está lenta.
+export const maxDuration = 60;
 
 export async function PUT(
   request: NextRequest,
@@ -13,6 +18,13 @@ export async function PUT(
   try {
     const { id: budgetVersionId, itemId } = await params;
     const data = await request.json();
+
+    // La foto se guarda como COPIA en la app, no como link a la tienda (cajón
+    // de fotos, 2026-09-27): el link de MK muere cuando MK cambia sus fotos.
+    // Se convierte acá arriba para que la línea y sus gemelas (las dos
+    // sincronizaciones de abajo) reciban el mismo link a la copia. Si la copia
+    // no se puede hacer, queda el link como antes.
+    if (data.imageUrl !== undefined) data.imageUrl = await guardarCopiaDeFoto(data.imageUrl);
 
     // Convención: discountPercent es decimal (0..1) y clientPrice es
     // unitario (no incluye qty). El editor manda valores ya calculados.

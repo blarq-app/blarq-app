@@ -44,6 +44,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { leerPrecioWeb } from "@/lib/catalog/leerPrecioWeb";
 import { leerFotoWeb, fotoSigueViva } from "@/lib/catalog/leerFotoWeb";
 import { requireSession } from "@/lib/apiAuth";
+import { anotarOrigen, guardarCopiaDeFoto } from "@/lib/fotos/guardarFoto";
+import { esFotoGuardada, idDeFotoGuardada } from "@/lib/fotos/linkFoto";
 
 // Vercel: el fetch a la web puede tardar; subimos el límite de la función
 // para que no se corte (default 10s) mientras consulta varios productos.
@@ -98,20 +100,40 @@ interface RevisionRow {
  * Devuelve la foto nueva si la repuso, o null si no hizo falta (o si la tienda
  * tampoco publica una que cargue: en ese caso se deja la guardada como está,
  * para que quede el rastro de que alguna vez tuvo).
+ *
+ * Cajón de fotos (2026-09-27): la foto repuesta se guarda como COPIA, y de paso
+ * una foto que todavía es un link de tienda (y carga) se copia, para que no se
+ * pierda la próxima vez que la tienda cambie sus fotos. Eso último no cuenta
+ * como "foto repuesta": en pantalla no cambia nada.
  */
 async function repararFoto(it: {
   id: string;
   imageUrl: string | null;
   referenceLink: string | null;
 }): Promise<string | null> {
+  // Ya guardada en la app: no depende de la tienda.
+  if (esFotoGuardada(it.imageUrl)) return null;
+  if (it.imageUrl && (await fotoSigueViva(it.imageUrl))) {
+    const copia = await guardarCopiaDeFoto(it.imageUrl);
+    if (copia !== it.imageUrl) {
+      await prisma.artefactoCatalog
+        .updateMany({ where: { id: it.id, imageUrl: it.imageUrl }, data: { imageUrl: copia } })
+        .catch(() => {});
+    }
+    return null;
+  }
   if (!it.referenceLink) return null;
-  if (await fotoSigueViva(it.imageUrl)) return null;
   const nueva = await leerFotoWeb(it.referenceLink);
   if (!nueva || nueva === it.imageUrl) return null;
+  const guardada = await guardarCopiaDeFoto(nueva);
+  // El link muerto queda anotado como la misma foto que la copia recuperada:
+  // una pantalla abierta desde antes, que todavía lo tiene, no pisa la copia.
+  const idCopia = idDeFotoGuardada(guardada);
+  if (idCopia && it.imageUrl) await anotarOrigen(idCopia, it.imageUrl).catch(() => {});
   await prisma.artefactoCatalog
-    .update({ where: { id: it.id }, data: { imageUrl: nueva } })
+    .update({ where: { id: it.id }, data: { imageUrl: guardada } })
     .catch(() => {});
-  return nueva;
+  return guardada;
 }
 
 function total(listPrice: number, discount: number): number {

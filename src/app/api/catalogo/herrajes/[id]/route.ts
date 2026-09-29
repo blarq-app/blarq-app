@@ -10,6 +10,10 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
+import { guardarCopiaDeFoto } from "@/lib/fotos/guardarFoto";
+
+// Cambiar la foto la baja y la guarda como copia (cajón de fotos).
+export const maxDuration = 60;
 
 export async function PUT(
   request: NextRequest,
@@ -21,6 +25,8 @@ export async function PUT(
   try {
     const { id } = await params;
     const data = await request.json();
+    // Foto como copia en la app (cajón de fotos, 2026-09-27).
+    if (data.imageUrl !== undefined) data.imageUrl = await guardarCopiaDeFoto(data.imageUrl);
 
     // Si llega costNet nuevo, refrescamos lastPriceCheck.
     const updateLastCheck = data.costNet !== undefined && data.costNet !== null;

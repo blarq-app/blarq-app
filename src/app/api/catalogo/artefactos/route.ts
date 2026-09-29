@@ -14,6 +14,10 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { requireSession } from "@/lib/apiAuth";
+import { guardarCopiaDeFoto } from "@/lib/fotos/guardarFoto";
+
+// El alta con foto la baja y la guarda como copia (cajón de fotos).
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   const gate = await requireSession();
@@ -83,6 +87,9 @@ export async function POST(request: NextRequest) {
       typeof data.subgroup === "string" && data.subgroup.trim()
         ? data.subgroup.trim()
         : autoSubgroup;
+    // Foto como copia en la app, no como link a la tienda (cajón de fotos,
+    // 2026-09-27): el link muere cuando la tienda cambia sus fotos.
+    const imageUrl = await guardarCopiaDeFoto(data.imageUrl ?? null);
     const item = await prisma.artefactoCatalog.create({
       data: {
         name: data.name,
@@ -95,7 +102,7 @@ export async function POST(request: NextRequest) {
         subgroup,
         supplier: data.supplier ?? null,
         referenceLink: data.referenceLink ?? null,
-        imageUrl: data.imageUrl ?? null,
+        imageUrl,
         listPrice: data.listPrice ?? 0,
         // Lo que paga el cliente = listPrice × (1 − discountPercent). No hay un
         // campo aparte: el `clientPrice` del catálogo se sacó en 2026-07-31

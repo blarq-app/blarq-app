@@ -138,6 +138,7 @@ lib/
 - `MuebleChapterTemplate` + `MuebleItemTemplate` + `MuebleItemTemplateDetail` — **plantillas de muebles** de MJ (desde 2026-09-11): un capítulo tipo con sus partidas tipo y componentes (materialidad, descripción, tipo, margen y proveedor de referencia), **sin precios ni cantidades**. Se guardan desde una cotización ("Guardar como plantilla") y se usan al agregar ("desde plantilla"). `MuebleHerraje.supplier` y `HerrajeCatalog.supplier` son texto libre: las pestañas de proveedor se arman con DPH, HBT y los que existan (`src/lib/presupuesto/herrajeProveedores.ts`).
 - `KnownStore` — **tiendas conocidas** (desde 2026-09-21, pendiente 181): las tiendas que la app aprende sola cuando MJ extrae el primer producto de una tienda nueva (`host`, `kind` = shopify | vtex | generico | cdn, `sampleUrl`). Junto con las de arranque escritas en `src/lib/catalog/tiendas.ts`, es la **única lista de tiendas**: la mira el proxy de fotos (`api/catalogo/img-proxy`) y los lectores de precio/foto (`leerPrecioWeb`, `leerFotoWeb`). Al extraer, `aprenderTienda` prueba la API de Shopify y la de VTEX con ese mismo producto y anota la plataforma; `permitirHostDeFoto` anota el CDN del que viene la foto. Antes había dos listas en el código que se editaban a mano por cada tienda nueva.
 - `ArtefactoItem` — Artefactos en estructura plana.
+- `FotoGuardada` — **cajón de fotos** (desde 2026-09-27): copia de cada foto de artefactos y herrajes (600 px, JPEG, una fila por foto distinta, `hash` único). `imageUrl` de `ArtefactoItem`, `ArtefactoCatalog` y `HerrajeCatalog` guarda `/api/fotos/<id>` en vez del link a la tienda, que moría cuando MK cambiaba sus fotos. `sourceUrls` = links de tienda que esa copia reemplaza (incluidos muertos recuperados). Los `bytes` NUNCA se cargan en queries de UI: solo `api/fotos/[id]` y el PDF (`incrustarFotosGuardadas`). Entrada única: `guardarCopiaDeFoto` (`src/lib/fotos/guardarFoto.ts`). ADR `2026-09-27-fotos-copia-en-la-app.md`.
 - `PartidaCatalog` + `PartidaComponent` — catálogo global de partidas (206 al día) con desglose por tipo de concepto: `material | labor | margin | tool | loss | subcontract`.
 - `MaterialCatalog` + `MaterialPriceOffer` + `MaterialPriceHistory`.
 
@@ -195,6 +196,7 @@ Los ADRs detallados viven en [`/docs/decisions/`](decisions/). Resumen de las ac
 | Migración SQLite → Postgres + cutover Vercel. | (pendiente — referencia: `docs/MIGRATION_POSTGRES.md`) |
 | `metrics.ts` única fuente de verdad. | (pendiente — referencia: commit `fb377b1`) |
 | No cargar `pdfContent` (Bytes) en queries de UI. | `2026-06-12-no-cargar-bytes-pesados-en-ui.md` |
+| Fotos de artefactos y herrajes como copia en la app (`FotoGuardada`), no como link a la tienda. | `2026-09-27-fotos-copia-en-la-app.md` |
 | Salida de Maxxa, mediano plazo. | (pendiente, decisión de proveedor en standby) |
 
 Detalles operativos del cutover Postgres histórico: [MIGRATION_POSTGRES.md](MIGRATION_POSTGRES.md). Reviews críticos del estado pasado: [REVIEW_navegacion_2026-04-27.md](REVIEW_navegacion_2026-04-27.md), [REVIEW_autorevision_2026-04-29.md](REVIEW_autorevision_2026-04-29.md).

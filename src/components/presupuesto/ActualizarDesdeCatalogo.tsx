@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { formatCLP } from "@/lib/utils";
 import { roomLabel } from "@/lib/presupuesto/ambientes";
 
@@ -75,13 +75,21 @@ function imageActionable(d: CatalogDiff): boolean {
  * muestra un diff de costo interno, precio a cliente y foto. MJ marca qué
  * bajar. Por defecto viene pre-marcado el COSTO (lo seguro de actualizar);
  * el precio a cliente queda sin marcar para no pisar un precio negociado.
+ *
+ * En una cotización YA ENVIADA (cualquier estado que no sea borrador) compara
+ * igual pero sin tildes ni botón de aplicar: "no se deben tocar cotizaciones
+ * ya enviadas" (MJ, 2026-09-29). Tampoco el costo interno — en una enviada
+ * suele ser el real del proveedor, y el del catálogo lo pisaría. El POST lo
+ * vuelve a chequear (409).
  */
 export default function ActualizarDesdeCatalogo({
   budgetId,
+  cotizacionEnviada,
   onApply,
   onClose,
 }: {
   budgetId: string;
+  cotizacionEnviada: boolean;
   onApply: (patches: CatalogApplyPatch[]) => Promise<void>;
   onClose: () => void;
 }) {
@@ -160,7 +168,7 @@ export default function ActualizarDesdeCatalogo({
   }
 
   async function handleApply() {
-    if (!result) return;
+    if (!result || cotizacionEnviada) return;
     const patches: CatalogApplyPatch[] = [];
     for (const { d } of rows) {
       const s = sel[d.itemId];
@@ -217,9 +225,16 @@ export default function ActualizarDesdeCatalogo({
             Comparar con mi catálogo
           </h2>
           <p className="text-xs text-gray-500 mt-1">
-            Compara cada artefacto con su producto en el catálogo BLARQ. El
-            costo viene pre-marcado; el precio a cliente y la foto los marcás vos.
+            Compara cada artefacto con su producto en el catálogo BLARQ.
+            {!cotizacionEnviada &&
+              " El costo viene pre-marcado; el precio a cliente y la foto los marcás vos."}
           </p>
+          {cotizacionEnviada && (
+            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-3">
+              Esta cotización ya se envió al cliente: se puede comparar, pero
+              sus precios no se cambian.
+            </div>
+          )}
         </div>
 
         {/* Cuerpo */}
@@ -245,7 +260,8 @@ export default function ActualizarDesdeCatalogo({
                     <div>
                       {result.skippedNoCatalog} artefacto
                       {result.skippedNoCatalog === 1 ? "" : "s"} sin link al
-                      catálogo — no se pueden actualizar desde acá.
+                      catálogo — no se pueden{" "}
+                      {cotizacionEnviada ? "comparar" : "actualizar"} desde acá.
                     </div>
                   )}
                   {result.skippedCatalogGone > 0 && (
@@ -299,13 +315,11 @@ export default function ActualizarDesdeCatalogo({
                         {/* Costo */}
                         <div>
                           {cost ? (
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={s.cost}
-                                onChange={() => toggle(d.itemId, "cost")}
-                                className="accent-gray-900"
-                              />
+                            <Marcable
+                              activo={!cotizacionEnviada}
+                              checked={s.cost}
+                              onToggle={() => toggle(d.itemId, "cost")}
+                            >
                               <span className="tabular-nums text-gray-400 line-through">
                                 {d.current.realCostBlarq != null
                                   ? formatCLP(d.current.realCostBlarq)
@@ -315,7 +329,7 @@ export default function ActualizarDesdeCatalogo({
                               <span className="tabular-nums font-semibold text-gray-900">
                                 {formatCLP(d.catalog.realCostBlarq ?? 0)}
                               </span>
-                            </label>
+                            </Marcable>
                           ) : (
                             <span className="text-gray-400 tabular-nums">
                               {d.current.realCostBlarq != null
@@ -329,13 +343,11 @@ export default function ActualizarDesdeCatalogo({
                         {/* Precio cliente */}
                         <div>
                           {price ? (
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={s.price}
-                                onChange={() => toggle(d.itemId, "price")}
-                                className="accent-gray-900"
-                              />
+                            <Marcable
+                              activo={!cotizacionEnviada}
+                              checked={s.price}
+                              onToggle={() => toggle(d.itemId, "price")}
+                            >
                               <span className="tabular-nums text-gray-400 line-through">
                                 {formatCLP(d.current.clientPrice ?? 0)}
                               </span>
@@ -350,7 +362,7 @@ export default function ActualizarDesdeCatalogo({
                               >
                                 {formatCLP(d.catalog.clientPrice ?? 0)}
                               </span>
-                            </label>
+                            </Marcable>
                           ) : (
                             <span className="text-gray-400 tabular-nums">
                               {formatCLP(d.current.clientPrice ?? 0)}{" "}
@@ -362,13 +374,11 @@ export default function ActualizarDesdeCatalogo({
                         {/* Foto */}
                         <div>
                           {image && d.catalog.imageUrl ? (
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={s.image}
-                                onChange={() => toggle(d.itemId, "image")}
-                                className="accent-gray-900"
-                              />
+                            <Marcable
+                              activo={!cotizacionEnviada}
+                              checked={s.image}
+                              onToggle={() => toggle(d.itemId, "image")}
+                            >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={d.catalog.imageUrl}
@@ -376,9 +386,15 @@ export default function ActualizarDesdeCatalogo({
                                 className="w-9 h-9 object-contain border border-gray-200 rounded bg-white"
                               />
                               <span className="text-[10px] text-gray-500">
-                                {d.current.imageUrl ? "actualizar" : "agregar"}
+                                {cotizacionEnviada
+                                  ? d.current.imageUrl
+                                    ? "otra en el catálogo"
+                                    : "sin foto acá"
+                                  : d.current.imageUrl
+                                    ? "actualizar"
+                                    : "agregar"}
                               </span>
-                            </label>
+                            </Marcable>
                           ) : (
                             <span className="text-gray-400 text-[10px]">
                               {d.current.imageUrl ? "sin cambio" : "—"}
@@ -397,7 +413,7 @@ export default function ActualizarDesdeCatalogo({
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
           <span className="text-xs text-gray-500">
-            {!loading && result
+            {!loading && result && !cotizacionEnviada
               ? `${selectedCount} de ${actionableCount} con cambios marcados`
               : ""}
           </span>
@@ -408,16 +424,47 @@ export default function ActualizarDesdeCatalogo({
             >
               Cerrar
             </button>
-            <button
-              onClick={handleApply}
-              disabled={loading || applying || selectedCount === 0}
-              className="text-xs bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
-            >
-              {applying ? "Aplicando…" : "Aplicar cambios marcados"}
-            </button>
+            {!cotizacionEnviada && (
+              <button
+                onClick={handleApply}
+                disabled={loading || applying || selectedCount === 0}
+                className="text-xs bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
+              >
+                {applying ? "Aplicando…" : "Aplicar cambios marcados"}
+              </button>
+            )}
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Un valor del catálogo con su tilde para bajarlo — o, en una cotización ya
+ * enviada, el mismo valor sin tilde: se ve la diferencia pero no se aplica.
+ */
+function Marcable({
+  activo,
+  checked,
+  onToggle,
+  children,
+}: {
+  activo: boolean;
+  checked: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  if (!activo) return <div className="flex items-center gap-2">{children}</div>;
+  return (
+    <label className="flex items-center gap-2 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onToggle}
+        className="accent-gray-900"
+      />
+      {children}
+    </label>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { formatCLP } from "@/lib/utils";
 import { roomLabel } from "@/lib/presupuesto/ambientes";
 import { esLaMismaImagen } from "@/lib/catalog/mismaImagen";
@@ -96,13 +96,22 @@ function pct(d: number): string {
  * lista de $229.840), la comparación daba "coincide" y el precio nuevo era
  * invisible. Ahora se compara el precio COMPLETO — lista, descuento y lo que
  * termina pagando el cliente — y al aplicar bajan los tres.
+ *
+ * ── Cotización ya enviada (2026-09-29) ─────────────────────────────────────
+ * "No se deben tocar cotizaciones ya enviadas" (MJ). En cualquier estado que
+ * no sea borrador el modal compara igual —mismos tres grupos, mismo antes y
+ * después— pero sin tildes ni botón de aplicar, con un aviso arriba. El PUT
+ * por-ítem lo vuelve a chequear (409). Mismo criterio que herrajes
+ * (RevisarPreciosHerrajes).
  */
 export default function RevisarPreciosArtefactos({
   budgetId,
+  cotizacionEnviada,
   onApply,
   onClose,
 }: {
   budgetId: string;
+  cotizacionEnviada: boolean;
   onApply: (patches: ArtefactoPricePatch[]) => Promise<void>;
   onClose: () => void;
 }) {
@@ -194,7 +203,7 @@ export default function RevisarPreciosArtefactos({
   }
 
   async function handleApply() {
-    if (!result) return;
+    if (!result || cotizacionEnviada) return;
     const patches: ArtefactoPricePatch[] = [];
     for (const { d } of distintos) {
       const s = sel[d.itemId];
@@ -248,9 +257,16 @@ export default function RevisarPreciosArtefactos({
           </h2>
           <p className="text-xs text-gray-500 mt-1">
             Entra al link de cada artefacto y compara contra el precio de hoy —
-            lista, descuento y lo que paga el cliente. Mirar no cambia nada: se
-            aplica solo lo que marques.
+            lista, descuento y lo que paga el cliente.
+            {!cotizacionEnviada &&
+              " Mirar no cambia nada: se aplica solo lo que marques."}
           </p>
+          {cotizacionEnviada && (
+            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-3">
+              Esta cotización ya se envió al cliente: se puede comparar, pero
+              sus precios no se cambian.
+            </div>
+          )}
         </div>
 
         {/* Cuerpo */}
@@ -304,7 +320,7 @@ export default function RevisarPreciosArtefactos({
               {distintos.length > 0 && (
                 <div className="mb-5">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-2">
-                    Distintos — marcá qué aplicar
+                    {cotizacionEnviada ? "Distintos" : "Distintos — marcá qué aplicar"}
                   </div>
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
                     <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)_minmax(0,0.8fr)] gap-3 px-3 py-2 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
@@ -338,13 +354,12 @@ export default function RevisarPreciosArtefactos({
                           <div>
                             {priceChanged ? (
                               <>
-                                <label className="flex items-start gap-2 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={s.price}
-                                    onChange={() => toggle(d.itemId, "price")}
-                                    className="accent-gray-900 mt-0.5"
-                                  />
+                                <Marcable
+                                  activo={!cotizacionEnviada}
+                                  checked={s.price}
+                                  onToggle={() => toggle(d.itemId, "price")}
+                                  alinear="start"
+                                >
                                   <span className="min-w-0">
                                     {/* Antes */}
                                     <span className="flex flex-wrap items-baseline gap-x-1.5 text-gray-400">
@@ -387,15 +402,15 @@ export default function RevisarPreciosArtefactos({
                                       )}
                                     </span>
                                   </span>
-                                </label>
-                                {!f.discountKnown && (
+                                </Marcable>
+                                {!f.discountKnown && !cotizacionEnviada && (
                                   <div className="text-[10px] text-gray-500 mt-1 pl-6">
                                     Esta tienda no publica el descuento: se
                                     actualiza solo la lista y se conserva el{" "}
                                     {pct(d.currentDiscount)} guardado.
                                   </div>
                                 )}
-                                {d.priceOverridden ? (
+                                {cotizacionEnviada ? null : d.priceOverridden ? (
                                   <div className="text-[10px] text-amber-700 mt-1 pl-6">
                                     Este precio no sigue al catálogo — marcalo
                                     si querés el de la tienda
@@ -420,13 +435,11 @@ export default function RevisarPreciosArtefactos({
                           {/* Imagen */}
                           <div>
                             {imageActionable && f.imageUrl ? (
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={s.image}
-                                  onChange={() => toggle(d.itemId, "image")}
-                                  className="accent-gray-900"
-                                />
+                              <Marcable
+                                activo={!cotizacionEnviada}
+                                checked={s.image}
+                                onToggle={() => toggle(d.itemId, "image")}
+                              >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src={f.imageUrl}
@@ -434,9 +447,15 @@ export default function RevisarPreciosArtefactos({
                                   className="w-9 h-9 object-contain border border-gray-200 rounded bg-white"
                                 />
                                 <span className="text-[10px] text-gray-500">
-                                  {d.currentImageUrl ? "actualizar" : "agregar"}
+                                  {cotizacionEnviada
+                                    ? d.currentImageUrl
+                                      ? "otra en la web"
+                                      : "sin foto acá"
+                                    : d.currentImageUrl
+                                      ? "actualizar"
+                                      : "agregar"}
                                 </span>
-                              </label>
+                              </Marcable>
                             ) : (
                               <span className="text-gray-400 text-[10px]">
                                 {d.currentImageUrl ? "sin cambio" : "—"}
@@ -447,10 +466,12 @@ export default function RevisarPreciosArtefactos({
                       );
                     })}
                   </div>
-                  <p className="text-[10px] text-gray-500 mt-1.5">
-                    Lo que apliques sigue conectado a tu catálogo: solo se
-                    mueve si después cambiás el precio de ese producto allá.
-                  </p>
+                  {!cotizacionEnviada && (
+                    <p className="text-[10px] text-gray-500 mt-1.5">
+                      Lo que apliques sigue conectado a tu catálogo: solo se
+                      mueve si después cambiás el precio de ese producto allá.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -534,7 +555,7 @@ export default function RevisarPreciosArtefactos({
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
           <span className="text-xs text-gray-500">
-            {!loading && result
+            {!loading && result && !cotizacionEnviada
               ? `${selectedCount} de ${distintos.length} con cambios marcados`
               : ""}
           </span>
@@ -545,17 +566,51 @@ export default function RevisarPreciosArtefactos({
             >
               Cerrar
             </button>
-            <button
-              onClick={handleApply}
-              disabled={loading || applying || selectedCount === 0}
-              className="text-xs bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
-            >
-              {applying ? "Aplicando…" : "Aplicar cambios marcados"}
-            </button>
+            {!cotizacionEnviada && (
+              <button
+                onClick={handleApply}
+                disabled={loading || applying || selectedCount === 0}
+                className="text-xs bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
+              >
+                {applying ? "Aplicando…" : "Aplicar cambios marcados"}
+              </button>
+            )}
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Un valor de la tienda con su tilde para aplicarlo — o, en una cotización ya
+ * enviada, el mismo valor sin tilde: se ve la diferencia pero no se aplica.
+ */
+function Marcable({
+  activo,
+  checked,
+  onToggle,
+  alinear = "center",
+  children,
+}: {
+  activo: boolean;
+  checked: boolean;
+  onToggle: () => void;
+  alinear?: "start" | "center";
+  children: ReactNode;
+}) {
+  const fila = `flex gap-2 ${alinear === "start" ? "items-start" : "items-center"}`;
+  if (!activo) return <div className={fila}>{children}</div>;
+  return (
+    <label className={`${fila} cursor-pointer`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onToggle}
+        className={`accent-gray-900 ${alinear === "start" ? "mt-0.5" : ""}`}
+      />
+      {children}
+    </label>
   );
 }
 

@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-09-29 — Artefactos: en una cotización ya enviada, las ventanas de comparar solo comparan
+
+- Regla de MJ: "no se deben tocar cotizaciones ya enviadas". Lo automático ya la cumplía (el catálogo solo baja a borradores); lo manual no: "Aplicar" en **Comparar con la tienda web** y en **Comparar con mi catálogo** cambiaba precios, costo y foto de enviadas, aprobadas y rechazadas.
+- En cualquier estado que no sea borrador las dos ventanas comparan igual, sin tildes ni botón, con aviso ámbar arriba. El servidor también lo bloquea (409): `actualizar-catalogo` (POST) y el PUT por línea cuando viene del modal (`desdeLaTienda`). Tipear en la línea sigue permitido en todos los estados (bloquearlo es otra decisión).
+- Mismo criterio que herrajes (pendiente 143). Regresión: `scripts/test-enviada-solo-compara.ts` (24 casos); `test-186-despegue.ts` sigue 37/37.
+
 ## 2026-09-29 — Las fotos de artefactos y herrajes se guardan como copia en la app (PR #461, en prod)
 
 - Antes se guardaba el link a la foto de la tienda; cuando MK cambiaba sus fotos el link moría y la foto desaparecía de la cotización y del PDF (59 líneas al 2026-09-27, casi todas en enviadas/aprobadas). Ahora cada foto se baja una vez, se achica a 600 px y se guarda en la tabla `FotoGuardada`; `imageUrl` apunta a `/api/fotos/<id>`. Decisión en [ADR 2026-09-27](decisions/2026-09-27-fotos-copia-en-la-app.md).

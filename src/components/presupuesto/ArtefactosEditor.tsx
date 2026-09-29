@@ -104,6 +104,10 @@ interface PaymentTerm {
 interface Budget {
   id: string;
   version: string;
+  // borrador | enviado | aprobado | rechazado. Una cotización que ya salió al
+  // cliente (todo lo que no es borrador) se puede comparar con el catálogo y
+  // con la web, pero no aplicarle precios desde esas ventanas.
+  status: string;
   conditions: Condicion[];
   artefactoItems: ArtefactoItem[];
   paymentTerms: PaymentTerm[];
@@ -170,6 +174,11 @@ export default function ArtefactosEditor({
   projectId: string;
 }) {
   const router = useRouter();
+  // "No se deben tocar cotizaciones ya enviadas" (MJ, 2026-09-29): en una que
+  // no es borrador, las ventanas "Comparar con mi catálogo" y "Comparar con la
+  // tienda web" comparan igual pero no aplican. El back lo vuelve a chequear.
+  // La edición a mano en la línea NO se bloquea (otra decisión, pendiente).
+  const cotizacionEnviada = initialBudget.status !== "borrador";
   const [items, setItems] = useState<ArtefactoItem[]>(
     initialBudget.artefactoItems
   );
@@ -502,7 +511,8 @@ export default function ArtefactosEditor({
       }
     );
     if (!res.ok) {
-      alert("No se pudieron aplicar los cambios del catálogo.");
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || "No se pudieron aplicar los cambios del catálogo.");
       return;
     }
     const { updated } = (await res.json()) as {
@@ -575,11 +585,15 @@ export default function ArtefactosEditor({
       // cosa en su campo y SOLO si de verdad se aplicó:
       //   precioDeLaTienda    → la lista: no despega la línea (y la reconecta).
       //   descuentoDeLaTienda → el %: deja de ser "descuento propio".
+      //   desdeLaTienda       → va SIEMPRE, también con la sola foto: dice
+      //                         que esto es "aplicar" y no la edición en la
+      //                         línea. El back lo rechaza (409) si la
+      //                         cotización ya se envió.
       // OJO, error que hubo acá: el aviso del descuento viajaba SIEMPRE, así
       // que aplicar solo la FOTO —o solo la lista, en una tienda que no
       // publica el descuento— le borraba a MJ la marca de su porcentaje sin
       // que el porcentaje cambiara, y el catálogo se lo pisaba después.
-      const deLaTienda: Record<string, true> = {};
+      const deLaTienda: Record<string, true> = { desdeLaTienda: true };
       if (p.listPrice !== undefined) deLaTienda.precioDeLaTienda = true;
       if (p.discountPercent !== undefined) deLaTienda.descuentoDeLaTienda = true;
       nuevos.push({ item: merged, deLaTienda });
@@ -1429,6 +1443,7 @@ export default function ArtefactosEditor({
       {showActualizarCat && (
         <ActualizarDesdeCatalogo
           budgetId={initialBudget.id}
+          cotizacionEnviada={cotizacionEnviada}
           onApply={applyCatalogPatches}
           onClose={() => setShowActualizarCat(false)}
         />
@@ -1438,6 +1453,7 @@ export default function ArtefactosEditor({
       {showRevisarWeb && (
         <RevisarPreciosArtefactos
           budgetId={initialBudget.id}
+          cotizacionEnviada={cotizacionEnviada}
           onApply={applyOnlinePatches}
           onClose={() => setShowRevisarWeb(false)}
         />

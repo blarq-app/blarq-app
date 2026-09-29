@@ -151,6 +151,15 @@ interface ApplyPatch {
  *   atrasado respecto de la tienda (la grifería Urban-N antique bronze, $38.000
  *   abajo), MJ casi no usa este botón y verifica contra la web. Conectar líneas
  *   a un catálogo atrasado las expone a precios más baratos que la realidad.
+ *
+ *   Solo en BORRADOR (2026-09-29): "no se deben tocar cotizaciones ya
+ *   enviadas" (MJ). En una enviada / aprobada / rechazada devuelve 409 aunque
+ *   la pantalla ya no ofrezca aplicar — el control vive acá, no en el modal.
+ *   Incluye el costo interno: en una enviada ese costo suele ser el real del
+ *   proveedor (skill costo-artefactos), y el del catálogo lo pisaría. Comparar
+ *   (el GET de arriba) sigue abierto en cualquier estado. Mismo criterio que
+ *   herrajes (aplicar-web) y que la propagación automática del catálogo
+ *   (propagateCatalogToBorradores).
  */
 export async function POST(
   request: NextRequest,
@@ -161,6 +170,21 @@ export async function POST(
 
   try {
     const { id: budgetVersionId } = await params;
+
+    const bv = await prisma.budgetVersion.findUnique({
+      where: { id: budgetVersionId },
+      select: { status: true },
+    });
+    if (!bv) {
+      return NextResponse.json({ error: "Cotización no encontrada" }, { status: 404 });
+    }
+    if (bv.status !== "borrador") {
+      return NextResponse.json(
+        { error: "Esta cotización ya se envió: sus precios no se cambian." },
+        { status: 409 },
+      );
+    }
+
     const body = await request.json();
     const patches: ApplyPatch[] = Array.isArray(body?.patches)
       ? body.patches

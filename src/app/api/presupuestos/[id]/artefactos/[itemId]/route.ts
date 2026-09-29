@@ -19,6 +19,34 @@ export async function PUT(
     const { id: budgetVersionId, itemId } = await params;
     const data = await request.json();
 
+    // "Aplicar cambios marcados" de "Comparar con la tienda web" pasa por este
+    // mismo PUT, igual que la edición en la línea. Solo lo primero se bloquea
+    // en una cotización que ya salió al cliente ("no se deben tocar
+    // cotizaciones ya enviadas", MJ 2026-09-29): el modal avisa en
+    // `desdeLaTienda` (y en los campos de precio/descuento de más abajo), y
+    // con eso se devuelve 409 antes de escribir nada — ni siquiera se guarda
+    // la copia de la foto. Tipear en la línea sigue permitido en cualquier
+    // estado: bloquearlo es otra decisión, pendiente de MJ.
+    const desdeLaTienda =
+      data.desdeLaTienda === true ||
+      data.precioDeLaTienda === true ||
+      data.descuentoDeLaTienda === true;
+    if (desdeLaTienda) {
+      const linea = await prisma.artefactoItem.findUnique({
+        where: { id: itemId },
+        select: { budgetVersionId: true, budgetVersion: { select: { status: true } } },
+      });
+      if (!linea || linea.budgetVersionId !== budgetVersionId) {
+        return NextResponse.json({ error: "Artefacto no encontrado" }, { status: 404 });
+      }
+      if (linea.budgetVersion.status !== "borrador") {
+        return NextResponse.json(
+          { error: "Esta cotización ya se envió: sus precios no se cambian." },
+          { status: 409 },
+        );
+      }
+    }
+
     // La foto se guarda como COPIA en la app, no como link a la tienda (cajón
     // de fotos, 2026-09-27): el link de MK muere cuando MK cambia sus fotos.
     // Se convierte acá arriba para que la línea y sus gemelas (las dos

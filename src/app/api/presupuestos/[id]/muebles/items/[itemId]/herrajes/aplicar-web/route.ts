@@ -1,13 +1,14 @@
 /**
- * "Aplicar precios de la web" de una partida de herrajes (pendiente 143,
- * segunda vuelta, 2026-09-29).
+ * "Aplicar cambios marcados" del modal "Comparar con la tienda web" de una
+ * partida de herrajes (pendiente 143, 2026-09-29).
  *
  * POST /api/presupuestos/{id}/muebles/items/{itemId}/herrajes/aplicar-web
- *   Body: { lineIds: string[] } — las líneas que MJ vio distintas al comparar.
+ *   Body: { lineIds: string[] } — las líneas que MJ MARCÓ, una por una, en el
+ *   modal (mismo gesto que artefactos). Se recalcula la partida una sola vez.
  *
- * MJ lo pidió POR GRUPO, no línea por línea: un solo botón en la partida que
- * pasa todas las distintas al precio de hoy. Por eso este endpoint recibe la
- * lista entera y recalcula la partida una sola vez.
+ * Solo en BORRADOR: "no se deben tocar cotizaciones ya enviadas" (MJ). Una
+ * enviada / aprobada / rechazada devuelve 409 aunque la pantalla no ofrezca
+ * el botón — el control vive acá, no solo en la pantalla.
  *
  * El precio NO viene del cliente: se vuelve a leer de la web acá (mismo
  * lector que "Comparar con la web"), igual que el costo al agregar del
@@ -50,10 +51,16 @@ export async function POST(
 
     const item = await prisma.muebleItem.findUnique({
       where: { id: itemId },
-      select: { budgetVersionId: true },
+      select: { budgetVersionId: true, budgetVersion: { select: { status: true } } },
     });
     if (!item || item.budgetVersionId !== budgetId) {
       return NextResponse.json({ error: "Partida no encontrada" }, { status: 404 });
+    }
+    if (item.budgetVersion.status !== "borrador") {
+      return NextResponse.json(
+        { error: "Esta cotización ya se envió: sus precios no se cambian." },
+        { status: 409 },
+      );
     }
 
     const lineas = await prisma.muebleHerraje.findMany({

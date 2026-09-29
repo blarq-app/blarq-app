@@ -4,12 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
-## 2026-09-28 — Las fotos de artefactos y herrajes se guardan como copia en la app
+## 2026-09-29 — Las fotos de artefactos y herrajes se guardan como copia en la app (PR #461, en prod)
 
 - Antes se guardaba el link a la foto de la tienda; cuando MK cambiaba sus fotos el link moría y la foto desaparecía de la cotización y del PDF (59 líneas al 2026-09-27, casi todas en enviadas/aprobadas). Ahora cada foto se baja una vez, se achica a 600 px y se guarda en la tabla `FotoGuardada`; `imageUrl` apunta a `/api/fotos/<id>`. Decisión en [ADR 2026-09-27](decisions/2026-09-27-fotos-copia-en-la-app.md).
 - Se copia apenas la foto entra a la app y, como red, al "Marcar como enviada". "Volver a lo enviado" repone la copia; el PDF la lleva incrustada; las ventanas de comparar reconocen la misma foto.
 - Pasada única `scripts/fotos-guardar-copias.ts` (dry-run, respaldo, escritura condicionada) que también recupera las fotos muertas: tienda hoy → otra foto del mismo producto → PDF enviado al cliente. Control: `scripts/diag-fotos-huella.ts` (todo lo que no es foto queda idéntico). Regresión: `scripts/test-fotos-guardadas.ts`.
-- Tabla nueva en la viva: `prisma/sql/fotos-guardadas.sql` (aditiva, antes del deploy).
+- Tabla nueva en la viva: `prisma/sql/fotos-guardadas.sql` (aditiva, antes del deploy). Pasada aplicada en la viva el 2026-09-29 con OK de MJ: 57 líneas recuperan su foto; huella y totales idénticos antes/después.
 
 ## 2026-09-28 — La flechita ↗ de herrajes en la cotización de muebles
 

@@ -217,7 +217,7 @@ async function fetchHtml(url: string): Promise<string | null> {
  * fallo daba el mismo "no se pudo abrir el link o el sitio no expone datos",
  * que culpaba al link incluso cuando el link estaba bien y era la tienda la
  * que no dejaba entrar al servidor.
- *   - "bloqueado":     la tienda contestó que no (401/403/429/503).
+ *   - "bloqueado":     la tienda contestó que no (4xx salvo 404/410, o 503).
  *   - "no-existe":     la página no existe (404/410).
  *   - "sin-respuesta": no contestó dentro del plazo (25 s).
  *   - "sin-conexion":  no se pudo ni conectar (DNS, conexión cortada).
@@ -247,12 +247,16 @@ async function fetchHtmlConMotivo(
       signal: AbortSignal.timeout(25000),
     });
     if (!res.ok) {
+      // Cualquier rechazo 4xx que no sea "no existe" cuenta como bloqueo: los
+      // WAF no usan un código fijo (403, 406, 429, 451…). Verificado el
+      // 2026-09-29 desde el deploy: hbt.cl rechaza al servidor de Vercel en
+      // ~0,3 s (desde Santiago abre, en ~10 s) — es bloqueo, no demora.
       const s = res.status;
       const motivo: MotivoFalla =
-        s === 401 || s === 403 || s === 429 || s === 503
-          ? "bloqueado"
-          : s === 404 || s === 410
-            ? "no-existe"
+        s === 404 || s === 410
+          ? "no-existe"
+          : (s >= 400 && s < 500) || s === 503
+            ? "bloqueado"
             : "error-tienda";
       return { html: null, motivo, status: s };
     }

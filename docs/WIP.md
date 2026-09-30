@@ -1,8 +1,16 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-09-29.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-09-30.
 
 ---
+
+- **Descargar el Cuadro Resumen en Excel (2026-09-30, pendiente 190, rama `feat/cuadro-resumen-excel`, SIN SUBIR — falta el OK de MJ con el archivo final)**:
+  - Botón "Descargar Excel" al lado de "Descargar imagen" (`CuadroResumenAvance.tsx`). Generador `src/lib/xlsx/CuadroResumenXLSX.ts` (ExcelJS, molde del Excel del maestro). Se arma en el NAVEGADOR (import dinámico al click) para llevar el % de avance recién tipeado y el tilde "Comparar con V_".
+  - **Es el Excel de MJ, no del cliente** (lo eligió ella viendo las dos versiones): hoja "Cuadro Resumen" igual a la imagen + "Valores con IVA incluido" + la línea del pie, y hoja "Me paso a Sueldos" con la lista de traspasos. Al cliente le sigue yendo la imagen.
+  - No recalcula nada: las cuentas del avance (apilado de pagos, a pedir, saldo, sueldos) se movieron sin cambios del componente a `src/lib/projects/cuadroAvance.ts`; las usan pantalla, imagen y Excel. Montos sin redondear (sumar una columna da su TOTAL PAGOS), % y fechas como número. Isotipo con la opacidad ya aplicada: `public/assets/blarq-isotipo-piedra-55.png`.
+  - **Arreglo en pantalla**: la línea "Con este avance pedís…" decía $1 más que la fila AVANCE A COBRAR (sumaba fracciones) y "pedís $0" en obras cobradas. Ahora usa el mismo total entero que la fila (MJ dijo que sí).
+  - Verificado contra la base viva (solo lectura): pantalla/imagen/Me paso a Sueldos idénticos antes/después en Algarrobos, Sena, Portofino y Candelaria (salvo esa línea); el Excel del botón es idéntico celda por celda al generado aparte.
+  - OJO: los totales del pedido original ($59.652.763 acordado / $12.643.549 pagos) eran de **Cocina Candelaria**, no de Casa Los Algarrobos. Y Candelaria se estaba editando en vivo durante la sesión (el acordado de obra pasó a $23.355.961).
 
 - **Alta de herrajes como la de artefactos + el costo del "Extraer" (2026-09-29, pendiente 188, PR #466, EN PROD — MJ eligió la opción A: HBT con costo vacío y el precio de la web como referencia; probado en vivo: HBT → 403 de hbt.cl y el mensaje nuevo, DPH con SKU → $26.900)**:
   - **A · Pestañas**: el alta de herrajes (`AddHerrajeFromCatalog.tsx`) tiene arriba "Buscar en catálogo" | "Crear nuevo", igual que artefactos. Antes era un botón "+ Nuevo herraje" al pie de la lista y MJ nunca lo veía. Las pestañas de proveedor (DPH/HBT/…) bajaron a la fila del buscador. Se mantienen "Crear uno nuevo" de la partida y "Cargarlo como nuevo herraje" cuando la búsqueda no trae nada.

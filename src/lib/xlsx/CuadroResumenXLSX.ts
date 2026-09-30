@@ -23,16 +23,22 @@
  * tres pasadas de decisión de MJ detrás (está contado en el componente): no se
  * cambia acá.
  *
- * Los montos van tal cual salen del cálculo, SIN redondear, con formato de
- * pesos sin decimales. Así el total de una columna sumado en Excel da lo mismo
- * que la celda TOTAL, que a su vez es lo que dice la pantalla. La única fila
- * que va en pesos enteros es AVANCE A COBRAR, porque la pantalla también la
- * imprime entera (ver `hayQuePedir` / `totalAPedirMostrado`).
+ * CON FÓRMULAS (pedido de MJ, 2026-09-30). Son DATO, como número fijo, solo
+ * los acordados, los pagos y el % de avance de cada concepto. Todo lo demás es
+ * fórmula: TOTAL PAGOS y su %, lo que se pide en AVANCE A COBRAR, el SALDO, la
+ * columna TOTAL, la línea del pie y la hoja "Me paso a Sueldos" (enganchada a
+ * esta). Si MJ cambia un % en el Excel, se recalcula todo, como en pantalla.
  *
- * Los totales van como VALOR, no como fórmula: el archivo es una foto del
- * cuadro tal como está en pantalla (con el % de avance que MJ tipeó), no una
- * planilla que recalcula. Con fórmulas, el SALDO PENDIENTE de Excel (acordado −
- * pagos − avance redondeado) podía salir $1 distinto del de la pantalla.
+ * Las fórmulas repiten las cuentas de `calcularAvance` (pantalla) y, con los
+ * datos tal como vienen, dan EXACTAMENTE lo mismo — cada una lleva al lado el
+ * `result` que calculó la pantalla. Cuidados para que eso se cumpla:
+ *   - Los montos van tal cual salen del cálculo, SIN redondear (formato de
+ *     pesos sin decimales), así la suma de una columna es lo que la pantalla
+ *     llama TOTAL PAGOS.
+ *   - AVANCE A COBRAR va en pesos enteros (ROUND), porque la pantalla también
+ *     lo imprime entero y su total es la suma de lo impreso.
+ *   - El SALDO NO resta la celda de AVANCE (redondeada) sino la cuenta sin
+ *     redondear, como `saldoNuevo`; si no, podía salir $1 distinto.
  *
  * Funciona igual en el navegador (el botón "Descargar Excel" lo arma ahí, con
  * el % recién tipeado) y en Node (scripts), por eso no lee archivos: el
@@ -41,7 +47,7 @@
 
 import ExcelJS from "exceljs";
 import { formatCLP } from "@/lib/utils";
-import type { ConceptoCuadro, CuadroResumenData } from "@/lib/projects/cuadroResumen";
+import type { ConceptoCuadro, ConceptoKey, CuadroResumenData } from "@/lib/projects/cuadroResumen";
 import {
   apilarPagos,
   calcularAvance,
@@ -131,10 +137,12 @@ function aplicar(cell: ExcelJS.Cell, e: Estilo) {
   cell.border = border;
 }
 
-// Lo que la pantalla imprime con `cellMonto`: el monto si es positivo, guion si
-// no. Un 0 con FMT_MONTO se ve como guion y sigue siendo un número.
-function montoPantalla(v: number): number {
-  return v > 0 ? v : 0;
+// Celda con fórmula. El `result` va SIEMPRE resuelto (el mismo número que la
+// pantalla): sin él, los visores que no recalculan (Vista previa de Mac,
+// Drive, WhatsApp) muestran la celda VACÍA — el gotcha que ya mordió en el
+// Excel del maestro.
+function formula(cell: ExcelJS.Cell, f: string, result: number | string) {
+  cell.value = { formula: f, result } as ExcelJS.CellFormulaValue;
 }
 
 // Fecha de un movimiento bancario: se guarda a medianoche UTC (el día de la
@@ -306,6 +314,32 @@ export async function buildCuadroResumenXLSX(input: CuadroResumenXLSXInput): Pro
     return row;
   }
 
+  // Dónde queda cada fila: las fórmulas de más abajo (y las de la hoja "Me
+  // paso a Sueldos") se refieren a estas celdas.
+  const dir = (fila: number, col: number) => ws.getCell(fila, col).address;
+  const sumaFila = (fila: number, col: (i: number) => number) =>
+    `SUM(${conceptos.map((_, i) => dir(fila, col(i))).join(",")})`;
+  const filaAcordado = FILA_H2 + 1 + (mostrarAnterior ? 1 : 0);
+  const filaPrimerPago = filaAcordado + 1;
+  const filaUltimoPago = filaAcordado + filasPagos.length;
+  // +1 por la fila de aire entre las transferencias y los totales.
+  const filaTotalPagos = filaUltimoPago + 2;
+  const filaAvance = filaTotalPagos + 1;
+  const filaSaldo = filaAvance + 1;
+  // Si el armado de abajo se corre una fila, las fórmulas apuntarían a otra
+  // celda sin que nada lo avise: mejor que el Excel no salga.
+  const verificarFila = (esperada: number) => {
+    if (r !== esperada) throw new Error(`Cuadro Resumen XLSX: fila ${r}, se esperaba ${esperada}`);
+  };
+
+  // Lo que se pide en el concepto i: lo que falta para llegar al %, nunca
+  // negativo, en pesos enteros (misma cuenta que `calcularAvance`).
+  const aPedirExcel = (i: number) => {
+    const acordado = dir(filaAcordado, colMonto(i));
+    const pagado = dir(filaTotalPagos, colMonto(i));
+    return `ROUND(MAX(0,${dir(filaAvance, colFecha(i))}*${acordado}-${pagado}),0)`;
+  };
+
   // ─── Versión ANTERIOR (opcional, si está prendida en pantalla) ────────────
   if (mostrarAnterior) {
     const ant = anterior!;
@@ -315,14 +349,14 @@ export async function buildCuadroResumenXLSX(input: CuadroResumenXLSXInput): Pro
     row.getCell(1).value = ant.versionLabel;
     conceptos.forEach((c, i) => {
       const cell = row.getCell(colMonto(i));
-      cell.value = montoPantalla(ant.acordado[c.key]);
+      cell.value = ant.acordado[c.key];
       cell.numFmt = FMT_MONTO;
       // El guion de "no existía en esa versión" va todavía más tenue.
       if (!(ant.acordado[c.key] > 0)) cell.font = { ...cell.font, color: { argb: GRIS[200] } };
     });
     const tot = row.getCell(COL_TOTAL);
     if (ant.totalComparable) {
-      tot.value = ant.total;
+      formula(tot, sumaFila(r, colMonto), ant.total);
       tot.numFmt = FMT_MONTO_TOTAL;
     } else {
       // Total no comparable (faltan versiones anteriores de algún concepto):
@@ -334,6 +368,7 @@ export async function buildCuadroResumenXLSX(input: CuadroResumenXLSXInput): Pro
   }
 
   // ─── Acordado (versión vigente) ───────────────────────────────────────────
+  verificarFila(filaAcordado);
   {
     const base: Estilo = { color: GRIS[900], bold: true, fill: GRIS[50], bottom: GRIS[200] };
     const row = filaBase(r, base, GRIS[200]);
@@ -345,12 +380,12 @@ export async function buildCuadroResumenXLSX(input: CuadroResumenXLSXInput): Pro
       f.value = dia;
       aplicar(f, { ...base, bold: false, color: GRIS[500], left: GRIS[200], numFmt: FMT_FECHA });
       const m = row.getCell(colMonto(i));
-      m.value = montoPantalla(c.acordado);
+      m.value = c.acordado;
       m.numFmt = FMT_MONTO;
       if (!(c.acordado > 0)) m.font = { ...m.font, color: { argb: GRIS[300] } };
     });
     const tot = row.getCell(COL_TOTAL);
-    tot.value = totalAcordado;
+    formula(tot, sumaFila(r, colMonto), totalAcordado);
     tot.numFmt = FMT_MONTO_TOTAL;
     r++;
   }
@@ -372,7 +407,8 @@ export async function buildCuadroResumenXLSX(input: CuadroResumenXLSXInput): Pro
       if (celda) {
         f.value = fechaMovimiento(celda.date);
         aplicar(f, { ...base, color: GRIS[500], left: GRIS[100], numFmt: FMT_FECHA });
-        m.value = montoPantalla(celda.monto);
+        // Tal cual, sin recortar: TOTAL PAGOS es la suma de esta columna.
+        m.value = celda.monto;
         m.numFmt = FMT_MONTO;
         fa.value = valorFolio(celda.folio);
         aplicar(fa, { ...base, color: GRIS[500], align: "right", numFmt: "0" });
@@ -391,28 +427,41 @@ export async function buildCuadroResumenXLSX(input: CuadroResumenXLSXInput): Pro
   r++;
 
   // ─── TOTAL PAGOS ──────────────────────────────────────────────────────────
+  verificarFila(filaTotalPagos);
   {
     const base: Estilo = { color: GRIS[600], bold: true, top: GRIS[300] };
     const row = filaBase(r, base, GRIS[200]);
     row.height = 16;
     row.getCell(1).value = "TOTAL PAGOS";
     conceptos.forEach((c, i) => {
+      const acordado = dir(filaAcordado, colMonto(i));
+      const pagado = dir(r, colMonto(i));
       const p = row.getCell(colFecha(i));
-      p.value = c.avancePct;
+      // % cobrado = pagado / acordado (0 si no hay acordado, como en pantalla).
+      formula(p, `IF(${acordado}>0,${pagado}/${acordado},0)`, c.avancePct);
       aplicar(p, { ...base, bold: false, color: GRIS[500], left: GRIS[200], numFmt: FMT_PCT });
       const m = row.getCell(colMonto(i));
-      m.value = montoPantalla(c.pagado);
+      if (filasPagos.length > 0) {
+        formula(
+          m,
+          `SUM(${dir(filaPrimerPago, colMonto(i))}:${dir(filaUltimoPago, colMonto(i))})`,
+          c.pagado
+        );
+      } else {
+        m.value = 0;
+      }
       m.numFmt = FMT_MONTO;
       if (!(c.pagado > 0)) m.font = { ...m.font, color: { argb: GRIS[300] } };
       ws.mergeCells(r, colMonto(i), r, colFactura(i));
     });
     const tot = row.getCell(COL_TOTAL);
-    tot.value = totalPagado;
+    formula(tot, sumaFila(r, colMonto), totalPagado);
     tot.numFmt = FMT_MONTO_TOTAL;
     r++;
   }
 
   // ─── AVANCE A COBRAR — la banda #BFBCB8 ───────────────────────────────────
+  verificarFila(filaAvance);
   {
     const base: Estilo = {
       color: GRIS[800],
@@ -427,22 +476,26 @@ export async function buildCuadroResumenXLSX(input: CuadroResumenXLSXInput): Pro
     conceptos.forEach((c, i) => {
       const cc = calc.porConcepto.get(c.key)!;
       const p = row.getCell(colFecha(i));
+      // El % es DATO (lo que MJ tipeó): se puede cambiar acá y todo lo de
+      // abajo se recalcula.
       p.value = (avance[c.key] ?? 0) / 100;
       aplicar(p, { ...base, bold: false, color: GRIS[700], left: GRIS[400], numFmt: FMT_PCT });
       const m = row.getCell(colMonto(i));
-      // En pesos enteros, como la pantalla: lo que se pide y lo que suma el total.
-      m.value = hayQuePedir(cc.aPedir) ? Math.round(cc.aPedir) : 0;
+      // A cobrar = lo que falta para llegar al %, nunca negativo, en pesos
+      // enteros como la pantalla (`calcularAvance` + `hayQuePedir`).
+      formula(m, aPedirExcel(i), Math.round(cc.aPedir));
       m.numFmt = FMT_MONTO;
       if (!hayQuePedir(cc.aPedir)) m.font = { ...m.font, bold: false, color: { argb: GRIS[500] } };
       ws.mergeCells(r, colMonto(i), r, colFactura(i));
     });
     const tot = row.getCell(COL_TOTAL);
-    tot.value = aCobrarMostrado;
+    formula(tot, sumaFila(r, colMonto), aCobrarMostrado);
     tot.numFmt = FMT_MONTO_TOTAL;
     r++;
   }
 
   // ─── SALDO PENDIENTE ──────────────────────────────────────────────────────
+  verificarFila(filaSaldo);
   {
     const base: Estilo = { color: GRIS[900], top: GRIS[200] };
     const row = filaBase(r, base, GRIS[200]);
@@ -451,13 +504,22 @@ export async function buildCuadroResumenXLSX(input: CuadroResumenXLSXInput): Pro
     conceptos.forEach((c, i) => {
       const cc = calc.porConcepto.get(c.key)!;
       const m = row.getCell(colFecha(i));
-      m.value = montoPantalla(cc.saldoNuevo);
+      // Saldo = acordado − pagado − lo que falta para el %, con ese último SIN
+      // redondear: es la cuenta exacta de la pantalla (`saldoNuevo`). Restar
+      // la celda de AVANCE (que va en pesos enteros) podía dar $1 distinto.
+      const acordado = dir(filaAcordado, colMonto(i));
+      const pagado = dir(filaTotalPagos, colMonto(i));
+      formula(
+        m,
+        `MAX(0,${acordado}-${pagado}-MAX(0,${dir(filaAvance, colFecha(i))}*${acordado}-${pagado}))`,
+        cc.saldoNuevo
+      );
       aplicar(m, { ...base, align: "right", left: GRIS[200], numFmt: FMT_MONTO });
       if (!(cc.saldoNuevo > 0)) m.font = { ...m.font, color: { argb: GRIS[300] } };
       ws.mergeCells(r, colFecha(i), r, colFactura(i));
     });
     const tot = row.getCell(COL_TOTAL);
-    tot.value = calc.totalSaldoNuevo;
+    formula(tot, sumaFila(r, colFecha), calc.totalSaldoNuevo);
     tot.numFmt = FMT_MONTO_TOTAL;
     r++;
   }
@@ -465,31 +527,61 @@ export async function buildCuadroResumenXLSX(input: CuadroResumenXLSXInput): Pro
   // ─── Línea del pie, como en pantalla ──────────────────────────────────────
   // (La imagen del cliente no la lleva a propósito; este Excel es de MJ.) El
   // monto que "pedís" es el MISMO total de la fila AVANCE A COBRAR, en pesos
-  // enteros — ver el mismo bloque en CuadroResumenAvance.tsx.
+  // enteros — ver el mismo bloque en CuadroResumenAvance.tsx. También es
+  // fórmula, para que acompañe si MJ cambia un % en el Excel. FIXED pone los
+  // miles con el separador del idioma de quien abre (en español, "46.784.580").
   r++;
   const pie = ws.getCell(r, 1);
   let texto = `Avance total cobrado: ${(avanceTotal * 100).toFixed(0)}% del acordado.`;
   if (aCobrarMostrado > 0) {
     texto += ` Con este avance pedís ${formatCLP(aCobrarMostrado)} y el saldo queda en ${formatCLP(calc.totalSaldoNuevo)}.`;
   }
-  pie.value = texto;
+  const totAcordado = dir(filaAcordado, COL_TOTAL);
+  const totPagado = dir(filaTotalPagos, COL_TOTAL);
+  const totAvance = dir(filaAvance, COL_TOTAL);
+  const totSaldo = dir(filaSaldo, COL_TOTAL);
+  formula(
+    pie,
+    `"Avance total cobrado: "&FIXED(IF(${totAcordado}>0,${totPagado}/${totAcordado},0)*100,0)&"% del acordado."` +
+      `&IF(${totAvance}>0," Con este avance pedís $"&FIXED(${totAvance},0)&" y el saldo queda en $"&FIXED(${totSaldo},0)&".","")`,
+    texto
+  );
   aplicar(pie, { color: GRIS[400], size: 9 });
 
   ws.pageSetup.printArea = `A1:${ws.getColumn(COL_TOTAL).letter}${r}`;
 
-  hojaSueldos(wb, conceptos, calc, transferido, input.transferencias);
+  // Lo que la hoja de sueldos necesita del cuadro: por concepto, dónde están
+  // el acordado, lo pagado y el % de avance.
+  const celdasConcepto = new Map(
+    conceptos.map((c, i) => [
+      c.key,
+      {
+        acordado: `'${ws.name}'!${dir(filaAcordado, colMonto(i))}`,
+        pagado: `'${ws.name}'!${dir(filaTotalPagos, colMonto(i))}`,
+        pct: `'${ws.name}'!${dir(filaAvance, colFecha(i))}`,
+      },
+    ])
+  );
+  hojaSueldos(wb, conceptos, calc, transferido, input.transferencias, celdasConcepto);
 
   return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
 }
 
+
 // ─── Hoja "Me paso a Sueldos" ────────────────────────────────────────────────
-// La misma tabla que la pantalla, más el detalle de las transferencias.
+// La misma tabla que la pantalla, más el detalle de las transferencias. Va
+// ENGANCHADA a la hoja del cuadro: si MJ cambia un % de avance allá, acá se
+// recalculan el % final, lo generado y lo que falta transferir. "Ya
+// transferido" suma la lista de traspasos de abajo.
+type CeldasConcepto = Map<ConceptoKey, { acordado: string; pagado: string; pct: string }>;
+
 function hojaSueldos(
   wb: ExcelJS.Workbook,
   conceptos: ConceptoCuadro[],
   calc: CalculoAvance,
   transferido: TransferidoPorConcepto,
-  transferencias: TransferenciaSueldo[]
+  transferencias: TransferenciaSueldo[],
+  celdas: CeldasConcepto
 ) {
   const ws = wb.addWorksheet("Me paso a Sueldos", {
     pageSetup: { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
@@ -519,22 +611,51 @@ function hojaSueldos(
     aplicar(c, { fill: BANDA, color: GRIS[500], size: 8, bottom: GRIS[200], align: i === 0 ? "left" : "right" });
   });
 
-  let r = 5;
-  for (const c of conceptos.filter((x) => x.generaSueldo)) {
+  // Filas, calculadas de antemano porque la tabla de arriba suma la lista de
+  // traspasos de abajo.
+  const conSueldo = conceptos.filter((x) => x.generaSueldo);
+  const filaPrimerConcepto = 5;
+  const filaTotal = filaPrimerConcepto + conSueldo.length;
+  const filaPrimerTraspaso = filaTotal + 5;
+  const filaUltimoTraspaso = filaPrimerTraspaso + transferencias.length - 1;
+  const hayTraspasos = transferencias.length > 0;
+  const rangoConcepto = `$B$${filaPrimerTraspaso}:$B$${filaUltimoTraspaso}`;
+  const rangoMonto = `$C$${filaPrimerTraspaso}:$C$${filaUltimoTraspaso}`;
+
+  let r = filaPrimerConcepto;
+  for (const c of conSueldo) {
     const cc = calc.porConcepto.get(c.key)!;
+    const { acordado, pagado, pct } = celdas.get(c.key)!;
     const row = ws.getRow(r);
-    const vals: [ExcelJS.CellValue, Estilo][] = [
-      [c.key === "obra" ? `${c.label} · GG` : c.label, {}],
-      [c.utilidad100, { color: GRIS[600], align: "right", numFmt: FMT_MONTO_TOTAL }],
-      [cc.pctFinal, { color: GRIS[400], align: "right", numFmt: FMT_PCT }],
-      [cc.generado, { bold: true, align: "right", numFmt: FMT_MONTO_TOTAL }],
-      [cc.transferido, { color: GRIS[600], align: "right", numFmt: FMT_MONTO_TOTAL }],
-      [cc.faltaTransferir, { bold: true, align: "right", numFmt: FMT_MONTO_TOTAL }],
+    const estilos: Estilo[] = [
+      {},
+      { color: GRIS[600], align: "right", numFmt: FMT_MONTO_TOTAL },
+      { color: GRIS[400], align: "right", numFmt: FMT_PCT },
+      { bold: true, align: "right", numFmt: FMT_MONTO_TOTAL },
+      { color: GRIS[600], align: "right", numFmt: FMT_MONTO_TOTAL },
+      { bold: true, align: "right", numFmt: FMT_MONTO_TOTAL },
     ];
-    vals.forEach(([v, e], i) => {
-      row.getCell(i + 1).value = v;
-      aplicar(row.getCell(i + 1), { ...e, bottom: GRIS[50] });
-    });
+    estilos.forEach((e, i) => aplicar(row.getCell(i + 1), { ...e, bottom: GRIS[50] }));
+    row.getCell(1).value = c.key === "obra" ? `${c.label} · GG` : c.label;
+    // Utilidad al 100%: DATO (sale del presupuesto, GG de obra / utilidad neta
+    // de muebles), no se recalcula acá.
+    row.getCell(2).value = c.utilidad100;
+    // % final = (pagado + lo que se pide) / acordado — `pctFinal`.
+    formula(
+      row.getCell(3),
+      `IF(${acordado}>0,(${pagado}+MAX(0,${pct}*${acordado}-${pagado}))/${acordado},0)`,
+      cc.pctFinal
+    );
+    // Generado = utilidad × % final, con tope en el 100%.
+    formula(row.getCell(4), `MIN(1,C${r})*B${r}`, cc.generado);
+    // Ya transferido: los traspasos de la lista marcados con este concepto.
+    const etiqueta = c.key === "obra" ? "Obra" : "Muebles";
+    if (hayTraspasos) {
+      formula(row.getCell(5), `SUMIF(${rangoConcepto},"${etiqueta}",${rangoMonto})`, cc.transferido);
+    } else {
+      row.getCell(5).value = 0;
+    }
+    formula(row.getCell(6), `MAX(0,D${r}-E${r})`, cc.faltaTransferir);
     r++;
   }
   {
@@ -542,14 +663,22 @@ function hojaSueldos(
     for (let i = 1; i <= 6; i++) aplicar(row.getCell(i), { bold: true, top: GRIS[200], align: i === 1 ? "left" : "right" });
     row.getCell(1).value = "TOTAL";
     ws.mergeCells(r, 1, r, 3);
-    row.getCell(4).value = calc.generadoTotal;
-    row.getCell(5).value = totalTransferido(transferido);
-    row.getCell(6).value = calc.aTransferir;
+    const ultimo = filaTotal - 1;
+    formula(row.getCell(4), `SUM(D${filaPrimerConcepto}:D${ultimo})`, calc.generadoTotal);
+    // El total transferido incluye lo que está "Sin marcar" (como en
+    // pantalla), por eso no es la suma de la columna sino la de la lista.
+    if (hayTraspasos) {
+      formula(row.getCell(5), `SUM(${rangoMonto})`, totalTransferido(transferido));
+    } else {
+      row.getCell(5).value = 0;
+    }
+    // A transferir = generado − TODO lo transferido, nunca negativo.
+    formula(row.getCell(6), `MAX(0,D${r}-E${r})`, calc.aTransferir);
     for (const i of [4, 5, 6]) row.getCell(i).numFmt = FMT_MONTO_TOTAL;
     r++;
   }
 
-  if (transferencias.length === 0) return;
+  if (!hayTraspasos) return;
 
   // Detalle de "Ya transferido": de qué traspasos está hecho, del más nuevo al
   // más viejo (mismo orden que el desplegable de la pantalla).
@@ -564,6 +693,9 @@ function hojaSueldos(
     hr2.getCell(i + 1).value = t;
   });
   r++;
+  if (r !== filaPrimerTraspaso) {
+    throw new Error(`Me paso a Sueldos XLSX: fila ${r}, se esperaba ${filaPrimerTraspaso}`);
+  }
   for (const t of transferencias) {
     const row = ws.getRow(r);
     row.getCell(1).value = fechaMovimiento(t.date);
@@ -580,6 +712,6 @@ function hojaSueldos(
   for (let i = 1; i <= 3; i++) aplicar(row.getCell(i), { bold: true, top: GRIS[300], align: i === 3 ? "right" : "left" });
   row.getCell(1).value = "TOTAL TRANSFERIDO";
   ws.mergeCells(r, 1, r, 2);
-  row.getCell(3).value = totalTransferido(transferido);
+  formula(row.getCell(3), `SUM(${rangoMonto})`, totalTransferido(transferido));
   row.getCell(3).numFmt = FMT_MONTO_TOTAL;
 }

@@ -7,7 +7,7 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 ## 2026-09-30 — Descargar el Cuadro Resumen en Excel
 
 - **Pendiente 190**: botón "Descargar Excel" en el Cuadro Resumen. Es el Excel de MJ (decidido con ella): el cuadro igual a la imagen, con la línea del pie, y una hoja "Me paso a Sueldos" con los traspasos. Al cliente le sigue yendo la imagen.
-- Números como números (pesos sin decimales, % y fechas de verdad); columna de rótulos y encabezado congelados; trae la fila de la versión anterior si está prendida.
+- Números como números (pesos sin decimales, % y fechas de verdad); encabezado congelado al bajar (la columna de rótulos no: la línea de Excel cruzaba el título); trae la fila de la versión anterior si está prendida.
 - Con fórmulas: acordados, pagos y % de avance son dato; totales, a cobrar, saldo, pie y "Me paso a Sueldos" se recalculan si MJ cambia un % en el Excel, y dan lo mismo que la pantalla.
 - Las cuentas del avance salieron del componente a `lib/projects/cuadroAvance.ts` sin cambios; pantalla, imagen y Excel usan las mismas, así no pueden diferir.
 - La línea del pie de la pantalla ("pedís…") ahora usa el mismo total que la fila AVANCE A COBRAR (antes decía $1 más por redondeo).

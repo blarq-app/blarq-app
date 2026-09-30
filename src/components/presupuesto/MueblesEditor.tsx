@@ -133,6 +133,64 @@ function HerrajeNameInput({
   );
 }
 
+// Ubicación de una línea de herraje (pendiente 189): dónde va en el mueble
+// ("LAVAPLATOS", "TORRE HORNO"…). Es INTERNA — el PDF del cliente no la
+// muestra; sale en el PDF mueblista, para pasársela al maestro. Se guarda en
+// `MuebleHerraje.sector`: el campo existía desde que se armó la partida de
+// herrajes, pero no había dónde escribirlo.
+//
+// Igual que la cantidad y el nombre: edita en LOCAL y guarda al SALIR del
+// campo. Se guarda en MAYÚSCULA y con los espacios limpios porque las líneas
+// se agrupan por el texto exacto: "Lavaplatos" y "LAVAPLATOS " armarían dos
+// grupos distintos. Vaciarla es válido (la línea vuelve a "Sin ubicación").
+// `listId` apunta al <datalist> de la partida: sugiere las ubicaciones que ya
+// se escribieron en ella, para no tipear lo mismo diez veces.
+function normalizarUbicacion(s: string): string {
+  return s.replace(/\s+/g, " ").trim().toLocaleUpperCase("es-CL");
+}
+
+function HerrajeUbicacionInput({
+  herrajeId,
+  value,
+  listId,
+  onCommit,
+}: {
+  herrajeId: string;
+  value: string;
+  listId: string;
+  onCommit: (ubicacion: string) => void;
+}) {
+  const [local, setLocal] = useState(value);
+  useEffect(() => {
+    setLocal(value);
+  }, [value]);
+  const commit = () => {
+    const v = normalizarUbicacion(local);
+    setLocal(v);
+    if (v !== value) onCommit(v);
+  };
+  return (
+    <input
+      type="text"
+      list={listId}
+      value={local}
+      data-herraje-ubicacion={herrajeId}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") {
+          setLocal(value);
+          requestAnimationFrame(() => (e.target as HTMLInputElement).blur());
+        }
+      }}
+      placeholder="—"
+      title="Dónde va este herraje (ej. LAVAPLATOS). Interno: el cliente no la ve. Sale en el PDF mueblista."
+      className="shrink-0 w-40 self-center bg-transparent border-0 rounded px-1 py-0 text-[10px] uppercase text-gray-700 placeholder:text-gray-300 outline-none hover:bg-gray-50 focus:bg-white focus:ring-1 focus:ring-gray-300"
+    />
+  );
+}
+
 // Input numérico con separadores de miles. Sin foco muestra "5.488.460",
 // con foco muestra "5488460" para edición. onChange devuelve el número crudo.
 function ThousandsInput({
@@ -2561,25 +2619,54 @@ function HerrajePartidaBlock({
   const ROW_GRID =
     "grid grid-cols-[3rem_minmax(0,1fr)_5rem_8rem_2rem] items-baseline gap-3";
 
-  // Agrupamos las líneas por sector. "" = "Sin sector". Conservamos el orden de
-  // aparición de los sectores (primer line de cada sector marca su posición).
+  // Agrupamos las líneas por ubicación (campo `sector`). Las ubicaciones van en
+  // el orden en que aparecen (la primera línea de cada una marca su posición)
+  // y las líneas "Sin ubicación" van SIEMPRE al final. Así, cuando MJ recorre
+  // la lista de arriba abajo anotando ubicaciones, cada línea que anota queda
+  // más o menos donde estaba (pasa del tope de las pendientes al fondo de las
+  // ya ubicadas) en vez de saltar por encima de las que faltan.
   const groups: { sector: string; lines: MuebleHerraje[] }[] = [];
+  const sinUbicacion: MuebleHerraje[] = [];
   for (const line of item.herrajes) {
     const sector = line.sector ?? "";
+    if (!sector) {
+      sinUbicacion.push(line);
+      continue;
+    }
     const existing = groups.find((g) => g.sector === sector);
     if (existing) existing.lines.push(line);
     else groups.push({ sector, lines: [line] });
   }
+  if (sinUbicacion.length > 0) groups.push({ sector: "", lines: sinUbicacion });
+  // Con al menos una ubicación escrita, el grupo de las que faltan se rotula
+  // "Sin ubicación": si no, esas líneas se leerían como parte del grupo de
+  // arriba. Si ninguna tiene ubicación, la lista va plana, sin rótulos.
+  const hayUbicaciones = groups.some((g) => g.sector);
+  // Ubicaciones ya escritas en esta partida, para autocompletar.
+  const ubicacionesListId = `herrajes-ubicaciones-${item.id}`;
+  const ubicaciones = groups.filter((g) => g.sector).map((g) => g.sector);
 
-  // Arrastre de una línea DENTRO de su sector. El sortOrder es global a la
+  // Al anotar una ubicación la línea salta a su grupo. Para que no parezca que
+  // "desapareció", se la resalta un momento y se la trae a la vista.
+  const [recienUbicada, setRecienUbicada] = useState<string | null>(null);
+  useEffect(() => {
+    if (!recienUbicada) return;
+    document
+      .querySelector(`[data-herraje-ubicacion="${recienUbicada}"]`)
+      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const t = setTimeout(() => setRecienUbicada(null), 1600);
+    return () => clearTimeout(t);
+  }, [recienUbicada]);
+
+  // Arrastre de una línea DENTRO de su ubicación. El sortOrder es global a la
   // partida, así que se rearma la lista completa: se reemplazan las líneas de
-  // ese sector por su orden nuevo y el resto queda donde estaba.
+  // esa ubicación por su orden nuevo y el resto queda donde estaba.
   //
-  // El arrastre NO cruza sectores a propósito: soltar una línea en otro grupo
-  // no le cambiaría el sector (el sector es un campo de la línea, no su
+  // El arrastre NO cruza ubicaciones a propósito: soltar una línea en otro
+  // grupo no le cambiaría la ubicación (es un campo de la línea, no su
   // posición), así que volvería a saltar a su grupo original y se vería como
-  // que el arrastre "no funcionó". Cambiar el sector de una línea queda para
-  // cuando MJ retome ese tema (decisión del 2026-08-08).
+  // que el arrastre "no funcionó". Para cambiarla de grupo se reescribe su
+  // ubicación en la columna.
   function reordenarEnSector(sector: string, lines: MuebleHerraje[], e: DragEndEvent) {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
@@ -2639,19 +2726,49 @@ function HerrajePartidaBlock({
           - SIN líneas: modo MANUAL — proveedor + costo se cargan en el "Costo
             interno" de abajo (igual que muebles/cubiertas).
           - CON líneas (del catálogo): itemizado; el costo lo derivan las líneas.
-          Las líneas del catálogo se listan acá, agrupadas por sector. */}
+          Las líneas del catálogo se listan acá, agrupadas por ubicación. */}
+      {item.herrajes.length > 0 && (
+        <>
+          {/* Encabezado de la columna UBICACIÓN, sobre el campo de cada línea.
+              La marca "el cliente no la ve" es la misma que usa la descripción
+              para el maestro (PartidaExpandedPanel): mismo lenguaje para todo
+              lo que es interno. */}
+          <div className={`${ROW_GRID} px-4 pt-1 pb-0 border-b border-gray-50`}>
+            <div></div>
+            <div className="flex items-baseline gap-2 min-w-0">
+              <div className="flex-1"></div>
+              <div className="shrink-0 w-[14.5rem] px-1 whitespace-nowrap text-[9px] uppercase tracking-wider text-gray-500">
+                Ubicación
+                <span className="ml-1.5 normal-case tracking-normal italic text-gray-400">
+                  — PDF mueblista · el cliente no la ve
+                </span>
+              </div>
+            </div>
+            <div></div>
+            <div></div>
+            <div></div>
+          </div>
+          <datalist id={ubicacionesListId}>
+            {ubicaciones.map((u) => (
+              <option key={u} value={u} />
+            ))}
+          </datalist>
+        </>
+      )}
       {item.herrajes.length > 0 && (
         groups.map((g) => (
           <div key={g.sector || "__sin__"}>
-            {/* Sub-encabezado del sector: SOLO si la línea tiene un sector
-                asignado. Si no hay sectores, no mostramos "Sin sector" (era
-                ruido cuando MJ no usa sectores); los herrajes se listan planos.
-                El sector se asigna al agregar del catálogo (campo Sector). */}
-            {g.sector && (
+            {/* Rótulo del grupo: la ubicación, o "Sin ubicación" para las que
+                faltan — este último SOLO si hay otras ubicaciones escritas. Si
+                ninguna línea tiene ubicación no se rotula nada (era ruido: la
+                lista va plana). */}
+            {(g.sector || hayUbicaciones) && (
               <div className={`${ROW_GRID} px-4 pt-1.5 pb-0.5 border-b border-gray-50`}>
                 <div></div>
-                <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                  Sector {g.sector}
+                <div
+                  className={`text-[10px] font-semibold uppercase tracking-wider ${g.sector ? "text-gray-500" : "text-gray-400"}`}
+                >
+                  {g.sector || "Sin ubicación"}
                 </div>
                 <div></div>
                 <div></div>
@@ -2677,7 +2794,7 @@ function HerrajePartidaBlock({
                   <SortableRow
                     key={h.id}
                     id={h.id}
-                    className={`${ROW_GRID} px-4 py-0.5 border-b border-gray-50`}
+                    className={`${ROW_GRID} px-4 py-0.5 border-b border-gray-50 transition-colors duration-700 ${recienUbicada === h.id ? "bg-gray-100" : ""}`}
                   >
                     {(handle) => (
                       <>
@@ -2720,6 +2837,19 @@ function HerrajePartidaBlock({
                           <span className="shrink-0 text-[9px] uppercase tracking-wider text-gray-400 self-center">
                             {h.supplier}
                           </span>
+                          {/* Columna UBICACIÓN (interna). Ancho fijo y pegada
+                              al costo: así queda alineada en todas las líneas
+                              aunque los nombres y medidas tengan largos
+                              distintos. */}
+                          <HerrajeUbicacionInput
+                            herrajeId={h.id}
+                            value={h.sector ?? ""}
+                            listId={ubicacionesListId}
+                            onCommit={(sector) => {
+                              onUpdateHerraje(h.id, { sector });
+                              setRecienUbicada(h.id);
+                            }}
+                          />
                           {/* Costo unitario (read-only, gris). */}
                           <span className="shrink-0 w-16 text-[10px] text-right tabular-nums text-gray-400 self-center">
                             {formatCLP(h.costNet)}

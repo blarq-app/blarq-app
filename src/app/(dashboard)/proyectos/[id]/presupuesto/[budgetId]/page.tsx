@@ -136,7 +136,7 @@ export default async function PresupuestoDetailPage({
                 href={`/api/presupuestos/${budget.id}/pdf?tipo=mueblista`}
                 target="_blank"
                 className="border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
-                title="Listado de herrajes por sector SIN precios, para pasarle al mueblista"
+                title="Listado de herrajes por ubicación SIN precios, para pasarle al mueblista"
               >
                 PDF mueblista
               </a>

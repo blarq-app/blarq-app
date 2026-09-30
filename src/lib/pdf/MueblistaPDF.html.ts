@@ -2,9 +2,16 @@
  * PDF "Listado de herrajes para el mueblista" (Fase 3 herrajes, 2026-06-22).
  *
  * Es la SEGUNDA salida de la cotización de muebles: el mismo set de herrajes
- * pero SIN PRECIOS, agrupado por SECTOR, para pasarle al mueblista y que sepa
- * dónde va cada herraje y cuántos (y, si BLARQ los compró, dónde se los
- * consideró). Solo nombre + medida/color + proveedor + cantidad.
+ * pero SIN PRECIOS, agrupado por UBICACIÓN (campo `sector` de la línea), para
+ * pasarle al mueblista y que sepa dónde va cada herraje y cuántos (y, si BLARQ
+ * los compró, dónde se los consideró). Solo nombre + medida/color + proveedor +
+ * cantidad.
+ *
+ * Los grupos siguen la MISMA regla que el editor (HerrajePartidaBlock): las
+ * ubicaciones en el orden en que aparecen, "Sin ubicación" al final, y ese
+ * rótulo solo cuando hay otras ubicaciones escritas — si ninguna línea tiene
+ * ubicación, la lista del capítulo va plana. Así la pantalla y el PDF se leen
+ * igual.
  *
  * Self-contained a propósito (no toca el PDF de muebles al cliente).
  */
@@ -84,7 +91,8 @@ const CSS = `
   .empty { font-size: 9pt; color: #888; font-style: italic; padding: 12pt 0; }
 `;
 
-function renderSector(sector: string, lines: MueblistaHerrajeInput[]): string {
+// `rotulo` = null → sin rótulo (capítulo sin ninguna ubicación escrita).
+function renderSector(rotulo: string | null, lines: MueblistaHerrajeInput[]): string {
   const rows = lines
     .map((h) => {
       const spec = [h.measure, h.finish].filter(Boolean).join(" · ");
@@ -100,7 +108,7 @@ function renderSector(sector: string, lines: MueblistaHerrajeInput[]): string {
     })
     .join("");
   return `
-    <div class="sector">${esc(sector ? sector.toUpperCase() : "Sin sector")}</div>
+    ${rotulo !== null ? `<div class="sector">${esc(rotulo)}</div>` : ""}
     <table>
       <thead>
         <tr><th style="width:48%">Herraje</th><th style="width:28%">Medida / color</th><th style="width:14%">Prov.</th><th style="width:10%;text-align:right">Cant.</th></tr>
@@ -116,23 +124,32 @@ export function renderMueblistaHTML(input: MueblistaHTMLInput): string {
     ? `<img class="logo" src="${logoUri}" alt="BLARQ" />`
     : `<div class="title">BLARQ</div>`;
 
-  // Solo capítulos con herrajes; dentro, agrupar por sector preservando orden.
+  // Solo capítulos con herrajes; dentro, agrupar por ubicación (misma regla
+  // que el editor, ver arriba).
   const body = chapters
     .filter((ch) => ch.herrajes.length > 0)
     .map((ch) => {
       const order: string[] = [];
       const bySector = new Map<string, MueblistaHerrajeInput[]>();
+      const sinUbicacion: MueblistaHerrajeInput[] = [];
       for (const h of ch.herrajes) {
-        const key = h.sector || "";
+        const key = (h.sector ?? "").trim().toUpperCase();
+        if (!key) {
+          sinUbicacion.push(h);
+          continue;
+        }
         if (!bySector.has(key)) {
           bySector.set(key, []);
           order.push(key);
         }
         bySector.get(key)!.push(h);
       }
-      const sectors = order
-        .map((s) => renderSector(s, bySector.get(s)!))
-        .join("");
+      const hayUbicaciones = order.length > 0;
+      const sectors =
+        order.map((s) => renderSector(s, bySector.get(s)!)).join("") +
+        (sinUbicacion.length > 0
+          ? renderSector(hayUbicaciones ? "Sin ubicación" : null, sinUbicacion)
+          : "");
       return `<div class="chapter">${esc(ch.name)}</div>${sectors}`;
     })
     .join("");
@@ -163,7 +180,7 @@ export function renderMueblistaHTML(input: MueblistaHTMLInput): string {
     </div>
   </div>
 
-  <div class="note">Listado sin precios. Indica en qué sector va cada herraje y cuántos. Si BLARQ compró los herrajes, este listado señala dónde se consideraron.</div>
+  <div class="note">Listado sin precios. Indica dónde va cada herraje y cuántos. Si BLARQ compró los herrajes, este listado señala dónde se consideraron.</div>
 
   ${hasHerrajes ? body : `<div class="empty">Esta cotización no tiene herrajes cargados.</div>`}
 </body>

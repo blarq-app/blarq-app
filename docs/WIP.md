@@ -4,7 +4,7 @@ Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cie
 
 ---
 
-- **Descargar el Cuadro Resumen en Excel (2026-09-30, pendiente 190, rama `feat/cuadro-resumen-excel`, SIN SUBIR — falta el OK de MJ con el archivo final)**:
+- **Descargar el Cuadro Resumen en Excel (2026-09-30, pendiente 190, PR #468, a prod el 2026-09-30 con OK de MJ (deploy automático de Vercel al mergear; falta ver el botón en blarq-app.vercel.app))**:
   - Botón "Descargar Excel" al lado de "Descargar imagen" (`CuadroResumenAvance.tsx`). Generador `src/lib/xlsx/CuadroResumenXLSX.ts` (ExcelJS, molde del Excel del maestro). Se arma en el NAVEGADOR (import dinámico al click) para llevar el % de avance recién tipeado y el tilde "Comparar con V_".
   - **Es el Excel de MJ, no del cliente** (lo eligió ella viendo las dos versiones): hoja "Cuadro Resumen" igual a la imagen + "Valores con IVA incluido" + la línea del pie, y hoja "Me paso a Sueldos" con la lista de traspasos. Al cliente le sigue yendo la imagen.
   - Las cuentas del avance (apilado de pagos, a pedir, saldo, sueldos) se movieron sin cambios del componente a `src/lib/projects/cuadroAvance.ts`; las usan pantalla, imagen y Excel. Montos sin redondear (sumar una columna da su TOTAL PAGOS), % y fechas como número. Isotipo con la opacidad ya aplicada: `public/assets/blarq-isotipo-piedra-55.png`.

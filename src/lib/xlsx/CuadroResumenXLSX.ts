@@ -1,7 +1,15 @@
 /**
- * Excel del Cuadro Resumen (pendiente 190): la misma hoja que la imagen que se
- * le manda al cliente, pero como .xlsx con NÚMEROS de verdad — MJ puede sumar
- * una columna, copiar un monto o pegarlo en otro documento sin que se pixele.
+ * Excel del Cuadro Resumen (pendiente 190): el cuadro como .xlsx con NÚMEROS de
+ * verdad — MJ puede sumar una columna, copiar un monto o pegarlo en otro
+ * documento sin que se pixele.
+ *
+ * ES EL EXCEL DE MJ, NO EL DEL CLIENTE (decidido con ella el 2026-09-30, viendo
+ * las dos versiones con Algarrobos y Candelaria). Por eso trae, además de la
+ * hoja del cuadro, lo que la pantalla muestra y la imagen no: "Valores con IVA
+ * incluido", la línea del pie ("Avance total cobrado…") y una segunda hoja
+ * "Me paso a Sueldos" con el detalle de los traspasos. Lo que va al cliente
+ * sigue siendo la imagen. Si algún día se quiere un Excel para el cliente, sale
+ * de sacarle esas tres cosas a este mismo archivo.
  *
  * NO CALCULA NADA PROPIO. Toma el mismo `CuadroResumenData` que pinta la
  * pantalla (sale de `computeCuadroResumen`) y lo que depende del % de avance lo
@@ -46,8 +54,6 @@ import {
   type TransferidoPorConcepto,
 } from "@/lib/projects/cuadroAvance";
 
-export type VarianteCuadroXLSX = "cliente" | "interna";
-
 export interface CuadroResumenXLSXInput {
   projectName: string;
   // Fecha del documento (la que va arriba a la derecha, como en la imagen).
@@ -57,10 +63,8 @@ export interface CuadroResumenXLSXInput {
   avance: Record<string, number>;
   // Si en pantalla está prendido "Comparar con V_".
   mostrarAnterior: boolean;
+  // Traspasos a Sueldos de la obra (hoja "Me paso a Sueldos").
   transferencias: TransferenciaSueldo[];
-  // "cliente" = igual que la imagen. "interna" = además la línea del pie y la
-  // hoja "Me paso a Sueldos" (lo que la pantalla muestra y la imagen no).
-  variante: VarianteCuadroXLSX;
   // PNG del isotipo en base64 (con o sin prefijo data:). Sin él, sin logo.
   isotipoBase64?: string | null;
 }
@@ -161,9 +165,8 @@ function valorFolio(folio: string | null): string | number | null {
 }
 
 export async function buildCuadroResumenXLSX(input: CuadroResumenXLSXInput): Promise<ArrayBuffer> {
-  const { data, avance, projectName, variante } = input;
+  const { data, avance, projectName } = input;
   const { conceptos, pagos, totalAcordado, totalPagado, avanceTotal, versionLabel, anterior } = data;
-  const interna = variante === "interna";
 
   // Las MISMAS cuentas que la pantalla (ver cuadroAvance.ts).
   const transferido = sumarTransferido(input.transferencias);
@@ -214,7 +217,7 @@ export async function buildCuadroResumenXLSX(input: CuadroResumenXLSXInput): Pro
   ws.getRow(1).height = 18;
   ws.getRow(2).height = 16;
   ws.getRow(3).height = 24;
-  ws.getRow(4).height = 10;
+  ws.getRow(4).height = 14;
 
   const tit = ws.getCell(2, 1);
   tit.value = "CUADRO RESUMEN";
@@ -223,12 +226,11 @@ export async function buildCuadroResumenXLSX(input: CuadroResumenXLSXInput): Pro
   // En pantalla el h1 va en mayúsculas (globals.css).
   nombre.value = projectName.toUpperCase();
   aplicar(nombre, { color: GRIS[900], size: 16 });
-  if (interna) {
-    const iva = ws.getCell(4, 1);
-    iva.value = "Valores con IVA incluido";
-    aplicar(iva, { color: GRIS[400], size: 8 });
-    ws.getRow(4).height = 14;
-  }
+  // El mismo rótulo que la pantalla: el cuadro va c/IVA y las cards de arriba
+  // del Resumen en neto (ver el comentario en CuadroResumenAvance.tsx).
+  const iva = ws.getCell(4, 1);
+  iva.value = "Valores con IVA incluido";
+  aplicar(iva, { color: GRIS[400], size: 8 });
 
   const fechaDoc = ws.getCell(3, COL_TOTAL);
   fechaDoc.value = diaCalendario(input.fecha);
@@ -460,29 +462,27 @@ export async function buildCuadroResumenXLSX(input: CuadroResumenXLSXInput): Pro
     r++;
   }
 
-  // ─── Línea del pie (solo la versión de MJ) ────────────────────────────────
-  // La imagen del cliente no la lleva a propósito ("el resumen en palabras es
-  // para MJ", ver el componente); la pantalla sí.
-  if (interna) {
-    r++;
-    const pie = ws.getCell(r, 1);
-    let texto = `Avance total cobrado: ${(avanceTotal * 100).toFixed(0)}% del acordado.`;
-    if (calc.totalAPedir > 0) {
-      texto += ` Con este avance pedís ${formatCLP(calc.totalAPedir)} y el saldo queda en ${formatCLP(calc.totalSaldoNuevo)}.`;
-    }
-    pie.value = texto;
-    aplicar(pie, { color: GRIS[400], size: 9 });
-    r++;
+  // ─── Línea del pie, como en pantalla ──────────────────────────────────────
+  // (La imagen del cliente no la lleva a propósito; este Excel es de MJ.) El
+  // monto que "pedís" es el MISMO total de la fila AVANCE A COBRAR, en pesos
+  // enteros — ver el mismo bloque en CuadroResumenAvance.tsx.
+  r++;
+  const pie = ws.getCell(r, 1);
+  let texto = `Avance total cobrado: ${(avanceTotal * 100).toFixed(0)}% del acordado.`;
+  if (aCobrarMostrado > 0) {
+    texto += ` Con este avance pedís ${formatCLP(aCobrarMostrado)} y el saldo queda en ${formatCLP(calc.totalSaldoNuevo)}.`;
   }
+  pie.value = texto;
+  aplicar(pie, { color: GRIS[400], size: 9 });
 
-  ws.pageSetup.printArea = `A1:${ws.getColumn(COL_TOTAL).letter}${r - 1}`;
+  ws.pageSetup.printArea = `A1:${ws.getColumn(COL_TOTAL).letter}${r}`;
 
-  if (interna) hojaSueldos(wb, conceptos, calc, transferido, input.transferencias);
+  hojaSueldos(wb, conceptos, calc, transferido, input.transferencias);
 
   return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
 }
 
-// ─── Hoja "Me paso a Sueldos" (solo la versión de MJ) ──────────────────────
+// ─── Hoja "Me paso a Sueldos" ────────────────────────────────────────────────
 // La misma tabla que la pantalla, más el detalle de las transferencias.
 function hojaSueldos(
   wb: ExcelJS.Workbook,

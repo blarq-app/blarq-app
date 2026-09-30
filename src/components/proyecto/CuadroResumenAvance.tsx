@@ -225,6 +225,8 @@ export default function CuadroResumenAvance({
   }
 
   // ── Descargar como Excel ─────────────────────────────────────────────────
+  // Es el Excel de MJ (no el del cliente, que sigue siendo la imagen): trae
+  // también la línea del pie y "Me paso a Sueldos". Ver CuadroResumenXLSX.ts.
   // Se arma ACÁ, en el navegador, y no en una ruta del server: así lleva el %
   // de avance recién tipeado (el guardado va con retardo y el server podría
   // tener todavía el anterior) y el tilde de comparación tal como está. El
@@ -258,7 +260,6 @@ export default function CuadroResumenAvance({
         avance,
         mostrarAnterior,
         transferencias,
-        variante: "cliente",
         isotipoBase64,
       });
       const url = URL.createObjectURL(
@@ -504,10 +505,14 @@ export default function CuadroResumenAvance({
             </tbody>
           </table>
         </div>
+        {/* Lo que "pedís" es el MISMO total de la fila AVANCE, en pesos
+            enteros. Hasta 2026-09-30 usaba la suma con fracciones y decía $1
+            más que la fila (Algarrobos: $46.784.581 contra $46.784.580), y en
+            una obra ya cobrada al 100% decía "pedís $0". */}
         <p className="text-[11px] text-gray-400 mt-3">
           Avance total cobrado: {(avanceTotal * 100).toFixed(0)}% del acordado.
-          {calc.totalAPedir > 0 && (
-            <> Con este avance pedís <span className="text-rose-700 font-medium tabular-nums">{formatCLP(calc.totalAPedir)}</span> y el saldo queda en {formatCLP(calc.totalSaldoNuevo)}.</>
+          {totalAPedirMostrado > 0 && (
+            <> Con este avance pedís <span className="text-rose-700 font-medium tabular-nums">{formatCLP(totalAPedirMostrado)}</span> y el saldo queda en {formatCLP(calc.totalSaldoNuevo)}.</>
           )}
         </p>
       </div>

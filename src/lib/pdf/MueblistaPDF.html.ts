@@ -85,7 +85,7 @@ const CSS = `
   tbody td { padding: 3.5pt 6pt; border-bottom: 0.5pt solid #EEE; vertical-align: top; }
   .c-spec { color: #666; text-transform: uppercase; font-size: 8pt; }
   .c-prov { color: #888; text-transform: uppercase; font-size: 7.5pt; }
-  .c-ubic { text-transform: uppercase; font-size: 8pt; }
+  .c-ubic { font-size: 8pt; }
   .c-qty { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .empty { font-size: 9pt; color: #888; font-style: italic; padding: 12pt 0; }
 `;

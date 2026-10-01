@@ -1,8 +1,12 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-09-30.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-10-01.
 
 ---
+
+- **Ubicación de herrajes en minúscula o mayúscula (2026-10-01, a prod con OK de MJ: "sube lo de los textos")**: el campo UBICACIÓN de las líneas de herraje forzaba MAYÚSCULA (al guardar, en pantalla y en el PDF mueblista). Ahora se guarda como lo escribe MJ, solo con los espacios limpios. El autocompletar de la partida muestra "Lavaplatos" y "LAVAPLATOS" una sola vez. Las ubicaciones ya guardadas siguen en mayúscula hasta que se reescriban. Pendiente ofrecido, sin respuesta: el campo es angosto y corta los textos largos.
+
+- **Proveedor SAMET con las bisagras de DPH (2026-10-01, pendiente 192, APLICADO en la viva con OK de MJ)**: Samet no tiene web ni precios online; MJ: *"los productos son los mismos, solo cambian las marcas"*. `scripts/copiar-bisagras-dph-a-samet.ts` (dry-run por defecto, `--write` para guardar; no usa dotenv, lee `.env.prod`) copió 13 de las 14 bisagras DPH a SAMET: mismo nombre **sin "Par"** (Samet vende por unidad), misma carpeta, color y foto (ya era copia en la app), marca "Samet", **costo $0** (MJ pone el precio Samet), sin SKU ni link de DPH (así "Revisar precios" no las compara con dph.cl). La "Bisagra 3D Recta Cierre Suave Par" no se copió: MJ ya tenía "Bisagra Recta Cierre Suave" ($3.600), que recibió la foto y la carpeta "Cierre suave 3D". SAMET quedó con 14. DPH no se tocó. OJO: hasta que MJ ponga los precios, una bisagra SAMET agregada a una cotización entra a $0.
 
 - **Columna UBICACIÓN en las líneas de herraje, interna (2026-09-30, pendiente 189, PR #470, a prod el 2026-09-30 con OK de MJ: "dale a prod")**: MJ quería anotar *"dónde estoy ubicando cada accesorio, pero que no lo vea el cliente, después para mandárselo al maestro"*.
   - **El campo ya existía**: `MuebleHerraje.sector`, desde la partida de herrajes, aceptado por la API al crear y editar, pero sin dónde escribirlo (0 de 73 líneas con valor en la viva). Sin cambios de base de datos.

@@ -2,16 +2,15 @@
  * PDF "Listado de herrajes para el mueblista" (Fase 3 herrajes, 2026-06-22).
  *
  * Es la SEGUNDA salida de la cotización de muebles: el mismo set de herrajes
- * pero SIN PRECIOS, agrupado por UBICACIÓN (campo `sector` de la línea), para
- * pasarle al mueblista y que sepa dónde va cada herraje y cuántos (y, si BLARQ
- * los compró, dónde se los consideró). Solo nombre + medida/color + proveedor +
- * cantidad.
+ * pero SIN PRECIOS, para pasarle al mueblista y que sepa dónde va cada herraje
+ * y cuántos (y, si BLARQ los compró, dónde se los consideró). Nombre +
+ * medida/color + proveedor + ubicación + cantidad.
  *
- * Los grupos siguen la MISMA regla que el editor (HerrajePartidaBlock): las
- * ubicaciones en el orden en que aparecen, "Sin ubicación" al final, y ese
- * rótulo solo cuando hay otras ubicaciones escritas — si ninguna línea tiene
- * ubicación, la lista del capítulo va plana. Así la pantalla y el PDF se leen
- * igual.
+ * Se ve IGUAL que la lista de la app (HerrajePartidaBlock), por pedido de MJ
+ * (2026-09-30, pendiente 189): una tabla por capítulo, en el orden de MJ, y la
+ * ubicación (campo `sector` de la línea) como una columna más — sin títulos
+ * por ubicación. Si ninguna línea del documento tiene ubicación, la columna no
+ * se imprime (sería una columna entera de "—").
  *
  * Self-contained a propósito (no toca el PDF de muebles al cliente).
  */
@@ -81,21 +80,21 @@ const CSS = `
   .meta strong { color: #1A1A1A; }
   .note { font-size: 8pt; color: #555; background: #F5F5F5; padding: 6pt 8pt; border-radius: 4pt; margin-bottom: 12pt; }
   .chapter { font-size: 10pt; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin: 14pt 0 4pt; padding-bottom: 2pt; border-bottom: 1pt solid #CCC; }
-  .sector { font-size: 8.5pt; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #555; background: #F5F5F5; padding: 3pt 6pt; margin-top: 8pt; }
   table { width: 100%; border-collapse: collapse; }
   thead th { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.04em; color: #888; text-align: left; padding: 4pt 6pt; border-bottom: 1pt solid #DDD; font-weight: 600; }
   tbody td { padding: 3.5pt 6pt; border-bottom: 0.5pt solid #EEE; vertical-align: top; }
   .c-spec { color: #666; text-transform: uppercase; font-size: 8pt; }
   .c-prov { color: #888; text-transform: uppercase; font-size: 7.5pt; }
+  .c-ubic { text-transform: uppercase; font-size: 8pt; }
   .c-qty { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .empty { font-size: 9pt; color: #888; font-style: italic; padding: 12pt 0; }
 `;
 
-// `rotulo` = null → sin rótulo (capítulo sin ninguna ubicación escrita).
-function renderSector(rotulo: string | null, lines: MueblistaHerrajeInput[]): string {
+function renderTabla(lines: MueblistaHerrajeInput[], conUbicacion: boolean): string {
   const rows = lines
     .map((h) => {
       const spec = [h.measure, h.finish].filter(Boolean).join(" · ");
+      const ubic = (h.sector ?? "").trim();
       // El nombre va con la escritura homologada (pendiente 139) con el mismo
       // helper que usa el editor, para que PDF y pantalla no puedan divergir.
       return `
@@ -103,15 +102,18 @@ function renderSector(rotulo: string | null, lines: MueblistaHerrajeInput[]): st
         <td>${esc(formatHerrajeName(h.name))}</td>
         <td class="c-spec">${esc(spec) || "—"}</td>
         <td class="c-prov">${esc(h.supplier)}</td>
+        ${conUbicacion ? `<td class="c-ubic">${esc(ubic) || "—"}</td>` : ""}
         <td class="c-qty">${fmtQty(h.quantity)}</td>
       </tr>`;
     })
     .join("");
+  const head = conUbicacion
+    ? `<th style="width:38%">Herraje</th><th style="width:20%">Medida / color</th><th style="width:11%">Prov.</th><th style="width:22%">Ubicación</th><th style="width:9%;text-align:right">Cant.</th>`
+    : `<th style="width:48%">Herraje</th><th style="width:28%">Medida / color</th><th style="width:14%">Prov.</th><th style="width:10%;text-align:right">Cant.</th>`;
   return `
-    ${rotulo !== null ? `<div class="sector">${esc(rotulo)}</div>` : ""}
     <table>
       <thead>
-        <tr><th style="width:48%">Herraje</th><th style="width:28%">Medida / color</th><th style="width:14%">Prov.</th><th style="width:10%;text-align:right">Cant.</th></tr>
+        <tr>${head}</tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>`;
@@ -124,34 +126,16 @@ export function renderMueblistaHTML(input: MueblistaHTMLInput): string {
     ? `<img class="logo" src="${logoUri}" alt="BLARQ" />`
     : `<div class="title">BLARQ</div>`;
 
-  // Solo capítulos con herrajes; dentro, agrupar por ubicación (misma regla
-  // que el editor, ver arriba).
+  // Solo capítulos con herrajes, cada uno en una tabla en el orden de MJ.
+  const conUbicacion = chapters.some((ch) =>
+    ch.herrajes.some((h) => (h.sector ?? "").trim() !== ""),
+  );
   const body = chapters
     .filter((ch) => ch.herrajes.length > 0)
-    .map((ch) => {
-      const order: string[] = [];
-      const bySector = new Map<string, MueblistaHerrajeInput[]>();
-      const sinUbicacion: MueblistaHerrajeInput[] = [];
-      for (const h of ch.herrajes) {
-        const key = (h.sector ?? "").trim().toUpperCase();
-        if (!key) {
-          sinUbicacion.push(h);
-          continue;
-        }
-        if (!bySector.has(key)) {
-          bySector.set(key, []);
-          order.push(key);
-        }
-        bySector.get(key)!.push(h);
-      }
-      const hayUbicaciones = order.length > 0;
-      const sectors =
-        order.map((s) => renderSector(s, bySector.get(s)!)).join("") +
-        (sinUbicacion.length > 0
-          ? renderSector(hayUbicaciones ? "Sin ubicación" : null, sinUbicacion)
-          : "");
-      return `<div class="chapter">${esc(ch.name)}</div>${sectors}`;
-    })
+    .map(
+      (ch) =>
+        `<div class="chapter">${esc(ch.name)}</div>${renderTabla(ch.herrajes, conUbicacion)}`,
+    )
     .join("");
 
   const hasHerrajes = body.length > 0;

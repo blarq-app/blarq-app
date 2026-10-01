@@ -140,9 +140,10 @@ function HerrajeNameInput({
 // herrajes, pero no había dónde escribirlo.
 //
 // Igual que la cantidad y el nombre: edita en LOCAL y guarda al SALIR del
-// campo. Se guarda en MAYÚSCULA y con los espacios limpios porque las líneas
-// se agrupan por el texto exacto: "Lavaplatos" y "LAVAPLATOS " armarían dos
-// grupos distintos. Vaciarla es válido (la línea vuelve a "Sin ubicación").
+// campo. Se guarda en MAYÚSCULA y con los espacios limpios para que la misma
+// ubicación se escriba siempre igual ("Lavaplatos" y "LAVAPLATOS " serían dos
+// sugerencias distintas en el autocompletar). Vaciarla es válido. Escribirla
+// NO mueve la línea: la lista va en el orden de MJ.
 // `listId` apunta al <datalist> de la partida: sugiere las ubicaciones que ya
 // se escribieron en ella, para no tipear lo mismo diez veces.
 function normalizarUbicacion(s: string): string {
@@ -2619,65 +2620,32 @@ function HerrajePartidaBlock({
   const ROW_GRID =
     "grid grid-cols-[3rem_minmax(0,1fr)_5rem_8rem_2rem] items-baseline gap-3";
 
-  // Agrupamos las líneas por ubicación (campo `sector`). Las ubicaciones van en
-  // el orden en que aparecen (la primera línea de cada una marca su posición)
-  // y las líneas "Sin ubicación" van SIEMPRE al final. Así, cuando MJ recorre
-  // la lista de arriba abajo anotando ubicaciones, cada línea que anota queda
-  // más o menos donde estaba (pasa del tope de las pendientes al fondo de las
-  // ya ubicadas) en vez de saltar por encima de las que faltan.
-  const groups: { sector: string; lines: MuebleHerraje[] }[] = [];
-  const sinUbicacion: MuebleHerraje[] = [];
-  for (const line of item.herrajes) {
-    const sector = line.sector ?? "";
-    if (!sector) {
-      sinUbicacion.push(line);
-      continue;
-    }
-    const existing = groups.find((g) => g.sector === sector);
-    if (existing) existing.lines.push(line);
-    else groups.push({ sector, lines: [line] });
-  }
-  if (sinUbicacion.length > 0) groups.push({ sector: "", lines: sinUbicacion });
-  // Con al menos una ubicación escrita, el grupo de las que faltan se rotula
-  // "Sin ubicación": si no, esas líneas se leerían como parte del grupo de
-  // arriba. Si ninguna tiene ubicación, la lista va plana, sin rótulos.
-  const hayUbicaciones = groups.some((g) => g.sector);
+  // Las líneas van en UNA lista, en el orden de MJ (sortOrder), sin títulos
+  // por ubicación. La ubicación es solo una columna: escribirla NO mueve la
+  // línea. Si MJ quiere juntar las de un mismo lugar, las arrastra. Decisión
+  // de MJ (2026-09-30, pendiente 189): "solo la columna ubicación y nada más",
+  // y que el PDF mueblista se vea igual que la app.
+  //
+  // Antes el editor agrupaba por `sector` con un título por grupo y un
+  // arrastre confinado a cada grupo. Ninguna línea tenía sector escrito, así
+  // que en la práctica la lista ya era plana.
+  //
   // Ubicaciones ya escritas en esta partida, para autocompletar.
   const ubicacionesListId = `herrajes-ubicaciones-${item.id}`;
-  const ubicaciones = groups.filter((g) => g.sector).map((g) => g.sector);
+  const ubicaciones = Array.from(
+    new Set(item.herrajes.map((h) => h.sector ?? "").filter(Boolean))
+  );
 
-  // Al anotar una ubicación la línea salta a su grupo. Para que no parezca que
-  // "desapareció", se la resalta un momento y se la trae a la vista.
-  const [recienUbicada, setRecienUbicada] = useState<string | null>(null);
-  useEffect(() => {
-    if (!recienUbicada) return;
-    document
-      .querySelector(`[data-herraje-ubicacion="${recienUbicada}"]`)
-      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    const t = setTimeout(() => setRecienUbicada(null), 1600);
-    return () => clearTimeout(t);
-  }, [recienUbicada]);
-
-  // Arrastre de una línea DENTRO de su ubicación. El sortOrder es global a la
-  // partida, así que se rearma la lista completa: se reemplazan las líneas de
-  // esa ubicación por su orden nuevo y el resto queda donde estaba.
-  //
-  // El arrastre NO cruza ubicaciones a propósito: soltar una línea en otro
-  // grupo no le cambiaría la ubicación (es un campo de la línea, no su
-  // posición), así que volvería a saltar a su grupo original y se vería como
-  // que el arrastre "no funcionó". Para cambiarla de grupo se reescribe su
-  // ubicación en la columna.
-  function reordenarEnSector(sector: string, lines: MuebleHerraje[], e: DragEndEvent) {
+  // Arrastre de una línea dentro de la partida. Se manda el orden completo.
+  function reordenarHerrajes(e: DragEndEvent) {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const oldIdx = lines.findIndex((l) => l.id === active.id);
-    const newIdx = lines.findIndex((l) => l.id === over.id);
+    const oldIdx = item.herrajes.findIndex((l) => l.id === active.id);
+    const newIdx = item.herrajes.findIndex((l) => l.id === over.id);
     if (oldIdx < 0 || newIdx < 0) return;
-    const nuevas = arrayMove(lines, oldIdx, newIdx);
-    const global = groups.flatMap((g) =>
-      g.sector === sector ? nuevas : g.lines
+    onReorderHerrajes(
+      arrayMove(item.herrajes, oldIdx, newIdx).map((l) => l.id)
     );
-    onReorderHerrajes(global.map((l) => l.id));
   }
 
   // Margen mostrado como % entero (0.2 → 20).
@@ -2726,7 +2694,7 @@ function HerrajePartidaBlock({
           - SIN líneas: modo MANUAL — proveedor + costo se cargan en el "Costo
             interno" de abajo (igual que muebles/cubiertas).
           - CON líneas (del catálogo): itemizado; el costo lo derivan las líneas.
-          Las líneas del catálogo se listan acá, agrupadas por ubicación. */}
+          Las líneas del catálogo se listan acá, en el orden de MJ. */}
       {item.herrajes.length > 0 && (
         <>
           {/* Encabezado de la columna UBICACIÓN, sobre el campo de cada línea.
@@ -2756,128 +2724,101 @@ function HerrajePartidaBlock({
         </>
       )}
       {item.herrajes.length > 0 && (
-        groups.map((g) => (
-          <div key={g.sector || "__sin__"}>
-            {/* Rótulo del grupo: la ubicación, o "Sin ubicación" para las que
-                faltan — este último SOLO si hay otras ubicaciones escritas. Si
-                ninguna línea tiene ubicación no se rotula nada (era ruido: la
-                lista va plana). */}
-            {(g.sector || hayUbicaciones) && (
-              <div className={`${ROW_GRID} px-4 pt-1.5 pb-0.5 border-b border-gray-50`}>
-                <div></div>
-                <div
-                  className={`text-[10px] font-semibold uppercase tracking-wider ${g.sector ? "text-gray-500" : "text-gray-400"}`}
-                >
-                  {g.sector || "Sin ubicación"}
-                </div>
-                <div></div>
-                <div></div>
-                <div></div>
-              </div>
-            )}
-
-            {/* Cada herraje del sector. DndContext PROPIO por sector: el
-                arrastre queda confinado al grupo (ver reordenarEnSector). */}
-            <DndContext
-              id={`muebles-herrajes-dnd-${item.id}-${g.sector || "__sin__"}`}
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={(e: DragEndEvent) =>
-                reordenarEnSector(g.sector, g.lines, e)
-              }
-            >
-              <SortableContext
-                items={g.lines.map((l) => l.id)}
-                strategy={verticalListSortingStrategy}
+        <DndContext
+          id={`muebles-herrajes-dnd-${item.id}`}
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={reordenarHerrajes}
+        >
+          <SortableContext
+            items={item.herrajes.map((l) => l.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {item.herrajes.map((h) => (
+              <SortableRow
+                key={h.id}
+                id={h.id}
+                className={`${ROW_GRID} px-4 py-0.5 border-b border-gray-50`}
               >
-                {g.lines.map((h) => (
-                  <SortableRow
-                    key={h.id}
-                    id={h.id}
-                    className={`${ROW_GRID} px-4 py-0.5 border-b border-gray-50 transition-colors duration-700 ${recienUbicada === h.id ? "bg-gray-100" : ""}`}
-                  >
-                    {(handle) => (
-                      <>
-                        <div></div>
-                        {/* Columna PARTIDA: manija + nombre + medida + color +
-                            proveedor. Flex (no grid anidado): el grid anidado
-                            colapsaba la columna del nombre a ~1 carácter y lo
-                            dibujaba en vertical. */}
-                        <div className="flex items-baseline gap-2 min-w-0">
-                          <span className="shrink-0 self-center">{handle}</span>
-                          {/* Nombre editable (commit al salir del campo),
-                              con la escritura homologada (pendiente 139). */}
-                          <HerrajeNameInput
-                            value={formatHerrajeName(h.name)}
-                            onCommit={(name) => onUpdateHerraje(h.id, { name })}
-                          />
-                          {/* Flechita ↗ al producto en la web del proveedor,
-                              IGUAL que en artefactos: mismo glifo, tamaño y
-                              lugar (pegada al nombre). Sin catálogo detrás no
-                              hay link y no se dibuja (pendiente 143). */}
-                          {h.referenceLink && (
-                            <a
-                              href={h.referenceLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="shrink-0 self-center text-xs text-gray-400 hover:text-gray-900 leading-none"
-                              title="Abrir el producto en la web del proveedor"
-                            >
-                              ↗
-                            </a>
-                          )}
-                          {(h.measure || h.finish) && (
-                            <span className="shrink-0 text-[10px] text-gray-500 self-center">
-                              {[h.measure, h.finish]
-                                .filter(Boolean)
-                                .map((s) => (s as string).toUpperCase())
-                                .join(" · ")}
-                            </span>
-                          )}
-                          <span className="shrink-0 text-[9px] uppercase tracking-wider text-gray-400 self-center">
-                            {h.supplier}
-                          </span>
-                          {/* Columna UBICACIÓN (interna). Ancho fijo y pegada
-                              al costo: así queda alineada en todas las líneas
-                              aunque los nombres y medidas tengan largos
-                              distintos. */}
-                          <HerrajeUbicacionInput
-                            herrajeId={h.id}
-                            value={h.sector ?? ""}
-                            listId={ubicacionesListId}
-                            onCommit={(sector) => {
-                              onUpdateHerraje(h.id, { sector });
-                              setRecienUbicada(h.id);
-                            }}
-                          />
-                          {/* Costo unitario (read-only, gris). */}
-                          <span className="shrink-0 w-16 text-[10px] text-right tabular-nums text-gray-400 self-center">
-                            {formatCLP(h.costNet)}
-                          </span>
-                        </div>
-                        {/* Cantidad editable (commit al salir) + subtotal. */}
-                        <HerrajeQtyInput
-                          value={h.quantity}
-                          costNet={h.costNet}
-                          onCommit={(qty) =>
-                            onUpdateHerraje(h.id, { quantity: qty })
-                          }
-                        />
-                        <button
-                          onClick={() => onDeleteHerraje(h.id)}
-                          className="text-gray-300 hover:text-red-500 text-xs leading-none"
-                          title="Eliminar herraje"
+                {(handle) => (
+                  <>
+                    <div></div>
+                    {/* Columna PARTIDA: manija + nombre + medida + color +
+                        proveedor. Flex (no grid anidado): el grid anidado
+                        colapsaba la columna del nombre a ~1 carácter y lo
+                        dibujaba en vertical. */}
+                    <div className="flex items-baseline gap-2 min-w-0">
+                      <span className="shrink-0 self-center">{handle}</span>
+                      {/* Nombre editable (commit al salir del campo),
+                          con la escritura homologada (pendiente 139). */}
+                      <HerrajeNameInput
+                        value={formatHerrajeName(h.name)}
+                        onCommit={(name) => onUpdateHerraje(h.id, { name })}
+                      />
+                      {/* Flechita ↗ al producto en la web del proveedor,
+                          IGUAL que en artefactos: mismo glifo, tamaño y
+                          lugar (pegada al nombre). Sin catálogo detrás no
+                          hay link y no se dibuja (pendiente 143). */}
+                      {h.referenceLink && (
+                        <a
+                          href={h.referenceLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 self-center text-xs text-gray-400 hover:text-gray-900 leading-none"
+                          title="Abrir el producto en la web del proveedor"
                         >
-                          ✕
-                        </button>
-                      </>
-                    )}
-                  </SortableRow>
-                ))}
-              </SortableContext>
-            </DndContext>
-          </div>
-        ))
+                          ↗
+                        </a>
+                      )}
+                      {(h.measure || h.finish) && (
+                        <span className="shrink-0 text-[10px] text-gray-500 self-center">
+                          {[h.measure, h.finish]
+                            .filter(Boolean)
+                            .map((s) => (s as string).toUpperCase())
+                            .join(" · ")}
+                        </span>
+                      )}
+                      <span className="shrink-0 text-[9px] uppercase tracking-wider text-gray-400 self-center">
+                        {h.supplier}
+                      </span>
+                      {/* Columna UBICACIÓN (interna). Ancho fijo y pegada
+                          al costo: así queda alineada en todas las líneas
+                          aunque los nombres y medidas tengan largos
+                          distintos. */}
+                      <HerrajeUbicacionInput
+                        herrajeId={h.id}
+                        value={h.sector ?? ""}
+                        listId={ubicacionesListId}
+                        onCommit={(sector) =>
+                          onUpdateHerraje(h.id, { sector })
+                        }
+                      />
+                      {/* Costo unitario (read-only, gris). */}
+                      <span className="shrink-0 w-16 text-[10px] text-right tabular-nums text-gray-400 self-center">
+                        {formatCLP(h.costNet)}
+                      </span>
+                    </div>
+                    {/* Cantidad editable (commit al salir) + subtotal. */}
+                    <HerrajeQtyInput
+                      value={h.quantity}
+                      costNet={h.costNet}
+                      onCommit={(qty) =>
+                        onUpdateHerraje(h.id, { quantity: qty })
+                      }
+                    />
+                    <button
+                      onClick={() => onDeleteHerraje(h.id)}
+                      className="text-gray-300 hover:text-red-500 text-xs leading-none"
+                      title="Eliminar herraje"
+                    >
+                      ✕
+                    </button>
+                  </>
+                )}
+              </SortableRow>
+            ))}
+          </SortableContext>
+        </DndContext>
       )}
 
       {/* Botones "Agregar del catálogo" y "Crear uno nuevo" + la ventana.

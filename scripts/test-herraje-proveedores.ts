@@ -8,8 +8,8 @@ import {
   seComparaConLaWeb,
   motivoSinCompararWeb,
   proveedorDelLink,
-  extraerLlenaCosto,
-  avisoCostoSinLlenar,
+  extraerPrecioExactoDph,
+  avisoCostoDeLaWeb,
 } from "../src/lib/presupuesto/herrajeProveedores";
 import { extractGenericProductData } from "../src/lib/catalog/fetchArtefactoData";
 
@@ -45,30 +45,30 @@ eq("sitio hbt.cl (con www y parámetro de Google)", proveedorDelLink(HBT_LINK), 
 eq("sitio dph.cl", proveedorDelLink(DPH_LINK), "DPH");
 eq("sitio desconocido", proveedorDelLink("https://tienda.cl/x"), null);
 eq("link roto", proveedorDelLink("no es link"), null);
-eq("DPH + link DPH → llena", extraerLlenaCosto("DPH", DPH_LINK), true);
-eq("HBT + link HBT → NO llena", extraerLlenaCosto("HBT", HBT_LINK), false);
-eq("pestaña DPH olvidada + link HBT → NO llena", extraerLlenaCosto("DPH", HBT_LINK), false);
-eq("HBT + link DPH → NO llena", extraerLlenaCosto("HBT", DPH_LINK), false);
-eq("Ducasse → NO llena", extraerLlenaCosto("DAPDUCASSE", "https://dapducasse.cl/x.html"), false);
-eq("DPH + sitio desconocido → NO llena", extraerLlenaCosto("DPH", "https://tienda.cl/x"), false);
-eq("dph + www.dph.cl → llena", extraerLlenaCosto(" dph ", "https://www.dph.cl/products/x"), true);
-eq("Carlos (otro) → NO llena", extraerLlenaCosto("Carlos", "https://tienda.cl/x"), false);
+eq("DPH + link DPH → llena", extraerPrecioExactoDph("DPH", DPH_LINK), true);
+eq("HBT + link HBT → NO llena", extraerPrecioExactoDph("HBT", HBT_LINK), false);
+eq("pestaña DPH olvidada + link HBT → NO llena", extraerPrecioExactoDph("DPH", HBT_LINK), false);
+eq("HBT + link DPH → NO llena", extraerPrecioExactoDph("HBT", DPH_LINK), false);
+eq("Ducasse → NO llena", extraerPrecioExactoDph("DAPDUCASSE", "https://dapducasse.cl/x.html"), false);
+eq("DPH + sitio desconocido → NO llena", extraerPrecioExactoDph("DPH", "https://tienda.cl/x"), false);
+eq("dph + www.dph.cl → llena", extraerPrecioExactoDph(" dph ", "https://www.dph.cl/products/x"), true);
+eq("Carlos (otro) → NO llena", extraerPrecioExactoDph("Carlos", "https://tienda.cl/x"), false);
 
-// Aviso cuando el costo no se llena (2026-10-01): salió de la ruta extract a
-// herrajeProveedores para que el servidor y el navegador digan lo mismo. Los
-// textos son los que la ruta ya daba.
-eq("aviso HBT con precio web", avisoCostoSinLlenar("HBT", HBT_LINK, 10990),
-  "HBT: el costo es el precio que negociaste, no el de la web (la web publica $10.990). Escribilo a mano.");
-eq("aviso HBT sin precio web", avisoCostoSinLlenar("HBT", HBT_LINK, null),
-  "HBT: el costo es el precio que negociaste, no el de la web. Escribilo a mano.");
-eq("aviso pestaña DPH + link HBT → manda el sitio", avisoCostoSinLlenar("DPH", HBT_LINK, null),
-  "HBT: el costo es el precio que negociaste, no el de la web. Escribilo a mano.");
-eq("aviso DPH + sitio desconocido", avisoCostoSinLlenar("DPH", "https://tienda.cl/x", 5000),
-  "El link no es de dph.cl: el costo no se toma de la web (la web publica $5.000). Escribilo a mano.");
-eq("aviso Ducasse", avisoCostoSinLlenar("DAPDUCASSE", "https://dapducasse.cl/x.html", null),
-  "DAPDUCASSE: el costo no se toma de la web. Escribilo a mano.");
-eq("aviso otro proveedor sin sitio conocido", avisoCostoSinLlenar("Carlos", "https://tienda.cl/x", null),
-  "Carlos: el costo no se toma de la web. Escribilo a mano.");
+// Aviso de "Extraer" cuando el costo sale del precio de la web (todo lo que
+// no es DPH con variante exacta). Desde 2026-10-01 el costo se llena también
+// en HBT (pedido de MJ) y el aviso recuerda cambiarlo si negoció otro.
+eq("aviso HBT con precio web", avisoCostoDeLaWeb("HBT", HBT_LINK, 10990),
+  "Costo = precio de la web de HBT ($10.990). Si negociaste otro precio, cambialo.");
+eq("aviso HBT sin precio web", avisoCostoDeLaWeb("HBT", HBT_LINK, null),
+  "HBT: la web no muestra el precio. Escribí el costo a mano.");
+eq("aviso pestaña DPH + link HBT → manda el sitio", avisoCostoDeLaWeb("DPH", HBT_LINK, 10990),
+  "Costo = precio de la web de HBT ($10.990). Si negociaste otro precio, cambialo.");
+eq("aviso sitio desconocido → el host", avisoCostoDeLaWeb("DPH", "https://www.tienda.cl/x", 5000),
+  "Costo = precio de la web de tienda.cl ($5.000). Si negociaste otro precio, cambialo.");
+eq("aviso Ducasse", avisoCostoDeLaWeb("DAPDUCASSE", "https://dapducasse.cl/x.html", 2980),
+  "Costo = precio de la web de DAPDUCASSE ($2.980). Si negociaste otro precio, cambialo.");
+eq("aviso otro proveedor, sitio desconocido, sin precio", avisoCostoDeLaWeb("Carlos", "https://tienda.cl/x", null),
+  "tienda.cl: la web no muestra el precio. Escribí el costo a mano.");
 
 // El lector que usa el NAVEGADOR cuando hbt.cl bloquea al servidor: misma
 // forma que la página real de hbt.cl (Magento, og:title en entidades hex).

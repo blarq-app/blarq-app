@@ -18,13 +18,15 @@
  *     (extractGenericProductData), para que salga igual.
  *   - La foto se baja acá y viaja como data URL: el servidor la guarda como
  *     copia (cajón de fotos) sin tener que ir a hbt.cl, que lo rechazaría.
- *   - El costo NUNCA se llena: en HBT es el precio negociado, y el precio
- *     exacto de DPH lo sabe leer solo el servidor. Va el mismo aviso que daría
- *     el servidor, con el precio de la web como referencia.
+ *   - El costo, igual que en el servidor: el precio de la web, con el aviso
+ *     que recuerda cambiarlo si MJ negoció otro (desde 2026-10-01; antes
+ *     quedaba vacío). Excepción: DPH, cuyo precio exacto de la variante sabe
+ *     leerlo solo el servidor; la página muestra el de otra medida, así que
+ *     ahí el costo queda vacío con aviso.
  */
 import { extractGenericProductData } from "@/lib/catalog/fetchArtefactoData";
 import { fileToThumbnailDataUrl } from "@/lib/imageThumbnail";
-import { avisoCostoSinLlenar, extraerLlenaCosto } from "@/lib/presupuesto/herrajeProveedores";
+import { avisoCostoDeLaWeb, extraerPrecioExactoDph } from "@/lib/presupuesto/herrajeProveedores";
 import { formatCLP } from "@/lib/utils";
 
 export interface HerrajeExtraido {
@@ -92,15 +94,22 @@ async function extraerEnNavegador(
   const d = extractGenericProductData(url, html, host.split(".")[0]);
   if (!d.name && !d.imageUrl) return null;
   const imageUrl = d.imageUrl ? await fotoComoDataUrl(d.imageUrl) : null;
-  const publica = d.listPrice ? ` (la web publica ${formatCLP(d.listPrice)})` : "";
+  if (extraerPrecioExactoDph(proveedor, url)) {
+    const publica = d.listPrice ? ` (la web publica ${formatCLP(d.listPrice)})` : "";
+    return {
+      name: d.name,
+      brand: d.brand,
+      imageUrl,
+      costNet: null,
+      avisoCosto: `El precio exacto de la medida no se pudo leer${publica}: escribí el costo a mano.`,
+    };
+  }
   return {
     name: d.name,
     brand: d.brand,
     imageUrl,
-    costNet: null,
-    avisoCosto: extraerLlenaCosto(proveedor, url)
-      ? `El precio exacto de la medida no se pudo leer${publica}: escribí el costo a mano.`
-      : avisoCostoSinLlenar(proveedor, url, d.listPrice),
+    costNet: d.listPrice,
+    avisoCosto: avisoCostoDeLaWeb(proveedor, url, d.listPrice),
   };
 }
 

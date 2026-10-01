@@ -75,33 +75,36 @@ export function proveedorDelLink(link: string): string | null {
 }
 
 /**
- * ¿El precio que trae "Extraer" puede quedar como COSTO del herraje nuevo?
+ * ¿"Extraer" saca el costo del precio EXACTO de la variante en dph.cl?
  * (pendiente 188, 2026-09-29 — esto es plata.)
  *
- * Solo si el precio público es lo que paga BLARQ, o sea DPH (misma lista que
- * "Comparar con la web", PROVEEDORES_PRECIO_WEB). En HBT el costo es el
- * precio NEGOCIADO: el Merivobox E se paga $64.000 y hbt.cl publica $89.990;
- * llenar el costo con lo de la web lo cargaba $26.000 más caro sin avisar, y
- * de ahí entraba derecho a la partida. Ducasse: 1 solo herraje en la base (su
- * web publica lo mismo que el costo), muy poco para fiarse → como HBT.
+ * Los productos de DPH vienen en varias medidas y la página muestra el precio
+ * de otra: el cajón 119mm daba $26.100 cuando el de 500mm (el que se compra)
+ * es $26.900. Por eso con DPH el costo sale de fetchHerrajePrice (por SKU o
+ * la única variante), y si no se sabe cuál, queda vacío con aviso.
  *
  * Tienen que calzar LAS DOS pistas: el proveedor del formulario Y el sitio
- * del link. Un link de hbt.cl con la pestaña DPH olvidada no llena el costo,
- * y tampoco un link de un sitio que no conocemos (el precio exacto de la
- * variante solo se sabe leer en dph.cl).
+ * del link (el precio exacto de la variante solo se sabe leer en dph.cl).
+ *
+ * Hasta 2026-10-01 esto decidía además si el costo se llenaba: con HBT y el
+ * resto quedaba VACÍO, porque en HBT el costo es el precio negociado (el
+ * Merivobox E se paga $64.000 y hbt.cl publica $89.990). MJ lo cambió al
+ * usarlo: "si estoy pidiéndole extraer, que me lo extraiga no más". Ahora
+ * todos llenan el costo con el precio de la web y el aviso (avisoCostoDeLaWeb)
+ * le recuerda cambiarlo si negoció otro.
  */
-export function extraerLlenaCosto(proveedor: string, link: string): boolean {
+export function extraerPrecioExactoDph(proveedor: string, link: string): boolean {
   const delSitio = proveedorDelLink(link);
   return seComparaConLaWeb(proveedor) && delSitio != null && seComparaConLaWeb(delSitio);
 }
 
 /**
- * El aviso que acompaña al "Extraer" cuando el costo NO se llena con el precio
- * de la web, en palabras de MJ. Lo usan el servidor (extract) y el navegador
- * (cuando la tienda bloquea al servidor, ver extraerHerraje.ts), para que los
- * dos caminos digan lo mismo.
+ * El aviso que acompaña al "Extraer" cuando el costo sale del precio de la
+ * web de la página (todo lo que no es DPH con variante exacta), en palabras
+ * de MJ. Lo usan el servidor (extract) y el navegador (cuando la tienda
+ * bloquea al servidor, ver extraerHerraje.ts), para que digan lo mismo.
  */
-export function avisoCostoSinLlenar(
+export function avisoCostoDeLaWeb(
   proveedor: string,
   link: string,
   precioWeb: number | null
@@ -112,16 +115,14 @@ export function avisoCostoSinLlenar(
   } catch {
     /* link inválido: queda el proveedor */
   }
-  const delSitio = proveedorDelLink(link);
-  const quien = delSitio ?? (proveedor || host);
-  const publica = precioWeb ? ` (la web publica ${formatCLP(precioWeb)})` : "";
-  if (quien === "HBT") {
-    return `HBT: el costo es el precio que negociaste, no el de la web${publica}. Escribilo a mano.`;
+  // El nombre de la tienda de donde salió el precio: el proveedor si el sitio
+  // es conocido (dph.cl → DPH), si no la página misma (tienda.cl), no la
+  // pestaña del formulario (que puede ser otra).
+  const quien = proveedorDelLink(link) ?? (host || proveedor);
+  if (!precioWeb) {
+    return `${quien}: la web no muestra el precio. Escribí el costo a mano.`;
   }
-  if (delSitio == null && extraerLlenaCosto(proveedor, "https://dph.cl/")) {
-    return `El link no es de dph.cl: el costo no se toma de la web${publica}. Escribilo a mano.`;
-  }
-  return `${quien}: el costo no se toma de la web${publica}. Escribilo a mano.`;
+  return `Costo = precio de la web de ${quien} (${formatCLP(precioWeb)}). Si negociaste otro precio, cambialo.`;
 }
 
 // Por qué un proveedor NO se compara, en palabras de MJ (va en pantalla).

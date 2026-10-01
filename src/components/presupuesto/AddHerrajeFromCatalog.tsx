@@ -195,17 +195,18 @@ export default function AddHerrajeFromCatalog({
   const [nuevo, setNuevo] = useState(NUEVO_VACIO);
   const [guardandoNuevo, setGuardandoNuevo] = useState(false);
   const [extrayendo, setExtrayendo] = useState(false);
-  // Por qué "Extraer" no llenó el costo (HBT negociado, DPH con varias
-  // medidas…). Se muestra bajo el formulario.
+  // De dónde salió el costo de "Extraer" (precio de la web: cambiarlo si MJ
+  // negoció otro) o por qué no lo llenó (DPH con varias medidas…). Se
+  // muestra bajo el formulario.
   const [avisoCosto, setAvisoCosto] = useState<string | null>(null);
 
   // "Extraer" de HERRAJES (pendiente 188): mismo endpoint que el catálogo de
   // herrajes. El nombre se sugiere solo si está vacío (no pisa lo que MJ
   // escribió); la foto y la marca se toman siempre. El COSTO lo decide el
-  // server: solo DPH y con el precio exacto de la variante; en HBT queda
-  // vacío porque el costo es el precio negociado, no el de la web. Si no lo
-  // llena, dice por qué (avisoCosto). Si la tienda bloquea al servidor (HBT),
-  // lee la página desde el navegador (extraerHerraje).
+  // server: DPH con el precio exacto de la variante; el resto (HBT incluido)
+  // con el precio de la web y un aviso para cambiarlo si MJ negoció otro
+  // (avisoCosto). Solo llena el costo si estaba vacío. Si la tienda bloquea
+  // al servidor (HBT), lee la página desde el navegador (extraerHerraje).
   async function extraerDeLink() {
     if (!nuevo.referenceLink.trim()) return setError("Pegá el link del producto primero.");
     setExtrayendo(true);
@@ -609,7 +610,7 @@ export default function AddHerrajeFromCatalog({
               onClick={extraerDeLink}
               disabled={extrayendo || !nuevo.referenceLink.trim()}
               className="text-xs font-medium text-gray-700 border border-gray-300 rounded px-2.5 py-1.5 hover:bg-white hover:border-gray-400 disabled:opacity-40 whitespace-nowrap"
-              title="Trae nombre, marca y foto del producto. El costo solo se llena con DPH (su precio público es el costo); en HBT el costo es el negociado y se escribe a mano."
+              title="Trae nombre, marca, foto y el precio de la web como costo. Si negociaste otro precio (ej. HBT), cambialo."
             >
               {extrayendo ? "Buscando…" : "Extraer"}
             </button>

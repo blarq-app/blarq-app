@@ -140,14 +140,16 @@ function HerrajeNameInput({
 // herrajes, pero no había dónde escribirlo.
 //
 // Igual que la cantidad y el nombre: edita en LOCAL y guarda al SALIR del
-// campo. Se guarda en MAYÚSCULA y con los espacios limpios para que la misma
-// ubicación se escriba siempre igual ("Lavaplatos" y "LAVAPLATOS " serían dos
-// sugerencias distintas en el autocompletar). Vaciarla es válido. Escribirla
-// NO mueve la línea: la lista va en el orden de MJ.
+// campo. Se guarda TAL CUAL la escribe MJ (minúscula o mayúscula), solo con
+// los espacios limpios. Hasta 2026-10-01 se forzaba a MAYÚSCULA para que el
+// autocompletar no repitiera "Lavaplatos" y "LAVAPLATOS"; MJ pidió poder
+// anotar como quiera, así que ahora esa repetición la evita el autocompletar
+// (ver `ubicaciones` en la partida). Vaciarla es válido. Escribirla NO mueve
+// la línea: la lista va en el orden de MJ.
 // `listId` apunta al <datalist> de la partida: sugiere las ubicaciones que ya
 // se escribieron en ella, para no tipear lo mismo diez veces.
 function normalizarUbicacion(s: string): string {
-  return s.replace(/\s+/g, " ").trim().toLocaleUpperCase("es-CL");
+  return s.replace(/\s+/g, " ").trim();
 }
 
 function HerrajeUbicacionInput({
@@ -186,8 +188,8 @@ function HerrajeUbicacionInput({
         }
       }}
       placeholder="—"
-      title="Dónde va este herraje (ej. LAVAPLATOS). Interno: el cliente no la ve. Sale en el PDF mueblista."
-      className="shrink-0 w-40 self-center bg-transparent border-0 rounded px-1 py-0 text-[10px] uppercase text-gray-700 placeholder:text-gray-300 outline-none hover:bg-gray-50 focus:bg-white focus:ring-1 focus:ring-gray-300"
+      title="Dónde va este herraje (ej. Lavaplatos). Interno: el cliente no la ve. Sale en el PDF mueblista."
+      className="shrink-0 w-40 self-center bg-transparent border-0 rounded px-1 py-0 text-[10px] text-gray-700 placeholder:text-gray-300 outline-none hover:bg-gray-50 focus:bg-white focus:ring-1 focus:ring-gray-300"
     />
   );
 }
@@ -2630,11 +2632,18 @@ function HerrajePartidaBlock({
   // arrastre confinado a cada grupo. Ninguna línea tenía sector escrito, así
   // que en la práctica la lista ya era plana.
   //
-  // Ubicaciones ya escritas en esta partida, para autocompletar.
+  // Ubicaciones ya escritas en esta partida, para autocompletar. Se respeta
+  // cómo las escribió MJ, pero "Lavaplatos" y "LAVAPLATOS" salen UNA vez en
+  // la sugerencia (gana la primera que aparece en la lista).
   const ubicacionesListId = `herrajes-ubicaciones-${item.id}`;
-  const ubicaciones = Array.from(
-    new Set(item.herrajes.map((h) => h.sector ?? "").filter(Boolean))
-  );
+  const ubicacionesPorClave = new Map<string, string>();
+  for (const h of item.herrajes) {
+    const u = h.sector ?? "";
+    if (!u) continue;
+    const clave = u.toLocaleLowerCase("es-CL");
+    if (!ubicacionesPorClave.has(clave)) ubicacionesPorClave.set(clave, u);
+  }
+  const ubicaciones = Array.from(ubicacionesPorClave.values());
 
   // Arrastre de una línea dentro de la partida. Se manda el orden completo.
   function reordenarHerrajes(e: DragEndEvent) {

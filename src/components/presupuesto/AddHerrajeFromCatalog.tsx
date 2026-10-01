@@ -106,9 +106,9 @@ const CATEGORY_LABELS: Record<string, string> = {
  * no le veo sentido". Ahora "+ agregar" crea la línea con cantidad 1 y la
  * cantidad se ajusta después en la propia línea de la partida.
  *
- * El sector salió del alta por decisión de MJ (2026-08-08): lo va a retomar
- * aparte. Las líneas nuevas entran sin sector; las que YA tienen sector se
- * siguen mostrando agrupadas igual en la partida.
+ * El sector salió del alta por decisión de MJ (2026-08-08). Las líneas nuevas
+ * entran sin sector y la ubicación se escribe después en la propia línea de la
+ * partida (columna UBICACIÓN, pendiente 189).
  *
  * DOS PESTAÑAS ARRIBA, "Buscar en catálogo" | "Crear nuevo", igual que el
  * alta de artefactos (pendiente 188, 2026-09-29). Antes el alta de un herraje

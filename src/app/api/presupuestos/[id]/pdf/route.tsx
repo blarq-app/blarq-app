@@ -114,7 +114,7 @@ export async function GET(
 
   try {
     const { id } = await params;
-    // tipo=mueblista → listado de herrajes por sector SIN precios (Fase 3).
+    // tipo=mueblista → listado de herrajes con su ubicación, SIN precios (Fase 3).
     // tipo=orden-compra → orden de compra de artefactos SIN precios, una por
     // subcategoría (?sub=cocina|sanitario|iluminacion), para el proveedor.
     const tipo = request.nextUrl.searchParams.get("tipo");
@@ -204,7 +204,7 @@ export async function GET(
       });
       filename = `BLARQ_Obra_${baseName}_${budget.version}.pdf`;
     } else if (budget.type === "muebles" && tipo === "mueblista") {
-      // Listado para el mueblista: herrajes por sector, sin precios. Aplana las
+      // Listado para el mueblista: herrajes con su ubicación, sin precios. Aplana las
       // líneas de herraje de todas las partidas de cada capítulo.
       html = renderMueblistaHTML({
         project: budget.project,
@@ -313,7 +313,7 @@ export async function GET(
     // corte contra el borde) y laterales 0 — el aire lateral lo pone el padding
     // de la plantilla. La portada calcula su alto contra estos 14mm+14mm.
     // Muebles/artefactos siguen con el formato previo hasta migrar.
-    // El PDF mueblista (herrajes por sector, sin precios) sigue con el formato
+    // El PDF mueblista (herrajes con su ubicación, sin precios) sigue con el formato
     // previo; el de muebles al cliente ya usa la marca v2 como obra.
     // La orden de compra al proveedor es un documento corrido (sin portada) y
     // no define @page en su CSS: los márgenes se los tiene que poner la opción

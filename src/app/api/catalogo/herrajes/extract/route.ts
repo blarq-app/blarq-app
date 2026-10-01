@@ -1,6 +1,6 @@
 /**
- * "Extraer" de HERRAJES: pegar el link del producto y traer nombre, marca y
- * foto, más el costo SOLO cuando es seguro (pendiente 188, 2026-09-29).
+ * "Extraer" de HERRAJES: pegar el link del producto y traer nombre, marca,
+ * foto y costo (pendiente 188, 2026-09-29; costo para todos desde 2026-10-01).
  *
  * GET /api/catalogo/herrajes/extract?url=<link>&proveedor=<DPH|HBT|…>&sku=<opcional>
  *
@@ -17,11 +17,14 @@
  *      es $26.900.
  *
  * Por eso el costo lo decide el server:
- *   - Solo si `extraerLlenaCosto` (proveedor DPH y link no de otro proveedor).
- *   - Y solo con el precio EXACTO de la variante: `fetchHerrajePrice` (el mismo
- *     lector que "Comparar con la tienda web"), que la busca por SKU o toma la
- *     única que haya. Si hay varias y no hay SKU, no adivina: costo vacío y se
- *     dice por qué.
+ *   - DPH (`extraerPrecioExactoDph`): solo con el precio EXACTO de la
+ *     variante, `fetchHerrajePrice` (el mismo lector que "Comparar con la
+ *     tienda web"), que la busca por SKU o toma la única que haya. Si hay
+ *     varias y no hay SKU, no adivina: costo vacío y se dice por qué.
+ *   - El resto (HBT incluido): el precio de la web, con un aviso que recuerda
+ *     cambiarlo si MJ negoció otro (`avisoCostoDeLaWeb`). Hasta 2026-10-01 el
+ *     problema 1 dejaba el costo VACÍO; MJ pidió que "Extraer" lo llene igual
+ *     ("si estoy pidiéndole extraer, que me lo extraiga no más").
  *
  * Y si la página no se puede leer, se dice el motivo real (ver MotivoFalla):
  * "la tienda no nos deja entrar desde el servidor" no es lo mismo que "el
@@ -36,8 +39,8 @@ import {
 import { fetchHerrajePrice } from "@/lib/catalog/fetchHerrajePrice";
 import { aprenderTienda, permitirHostDeFoto } from "@/lib/catalog/tiendas";
 import {
-  avisoCostoSinLlenar,
-  extraerLlenaCosto,
+  avisoCostoDeLaWeb,
+  extraerPrecioExactoDph,
   normalizarProveedor,
 } from "@/lib/presupuesto/herrajeProveedores";
 
@@ -93,10 +96,10 @@ export async function GET(request: NextRequest) {
     }
     await permitirHostDeFoto(r.data.imageUrl).catch(() => null);
 
-    // ── El costo: solo DPH y solo con la variante exacta ─────────────────
+    // ── El costo: DPH con la variante exacta; el resto, el de la web ─────
     let costNet: number | null = null;
     let avisoCosto: string | null = null;
-    if (extraerLlenaCosto(proveedor, url)) {
+    if (extraerPrecioExactoDph(proveedor, url)) {
       const { costNet: exacto } = await fetchHerrajePrice({
         supplier: "DPH",
         referenceLink: url,
@@ -110,7 +113,8 @@ export async function GET(request: NextRequest) {
           : "Este producto de DPH viene en varias medidas y la página no dice cuál: escribí el SKU de la medida y volvé a extraer, o el costo a mano.";
       }
     } else {
-      avisoCosto = avisoCostoSinLlenar(proveedor, url, r.data.listPrice);
+      costNet = r.data.listPrice ?? null;
+      avisoCosto = avisoCostoDeLaWeb(proveedor, url, r.data.listPrice);
     }
 
     return NextResponse.json({

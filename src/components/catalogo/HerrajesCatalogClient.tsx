@@ -430,7 +430,8 @@ export default function HerrajesCatalogClient({
     clientPrice: 0,
   });
   const [extractingForNew, setExtractingForNew] = useState(false);
-  // Por qué "Extraer" no llenó el costo (HBT negociado, DPH con varias medidas…).
+  // De dónde salió el costo de "Extraer" (precio de la web) o por qué no lo
+  // llenó (DPH con varias medidas…).
   const [avisoCostoNuevo, setAvisoCostoNuevo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -872,8 +873,8 @@ export default function HerrajesCatalogClient({
         imageUrl: data.imageUrl ?? prev.imageUrl,
         detail: data.name ?? prev.detail,
         brand: data.brand ?? prev.brand,
-        // El costo SOLO si el server lo devolvió (DPH, variante exacta) y
-        // todavía no había uno escrito.
+        // El costo si vino (DPH: variante exacta; el resto: precio de la web)
+        // y todavía no había uno escrito.
         costNet: prev.costNet ? prev.costNet : (data.costNet ?? prev.costNet),
       }));
       setAvisoCostoNuevo(data.avisoCosto ?? null);
@@ -1194,9 +1195,8 @@ export default function HerrajesCatalogClient({
               </button>
             </div>
             <p className="text-[10px] text-gray-500 mt-1">
-              Trae imagen, nombre y marca. El costo solo se llena con DPH (su
-              precio público es el costo); en HBT el costo es el negociado y se
-              escribe a mano.
+              Trae imagen, nombre, marca y el precio de la web como costo. Si
+              negociaste otro precio (ej. HBT), cambialo.
             </p>
             {avisoCostoNuevo && (
               <p className="text-[11px] text-amber-700 mt-1">{avisoCostoNuevo}</p>

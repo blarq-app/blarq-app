@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
 import { fileToThumbnailDataUrl } from "@/lib/imageThumbnail";
 import { linkEditableDeFoto } from "@/lib/fotos/linkFoto";
+import { extraerHerraje } from "@/lib/catalog/extraerHerraje";
 import {
   OTRO_PROVEEDOR,
   normalizarProveedor,
@@ -729,17 +730,18 @@ export default function HerrajesCatalogClient({
     setError(null);
     setAvisoCostoNuevo(null);
     try {
-      const qs = new URLSearchParams({
-        url: newItem.referenceLink.trim(),
+      // Si la tienda bloquea al servidor (HBT), lee la página desde el
+      // navegador (extraerHerraje).
+      const r = await extraerHerraje({
+        url: newItem.referenceLink,
         proveedor: newItem.supplier,
-        sku: (newItem.sku ?? "").trim(),
+        sku: newItem.sku ?? "",
       });
-      const res = await fetch(`/api/catalogo/herrajes/extract?${qs}`);
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "No se pudo extraer");
+      if (!r.ok) {
+        setError(r.error);
         return;
       }
+      const data = r.data;
       setNewItem((prev) => ({
         ...prev,
         // Sugerir el nombre corto SOLO si está vacío (no pisa lo de MJ).

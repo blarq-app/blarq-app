@@ -36,11 +36,10 @@ import {
 import { fetchHerrajePrice } from "@/lib/catalog/fetchHerrajePrice";
 import { aprenderTienda, permitirHostDeFoto } from "@/lib/catalog/tiendas";
 import {
+  avisoCostoSinLlenar,
   extraerLlenaCosto,
   normalizarProveedor,
-  proveedorDelLink,
 } from "@/lib/presupuesto/herrajeProveedores";
-import { formatCLP } from "@/lib/utils";
 
 export const runtime = "nodejs";
 // hbt.cl tarda ~10 s en contestar (medido desde Santiago); el fetch corta a
@@ -97,7 +96,6 @@ export async function GET(request: NextRequest) {
     // ── El costo: solo DPH y solo con la variante exacta ─────────────────
     let costNet: number | null = null;
     let avisoCosto: string | null = null;
-    const delSitio = proveedorDelLink(url);
     if (extraerLlenaCosto(proveedor, url)) {
       const { costNet: exacto } = await fetchHerrajePrice({
         supplier: "DPH",
@@ -112,14 +110,7 @@ export async function GET(request: NextRequest) {
           : "Este producto de DPH viene en varias medidas y la página no dice cuál: escribí el SKU de la medida y volvé a extraer, o el costo a mano.";
       }
     } else {
-      const quien = delSitio ?? (proveedor || host);
-      const publica = r.data.listPrice ? ` (la web publica ${formatCLP(r.data.listPrice)})` : "";
-      avisoCosto =
-        quien === "HBT"
-          ? `HBT: el costo es el precio que negociaste, no el de la web${publica}. Escribilo a mano.`
-          : delSitio == null && extraerLlenaCosto(proveedor, "https://dph.cl/")
-            ? `El link no es de dph.cl: el costo no se toma de la web${publica}. Escribilo a mano.`
-            : `${quien}: el costo no se toma de la web${publica}. Escribilo a mano.`;
+      avisoCosto = avisoCostoSinLlenar(proveedor, url, r.data.listPrice);
     }
 
     return NextResponse.json({

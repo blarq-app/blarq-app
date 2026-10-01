@@ -1,6 +1,14 @@
 "use client";
 
-import { Fragment, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
 import { fileToThumbnailDataUrl } from "@/lib/imageThumbnail";
@@ -184,11 +192,15 @@ const GRID_COLS =
 function ThousandsInput({
   value,
   onChange,
+  onBlur,
+  onKeyDown,
   className = "",
   placeholder,
 }: {
   value: number;
   onChange: (v: number) => void;
+  onBlur?: () => void;
+  onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
   className?: string;
   placeholder?: string;
 }) {
@@ -210,8 +222,117 @@ function ThousandsInput({
         setFocused(true);
         setTimeout(() => e.target.select(), 0);
       }}
-      onBlur={() => setFocused(false)}
+      onBlur={() => {
+        setFocused(false);
+        onBlur?.();
+      }}
+      onKeyDown={onKeyDown}
       onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+      className={className}
+    />
+  );
+}
+
+// Campos editables de las FILAS del catálogo: editan en LOCAL y guardan al
+// SALIR del campo (o con Enter); Escape deshace. Antes guardaban en cada
+// tecla (un PUT por letra) y MJ se quejó (2026-10-01): "cuando voy editando
+// texto se me va cortando, no me da tiempo". Dos causas:
+//   1. El nombre es parte de la clave que agrupa las medidas de un producto:
+//      cada letra cambiaba la clave, la fila se volvía a montar y el cursor
+//      se salía del campo.
+//   2. Los PUT de cada letra podían llegar desordenados y dejar guardada una
+//      versión a medias ("Semi Cier" en vez de "Semi Cierre"). En el costo es
+//      plata: "3600" podía quedar como "360".
+// Mismo patrón que el nombre y la ubicación de herrajes en la cotización de
+// muebles (MueblesEditor).
+function teclaAlSalir(
+  e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  deshacer: () => void
+) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    e.currentTarget.blur();
+  }
+  if (e.key === "Escape") {
+    deshacer();
+    const campo = e.currentTarget;
+    requestAnimationFrame(() => campo.blur());
+  }
+}
+
+function TextoAlSalir({
+  value,
+  onCommit,
+  multiline = false,
+  obligatorio = false,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onCommit: (v: string) => void;
+  // textarea que crece con el texto (nombre, medida, color) o input simple.
+  multiline?: boolean;
+  // No deja vaciarlo: si se borra todo, vuelve a lo que estaba (el nombre).
+  obligatorio?: boolean;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [local, setLocal] = useState(value);
+  useEffect(() => {
+    setLocal(value);
+  }, [value]);
+  const commit = () => {
+    // Solo guarda si MJ cambió algo: entrar y salir sin tocar no escribe.
+    if (local === value) return;
+    const v = local.replace(/\s+/g, " ").trim();
+    if (obligatorio && !v) {
+      setLocal(value);
+      return;
+    }
+    setLocal(v);
+    if (v !== value) onCommit(v);
+  };
+  const props = {
+    value: local,
+    placeholder,
+    className,
+    onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setLocal(e.target.value),
+    onBlur: commit,
+    onKeyDown: (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      teclaAlSalir(e, () => setLocal(value)),
+  };
+  return multiline ? (
+    <textarea rows={1} {...props} />
+  ) : (
+    <input type="text" {...props} />
+  );
+}
+
+function CostoAlSalir({
+  value,
+  onCommit,
+  placeholder,
+  className,
+}: {
+  value: number;
+  onCommit: (v: number) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [local, setLocal] = useState(value);
+  useEffect(() => {
+    setLocal(value);
+  }, [value]);
+  return (
+    <ThousandsInput
+      value={local}
+      onChange={setLocal}
+      onBlur={() => {
+        if (local !== value) onCommit(local);
+      }}
+      onKeyDown={(e) => teclaAlSalir(e, () => setLocal(value))}
+      placeholder={placeholder}
       className={className}
     />
   );
@@ -529,14 +650,14 @@ export default function HerrajesCatalogClient({
     }
   }
 
+  // El guardado va FUERA del setItems: dentro del actualizador React puede
+  // correrlo dos veces (en desarrollo lo hace siempre) y salían dos PUT.
   function updateItem(id: string, patch: Partial<HerrajeItem>) {
+    const actual = items.find((it) => it.id === id);
+    if (!actual) return;
+    persistItem({ ...actual, ...patch });
     setItems((prev) =>
-      prev.map((it) => {
-        if (it.id !== id) return it;
-        const merged = { ...it, ...patch };
-        persistItem(merged);
-        return merged;
-      })
+      prev.map((it) => (it.id === id ? { ...it, ...patch } : it))
     );
   }
 
@@ -870,9 +991,12 @@ export default function HerrajesCatalogClient({
           if (p.variants.length === 1) {
             // Producto con una sola variante → fila normal, sin desplegable.
             const item = p.variants[0];
+            // Clave por id, no por p.key: el nombre (que va en p.key) se
+            // edita en esta fila, y con p.key la fila se volvía a montar al
+            // guardarlo y el cursor no pasaba al campo siguiente con Tab.
             return (
               <HerrajeItemRow
-                key={p.key}
+                key={item.id}
                 sortId={itemSortId(item.id)}
                 item={item}
                 canReorder={!isFiltering}
@@ -1606,49 +1730,49 @@ function HerrajeItemRow({
 
       {/* Nombre + marca (la caja crece a su contenido, no trunca). */}
       <div className="min-w-0">
-        <textarea
-          rows={1}
+        <TextoAlSalir
+          multiline
+          obligatorio
           value={item.name}
-          onChange={(e) => onUpdate({ name: e.target.value })}
+          onCommit={(v) => onUpdate({ name: v })}
           className="w-full bg-transparent border-0 p-0 font-semibold text-gray-900 text-[11px] leading-tight resize-none [field-sizing:content] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1.5 focus:py-0.5"
         />
         {/* Marca debajo, gris y discreta. */}
-        <input
-          type="text"
+        <TextoAlSalir
           value={item.brand ?? ""}
           placeholder="marca"
-          onChange={(e) => onUpdate({ brand: e.target.value || null })}
+          onCommit={(v) => onUpdate({ brand: v || null })}
           className="w-full bg-transparent border-0 p-0 text-gray-500 text-[10px] uppercase outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
         />
       </div>
 
       {/* Medida (editable). En MAYÚSCULA, 2 líneas si hace falta. */}
       <div className="min-w-0">
-        <textarea
-          rows={1}
+        <TextoAlSalir
+          multiline
           value={item.measure ?? ""}
           placeholder="—"
-          onChange={(e) => onUpdate({ measure: e.target.value || null })}
+          onCommit={(v) => onUpdate({ measure: v || null })}
           className="w-full bg-transparent border-0 p-0 text-gray-700 text-[11px] font-medium uppercase leading-tight break-words resize-none [field-sizing:content] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
         />
       </div>
 
       {/* Color / terminación (editable). En MAYÚSCULA. */}
       <div className="min-w-0">
-        <textarea
-          rows={1}
+        <TextoAlSalir
+          multiline
           value={item.finish ?? ""}
           placeholder="—"
-          onChange={(e) => onUpdate({ finish: e.target.value || null })}
+          onCommit={(v) => onUpdate({ finish: v || null })}
           className="w-full bg-transparent border-0 p-0 text-gray-600 text-[11px] uppercase leading-tight break-words resize-none [field-sizing:content] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
         />
       </div>
 
       {/* Costo (editable inline = costNet). */}
       <div>
-        <ThousandsInput
+        <CostoAlSalir
           value={item.costNet}
-          onChange={(v) => onUpdate({ costNet: v })}
+          onCommit={(v) => onUpdate({ costNet: v })}
           placeholder="0"
           className="w-full bg-transparent border-0 p-0 text-right tabular-nums text-gray-700 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
         />
@@ -1680,11 +1804,10 @@ function HerrajeItemRow({
 
       {/* SKU (chico gris). */}
       <div className="min-w-0">
-        <input
-          type="text"
+        <TextoAlSalir
           value={item.sku ?? ""}
           placeholder="—"
-          onChange={(e) => onUpdate({ sku: e.target.value || null })}
+          onCommit={(v) => onUpdate({ sku: v || null })}
           className="w-full bg-transparent border-0 p-0 text-gray-400 text-[10px] outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
         />
       </div>
@@ -1896,9 +2019,9 @@ function HerrajeProductRow({
 
       {/* Costo de la variante elegida (editable inline = costNet). */}
       <div>
-        <ThousandsInput
+        <CostoAlSalir
           value={selected.costNet}
-          onChange={(v) => onUpdate({ costNet: v })}
+          onCommit={(v) => onUpdate({ costNet: v })}
           placeholder="0"
           className="w-full bg-transparent border-0 p-0 text-right tabular-nums text-gray-700 outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded focus:px-1 focus:py-0.5"
         />

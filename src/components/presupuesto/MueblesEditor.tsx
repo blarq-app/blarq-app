@@ -144,7 +144,11 @@ function HerrajeNameInput({
 // los espacios limpios. Hasta 2026-10-01 se forzaba a MAYÚSCULA para que el
 // autocompletar no repitiera "Lavaplatos" y "LAVAPLATOS"; MJ pidió poder
 // anotar como quiera, así que ahora esa repetición la evita el autocompletar
-// (ver `ubicaciones` en la partida). Vaciarla es válido. Escribirla NO mueve
+// (ver `ubicaciones` en la partida). Ancho: era w-40 y MJ pidió ensancharlo
+// porque cortaba "CUBIERTOS COSTADO LAVAPLATOS". En pantalla grande (2xl)
+// w-64; en notebook w-48, porque con w-64 el nombre del herraje quedaba en
+// 4 líneas. Si se cambia, ajustar el encabezado UBICACIÓN de la partida.
+// Vaciarla es válido. Escribirla NO mueve
 // la línea: la lista va en el orden de MJ.
 // `listId` apunta al <datalist> de la partida: sugiere las ubicaciones que ya
 // se escribieron en ella, para no tipear lo mismo diez veces.
@@ -188,8 +192,13 @@ function HerrajeUbicacionInput({
         }
       }}
       placeholder="—"
-      title="Dónde va este herraje (ej. Lavaplatos). Interno: el cliente no la ve. Sale en el PDF mueblista."
-      className="shrink-0 w-40 self-center bg-transparent border-0 rounded px-1 py-0 text-[10px] text-gray-700 placeholder:text-gray-300 outline-none hover:bg-gray-50 focus:bg-white focus:ring-1 focus:ring-gray-300"
+      // Con texto, el globito muestra la ubicación entera: en notebook una
+      // muy larga en mayúscula no alcanza a verse completa en el campo.
+      title={
+        local ||
+        "Dónde va este herraje (ej. Lavaplatos). Interno: el cliente no la ve. Sale en el PDF mueblista."
+      }
+      className="shrink-0 w-48 2xl:w-64 self-center bg-transparent border-0 rounded px-1 py-0 text-[10px] text-gray-700 placeholder:text-gray-300 outline-none hover:bg-gray-50 focus:bg-white focus:ring-1 focus:ring-gray-300"
     />
   );
 }
@@ -2714,7 +2723,10 @@ function HerrajePartidaBlock({
             <div></div>
             <div className="flex items-baseline gap-2 min-w-0">
               <div className="flex-1"></div>
-              <div className="shrink-0 w-[14.5rem] px-1 whitespace-nowrap text-[9px] uppercase tracking-wider text-gray-500">
+              {/* Ancho = campo de ubicación (w-48 / 2xl:w-64) + gap (0.5rem)
+                  + costo unitario (w-16), para que el título quede sobre el
+                  campo. */}
+              <div className="shrink-0 w-[16.5rem] 2xl:w-[20.5rem] px-1 whitespace-nowrap text-[9px] uppercase tracking-wider text-gray-500">
                 Ubicación
                 <span className="ml-1.5 normal-case tracking-normal italic text-gray-400">
                   — PDF mueblista · el cliente no la ve

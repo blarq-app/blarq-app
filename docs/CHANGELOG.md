@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-09-30 — Columna UBICACIÓN en las líneas de herraje (PR #470, en prod)
+
+- **Pendiente 189**: cada línea de herraje de una cotización de muebles tiene una columna UBICACIÓN para anotar dónde va ("TORRE CAJONES", "BAJO LAVAPLATOS"). Es interna: el PDF del cliente no la muestra. Usa `MuebleHerraje.sector`, que existía pero no se podía escribir; sin cambios de base de datos.
+- Se guarda al salir del campo, en mayúscula, con autocompletar de las ubicaciones ya escritas en la partida. Las líneas quedan en el orden de MJ, sin títulos por ubicación (lo eligió ella viendo la maqueta).
+- El PDF mueblista (sin precios) muestra la misma lista que la app con la columna Ubicación; si nada tiene ubicación, la columna no sale. Se fue el rótulo "SIN SECTOR" que salía en cada capítulo.
+
 ## 2026-09-30 — Descargar el Cuadro Resumen en Excel
 
 - **Pendiente 190**: botón "Descargar Excel" en el Cuadro Resumen. Es el Excel de MJ (decidido con ella): el cuadro igual a la imagen, con la línea del pie, y una hoja "Me paso a Sueldos" con los traspasos. Al cliente le sigue yendo la imagen.

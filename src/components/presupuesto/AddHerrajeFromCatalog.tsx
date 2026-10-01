@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatCLP } from "@/lib/utils";
 import { formatHerrajeName } from "@/lib/presupuesto/herrajeNombre";
+import { extraerHerraje } from "@/lib/catalog/extraerHerraje";
 import {
   OTRO_PROVEEDOR,
   PROVEEDORES_FIJOS,
@@ -203,7 +204,8 @@ export default function AddHerrajeFromCatalog({
   // escribió); la foto y la marca se toman siempre. El COSTO lo decide el
   // server: solo DPH y con el precio exacto de la variante; en HBT queda
   // vacío porque el costo es el precio negociado, no el de la web. Si no lo
-  // llena, dice por qué (avisoCosto).
+  // llena, dice por qué (avisoCosto). Si la tienda bloquea al servidor (HBT),
+  // lee la página desde el navegador (extraerHerraje).
   async function extraerDeLink() {
     if (!nuevo.referenceLink.trim()) return setError("Pegá el link del producto primero.");
     setExtrayendo(true);
@@ -211,14 +213,13 @@ export default function AddHerrajeFromCatalog({
     setAvisoCosto(null);
     try {
       const proveedor = normalizarProveedor(nuevoProveedor) || supplier;
-      const qs = new URLSearchParams({
-        url: nuevo.referenceLink.trim(),
+      const r = await extraerHerraje({
+        url: nuevo.referenceLink,
         proveedor,
-        sku: nuevo.sku.trim(),
+        sku: nuevo.sku,
       });
-      const res = await fetch(`/api/catalogo/herrajes/extract?${qs}`);
-      const data = await res.json();
-      if (!res.ok) return setError(data.error || "No se pudo extraer del link.");
+      if (!r.ok) return setError(r.error);
+      const data = r.data;
       setNuevo((prev) => ({
         ...prev,
         name: prev.name.trim() ? prev.name : (data.name ?? "").toString().toUpperCase(),

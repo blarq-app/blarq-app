@@ -11,6 +11,8 @@
  * Los fijos van primero y en ese orden (son los que tienen revisador de
  * precios / mayor volumen); el resto, alfabético. Pura, sin base de datos.
  */
+import { formatCLP } from "@/lib/utils";
+
 export const PROVEEDORES_FIJOS = ["DPH", "HBT"] as const;
 
 // Valor centinela del desplegable para "escribir un proveedor nuevo".
@@ -91,6 +93,35 @@ export function proveedorDelLink(link: string): string | null {
 export function extraerLlenaCosto(proveedor: string, link: string): boolean {
   const delSitio = proveedorDelLink(link);
   return seComparaConLaWeb(proveedor) && delSitio != null && seComparaConLaWeb(delSitio);
+}
+
+/**
+ * El aviso que acompaña al "Extraer" cuando el costo NO se llena con el precio
+ * de la web, en palabras de MJ. Lo usan el servidor (extract) y el navegador
+ * (cuando la tienda bloquea al servidor, ver extraerHerraje.ts), para que los
+ * dos caminos digan lo mismo.
+ */
+export function avisoCostoSinLlenar(
+  proveedor: string,
+  link: string,
+  precioWeb: number | null
+): string {
+  let host = "";
+  try {
+    host = new URL(link.trim()).hostname.replace(/^www\./, "");
+  } catch {
+    /* link inválido: queda el proveedor */
+  }
+  const delSitio = proveedorDelLink(link);
+  const quien = delSitio ?? (proveedor || host);
+  const publica = precioWeb ? ` (la web publica ${formatCLP(precioWeb)})` : "";
+  if (quien === "HBT") {
+    return `HBT: el costo es el precio que negociaste, no el de la web${publica}. Escribilo a mano.`;
+  }
+  if (delSitio == null && extraerLlenaCosto(proveedor, "https://dph.cl/")) {
+    return `El link no es de dph.cl: el costo no se toma de la web${publica}. Escribilo a mano.`;
+  }
+  return `${quien}: el costo no se toma de la web${publica}. Escribilo a mano.`;
 }
 
 // Por qué un proveedor NO se compara, en palabras de MJ (va en pantalla).

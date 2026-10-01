@@ -158,7 +158,9 @@ function parsePriceFromHtml(html: string): number | null {
   return null;
 }
 
-function extractGenericProductData(
+// Exportada (y pura: solo lee el texto del HTML) porque también la usa el
+// NAVEGADOR cuando la tienda bloquea al servidor (extraerHerraje.ts).
+export function extractGenericProductData(
   url: string,
   html: string,
   source: string

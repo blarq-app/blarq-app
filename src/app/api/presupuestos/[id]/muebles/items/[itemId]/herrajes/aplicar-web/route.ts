@@ -10,6 +10,8 @@
  *     catalogo?: boolean,    // dejar el precio de hoy en el catálogo de
  *                            // herrajes (default false: es una opción que MJ
  *                            // prende, "sí aplicar en el catálogo, dar la opción")
+ *     preciosNavegador?: { [catalogId]: number }  // los que leyó el navegador
+ *                            // porque la tienda bloquea al servidor (HBT)
  *   }
  *
  * COTIZACIÓN solo en BORRADOR: "no se deben tocar cotizaciones ya enviadas"
@@ -20,21 +22,25 @@
  * están enviadas o aprobadas). Actualizar el catálogo NO baja a ninguna
  * cotización: las líneas de herraje tienen el costo congelado.
  *
- * El precio NO viene del cliente: se vuelve a leer de la web acá (mismo
- * lector que "Comparar"), igual que el costo al agregar del catálogo sale del
- * catálogo y no del body. Nadie puede escribir un costo inventado, y si la web
- * cambió entre comparar y aplicar, queda el de ahora.
+ * El precio se vuelve a leer de la web acá (mismo lector que "Comparar"),
+ * igual que el costo al agregar del catálogo sale del catálogo y no del body:
+ * nadie escribe un costo inventado, y si la web cambió entre comparar y
+ * aplicar, queda el de ahora. Excepción (2026-10-01): hbt.cl rechaza al
+ * servidor, así que para HBT, si acá no se pudo leer, vale el precio que leyó
+ * el navegador de MJ en la ventana (precioWebParaAplicar).
  *
- * Solo toca herrajes que se comparan con la web (DPH con catálogo y link, ver
- * PROVEEDORES_PRECIO_WEB): una línea HBT que llegue en la lista se ignora —
- * su costo es el precio negociado. Las que no se pudieron leer quedan igual.
+ * Solo toca herrajes que se comparan con la web (DPH y HBT con catálogo y
+ * link, ver PROVEEDORES_PRECIO_WEB). Las que no se pudieron leer quedan igual.
  */
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
 import { fetchHerrajePrice } from "@/lib/catalog/fetchHerrajePrice";
 import { recomputeAndPersistHerrajeItem } from "@/lib/presupuesto/muebleHerrajes";
-import { seComparaConLaWeb } from "@/lib/presupuesto/herrajeProveedores";
+import {
+  precioWebParaAplicar,
+  seComparaConLaWeb,
+} from "@/lib/presupuesto/herrajeProveedores";
 import { conLink, linksDelCatalogo } from "@/lib/presupuesto/herrajeLinks";
 
 // Lee varias páginas del proveedor: puede tardar unos segundos.
@@ -56,6 +62,10 @@ export async function POST(
       : [];
     const aCotizacion = body?.cotizacion !== false;
     const aCatalogo = body?.catalogo === true;
+    const preciosNavegador: Record<string, unknown> =
+      body?.preciosNavegador && typeof body.preciosNavegador === "object"
+        ? body.preciosNavegador
+        : {};
     if (lineIds.length === 0 || (!aCotizacion && !aCatalogo)) {
       return NextResponse.json({ error: "No hay nada que aplicar" }, { status: 400 });
     }
@@ -98,9 +108,15 @@ export async function POST(
               referenceLink: cat.referenceLink,
               sku: cat.sku,
             });
-            webPorCatalogo.set(cid, costNet);
+            webPorCatalogo.set(
+              cid,
+              precioWebParaAplicar(cat.supplier, costNet, preciosNavegador[cid]),
+            );
           } catch {
-            webPorCatalogo.set(cid, null);
+            webPorCatalogo.set(
+              cid,
+              precioWebParaAplicar(cat.supplier, null, preciosNavegador[cid]),
+            );
           }
         },
       ),

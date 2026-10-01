@@ -13,11 +13,13 @@ import { useRouter } from "next/navigation";
 import { formatCLP, formatNumber } from "@/lib/utils";
 import { fileToThumbnailDataUrl } from "@/lib/imageThumbnail";
 import { linkEditableDeFoto } from "@/lib/fotos/linkFoto";
-import { extraerHerraje } from "@/lib/catalog/extraerHerraje";
+import { extraerHerraje, preciosWebEnNavegador } from "@/lib/catalog/extraerHerraje";
 import {
   OTRO_PROVEEDOR,
   normalizarProveedor,
   proveedoresDe,
+  seLeeEnElNavegador,
+  tienePrecioNegociado,
 } from "@/lib/presupuesto/herrajeProveedores";
 import {
   DndContext,
@@ -79,11 +81,26 @@ function imgSrc(url: string): string {
 interface PriceReviewRow {
   id: string;
   name: string;
+  supplier: string;
+  referenceLink: string;
   storedCost: number;
   webCost: number | null;
   delta: number | null; // webCost - storedCost
   status: "ok" | "sin-precio" | "error";
   applied?: boolean; // marcada como aplicada en esta sesión
+}
+
+type PriceReviewResumen = { ok: number; changed: number; sinPrecio: number; error: number };
+
+// Mismo resumen que arma el endpoint, recalculado en pantalla cuando el
+// navegador completa los precios que el servidor no pudo leer (HBT).
+function resumenDeRevision(rows: PriceReviewRow[]): PriceReviewResumen {
+  return {
+    ok: rows.filter((r) => r.status === "ok").length,
+    changed: rows.filter((r) => r.delta != null && r.delta !== 0).length,
+    sinPrecio: rows.filter((r) => r.status === "sin-precio").length,
+    error: rows.filter((r) => r.status === "error").length,
+  };
 }
 
 // ── Pestañas por proveedor ────────────────────────────────────────────────
@@ -439,12 +456,7 @@ export default function HerrajesCatalogClient({
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewRows, setReviewRows] = useState<PriceReviewRow[]>([]);
-  const [reviewResumen, setReviewResumen] = useState<{
-    ok: number;
-    changed: number;
-    sinPrecio: number;
-    error: number;
-  } | null>(null);
+  const [reviewResumen, setReviewResumen] = useState<PriceReviewResumen | null>(null);
 
   // ── Conteo por pestaña (universo completo, sin filtros) ────────────────
   const countsByTab = useMemo(() => {
@@ -899,8 +911,25 @@ export default function HerrajesCatalogClient({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error");
-      setReviewRows(data.rows ?? []);
-      setReviewResumen(data.summary ?? null);
+      let rows: PriceReviewRow[] = data.rows ?? [];
+      // Lo que el servidor no pudo leer porque la tienda lo bloquea (HBT), lo
+      // lee el navegador de MJ (ver seLeeEnElNavegador).
+      const pendientes = rows.filter(
+        (r) => r.webCost == null && seLeeEnElNavegador(r.supplier)
+      );
+      if (pendientes.length > 0) {
+        const precios = await preciosWebEnNavegador(
+          pendientes.map((r) => r.referenceLink)
+        );
+        rows = rows.map((r) => {
+          const web = r.webCost == null ? precios.get(r.referenceLink) : undefined;
+          return web == null
+            ? r
+            : { ...r, webCost: web, delta: web - r.storedCost, status: "ok" as const };
+        });
+      }
+      setReviewRows(rows);
+      setReviewResumen(resumenDeRevision(rows));
     } catch {
       setReviewRows([]);
       setReviewResumen(null);
@@ -920,13 +949,16 @@ export default function HerrajesCatalogClient({
     );
   }
 
+  // "Aplicar todos" deja fuera los de precio negociado (HBT): ahí la
+  // diferencia suele ser el descuento de MJ, se aplican uno por uno.
   function applyAllChanged() {
     for (const row of reviewRows) {
       if (
         row.status === "ok" &&
         row.delta != null &&
         row.delta !== 0 &&
-        !row.applied
+        !row.applied &&
+        !tienePrecioNegociado(row.supplier)
       ) {
         applyReviewRow(row);
       }
@@ -2104,7 +2136,7 @@ function PriceReviewPanel({
 }: {
   loading: boolean;
   rows: PriceReviewRow[];
-  resumen: { ok: number; changed: number; sinPrecio: number; error: number } | null;
+  resumen: PriceReviewResumen | null;
   onApply: (row: PriceReviewRow) => void;
   onApplyAll: () => void;
   onClose: () => void;
@@ -2117,6 +2149,13 @@ function PriceReviewPanel({
     (r) => r.status === "ok" && r.delta != null && r.delta !== 0
   );
   const displayRows = showAll ? rows : changedRows;
+  // Los que entran en "Aplicar todos": sin los de precio negociado (HBT).
+  const aplicablesEnBloque = changedRows.filter(
+    (r) => !r.applied && !tienePrecioNegociado(r.supplier)
+  );
+  const negociadosDistintos = changedRows.filter(
+    (r) => !r.applied && tienePrecioNegociado(r.supplier)
+  ).length;
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
       <div className="flex items-center justify-between mb-3">
@@ -2164,16 +2203,28 @@ function PriceReviewPanel({
                     ? "Ver solo los que cambiaron"
                     : `Ver todos (${rows.length})`}
                 </button>
-                {resumen.changed > 0 && (
+                {aplicablesEnBloque.length > 0 && (
                   <button
                     onClick={onApplyAll}
                     className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded hover:bg-gray-800"
+                    title={
+                      negociadosDistintos > 0
+                        ? "No incluye los de HBT (precio negociado): esos se aplican uno por uno."
+                        : undefined
+                    }
                   >
                     Aplicar todos los cambios
                   </button>
                 )}
               </div>
             </div>
+          )}
+          {negociadosDistintos > 0 && (
+            <p className="text-[11px] text-gray-500 mb-3">
+              HBT: tu costo es el precio que negociaste, así que lo distinto
+              no entra en «Aplicar todos». Si la web subió de verdad, aplicalo
+              uno por uno.
+            </p>
           )}
 
           <div className="border border-gray-200 rounded-lg overflow-hidden">

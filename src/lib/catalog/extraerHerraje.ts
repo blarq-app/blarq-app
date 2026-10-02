@@ -113,6 +113,40 @@ async function extraerEnNavegador(
   };
 }
 
+/**
+ * Precio de hoy en la web, leído por el NAVEGADOR (para "Comparar con la
+ * tienda web" y "Revisar precios" de los proveedores que bloquean al servidor,
+ * ver seLeeEnElNavegador). Mismo lector que el servidor. null si no se pudo.
+ */
+export async function precioWebEnNavegador(url: string): Promise<number | null> {
+  const res = await traer(url);
+  if (!res) return null;
+  const html = await res.text().catch(() => "");
+  if (!html) return null;
+  return extractGenericProductData(url, html, "web").listPrice;
+}
+
+/**
+ * Lo mismo para varios links, de a pocos a la vez: hbt.cl tarda ~10 s por
+ * página y no conviene abrirle 15 conexiones juntas. Cada link se lee una vez.
+ */
+export async function preciosWebEnNavegador(
+  links: string[],
+  deAPocos = 4
+): Promise<Map<string, number | null>> {
+  const unicos = [...new Set(links)];
+  const precios = new Map<string, number | null>();
+  let siguiente = 0;
+  async function trabajar() {
+    while (siguiente < unicos.length) {
+      const link = unicos[siguiente++];
+      precios.set(link, await precioWebEnNavegador(link).catch(() => null));
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(deAPocos, unicos.length) }, trabajar));
+  return precios;
+}
+
 export async function extraerHerraje(params: {
   url: string;
   proveedor: string;

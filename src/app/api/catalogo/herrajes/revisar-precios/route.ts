@@ -6,7 +6,9 @@
  *
  * Para cada herraje CON link trae el COSTO de hoy desde el proveedor:
  *   - DPH (Shopify): variante por SKU vía <producto>.json (ver fetchHerrajePrice).
- *   - HBT (Magento): pendiente — devuelve "sin-precio" sin romperse.
+ *   - HBT (Magento): el precio de la página (fetchHerrajePrice). En prod
+ *     hbt.cl rechaza al servidor y sale "sin-precio"; la pantalla completa
+ *     esos con lo que lee el navegador de MJ (seLeeEnElNavegador).
  *
  * NO pisa nada: devuelve costo guardado vs costo web para que MJ aplique los
  * que quiera (la aplicación se hace con el PUT por id, seteando costNet).

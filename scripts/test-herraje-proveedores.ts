@@ -10,6 +10,9 @@ import {
   proveedorDelLink,
   extraerPrecioExactoDph,
   avisoCostoDeLaWeb,
+  tienePrecioNegociado,
+  seLeeEnElNavegador,
+  precioWebParaAplicar,
 } from "../src/lib/presupuesto/herrajeProveedores";
 import { extractGenericProductData } from "../src/lib/catalog/fetchArtefactoData";
 
@@ -29,14 +32,28 @@ eq("vacío se ignora", proveedoresDe([{ supplier: "" }, { supplier: "  " }]), ["
 eq("mayúsculas NO se tocan (lo decide MJ)", proveedoresDe([{ supplier: "carlos" }, { supplier: "Carlos" }]), ["DPH", "HBT", "carlos", "Carlos"]);
 eq("normalizar", normalizarProveedor("  Carlos   Mueblista "), "Carlos Mueblista");
 
-// Comparar con la web (pendiente 143): solo DPH. HBT tiene precio negociado.
+// Comparar con la web (pendiente 143): DPH, y HBT desde 2026-10-01 (pedido
+// de MJ) con resguardos: precio negociado y web leída en el navegador.
 eq("DPH se compara", seComparaConLaWeb("DPH"), true);
 eq("dph con espacios se compara", seComparaConLaWeb(" dph "), true);
-eq("HBT NO se compara", seComparaConLaWeb("HBT"), false);
+eq("HBT se compara (desde 2026-10-01)", seComparaConLaWeb("hbt"), true);
 eq("Ducasse NO se compara", seComparaConLaWeb("DAPDUCASSE"), false);
 eq("vacío NO se compara", seComparaConLaWeb(""), false);
-eq("motivo HBT", motivoSinCompararWeb("HBT"), "precio negociado");
 eq("motivo otro", motivoSinCompararWeb("DAPDUCASSE"), "su web no se lee");
+eq("HBT tiene precio negociado", tienePrecioNegociado(" hbt "), true);
+eq("DPH no tiene precio negociado", tienePrecioNegociado("DPH"), false);
+eq("HBT se lee en el navegador", seLeeEnElNavegador("HBT"), true);
+eq("DPH se lee en el servidor", seLeeEnElNavegador("DPH"), false);
+
+// Al aplicar en la cotización: manda lo que leyó el servidor; el precio del
+// navegador vale solo para HBT y solo si el servidor no pudo.
+eq("aplicar: el servidor leyó → vale el del servidor", precioWebParaAplicar("HBT", 10990, 9990), 10990);
+eq("aplicar: HBT bloqueado → vale el del navegador", precioWebParaAplicar("HBT", null, 10990), 10990);
+eq("aplicar: HBT bloqueado y sin precio del navegador → nada", precioWebParaAplicar("HBT", null, undefined), null);
+eq("aplicar: precio del navegador basura → nada", precioWebParaAplicar("HBT", null, "10990"), null);
+eq("aplicar: precio del navegador negativo → nada", precioWebParaAplicar("HBT", null, -5), null);
+eq("aplicar: DPH sin lectura del servidor NO acepta el del navegador", precioWebParaAplicar("DPH", null, 26900), null);
+eq("aplicar: decimales se redondean", precioWebParaAplicar("HBT", null, 10990.4), 10990);
 
 // "Extraer" llena el costo solo con DPH (pendiente 188): HBT es negociado.
 const HBT_LINK = "https://www.hbt.cl/manilla-edge-s-cobre-160-200mm-pack-x1.html?srsltid=abc";

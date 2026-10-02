@@ -6,9 +6,14 @@
  * de la variante exacta (su SKU), no el del producto. Por eso, para DPH pegamos
  * a `<producto>.json` de Shopify y matcheamos por SKU.
  *
- * HBT es Magento — todavía no implementado (Fase 1 cargó solo DPH). Devuelve
- * null para que "Revisar precios" lo marque como "sin precio" sin romperse.
+ * HBT (Magento, desde 2026-10-01): una página por producto con su precio en
+ * los datos de la página (product:price:amount / JSON-LD), así que alcanza el
+ * lector genérico. OJO: hbt.cl rechaza al servidor de Vercel (403), así que en
+ * prod esto devuelve null y el precio lo lee el NAVEGADOR de MJ
+ * (precioWebEnNavegador en extraerHerraje.ts). Se intenta igual acá: local
+ * funciona, y si HBT algún día deja de bloquear, no hay que tocar nada.
  */
+import { fetchArtefactoData } from "@/lib/catalog/fetchArtefactoData";
 
 export type HerrajePriceResult = {
   costNet: number | null;
@@ -74,6 +79,10 @@ export async function fetchHerrajePrice(item: {
     const costNet = await fetchDphVariantCost(item.referenceLink, item.sku);
     return { costNet, source: costNet != null ? "dph-shopify" : null };
   }
-  // HBT (Magento) pendiente — tanda aparte.
+  if (item.supplier === "HBT") {
+    const d = await fetchArtefactoData(item.referenceLink).catch(() => null);
+    const costNet = d?.listPrice ?? null;
+    return { costNet, source: costNet != null ? "hbt-magento" : null };
+  }
   return { costNet: null, source: null };
 }

@@ -6,7 +6,10 @@ import { formatHerrajeName } from "@/lib/presupuesto/herrajeNombre";
 import {
   seComparaConLaWeb,
   motivoSinCompararWeb,
+  seLeeEnElNavegador,
+  tienePrecioNegociado,
 } from "@/lib/presupuesto/herrajeProveedores";
+import { preciosWebEnNavegador } from "@/lib/catalog/extraerHerraje";
 
 // Lo que el modal necesita de cada línea de herraje de la partida.
 export type LineaHerrajeWeb = {
@@ -39,8 +42,13 @@ type FilaCatalogo = {
  *
  * Tres grupos, en el orden de artefactos: DISTINTOS (con tilde, marcados de
  * entrada), NO SE PUDIERON LEER (con el link para mirarlo a mano) y COINCIDEN.
- * Al final, los herrajes que no se comparan y por qué (HBT: su costo es el
- * precio negociado, no el público).
+ * Al final, los herrajes que no se comparan y por qué.
+ *
+ * HBT se compara desde 2026-10-01 (pedido de MJ). Dos diferencias con DPH:
+ *   - Su web la lee el NAVEGADOR: hbt.cl rechaza al servidor (ver
+ *     seLeeEnElNavegador). Esos precios viajan al "Aplicar".
+ *   - Lo distinto viene SIN marcar: el costo de HBT es el precio que MJ
+ *     negoció y la diferencia suele ser su descuento (tienePrecioNegociado).
  *
  * Mirar no cambia nada. Aplicar cambia el costo de las líneas marcadas y la
  * partida se recalcula con su margen — por eso en una cotización YA ENVIADA
@@ -78,6 +86,10 @@ export default function RevisarPreciosHerrajes({
   // Confirmación cuando solo se actualizó el catálogo (la ventana queda
   // abierta: en la partida no cambia nada que se vea).
   const [hecho, setHecho] = useState<string | null>(null);
+  // Precios que leyó el navegador porque la tienda bloquea al servidor (HBT),
+  // por herraje del catálogo. Se mandan al aplicar: el servidor no los puede
+  // volver a leer.
+  const [leidosEnNavegador, setLeidosEnNavegador] = useState<Record<string, number>>({});
 
   // Las que se comparan (DPH con catálogo y link) y las que no, con motivo.
   const comparables = useMemo(
@@ -109,12 +121,39 @@ export default function RevisarPreciosHerrajes({
         }
         const mapa: Record<string, FilaCatalogo> = {};
         for (const r of data.rows as FilaCatalogo[]) mapa[r.id] = r;
+        // Lo que el servidor no pudo leer porque la tienda lo bloquea (HBT),
+        // lo lee el navegador.
+        const pendientes = comparables.filter(
+          (h) =>
+            mapa[h.catalogId as string]?.webCost == null &&
+            seLeeEnElNavegador(h.supplier) &&
+            h.referenceLink
+        );
+        const delNavegador: Record<string, number> = {};
+        if (pendientes.length > 0) {
+          const precios = await preciosWebEnNavegador(
+            pendientes.map((h) => h.referenceLink as string)
+          );
+          if (cancel) return;
+          for (const h of pendientes) {
+            const cid = h.catalogId as string;
+            const web = precios.get(h.referenceLink as string);
+            if (web == null) continue;
+            mapa[cid] = { id: cid, webCost: web, status: "ok" };
+            delNavegador[cid] = web;
+          }
+        }
+        setLeidosEnNavegador(delNavegador);
         setPorCatalogo(mapa);
-        // Igual que artefactos: lo distinto viene marcado de entrada.
+        // Igual que artefactos: lo distinto viene marcado de entrada. Menos
+        // lo de precio negociado (HBT): la diferencia suele ser el descuento
+        // de MJ, y queda sin marcar.
         const inicial: Record<string, boolean> = {};
         for (const h of comparables) {
           const w = mapa[h.catalogId as string]?.webCost;
-          if (w != null && Math.abs(w - h.costNet) >= 1) inicial[h.id] = true;
+          if (w != null && Math.abs(w - h.costNet) >= 1 && !tienePrecioNegociado(h.supplier)) {
+            inicial[h.id] = true;
+          }
         }
         setSel(inicial);
       } catch {
@@ -161,6 +200,7 @@ export default function RevisarPreciosHerrajes({
             lineIds: marcados.map(({ h }) => h.id),
             cotizacion: aCotizacion,
             catalogo: aCatalogo,
+            preciosNavegador: leidosEnNavegador,
           }),
         }
       );
@@ -267,6 +307,13 @@ export default function RevisarPreciosHerrajes({
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-2">
                     Distintos — marcá qué aplicar
                   </div>
+                  {distintos.some(({ h }) => tienePrecioNegociado(h.supplier)) && (
+                    <p className="text-[11px] text-gray-500 mb-2">
+                      Los de HBT vienen sin marcar: tu costo es el precio que
+                      negociaste y la diferencia suele ser tu descuento. Marcá
+                      solo los que de verdad cambiaron.
+                    </p>
+                  )}
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
                     <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-3 px-3 py-2 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
                       <div>Herraje</div>
@@ -309,6 +356,9 @@ export default function RevisarPreciosHerrajes({
                             </div>
                             <div className="text-[10px] text-gray-500 uppercase tracking-wider">
                               {[detalle(h), h.supplier].filter(Boolean).join(" · ")}
+                              {tienePrecioNegociado(h.supplier) && (
+                                <span className="normal-case tracking-normal"> · precio negociado</span>
+                              )}
                             </div>
                           </div>
                           <label className="flex items-start gap-2 cursor-pointer">

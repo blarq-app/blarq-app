@@ -2620,8 +2620,8 @@ function HerrajePartidaBlock({
   // "Comparar con la tienda web" (pendiente 143): abre el MISMO modal que
   // artefactos, con un tilde por línea (MJ, 2026-09-29: "que funcione como
   // funcionan los artefactos"). Solo se ofrece si hay algo que comparar: DPH
-  // con catálogo y link. HBT tiene flechita pero NO chequeo (su costo es el
-  // precio negociado, no el público) — ver PROVEEDORES_PRECIO_WEB.
+  // o HBT con catálogo y link (HBT desde 2026-10-01, lo distinto viene sin
+  // marcar por ser precio negociado) — ver PROVEEDORES_PRECIO_WEB.
   const [showWeb, setShowWeb] = useState(false);
   const comparables = item.herrajes.filter(
     (h) => h.catalogId && h.referenceLink && seComparaConLaWeb(h.supplier)
@@ -2881,7 +2881,7 @@ function HerrajePartidaBlock({
                   <button
                     onClick={() => setShowWeb(true)}
                     className="text-gray-400 hover:text-gray-900 text-left"
-                    title="Compara el costo de cada herraje con el precio de hoy en la web del proveedor. Se aplica solo lo que marques. HBT no se compara: su costo es el precio negociado."
+                    title="Compara el costo de cada herraje con el precio de hoy en la web del proveedor. Se aplica solo lo que marques. Los de HBT vienen sin marcar: su costo es el precio negociado."
                   >
                     Comparar con la tienda web
                   </button>

@@ -13,6 +13,7 @@ import {
 import { computeProjectMetrics } from "@/lib/projects/metrics";
 import { effectiveSalaryPeriod, yearMonthToDate } from "@/lib/banco/salaryPeriod";
 import { selectVigente } from "@/lib/projects/selectVersion";
+import { signoDte } from "@/lib/invoices/signo";
 
 // Gastos de estructura de BLARQ que NO son factura, traídos del banco. Son
 // movimientos categorizados a mano (sueldo / previred / comisión).
@@ -318,7 +319,7 @@ export default async function ResultadosPage({
   // el subtotal del desglose y la card de arriba. Las explicitamos acá
   // para que MJ las catalogue. Misma convención de signo (NC=-1) y neto
   // que el resto del desglose.
-  const sign = (i: { tipoDoc: number | null }) => (i.tipoDoc === 61 ? -1 : 1);
+  const sign = signoDte;
   const realSinCategoria = facturasRecibidas
     .filter((i) => !i.category)
     .reduce((s, i) => s + sign(i) * i.netAmount, 0);

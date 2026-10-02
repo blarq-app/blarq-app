@@ -5,6 +5,7 @@ import FacturasFilterBar from "@/components/facturas/FacturasFilterBar";
 import FacturasTable from "@/components/facturas/FacturasTable";
 import SyncSiiButton from "@/components/facturas/SyncSiiButton";
 import { formatCLP } from "@/lib/utils";
+import { signoDte } from "@/lib/invoices/signo";
 
 type SearchParams = {
   type?: "emitida" | "recibida";
@@ -159,8 +160,11 @@ export default async function FacturasPage({
     // Totales de las tarjetas de arriba. Van por consulta y NO sumando las
     // filas traídas: la lista corta en 500, así que sumar `invoices` daba el
     // total de las primeras 500 y no el de todas las que matchean el filtro.
+    //
+    // Agrupa también por tipoDoc para poder RESTAR las notas de crédito (61):
+    // un `_sum` por type solo las sumaba en positivo (ver signoDte).
     prisma.invoice.groupBy({
-      by: ["type"],
+      by: ["type", "tipoDoc"],
       where,
       _count: { _all: true },
       _sum: { totalAmount: true, netAmount: true },
@@ -185,13 +189,21 @@ export default async function FacturasPage({
   ]);
 
   // Los cuatro totales de arriba, ya por consulta y no sobre las 500 filas.
+  // Cada fila del groupBy es un (type, tipoDoc); se suman con el signo del
+  // documento, así la NC descuenta en el total y en el neto. Las anuladas
+  // siguen sumando: su NC las cancela (mismo criterio que metrics.ts).
   const totalFacturas = totalsByType.reduce((s, r) => s + r._count._all, 0);
-  const filaEmitidas = totalsByType.find((r) => r.type === "emitida");
-  const filaRecibidas = totalsByType.find((r) => r.type === "recibida");
-  const totalEmitido = filaEmitidas?._sum.totalAmount ?? 0;
-  const totalEmitidoNeto = filaEmitidas?._sum.netAmount ?? 0;
-  const totalRecibido = filaRecibidas?._sum.totalAmount ?? 0;
-  const totalRecibidoNeto = filaRecibidas?._sum.netAmount ?? 0;
+  const sumaFirmada = (
+    type: "emitida" | "recibida",
+    campo: "totalAmount" | "netAmount"
+  ) =>
+    totalsByType
+      .filter((r) => r.type === type)
+      .reduce((s, r) => s + signoDte(r) * (r._sum[campo] ?? 0), 0);
+  const totalEmitido = sumaFirmada("emitida", "totalAmount");
+  const totalEmitidoNeto = sumaFirmada("emitida", "netAmount");
+  const totalRecibido = sumaFirmada("recibida", "totalAmount");
+  const totalRecibidoNeto = sumaFirmada("recibida", "netAmount");
 
   // Conteos aplanados a { valor: cuántas } para las pastillas.
   const conteoTipo: Record<string, number> = {};

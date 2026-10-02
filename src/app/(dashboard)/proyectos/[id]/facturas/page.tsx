@@ -7,6 +7,7 @@ import ProjectFacturasFilters from "@/components/facturas/ProjectFacturasFilters
 import ClickableInvoiceRow from "@/components/facturas/ClickableInvoiceRow";
 import { invoiceStatusBadge } from "@/lib/facturas/statusBadge";
 import { contraparteDeFactura } from "@/lib/facturas/contraparte";
+import { signoDte } from "@/lib/invoices/signo";
 import {
   EditableCategoryCell,
   MoveProjectButton,
@@ -219,8 +220,8 @@ export default async function ProyectoFacturasPage({
   // Stats arriba: usan las facturas FILTRADAS (sin filtro = todas).
   // Eso responde al pedido de MJ: ver totales del filtro aplicado.
   // Una nota de crédito (DTE 61) revierte la factura — debe restar, no sumar.
-  // Mismo helper que metrics.ts línea 147.
-  const sign = (i: { tipoDoc: number | null }) => (i.tipoDoc === 61 ? -1 : 1);
+  // Criterio único en lib/invoices/signo.ts (el mismo de metrics.ts).
+  const sign = signoDte;
   const totalEmitido = invoices
     .filter((i) => i.type === "emitida")
     .reduce((s, i) => s + sign(i) * i.totalAmount, 0);

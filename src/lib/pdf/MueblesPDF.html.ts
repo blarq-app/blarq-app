@@ -211,7 +211,14 @@ const CSS = `
   .mtt { text-align: right; color: #34332E; font-variant-numeric: tabular-nums; font-size: 6.24pt; font-weight: 700; white-space: nowrap; }
 
   .spec { margin: 1.92pt 0 1.92pt var(--indent); }
-  .specrow, .hrow { display: grid; grid-template-columns: 81.6pt minmax(0, 1fr) 33.6pt 62.4pt; align-items: baseline; padding: 1.92pt 0; border-bottom: .48pt solid #eee8dd; font-size: 5.04pt; line-height: 1.35; color: #5f5b52; break-inside: avoid; }
+  .specrow, .hrow { display: grid; grid-template-columns: 81.6pt minmax(0, 1fr) 33.6pt 62.4pt; align-items: baseline; padding: 1.92pt 0; position: relative; border-bottom: .48pt solid transparent; font-size: 5.04pt; line-height: 1.35; color: #5f5b52; break-inside: avoid; }
+  /* Chromium redondea los bordes subpíxel a 1 px. Escalamos el trazo para
+     imprimir una línea realmente fina (0,25 pt), manteniendo el espaciado. */
+  .specrow::after, .hrow::after, .pagos .row::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+    height: 1pt; background: #D0D0D0;
+    transform: scaleY(.25); transform-origin: bottom;
+  }
   .speclbl { letter-spacing: .04em; text-transform: uppercase; font-weight: 400; padding-right: 4pt; }
   .specval, .hname { min-width: 0; overflow-wrap: anywhere; }
   .speclbl:empty + .specval { grid-column: 1 / 3; }
@@ -251,7 +258,7 @@ const CSS = `
   .cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 23.04pt; margin-top: 17.28pt; align-items: start; break-inside: avoid; }
   .blk-title { font-size: 5.28pt; letter-spacing: .18em; text-transform: uppercase; color: #9A9183; font-weight: 700; }
   .pagos { margin-top: 4.8pt; border-top: .48pt solid #e2dcd0; }
-  .pagos .row { display: flex; justify-content: space-between; gap: 8pt; padding: 3.84pt 0; border-bottom: .48pt solid #eee8dd; font-size: 6.72pt; }
+  .pagos .row { display: flex; justify-content: space-between; gap: 8pt; padding: 3.84pt 0; position: relative; border-bottom: .48pt solid transparent; font-size: 6.72pt; }
   .pagos .p { color: #6F6A60; font-weight: 700; font-variant-numeric: tabular-nums; }
   .totalbox { border-top: .96pt solid #34332E; padding-top: 8.64pt; display: flex; flex-direction: column; align-items: flex-end; gap: 2.88pt; }
   .totalbox .totrow { display: flex; flex-direction: column; align-items: flex-end; gap: 2.88pt; }

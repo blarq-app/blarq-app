@@ -223,7 +223,9 @@ const CSS = `
   .specval, .hname { min-width: 0; overflow-wrap: anywhere; }
   .speclbl:empty + .specval { grid-column: 1 / 3; }
   .hbrand, .hmut { color: #aaa294; font-weight: 400; }
-  .hqty { text-align: center; color: #34332E; font-size: 5.28pt; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .hqty { text-align: center; color: inherit; font-size: inherit; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .hunit { font-size: .9em; }
 
   /* Alternativas elegidas por MJ: debajo de la base, sin banda, solo los
      componentes distintos. Precio y diferencia alineados a la derecha;
@@ -312,7 +314,7 @@ function renderHerrajes(herrajes?: MuebleHerrajeInput[]): string {
       const spec = [measureText, h.finish].filter(Boolean).join(" · ");
       const mut = spec ? ` <span class="hmut">· ${esc(spec)}</span>` : "";
       const marca = h.brand ? ` <span class="hbrand">· ${esc(h.brand)}</span>` : "";
-      return `<div class="hrow"><span class="speclbl">${index === 0 ? esc(group) : ""}</span><span class="hname">${esc(formatHerrajeName(h.name))}${marca}${mut}</span><span class="hqty">${fmtQty(quantity)} UN</span></div>`;
+      return `<div class="hrow"><span class="speclbl">${index === 0 ? esc(group) : ""}</span><span class="hname">${esc(formatHerrajeName(h.name))}${marca}${mut}</span><span class="hqty">${fmtQty(quantity)} <span class="hunit">un</span></span></div>`;
     }).join("")
   ).join("");
 }

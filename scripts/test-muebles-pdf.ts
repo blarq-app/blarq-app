@@ -21,7 +21,7 @@ assert.deepEqual($('.mqty').map((_, el) => $(el).text()).get(), ['1', '1', '1'])
 assert.deepEqual($('.mtt').map((_, el) => $(el).text()).get(), ['$ 25.133.276', '$ 2.598.001', '$ 3.906.624']);
 assert.equal($('.tv').text(), '$ 31.637.901');
 assert.equal($('.hrow').length, 8, 'Resume las medidas sin duplicar productos');
-assert.equal($('.hqty').first().text(), '7 UN');
+assert.equal($('.hqty').first().text(), '7 un');
 assert.match($('.hname').first().text(), /500 × 1 \/ 450 × 4 \/ 350 × 2/);
 assert.equal($('.hrow .speclbl').filter((_, el) => $(el).text() === 'Correderas').length, 1);
 assert.equal($('.obs-item').length, 5);
@@ -52,9 +52,9 @@ hardware.herrajes = [
 const separatedHtml = renderMueblesHTML(separated);
 const sep = load(separatedHtml);
 assert.equal(sep('.hrow').length, 5, 'No mezcla proveedores, acabados ni modelos');
-assert.equal(sep('.hqty').first().text(), '6 UN');
+assert.equal(sep('.hqty').first().text(), '6 un');
 assert.match(sep('.hname').first().text(), /500mm × 1 \/ 450mm × 5/);
-assert.equal(sep('.hqty').last().text(), '0,5 UN');
+assert.equal(sep('.hqty').last().text(), '0,5 un');
 assert.ok(!separatedHtml.includes('UBICACIÓN INTERNA'), 'La ubicación no llega al cliente');
 assert.equal(sep('script').length, 0, 'Los textos se escapan');
 assert.match(sep('.hname').last().text(), /&/);

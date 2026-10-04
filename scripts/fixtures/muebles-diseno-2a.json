@@ -1,0 +1,213 @@
+{
+  "project": {
+    "name": "Cocina Candelaria",
+    "clientName": "Angelica Toro",
+    "address": null
+  },
+  "budget": {
+    "version": "V6",
+    "date": "2026-09-29",
+    "conditions": [
+      {
+        "lead": "Plazos de entrega.",
+        "text": "60 días corridos para muebles desde el ingreso a producción, salvo fuerza mayor. Las cubiertas de cuarzo y granito tienen un plazo de 10 días hábiles para instalación, posterior a su rectificación."
+      },
+      {
+        "lead": "Condiciones de entrega.",
+        "text": "Los muebles ingresan una vez puestos los cerámicos de muros con el frague seco, instalación de agua y desagüe. De haber pintura, debe estar seca. Las cubiertas solo se rectifican una vez instalados los muebles base."
+      },
+      {
+        "lead": "Garantías.",
+        "text": "Durante la etapa de diseño se revisan minuciosamente todos los detalles hasta lograr la plena satisfacción del cliente. Aprobado el diseño, todo cambio tiene costo adicional. No nos hacemos responsables por alteraciones en muebles y cubiertas una vez recibidos a conformidad."
+      },
+      {
+        "text": "Este presupuesto tiene una validez de 10 días corridos."
+      },
+      {
+        "text": "Los valores podrán sufrir modificaciones si existen variaciones considerables respecto de las medidas rectificadas en terreno."
+      }
+    ]
+  },
+  "chapters": [
+    {
+      "chapterNumber": 1,
+      "name": "Muebles de cocina",
+      "items": [
+        {
+          "itemNumber": "1.1",
+          "name": "Muebles",
+          "descriptionGeneral": "Según planos de arquitectura",
+          "quantity": 1,
+          "clientPriceIva": 25133276,
+          "details": [
+            {
+              "name": "Cuerpo interior",
+              "material": "Melamina blanca 18mm, tapacanto PVC 0,4mm"
+            },
+            {
+              "name": "Trasera",
+              "material": "Melamina blanca 15mm"
+            },
+            {
+              "name": "Frente mueble base",
+              "material": "Melamina Gizir Gris S027, tapacanto 1,5mm"
+            },
+            {
+              "name": "Frente mueble mural",
+              "material": "Melamina Gizir Gris S027, tapacanto 1,5mm"
+            },
+            {
+              "name": "Mueble isla",
+              "material": "Estructura de madera sólida. Frentes melamina Carvalo"
+            },
+            {
+              "name": "Vitrina",
+              "material": "Cuerpo interior melamina madera, frentes puertas Omnia enchapada en encina blanca"
+            },
+            {
+              "name": "Zócalo",
+              "material": "Terciado mueblería revestido porcelanato en obra"
+            }
+          ]
+        },
+        {
+          "itemNumber": "1.2",
+          "name": "Herrajes",
+          "descriptionGeneral": null,
+          "quantity": 1,
+          "clientPriceIva": 2598001,
+          "details": [],
+          "herrajes": [
+            {
+              "sector": "",
+              "name": "Cajón bajo 119mm",
+              "measure": "500",
+              "finish": null,
+              "quantity": 1,
+              "category": "cajon"
+            },
+            {
+              "sector": "",
+              "name": "Cajón bajo 119mm",
+              "measure": "450",
+              "finish": null,
+              "quantity": 4,
+              "category": "cajon"
+            },
+            {
+              "sector": "",
+              "name": "Cajón bajo 119mm",
+              "measure": "350",
+              "finish": null,
+              "quantity": 2,
+              "category": "cajon"
+            },
+            {
+              "sector": "",
+              "name": "Cajón alto 183mm",
+              "measure": "500",
+              "finish": null,
+              "quantity": 6,
+              "category": "cajon"
+            },
+            {
+              "sector": "",
+              "name": "Cajón alto 183mm",
+              "measure": "450",
+              "finish": null,
+              "quantity": 8,
+              "category": "cajon"
+            },
+            {
+              "sector": "",
+              "name": "Cajón alto 183mm",
+              "measure": "350",
+              "finish": null,
+              "quantity": 4,
+              "category": "cajon"
+            },
+            {
+              "sector": "",
+              "name": "Cajón interior alto 600mm",
+              "measure": "fondo 450",
+              "finish": null,
+              "quantity": 1,
+              "category": "cajon"
+            },
+            {
+              "sector": "",
+              "name": "Cajón interior bajo 600mm",
+              "measure": "fondo 450",
+              "finish": null,
+              "quantity": 1,
+              "category": "cajon"
+            },
+            {
+              "sector": "",
+              "name": "Cliptop 110° Blumotion recta (x10)",
+              "measure": "Blum · HBT",
+              "finish": null,
+              "quantity": 9,
+              "category": "bisagra"
+            },
+            {
+              "sector": "",
+              "name": "Rotonda esquinera antracita 180°",
+              "measure": "DPH",
+              "finish": null,
+              "quantity": 1,
+              "category": "accesorio"
+            },
+            {
+              "sector": "",
+              "name": "Cesta cromada extraíble cierre suave",
+              "measure": "DPH",
+              "finish": null,
+              "quantity": 3,
+              "category": "accesorio"
+            },
+            {
+              "sector": "",
+              "name": "Manilla Edge S bronce 160/200mm",
+              "measure": "HBT",
+              "finish": null,
+              "quantity": 39,
+              "category": "tirador"
+            }
+          ]
+        },
+        {
+          "itemNumber": "1.3",
+          "name": "Cubiertas",
+          "descriptionGeneral": null,
+          "quantity": 1,
+          "clientPriceIva": 3906624,
+          "details": [
+            {
+              "name": "Cubiertas",
+              "material": "Ultracompacto en frentes, 12mm"
+            },
+            {
+              "name": "Respaldos",
+              "material": "Alto en sector encimera"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "paymentTerms": [
+    {
+      "stage": "Anticipo",
+      "percentage": 60
+    },
+    {
+      "stage": "Inicio instalación",
+      "percentage": 30
+    },
+    {
+      "stage": "Saldo",
+      "percentage": 10
+    }
+  ]
+}

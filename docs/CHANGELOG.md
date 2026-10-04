@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-10-04 — Presupuesto de muebles según diseño 2a de MJ
+
+- Conserva la portada y renueva el detalle con columnas Ítem / Partida / Cant / Total, líneas finas grises y cierre de pagos, total y observaciones según la referencia aprobada.
+- Resume medidas del mismo herraje, manteniendo separados nombres, marcas/proveedores y terminaciones distintos. Las cantidades aparecen discretas bajo Cant, con «un» en minúscula; la ubicación interna no se imprime.
+- Conserva precios, cantidades y alternativas fuera del total. Pruebas locales independientes de la base de datos y revisión de PDF de dos y seis páginas. Publicación autorizada por MJ.
+
 ## 2026-09-30 — Columna UBICACIÓN en las líneas de herraje (PR #470, en prod)
 
 - **Pendiente 189**: cada línea de herraje de una cotización de muebles tiene una columna UBICACIÓN para anotar dónde va ("TORRE CAJONES", "BAJO LAVAPLATOS"). Es interna: el PDF del cliente no la muestra. Usa `MuebleHerraje.sector`, que existía pero no se podía escribir; sin cambios de base de datos.

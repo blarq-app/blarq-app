@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-10-05 — Columna UTILIDAD en Proyectos → Terminados
+
+- **Pendiente 195**: la pestaña Terminados de `/proyectos` muestra la utilidad real de cada obra (cobrado neto − gastado, `utilidadReal` de `metrics.ts`, sin tocarlo). En ejecución no se agrega: ahí los dos números engañan mientras la obra avanza. Lo eligió MJ viendo sus datos.
+- "—" cuando VENDIDO es "—" (obras sin presupuesto cargado y centros de costo internos). Rojo solo si es negativa; positiva en gris, no en verde.
+- Difiere de la tarjeta Utilidad del Resumen (acordado − gastado) en lo cobrado de más o de menos; el rótulo de la columna dice "cobrado − gastado".
+
 ## 2026-10-04 — Presupuesto de muebles según diseño 2a de MJ
 
 - Conserva la portada y renueva el detalle con columnas Ítem / Partida / Cant / Total, líneas finas grises y cierre de pagos, total y observaciones según la referencia aprobada.

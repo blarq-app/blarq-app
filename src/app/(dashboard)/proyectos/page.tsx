@@ -61,6 +61,16 @@ export default async function ProyectosPage({
       status: p.status,
       gastado: m.totalGastado,
       vendido: m.totalAcordado,
+      // Utilidad (decisión MJ 2026-10-05): solo en Terminados, y es la REAL
+      // (cobrado neto − gastado) — lo que efectivamente quedó de la obra.
+      // En ejecución no se muestra: la proyectada (acordado − gastado) da casi
+      // todo lo vendido en una obra que recién parte (Algarrobos ~$94M en
+      // oct-2026), y la real cuenta como ganancia anticipos que aún no se gastan.
+      // Sin presupuesto cargado (VENDIDO en "—": obras de antes de la app y
+      // centros de costo internos) va null → "—": no hay con qué medirla y
+      // sus cobros/gastos viejos no están revisados.
+      utilidad:
+        activeTab === "terminados" && m.totalAcordado > 0 ? m.utilidadReal : null,
       lastActivity: getLastActivity(p),
       hasAlert: overdueByProject.has(p.id),
     };

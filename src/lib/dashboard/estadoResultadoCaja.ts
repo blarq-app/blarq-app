@@ -180,6 +180,7 @@ export async function computeEstadoResultadoCaja(
       type: true,
       category: true,
       status: true,
+      netZeroAmount: true,
       salaryPeriod: true,
       counterpartyName: true,
       counterpartyRut: true,
@@ -273,7 +274,13 @@ export async function computeEstadoResultadoCaja(
             : topCategoria(p.invoice?.category ?? null);
         add("op", tipo, label, m, signo * p.amountApplied);
       }
-      const resto = Math.abs(mov.amount) - aplicado;
+      // El resto que sobra después de las facturas — descontando lo que se
+      // neteó con su devolución (neto cero PARCIAL). Un movimiento conciliado a
+      // su factura que además tuvo un sobrante devuelto por el proveedor (caso
+      // Barraca: pagaste de más, te reintegraron después) no debe mostrar ese
+      // sobrante como gasto "No asignado": es plata que fue y volvió. El campo
+      // netZeroAmount lleva exactamente cuánto de este movimiento ya se neteó.
+      const resto = Math.abs(mov.amount) - aplicado - (mov.netZeroAmount ?? 0);
       if (resto > 1) {
         // El resto NO conciliado: si la salida es a un socio → retiro (NO
         // operativo); si no → "No asignado" del bloque operativo (como siempre).

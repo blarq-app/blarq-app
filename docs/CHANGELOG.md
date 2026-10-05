@@ -4,7 +4,7 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
-## 2026-10-05 — Columna UTILIDAD en Proyectos → Terminados
+## 2026-10-05 — Columna UTILIDAD en Proyectos → Terminados (PR #483, en prod)
 
 - **Pendiente 195**: la pestaña Terminados de `/proyectos` muestra la utilidad real de cada obra (cobrado neto − gastado, `utilidadReal` de `metrics.ts`, sin tocarlo). En ejecución no se agrega: ahí los dos números engañan mientras la obra avanza. Lo eligió MJ viendo sus datos.
 - "—" cuando VENDIDO es "—" (obras sin presupuesto cargado y centros de costo internos). Rojo solo si es negativa; positiva en gris, no en verde.

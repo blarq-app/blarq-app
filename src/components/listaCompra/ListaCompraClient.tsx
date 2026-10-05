@@ -43,6 +43,7 @@ export default function ListaCompraClient({
   const [newItem, setNewItem] = useState({ name: "", unit: "UN" });
   const [showNew, setShowNew] = useState(false);
   const [showCarrito, setShowCarrito] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
 
   // Si cambia rows (por server refresh), actualiza
   if (rows !== (localRows as any)._src) {
@@ -120,7 +121,10 @@ export default function ListaCompraClient({
     router.refresh();
   }
 
-  const filtered = useMemo(() => {
+  // Primero el filtro de estado y después la búsqueda, por separado: el
+  // contador "12 de 60" compara lo buscado contra lo que el filtro de estado
+  // ya dejaba ver, no contra la versión entera.
+  const porEstado = useMemo(() => {
     return localRows.filter((i) => {
       const pend = i.qtyNeeded - i.qtyBought;
       if (filter === "pendiente") return pend > 0.001;
@@ -129,6 +133,25 @@ export default function ListaCompraClient({
       return true;
     });
   }, [localRows, filter]);
+
+  // La búsqueda mira nombre y notas, sin mayúsculas ni tildes ("cañeria"
+  // encuentra "CAÑERÍA COBRE"). Varias palabras tienen que estar TODAS, en
+  // cualquier orden, como en el catálogo de herrajes. Las filas manuales y
+  // las de excedente pasan por acá igual que las del presupuesto.
+  // Es solo para mirar en pantalla: los recuadros de arriba, el PDF y el
+  // Carro Sodimac siguen trabajando con localRows / el filtro de estado.
+  const palabras = useMemo(
+    () => sinTildes(busqueda).split(/\s+/).filter(Boolean),
+    [busqueda]
+  );
+  const filtered = useMemo(() => {
+    if (palabras.length === 0) return porEstado;
+    return porEstado.filter((i) => {
+      const texto = sinTildes(`${i.name} ${i.notes ?? ""}`);
+      return palabras.every((p) => texto.includes(p));
+    });
+  }, [porEstado, palabras]);
+  const buscando = palabras.length > 0;
 
   return (
     <div className="space-y-4">
@@ -180,6 +203,43 @@ export default function ListaCompraClient({
                   : "Comprados"}
               </button>
             ))}
+          </div>
+          {/* Buscador: mismo input que el de Facturas (alto, borde de 1px,
+              placeholder gris). En el celular ocupa la fila entera.
+              El contador "12 de 60" va ADENTRO del campo, junto a la ×: si
+              fuera afuera, al aparecer con la primera letra ensanchaba el
+              grupo y en notebook el buscador saltaba de línea mientras MJ
+              escribía. */}
+          <div className="relative w-full sm:w-64">
+            <input
+              type="text"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setBusqueda("");
+              }}
+              placeholder="Buscar material o nota…"
+              className={`w-full pl-3 ${
+                busqueda ? "pr-20" : "pr-3"
+              } py-1.5 border border-gray-300 rounded text-sm bg-white focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none`}
+            />
+            {busqueda && (
+              <div className="absolute inset-y-0 right-2 flex items-center gap-2">
+                {buscando && (
+                  <span className="pointer-events-none text-xs text-gray-400 tabular-nums">
+                    {filtered.length} de {porEstado.length}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setBusqueda("")}
+                  className="text-gray-400 hover:text-gray-900 text-sm leading-none"
+                  title="Limpiar búsqueda"
+                >
+                  ×
+                </button>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 overflow-x-auto -mx-1 px-1 xl:mx-0 xl:px-0 xl:overflow-visible">
@@ -306,7 +366,14 @@ export default function ListaCompraClient({
             "comprado" sea fácil de tocar. La tabla tiene 10 columnas y en el
             celular se cortaba en "Necesario". */}
         <div className="lg:hidden divide-y divide-gray-100">
-          {filtered.length === 0 && (
+          {filtered.length === 0 && buscando && (
+            <SinResultados
+              busqueda={busqueda}
+              filter={filter}
+              onLimpiar={() => setBusqueda("")}
+            />
+          )}
+          {filtered.length === 0 && !buscando && (
             <p className="px-3 py-8 text-center text-gray-500 text-sm">
               No hay materiales. El presupuesto no tiene partidas con
               componentes en el catálogo, o agrega uno manual.
@@ -455,7 +522,18 @@ export default function ListaCompraClient({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filtered.length === 0 && (
+            {filtered.length === 0 && buscando && (
+              <tr>
+                <td colSpan={10}>
+                  <SinResultados
+                    busqueda={busqueda}
+                    filter={filter}
+                    onLimpiar={() => setBusqueda("")}
+                  />
+                </td>
+              </tr>
+            )}
+            {filtered.length === 0 && !buscando && (
               <tr>
                 <td
                   colSpan={10}
@@ -800,6 +878,44 @@ function SodimacCarritoModal({
       </div>
     </div>
   );
+}
+
+// Una sola línea sobria cuando la búsqueda no encuentra nada. Si además hay
+// un filtro de estado puesto, lo nombra: así se entiende que el material
+// puede existir pero estar en la otra pastilla.
+function SinResultados({
+  busqueda,
+  filter,
+  onLimpiar,
+}: {
+  busqueda: string;
+  filter: "todo" | "pendiente" | "comprado";
+  onLimpiar: () => void;
+}) {
+  const estado =
+    filter === "pendiente" ? " pendiente" : filter === "comprado" ? " comprado" : "";
+  return (
+    <p className="px-3 py-8 text-center text-gray-500 text-sm">
+      Ningún material{estado} coincide con «{busqueda.trim()}».{" "}
+      <button
+        type="button"
+        onClick={onLimpiar}
+        className="text-gray-900 underline underline-offset-2 hover:text-gray-600"
+      >
+        Limpiar búsqueda
+      </button>
+    </p>
+  );
+}
+
+// Minúsculas y sin tildes, para comparar "cañeria" con "CAÑERÍA". Ojo: la ñ
+// también se descompone (n + virgulilla), así que "caneria" encuentra
+// "CAÑERÍA" — en una búsqueda eso ayuda, no molesta.
+function sinTildes(s: string) {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
 }
 
 function formatNum(n: number) {

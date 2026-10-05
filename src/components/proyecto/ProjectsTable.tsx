@@ -20,6 +20,11 @@ export type ProjectRow = {
   // computeProjectMetrics + getLastActivity, no este componente).
   gastado: number;
   vendido: number;
+  // Utilidad REAL (cobrado neto − gastado, viene de computeProjectMetrics).
+  // Solo la llena /proyectos y solo se muestra en la pestaña Terminados.
+  // null = la obra no tiene presupuesto cargado (VENDIDO en "—"): la celda va
+  // "—" y no un número, porque sin lo vendido no hay con qué medirla.
+  utilidad?: number | null;
   lastActivity: Date;
   // Fecha de creación real. La columna "Creada" de cotizaciones/archivadas la
   // usa a ella, no lastActivity: hasta julio 2026 esa columna decía "Creada"
@@ -103,6 +108,18 @@ export default function ProjectsTable({
                 </th>
               </>
             )}
+            {/* Utilidad solo en Terminados: lo que efectivamente quedó. El
+                rótulo dice "cobrado − gastado" porque NO es el mismo número
+                que la tarjeta Utilidad del Resumen (esa es acordado −
+                gastado); difieren en lo que se cobró de más o de menos. */}
+            {variant === "terminado" && (
+              <th className="text-right px-3 py-2">
+                Utilidad
+                <span className="block text-[9px] text-gray-400 normal-case font-normal">
+                  cobrado − gastado
+                </span>
+              </th>
+            )}
             {(variant === "cotizacion" || variant === "archivado") && (
               <th className="text-right px-3 py-2">
                 Monto
@@ -154,9 +171,9 @@ export default function ProjectsTable({
               <tr className="bg-gray-50">
                 <td
                   // colSpan dinámico: ejecucion=6 (sin columna de fecha),
-                  // terminado=7 (con columna "Terminado"). El resto de
-                  // variants no usa groupOtros.
-                  colSpan={variant === "ejecucion" ? 6 : 7}
+                  // terminado=8 (con columnas "Utilidad" y "Terminado"). El
+                  // resto de variants no usa groupOtros.
+                  colSpan={variant === "ejecucion" ? 6 : 8}
                   className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-gray-500"
                 >
                   Otros (centros de costo internos)
@@ -170,6 +187,24 @@ export default function ProjectsTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * Celda de Utilidad, compartida por la fila y la tarjeta del celular.
+ *
+ * Rojo SOLO si es negativa de verdad (se gastó más de lo que se cobró) — ese
+ * es el significado del rojo en la app. Positiva va en el gris oscuro de los
+ * otros montos, no en verde: verde no es el default. Sin presupuesto cargado
+ * (null) va el mismo guión claro que VENDIDO.
+ */
+function celdaUtilidad(utilidad: number | null | undefined) {
+  if (utilidad == null) return <span className="text-gray-300">—</span>;
+  if (Math.round(utilidad) === 0) return <span className="text-gray-400">{formatCLP(0)}</span>;
+  return (
+    <span className={utilidad < 0 ? "text-red-600" : "text-gray-900"}>
+      {formatCLP(utilidad)}
+    </span>
   );
 }
 
@@ -275,6 +310,12 @@ function TarjetaProyecto({
             </span>
           </>
         )}
+        {variant === "terminado" && (
+          <span className="text-gray-400">
+            Utilidad{" "}
+            <span className="tabular-nums">{celdaUtilidad(row.utilidad)}</span>
+          </span>
+        )}
         {(variant === "cotizacion" || variant === "archivado" || variant === "convertida") && (
           <span className="text-gray-400">
             Monto{" "}
@@ -375,6 +416,9 @@ function Row({
           <td className="px-3 py-2 text-right tabular-nums text-gray-900">{gastadoCell}</td>
           <td className="px-3 py-2 text-right tabular-nums text-gray-900">{vendidoCell}</td>
         </>
+      )}
+      {variant === "terminado" && (
+        <td className="px-3 py-2 text-right tabular-nums">{celdaUtilidad(row.utilidad)}</td>
       )}
       {(variant === "cotizacion" || variant === "archivado") && (
         <td className="px-3 py-2 text-right tabular-nums text-gray-900">{vendidoCell}</td>

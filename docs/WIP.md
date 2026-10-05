@@ -1,8 +1,14 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-10-04.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-10-05.
 
 ---
+
+- **Buscar en la Lista de compra (2026-10-05, pendiente 194, a prod el 2026-10-05 con OK de MJ: «si»)**: MJ: en Cocina Candelaria hay 60 materiales y no había cómo buscar. Campo "Buscar material o nota…" en la barra, al lado de Todos · Pendientes · Comprados (`ListaCompraClient.tsx`). Filtra mientras se escribe, en el nombre y las notas, sin mayúsculas ni tildes ("cañeria" encuentra "CAÑERÍA"; varias palabras tienen que estar todas). Se combina con el filtro de estado. Las filas manuales y de excedente se buscan igual. Escape o la × limpian; sin resultados, una línea con "Limpiar búsqueda".
+  - **No se filtran por la búsqueda**: los tres recuadros (siguen con el total de la versión), el PDF (sigue llevando solo el filtro de estado) y el Carro Sodimac. Pantalla pura: no toca `lib/listaCompra/` ni datos.
+  - El contador "2 de 60" va adentro del campo, junto a la ×: puesto afuera, al aparecer con la primera letra el buscador saltaba de línea en notebook mientras se escribía (verificado a 1280/1440/1920: ya no se mueve).
+  - Probado con la base viva en solo lectura (dev local del worktree, el navegador con todo guardado bloqueado: 0 intentos). Candelaria V2: "cañeria" y "CAÑERÍA" → las 2 cañerías de cobre, recuadros $4.883.304 antes y durante la búsqueda, link del PDF sin la búsqueda, celular sin desborde. Capturas en `scripts/_capturas/194-*.png` (sin commitear).
+  - Detalle chico que queda: si se busca por una palabra de la NOTA y se edita esa nota hasta borrarla, la fila desaparece de la búsqueda en medio del tipeo (lo escrito queda guardado igual).
 
 - **Nuevo detalle del PDF muebles según diseño 2a de MJ (2026-10-03, rama `codex/formato-presupuesto-muebles`, publicación autorizada por MJ el 2026-10-04: «dale, pasalo a prod»)**: referencia entregada en `Desarrollo de marca BLARQ (5).zip` + `muebles.pdf`. MJ confirmó conservar la portada y resumir medidas del mismo producto. Detalle A4 con cuatro columnas (Ítem / Partida / Cant / Total), banda de capítulo sin subtotal, componentes con líneas finas y cierre de pagos/total/observaciones como el adjunto. Los herrajes muestran familia del catálogo; se agrupan por nombre, marca/proveedor, terminación y categoría, sumando cantidades y mostrando el desglose por medida. La ubicación interna nunca se imprime. No se escriben datos ni cambian los precios de las partidas; las alternativas siguen fuera del total.
   - Implementado en `MueblesPDF.html.ts` y la ruta PDF (trae categoría junto con marca, en la misma consulta). Trabajo aislado en `/private/tmp/blarq-formato-presupuesto-muebles`; no se tocaron los pendientes de la carpeta principal.

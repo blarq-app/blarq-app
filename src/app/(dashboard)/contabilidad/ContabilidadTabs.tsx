@@ -8,6 +8,7 @@ const TABS = [
   { name: "Gastos", href: "/contabilidad/gastos" },
   { name: "Remuneraciones", href: "/contabilidad/remuneraciones" },
   { name: "Previred", href: "/contabilidad/previred" },
+  { name: "Cartola", href: "/contabilidad/cartola" },
 ];
 
 export default function ContabilidadTabs() {

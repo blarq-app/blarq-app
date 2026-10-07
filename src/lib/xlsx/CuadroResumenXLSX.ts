@@ -194,12 +194,14 @@ export async function buildCuadroResumenXLSX(input: CuadroResumenXLSXInput): Pro
   const colFactura = (i: number) => 4 + i * 3;
   const COL_TOTAL = 2 + N * 3;
 
-  // Encabezado arriba + las dos filas del encabezado de la tabla quedan fijas
-  // al bajar. La columna A (rótulos) NO se fija, a propósito: Excel marca el
-  // corte con una línea que va de arriba a abajo de la hoja y cruzaba el
-  // nombre de la obra y la línea del pie (MJ, 2026-09-30: "¿por qué sale con
-  // esa línea ahí?"). La línea del corte horizontal no se ve porque cae justo
-  // sobre el borde del encabezado.
+  // La hoja NO congela nada ("Inmovilizar paneles"), ni filas ni columnas, a
+  // propósito: Excel dibuja el corte como una línea gris que cruza la hoja
+  // entera, fuera de la tabla, y MJ lo pidió sacar dos veces. Primero se fue
+  // el corte vertical de la columna A, que cruzaba el nombre de la obra y el
+  // pie (2026-09-30: "¿por qué sale con esa línea ahí?"); después el
+  // horizontal bajo el encabezado de la tabla (2026-10-07), que sí se veía
+  // atravesando la hoja de lado a lado. La tabla tiene ~15 filas: fijar el
+  // encabezado al bajar no aporta nada que compense esa línea.
   const FILA_H1 = 5;
   const FILA_H2 = 6;
   const ws = wb.addWorksheet("Cuadro Resumen", {
@@ -211,7 +213,7 @@ export async function buildCuadroResumenXLSX(input: CuadroResumenXLSXInput): Pro
       fitToHeight: 0,
       margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
     },
-    views: [{ state: "frozen", xSplit: 0, ySplit: FILA_H2, showGridLines: false }],
+    views: [{ showGridLines: false }],
   });
 
   // Anchos en caracteres, pensados para los montos más largos ("$112.961.833")

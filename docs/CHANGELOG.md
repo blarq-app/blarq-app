@@ -4,6 +4,10 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-10-07 — Excel del Cuadro Resumen sin "Inmovilizar paneles"
+
+- **Pendiente 197**: la hoja "Cuadro Resumen" ya no congela el encabezado. Excel marcaba el corte con una línea gris que cruzaba la hoja entera bajo la tabla (MJ lo pidió el 30-sep y el 7-oct). Fórmulas, montos y estilos quedan iguales; probado con Cocina Candelaria.
+
 ## 2026-10-05 — Columna UTILIDAD en Proyectos → Terminados (PR #483, en prod)
 
 - **Pendiente 195**: la pestaña Terminados de `/proyectos` muestra la utilidad real de cada obra (cobrado neto − gastado, `utilidadReal` de `metrics.ts`, sin tocarlo). En ejecución no se agrega: ahí los dos números engañan mientras la obra avanza. Lo eligió MJ viendo sus datos.

@@ -1,7 +1,15 @@
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatCLP } from "@/lib/utils";
 import { cargarCartola } from "@/lib/contabilidad/cartolaConciliadaDatos";
+import {
+  MESES_PERIODO as MESES,
+  leerPeriodo,
+  nombrePeriodo,
+  periodoParam,
+  periodoPorDefecto,
+} from "@/lib/contabilidad/periodo";
+import SelectorPeriodo from "@/components/contabilidad/SelectorPeriodo";
+import BotonDescarga from "@/components/contabilidad/BotonDescarga";
 
 // Contabilidad → Cartola.
 //
@@ -19,31 +27,6 @@ import { cargarCartola } from "@/lib/contabilidad/cartolaConciliadaDatos";
 
 type SearchParams = { periodo?: string };
 
-const MESES = [
-  "enero", "febrero", "marzo", "abril", "mayo", "junio",
-  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
-];
-
-// ?periodo=YYYY-MM (un mes) o ?periodo=YYYY (el año completo). Sin parámetro:
-// el mes ANTERIOR, que es el que se le manda al contador (la cartola de julio
-// se manda en agosto).
-function parsePeriodo(raw: string | undefined): { year: number; month: number | null } {
-  const m = raw?.match(/^(\d{4})(?:-(\d{2}))?$/);
-  if (m) {
-    const year = Number(m[1]);
-    if (!m[2]) return { year, month: null };
-    const month = Number(m[2]);
-    if (month >= 1 && month <= 12) return { year, month };
-  }
-  const now = new Date();
-  const anterior = new Date(Date.UTC(now.getFullYear(), now.getMonth() - 1, 1));
-  return { year: anterior.getUTCFullYear(), month: anterior.getUTCMonth() + 1 };
-}
-
-function fmtPeriodo(year: number, month: number | null): string {
-  return month == null ? String(year) : `${year}-${String(month).padStart(2, "0")}`;
-}
-
 function fecha(d: Date): string {
   return d.toLocaleDateString("es-CL", { timeZone: "UTC", day: "2-digit", month: "2-digit" });
 }
@@ -54,8 +37,8 @@ export default async function CartolaPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const { year, month } = parsePeriodo(sp.periodo);
-  const periodoParam = fmtPeriodo(year, month);
+  const periodo = leerPeriodo(sp.periodo) ?? periodoPorDefecto();
+  const { year, month } = periodo;
 
   const [cartola, fechas] = await Promise.all([
     cargarCartola(prisma, year, month),
@@ -66,15 +49,14 @@ export default async function CartolaPage({
 
   const años = new Set(fechas.map((f) => f.date.getUTCFullYear()));
   años.add(year);
-  const years = [...años].sort((a, b) => b - a);
-  const mesesConDatos = new Set(
-    fechas.filter((f) => f.date.getUTCFullYear() === year).map((f) => f.date.getUTCMonth() + 1)
+  const mesesConDatos = Array.from(
+    new Set(fechas.filter((f) => f.date.getUTCFullYear() === year).map((f) => f.date.getUTCMonth() + 1))
   );
 
   const r = cartola.resumen;
   const pendientes = cartola.filas.filter((f) => f.estado !== "Conciliado");
   const vacio = r.movimientos === 0;
-  const url = (formato: "xlsx" | "pdf") => `/api/contabilidad/cartola?periodo=${periodoParam}&formato=${formato}`;
+  const url = (formato: "xlsx" | "pdf") => `/api/contabilidad/cartola?periodo=${periodoParam(periodo)}&formato=${formato}`;
 
   return (
     <div>
@@ -91,60 +73,17 @@ export default async function CartolaPage({
         </div>
       </div>
 
-      {/* Selector de año + meses (mismo patrón que F29 y Gastos). */}
-      <div className="max-w-3xl">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-xs uppercase tracking-wider text-gray-400">Año</span>
-          {years.map((y) => (
-            <Link
-              key={y}
-              href={`/contabilidad/cartola?periodo=${fmtPeriodo(y, month)}`}
-              className={`px-2.5 py-1 rounded text-sm font-medium tabular-nums transition-colors ${
-                y === year ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              {y}
-            </Link>
-          ))}
-        </div>
-        <div className="grid grid-cols-6 sm:grid-cols-12 gap-1 mb-2">
-          {MESES.map((nombre, i) => {
-            const m = i + 1;
-            const activo = m === month;
-            return (
-              <Link
-                key={m}
-                href={`/contabilidad/cartola?periodo=${fmtPeriodo(year, m)}`}
-                className={`text-center py-1.5 rounded text-xs font-medium transition-colors ${
-                  activo
-                    ? "bg-gray-900 text-white"
-                    : mesesConDatos.has(m)
-                      ? "text-gray-700 hover:bg-gray-100"
-                      : "text-gray-300 hover:bg-gray-50"
-                }`}
-                title={nombre}
-              >
-                {nombre.slice(0, 3)}
-              </Link>
-            );
-          })}
-        </div>
-        {/* El año completo: el mismo documento con todos los movimientos del
-            año y la cuadratura mes a mes. */}
-        <Link
-          href={`/contabilidad/cartola?periodo=${fmtPeriodo(year, null)}`}
-          className={`inline-block mb-6 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-            month == null ? "bg-gray-900 text-white" : "text-gray-700 hover:bg-gray-100 border border-gray-200"
-          }`}
-        >
-          Año {year} completo
-        </Link>
-      </div>
+      <SelectorPeriodo
+        ruta="/contabilidad/cartola"
+        periodo={periodo}
+        años={[...años].sort((a, b) => b - a)}
+        mesesConDatos={mesesConDatos}
+      />
 
       {vacio ? (
         <div className="border border-gray-200 rounded-xl p-8 text-center">
           <p className="text-sm text-gray-500">
-            No hay movimientos del banco en {month == null ? `el año ${year}` : `${MESES[month - 1]} ${year}`}.
+            No hay movimientos del banco en {month == null ? `el año ${year}` : nombrePeriodo(periodo)}.
           </p>
         </div>
       ) : (
@@ -238,23 +177,5 @@ export default async function CartolaPage({
         </div>
       )}
     </div>
-  );
-}
-
-function BotonDescarga({ href, texto, deshabilitado }: { href: string; texto: string; deshabilitado: boolean }) {
-  if (deshabilitado) {
-    return (
-      <span className="px-3 py-2 text-sm border border-gray-200 rounded text-gray-300 whitespace-nowrap">
-        {texto}
-      </span>
-    );
-  }
-  return (
-    <a
-      href={href}
-      className="px-3 py-2 text-sm border border-gray-300 rounded text-gray-700 hover:bg-gray-50 whitespace-nowrap"
-    >
-      {texto}
-    </a>
   );
 }

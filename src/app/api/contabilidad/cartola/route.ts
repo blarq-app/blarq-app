@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/apiAuth";
 import { renderPDF } from "@/lib/pdf/renderPDF";
 import { cargarCartola } from "@/lib/contabilidad/cartolaConciliadaDatos";
+import { leerPeriodo, periodoParam } from "@/lib/contabilidad/periodo";
 import { buildCartolaConciliadaXLSX } from "@/lib/xlsx/CartolaConciliadaXLSX";
 import {
   pieCartolaConciliada,
@@ -27,17 +28,13 @@ export async function GET(request: NextRequest) {
   if (gate instanceof Response) return gate;
 
   const sp = request.nextUrl.searchParams;
-  const m = (sp.get("periodo") ?? "").match(/^(\d{4})(?:-(\d{2}))?$/);
-  if (!m) {
+  const periodo = leerPeriodo(sp.get("periodo"));
+  if (!periodo) {
     return NextResponse.json({ error: "Falta el período: YYYY-MM (un mes) o YYYY (el año)" }, { status: 400 });
   }
-  const year = Number(m[1]);
-  const month = m[2] ? Number(m[2]) : null;
-  if (month != null && (month < 1 || month > 12)) {
-    return NextResponse.json({ error: "Mes inválido" }, { status: 400 });
-  }
+  const { year, month } = periodo;
   const formato = sp.get("formato") === "pdf" ? "pdf" : "xlsx";
-  const nombre = `Cartola_conciliada_${m[2] ? `${m[1]}-${m[2]}` : m[1]}_BLARQ`;
+  const nombre = `Cartola_conciliada_${periodoParam(periodo)}_BLARQ`;
 
   try {
     const cartola = await cargarCartola(prisma, year, month);

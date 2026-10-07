@@ -4,7 +4,7 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
-## 2026-10-07 — Cartola conciliada para el contador (en prod)
+## 2026-10-07 — Cartola conciliada para el contador (PR #487, en prod)
 
 - **Pendiente 196**: pestaña Contabilidad → Cartola. Por mes o año completo baja un Excel (hoja "Cartola" + hoja "Pagadas en partes") y un PDF: cada movimiento del banco en orden, con las facturas que paga (y cuánto a cada una) o qué es cuando no tiene factura (sueldo de qué mes, Previred, F29, reembolso a socio, traspaso, préstamo). Solo lee; no toca `metrics.ts` ni el estado de los movimientos.
 - Los saldos van al final: cuadratura contra la cartola por cuenta (y mes a mes en el del año). Nuevo `saldoAlCierre`: con dos montos iguales el mismo día el desempate daba descuadres falsos (30-dic-2025, Sueldos).

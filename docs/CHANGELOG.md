@@ -4,6 +4,16 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-10-07 — Cartola conciliada para el contador (en prod)
+
+- **Pendiente 196**: pestaña Contabilidad → Cartola. Por mes o año completo baja un Excel (hoja "Cartola" + hoja "Pagadas en partes") y un PDF: cada movimiento del banco en orden, con las facturas que paga (y cuánto a cada una) o qué es cuando no tiene factura (sueldo de qué mes, Previred, F29, reembolso a socio, traspaso, préstamo). Solo lee; no toca `metrics.ts` ni el estado de los movimientos.
+- Los saldos van al final: cuadratura contra la cartola por cuenta (y mes a mes en el del año). Nuevo `saldoAlCierre`: con dos montos iguales el mismo día el desempate daba descuadres falsos (30-dic-2025, Sueldos).
+- Lo dudoso sale pendiente "Por aclarar" (sueldo a quien no está en la planilla, préstamo de socio a quien no es socio); no se resuelve solo. Regresión en `scripts/test-cartola-conciliada.ts`.
+
+## 2026-10-07 — Excel del Cuadro Resumen sin "Inmovilizar paneles"
+
+- **Pendiente 197**: la hoja "Cuadro Resumen" ya no congela el encabezado. Excel marcaba el corte con una línea gris que cruzaba la hoja entera bajo la tabla (MJ lo pidió el 30-sep y el 7-oct). Fórmulas, montos y estilos quedan iguales; probado con Cocina Candelaria.
+
 ## 2026-10-05 — Columna UTILIDAD en Proyectos → Terminados (PR #483, en prod)
 
 - **Pendiente 195**: la pestaña Terminados de `/proyectos` muestra la utilidad real de cada obra (cobrado neto − gastado, `utilidadReal` de `metrics.ts`, sin tocarlo). En ejecución no se agrega: ahí los dos números engañan mientras la obra avanza. Lo eligió MJ viendo sus datos.

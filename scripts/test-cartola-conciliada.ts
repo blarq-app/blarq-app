@@ -20,6 +20,7 @@ import JSZip from "jszip";
 import {
   armarCartola,
   formatRut,
+  saldoAlCierre,
   type DatosCartola,
   type DocumentoCartola,
   type MovimientoCartolaInput,
@@ -265,6 +266,69 @@ check("Operativa cuadra", [cop.saldoInicial + cop.entradas - cop.salidas === cop
 const csu = c.cuadratura.find((q) => q.cuenta === "Sueldos")!;
 check("Sueldos NO cuadra y se dice cuánto", csu.diferencia, -1);
 check("resumen", c.resumen, { movimientos: 17, conciliados: 13, parciales: 1, pendientes: 3 });
+
+console.log("Saldo al cierre del día con montos repetidos");
+{
+  // 30-dic-2025, cuenta Sueldos, tal como está en la base: los dos −$750.000
+  // quedaron con los saldos cruzados respecto del desempate por descripción.
+  const dia = [
+    { amount: -2000000, balanceAfter: 3608762, description: "0180239839 Transf a Maria Jose Bla" },
+    { amount: -1000000, balanceAfter: 2608762, description: "018022887K Transf a Jose Tomas Lar" },
+    { amount: -750000, balanceAfter: 1108762, description: "018022887K Transf a Jose Tomas Lar" },
+    { amount: -750000, balanceAfter: 1858762, description: "0180239839 Transf a Maria Jose Bla" },
+  ].map((m) => ({ ...m, date: d("2025-12-30") }));
+  check("cierra en el saldo que encadena, no en el último por descripción", saldoAlCierre(dia), 1108762);
+  check("un solo movimiento: su saldo", saldoAlCierre([dia[0]]), 3608762);
+  // Sin el −$1.000.000 del medio los saldos guardados ya no encadenan: no se
+  // inventa un cierre, se usa el último canónico y la cuadratura lo muestra.
+  check("si no encadena (falta uno), vuelve al último canónico", saldoAlCierre([dia[0], dia[2], dia[3]]), 1858762);
+}
+
+console.log("Boleta de honorarios: la retención no es saldo pendiente");
+{
+  const bhe = doc({ id: "bhe14", tipoDoc: 1039, folioNumber: "14", rutIssuer: "20445752-2", businessName: "JUAN PABLO COSTA AGUIRRE", totalAmount: 353982, issueDate: d("2026-03-31") });
+  const pago = mov({ id: "mbhe", date: d("2026-04-06"), amount: -300000, description: "0204457522 Transf a Juan Pablo Cos", counterpartyRut: "0204457522", pagos: [{ invoiceId: "bhe14", amountApplied: 300000 }] });
+  const pagoMitad1 = mov({ id: "mbhe2a", date: d("2026-04-10"), amount: -150000, description: "0204457522 Transf a Juan Pablo Cos", counterpartyRut: "0204457522", pagos: [{ invoiceId: "bhe15", amountApplied: 150000 }] });
+  const pagoMitad2 = mov({ id: "mbhe2b", date: d("2026-04-20"), amount: -150000, description: "0204457522 Transf a Juan Pablo Cos", counterpartyRut: "0204457522", pagos: [{ invoiceId: "bhe15", amountApplied: 150000 }] });
+  const bhe15 = { ...bhe, id: "bhe15", folioNumber: "15", issueDate: d("2026-04-01") };
+  const cb = armarCartola({
+    ...datos,
+    month: 4,
+    movimientos: [pago, pagoMitad1, pagoMitad2],
+    referidos: [],
+    documentos: [bhe, bhe15],
+    pagosDeDocumentos: [
+      { invoiceId: "bhe14", bankMovementId: "mbhe", amountApplied: 300000 },
+      { invoiceId: "bhe15", bankMovementId: "mbhe2a", amountApplied: 150000 },
+      { invoiceId: "bhe15", bankMovementId: "mbhe2b", amountApplied: 150000 },
+    ],
+  });
+  const f = cb.filas.find((x) => x.movimientoId === "mbhe")!;
+  check("frase de honorarios", [f.queEs, f.aplicaciones[0].documento, f.aplicaciones[0].folio], ["Pago de honorarios", "Boleta de honorarios", "14"]);
+  check("pagada en una transferencia + retención: no va a la hoja por factura", cb.facturasPartidas.some((x) => x.folio === "14"), false);
+  const b15 = cb.facturasPartidas.find((x) => x.folio === "15")!;
+  check("pagada en dos: retención 15,25% y queda en cero", [b15.retencion, b15.retencionTasa, b15.leQueda], [53982, 0.1525, 0]);
+  check("le queda después de cada pago, sin contar la retención", b15.pagos.map((p) => p.leQueda), [150000, 0]);
+}
+
+console.log("Año completo");
+{
+  const mayo = mov({ id: "may1", date: d("2026-05-20"), amount: -100000, status: "sin_factura", category: "comision_bancaria", description: "COM.MANTENCION PLAN" });
+  mayo.balanceAfter = saldoInicialOp - 100000;
+  // Julio arranca donde terminó mayo, pero el cierre de julio del fixture no
+  // descuenta la comisión de mayo: la cartola dice $100.000 más de lo que da la
+  // suma, y el mes a mes tiene que decir que es en JULIO.
+  const ca = armarCartola({ ...datos, month: null, movimientos: [mayo, ...movimientos] });
+  check("período", [ca.periodo, ca.esAño], ["año 2026", true]);
+  check("desde / hasta", [ca.desde?.toISOString().slice(0, 10), ca.hasta?.toISOString().slice(0, 10)], ["2026-05-20", "2026-07-31"]);
+  check(
+    "cuadratura mes a mes: mayo y julio de la Operativa, julio de Sueldos",
+    ca.cuadraturaPorMes.map((q) => [q.month, q.cuenta, q.diferencia]),
+    [[5, "Operativa", 0], [7, "Operativa", 100000], [7, "Sueldos", -1]]
+  );
+  check("el N° corre por todo el año", ca.filas.map((x) => x.n), ca.filas.map((_, i) => i + 1));
+  check("mayo va primero en la Operativa", ca.filas[0].movimientoId, "may1");
+}
 
 async function excel() {
   console.log("Excel");

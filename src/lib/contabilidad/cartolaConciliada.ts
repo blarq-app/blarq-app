@@ -9,6 +9,9 @@
 // ENTREGA: la cartola completa, en el orden del banco, y al lado de cada
 // movimiento con qué se concilia.
 //
+// El mismo documento sale por mes o por AÑO COMPLETO (pedido de MJ, 2026-10-07):
+// en el del año van todos los movimientos del año, con la cuadratura mes a mes.
+//
 // Decidido con MJ (la primera maqueta, con saldos y porcentajes arriba, no se
 // entendió): la CARTOLA VA PRIMERO; los saldos van al final, chiquitos, como
 // respaldo. Todos los movimientos, no solo los raros, y los pendientes se
@@ -35,6 +38,7 @@ import { deriveEstado } from "@/lib/banco/movementDisplay";
 import { effectiveSalaryPeriod, shiftYearMonth, toYearMonth } from "@/lib/banco/salaryPeriod";
 import { esSocio, nombreSocio } from "@/lib/banco/socios";
 import { categoriaBanco } from "@/lib/banco/categorias";
+import { retencionHonorario, tasaRetencionHonorarios } from "@/lib/contabilidad/honorarios";
 
 // ─── Lo que entra (lo arma cartolaConciliadaDatos.ts) ───────────────────────
 
@@ -76,7 +80,7 @@ export type MovimientoCartolaInput = {
   ncDevueltas: { invoiceId: string; monto: number }[];
 };
 
-// Movimientos de FUERA del mes que hace falta nombrar: el par de un traspaso,
+// Movimientos de FUERA del período que hace falta nombrar: el par de un traspaso,
 // la otra mitad de una devolución neto cero, las transferencias de otros meses
 // que pagaron una factura de este mes.
 export type MovimientoReferido = {
@@ -93,19 +97,20 @@ export type CuentaCartolaInput = {
   id: string;
   alias: string;
   accountNumber: string;
-  // Saldo de la cartola al cierre del mes anterior (balanceAfter del último
-  // movimiento anterior al mes). null = la cuenta no tiene movimientos antes.
+  // Saldo de la cartola al cierre del último día ANTES del período (ver
+  // saldoAlCierre). null = la cuenta no tiene movimientos antes.
   saldoInicialBanco: number | null;
 };
 
 export type DatosCartola = {
   year: number;
-  month: number; // 1..12
+  // 1..12, o null para el AÑO COMPLETO (mismo documento, con todos los meses).
+  month: number | null;
   cuentas: CuentaCartolaInput[]; // en el orden en que se muestran
-  movimientos: MovimientoCartolaInput[]; // los del mes, todas las cuentas
+  movimientos: MovimientoCartolaInput[]; // los del período, todas las cuentas
   referidos: MovimientoReferido[];
   documentos: DocumentoCartola[];
-  // TODOS los pagos de los documentos tocados en el mes, de cualquier fecha.
+  // TODOS los pagos de los documentos tocados en el período, de cualquier fecha.
   pagosDeDocumentos: { invoiceId: string; bankMovementId: string; amountApplied: number }[];
   // Notas de crédito aplicadas a esos documentos (appliedToInvoiceId).
   ncAplicadas: { invoiceId: string; folio: string | null; monto: number }[];
@@ -128,7 +133,7 @@ export type Aplicacion = {
 };
 
 export type FilaCartola = {
-  n: number; // correlativo dentro del mes; ata la cartola con la hoja por factura
+  n: number; // correlativo del período; ata la cartola con la hoja por factura
   movimientoId: string;
   fecha: Date;
   cuenta: string;
@@ -156,10 +161,14 @@ export type CuadraturaCuenta = {
   movimientos: number;
 };
 
+// En el documento del año, la misma cuadratura mes a mes: si algo no cuadra,
+// dice EN QUÉ MES.
+export type CuadraturaMes = CuadraturaCuenta & { month: number };
+
 export type PagoDeFactura = {
   fecha: Date;
   cuenta: string;
-  n: number | null; // N° en la cartola de este mes; null si es de otro mes
+  n: number | null; // N° en esta cartola; null si es de fuera del período
   descripcion: string;
   montoTransferencia: number; // el movimiento entero, con signo
   aplicado: number;
@@ -178,15 +187,25 @@ export type FacturaPartida = {
   anulada: boolean;
   pagos: PagoDeFactura[];
   notasCredito: { folio: string | null; monto: number }[];
+  // Boleta de honorarios: BLARQ le paga el LÍQUIDO a la persona y la retención
+  // se la entera al SII en el F29. No es plata que falte pagar. 0 si no aplica.
+  retencion: number;
+  retencionTasa: number | null;
   leQueda: number;
 };
 
-export type CartolaMes = {
+export type CartolaConciliada = {
   year: number;
-  month: number;
-  mesNombre: string; // "julio"
+  month: number | null; // null = año completo
+  periodo: string; // "julio 2026" o "año 2026"
+  esAño: boolean;
+  // Primer y último movimiento del período (null si no hay ninguno). En el año
+  // en curso, `hasta` dice hasta qué día llegan las cartolas cargadas.
+  desde: Date | null;
+  hasta: Date | null;
   filas: FilaCartola[];
   cuadratura: CuadraturaCuenta[];
+  cuadraturaPorMes: CuadraturaMes[]; // solo en el documento del año
   facturasPartidas: FacturaPartida[];
   resumen: {
     movimientos: number;
@@ -219,6 +238,54 @@ export function ordenCanonico(
   if (d !== 0) return d;
   if (a.amount !== b.amount) return a.amount - b.amount;
   return a.description.localeCompare(b.description);
+}
+
+type ConSaldo = { date: Date; amount: number; description: string; balanceAfter: number | null };
+
+/**
+ * Saldo de la cartola al cierre de un DÍA, leído de los saldos que guardó el
+ * importador (balanceAfter). Recibe los movimientos de ese día.
+ *
+ * Con un movimiento es su saldo. Con varios, NO alcanza con tomar el último
+ * del orden canónico: cuando dos movimientos del día tienen el mismo monto
+ * (30-dic-2025, Sueldos: −$750.000 a JT y −$750.000 a MJ), el desempate es por
+ * descripción y la que quedó guardada no siempre es la que usó el import, así
+ * que el "último" puede ser el del medio y la cuadratura muestra un descuadre
+ * que no existe ($750.000 en dic y −$750.000 en ene). Por eso se busca el
+ * saldo que de verdad cierra la cadena del día: el que, restándole todo lo
+ * del día, deja un saldo de apertura desde el que los saldos guardados se
+ * encadenan uno tras otro. Si ninguno encadena (falta o sobra un movimiento),
+ * vuelve al último del orden canónico y la diferencia se ve en la cuadratura.
+ */
+export function saldoAlCierre(delDia: ConSaldo[]): number | null {
+  const conSaldo = delDia.filter((m) => m.balanceAfter != null);
+  if (conSaldo.length === 0) return null;
+  const canonico = [...conSaldo].sort(ordenCanonico);
+  if (conSaldo.length === 1 || conSaldo.length !== delDia.length) {
+    return canonico[canonico.length - 1].balanceAfter;
+  }
+  const sumaDia = delDia.reduce((s, m) => s + m.amount, 0);
+  const encadena = (cierre: number): boolean => {
+    let actual = cierre - sumaDia;
+    const quedan = [...conSaldo];
+    while (quedan.length) {
+      const i = quedan.findIndex((m) => Math.abs(actual + m.amount - m.balanceAfter!) <= TOLERANCIA);
+      if (i < 0) return false;
+      actual = quedan[i].balanceAfter!;
+      quedan.splice(i, 1);
+    }
+    return Math.abs(actual - cierre) <= TOLERANCIA;
+  };
+  const candidatos = Array.from(new Set(conSaldo.map((m) => m.balanceAfter!))).filter(encadena);
+  if (candidatos.length === 1) return candidatos[0];
+  return canonico[canonico.length - 1].balanceAfter;
+}
+
+// Los movimientos del último día de una lista ya ordenada por fecha.
+function delUltimoDia<T extends { date: Date }>(movs: T[]): T[] {
+  if (movs.length === 0) return [];
+  const ultimo = movs[movs.length - 1].date.getTime();
+  return movs.filter((m) => m.date.getTime() === ultimo);
 }
 
 // Orden en que se MUESTRA la cartola: por fecha y, dentro del día, primero lo
@@ -420,6 +487,13 @@ function explicarConDocumentos(m: MovimientoCartolaInput, ctx: Contexto, apps: A
       porAclarar: false,
     };
   }
+  if (todos((d) => d.tipoDoc === 1039)) {
+    return {
+      queEs: "Pago de honorarios",
+      detalle: "Se paga el líquido de la boleta; la retención la entera BLARQ en el F29",
+      porAclarar: false,
+    };
+  }
   if (todos((d) => d.origin === "gasto_internacional")) {
     return { queEs: "Gasto internacional", detalle: null, porAclarar: false };
   }
@@ -570,7 +644,7 @@ function explicar(m: MovimientoCartolaInput, ctx: Contexto, apps: Aplicacion[], 
 
 // ─── El armado ──────────────────────────────────────────────────────────────
 
-export function armarCartola(datos: DatosCartola): CartolaMes {
+export function armarCartola(datos: DatosCartola): CartolaConciliada {
   const aliasCuenta = new Map(datos.cuentas.map((c) => [c.id, c.alias]));
   const docs = new Map(datos.documentos.map((d) => [d.id, d]));
   const movPorId = new Map<string, MovimientoReferido>();
@@ -605,6 +679,7 @@ export function armarCartola(datos: DatosCartola): CartolaMes {
 
   const filas: FilaCartola[] = [];
   const cuadratura: CuadraturaCuenta[] = [];
+  const cuadraturaPorMes: CuadraturaMes[] = [];
   const nPorMovimiento = new Map<string, number>();
   let n = 0;
 
@@ -613,20 +688,19 @@ export function armarCartola(datos: DatosCartola): CartolaMes {
     // que usó para calcular balanceAfter); las filas van en el de la cartola.
     const canonicos = datos.movimientos.filter((m) => m.cuentaId === cuenta.id).sort(ordenCanonico);
     const movs = [...canonicos].sort(ordenCartola);
-    const primero = canonicos[0];
+    // Sin movimientos anteriores al período: se deduce del cierre del primer
+    // día, restándole lo que se movió ese día.
+    const primerDia = canonicos.filter((m) => m.date.getTime() === canonicos[0]?.date.getTime());
+    const cierrePrimerDia = saldoAlCierre(primerDia);
     const saldoInicial =
       cuenta.saldoInicialBanco ??
-      (primero?.balanceAfter != null ? primero.balanceAfter - primero.amount : 0);
+      (cierrePrimerDia != null ? cierrePrimerDia - primerDia.reduce((s, m) => s + m.amount, 0) : 0);
     let saldo = saldoInicial;
-    let entradas = 0;
-    let salidas = 0;
 
     for (const m of movs) {
       n += 1;
       nPorMovimiento.set(m.id, n);
       saldo += m.amount;
-      if (m.amount > 0) entradas += m.amount;
-      else salidas += -m.amount;
 
       const apps: Aplicacion[] = [
         ...m.pagos.flatMap((p) => {
@@ -671,28 +745,34 @@ export function armarCartola(datos: DatosCartola): CartolaMes {
       });
     }
 
-    const ultimo = canonicos[canonicos.length - 1];
-    const saldoFinalBanco = ultimo?.balanceAfter ?? saldoInicial;
-    const saldoCalculado = saldoInicial + entradas - salidas;
-    cuadratura.push({
-      cuenta: cuenta.alias,
-      numero: cuenta.accountNumber,
-      saldoInicial,
-      entradas,
-      salidas,
-      saldoCalculado,
-      saldoFinalBanco,
-      diferencia: saldoFinalBanco - saldoCalculado,
-      movimientos: movs.length,
-    });
+    const saldoFinalBanco = saldoAlCierre(delUltimoDia(canonicos)) ?? saldoInicial;
+    cuadratura.push(cuadrar(cuenta, saldoInicial, canonicos, saldoFinalBanco));
+
+    // Año completo: la misma cuadratura mes a mes. El saldo inicial de cada
+    // mes es el saldo de la cartola al cierre del mes anterior.
+    if (datos.month == null) {
+      let inicioMes = saldoInicial;
+      for (let mes = 1; mes <= 12; mes++) {
+        const delMes = canonicos.filter((m) => m.date.getUTCMonth() + 1 === mes);
+        if (delMes.length === 0) continue;
+        const finMes = saldoAlCierre(delUltimoDia(delMes)) ?? inicioMes + delMes.reduce((s, m) => s + m.amount, 0);
+        cuadraturaPorMes.push({ ...cuadrar(cuenta, inicioMes, delMes, finMes), month: mes });
+        inicioMes = finMes;
+      }
+    }
   }
 
+  const fechas = datos.movimientos.map((m) => m.date.getTime());
   return {
     year: datos.year,
     month: datos.month,
-    mesNombre: MESES[datos.month - 1],
+    periodo: datos.month == null ? `año ${datos.year}` : `${MESES[datos.month - 1]} ${datos.year}`,
+    esAño: datos.month == null,
+    desde: fechas.length ? new Date(Math.min(...fechas)) : null,
+    hasta: fechas.length ? new Date(Math.max(...fechas)) : null,
     filas,
     cuadratura,
+    cuadraturaPorMes,
     facturasPartidas: armarFacturasPartidas(datos, ctx, nPorMovimiento),
     resumen: {
       movimientos: filas.length,
@@ -703,9 +783,32 @@ export function armarCartola(datos: DatosCartola): CartolaMes {
   };
 }
 
-// Hoja "por factura": cada documento pagado este mes que se pagó EN PARTES
+// Saldo inicial + abonos − cargos, contra el saldo final de la cartola.
+function cuadrar(
+  cuenta: CuentaCartolaInput,
+  saldoInicial: number,
+  movs: { amount: number }[],
+  saldoFinalBanco: number
+): CuadraturaCuenta {
+  const entradas = movs.filter((m) => m.amount > 0).reduce((s, m) => s + m.amount, 0);
+  const salidas = movs.filter((m) => m.amount < 0).reduce((s, m) => s - m.amount, 0);
+  const saldoCalculado = saldoInicial + entradas - salidas;
+  return {
+    cuenta: cuenta.alias,
+    numero: cuenta.accountNumber,
+    saldoInicial,
+    entradas,
+    salidas,
+    saldoCalculado,
+    saldoFinalBanco,
+    diferencia: saldoFinalBanco - saldoCalculado,
+    movimientos: movs.length,
+  };
+}
+
+// Hoja "por factura": cada documento pagado en el período que se pagó EN PARTES
 // (más de una transferencia, saldo pendiente o nota de crédito encima), con
-// TODAS las transferencias que lo pagaron —también las de otros meses— y
+// TODAS las transferencias que lo pagaron —también las de fuera del período— y
 // cuánto le queda. Los pagos 1 a 1 no entran: esos el contador ya los concilia
 // solo por monto exacto.
 function armarFacturasPartidas(
@@ -713,11 +816,11 @@ function armarFacturasPartidas(
   ctx: Contexto,
   nPorMovimiento: Map<string, number>
 ): FacturaPartida[] {
-  const delMes = new Set<string>();
-  for (const m of datos.movimientos) for (const p of m.pagos) delMes.add(p.invoiceId);
+  const delPeriodo = new Set<string>();
+  for (const m of datos.movimientos) for (const p of m.pagos) delPeriodo.add(p.invoiceId);
 
   const out: FacturaPartida[] = [];
-  for (const id of delMes) {
+  for (const id of delPeriodo) {
     const d = ctx.docs.get(id);
     if (!d) continue;
     const pagosRaw = datos.pagosDeDocumentos
@@ -739,12 +842,23 @@ function armarFacturasPartidas(
     // "de más".
     const ncPedido = ncs.reduce((s, x) => s + x.monto, 0);
     const ncCuenta = Math.max(0, Math.min(ncPedido, total - pagado));
-    const leQueda = total - pagado - ncCuenta;
+    // Boleta de honorarios: lo que no se le pagó a la persona es la retención,
+    // que BLARQ entera en el F29 (misma tasa que usa el F29 de la app). Con
+    // tope, igual que la NC: si se pagó el bruto entero no hay retención que
+    // mostrar.
+    const tasa = d.tipoDoc === 1039 ? tasaRetencionHonorarios(d.issueDate.getUTCFullYear()) : null;
+    const retencion =
+      d.tipoDoc === 1039
+        ? Math.max(0, Math.min(retencionHonorario(total, d.issueDate.getUTCFullYear()), total - pagado - ncCuenta))
+        : 0;
+    const leQueda = total - pagado - ncCuenta - retencion;
 
     const partida = pagosRaw.length >= 2 || Math.abs(leQueda) > TOLERANCIA || ncs.length > 0;
     if (!partida) continue;
 
-    let acumulado = 0;
+    // "Le queda" después de cada pago parte del total menos la retención: esa
+    // parte nunca se le transfiere a quien emitió la boleta.
+    let acumulado = retencion;
     const pagos: PagoDeFactura[] = pagosRaw.map(({ p, mov }) => {
       acumulado += p.amountApplied;
       return {
@@ -771,6 +885,8 @@ function armarFacturasPartidas(
       anulada: d.status === "anulada",
       pagos,
       notasCredito: ncs.map((x) => ({ folio: x.folio, monto: x.monto })),
+      retencion,
+      retencionTasa: retencion > 0 ? tasa : null,
       leQueda,
     });
   }

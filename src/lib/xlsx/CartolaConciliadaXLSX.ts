@@ -12,8 +12,11 @@
  *      da lo conciliado). Al final, chico, el resumen y la cuadratura de saldos.
  *   2. "Pagadas en partes": cada factura del mes que se pagó en más de una
  *      transferencia (o a la que le queda saldo), con TODAS sus transferencias
- *      —también las de otros meses— y cuánto le queda después de cada una. Es
- *      la vista que el contador no puede armar solo.
+ *      —también las de fuera del período— y cuánto le queda después de cada
+ *      una. Es la vista que el contador no puede armar solo.
+ *
+ * Sale igual para un mes o para el AÑO COMPLETO; en el del año, la cuadratura
+ * va además mes a mes, para ver en qué mes no calza algo.
  *
  * NO CALCULA NADA PROPIO: pinta lo que arma `armarCartola`
  * (lib/contabilidad/cartolaConciliada.ts), la misma cuenta que el PDF.
@@ -23,7 +26,7 @@
  */
 
 import ExcelJS from "exceljs";
-import type { CartolaMes, FilaCartola } from "@/lib/contabilidad/cartolaConciliada";
+import { MESES, type CartolaConciliada, type FilaCartola } from "@/lib/contabilidad/cartolaConciliada";
 
 // ─── Paleta: los grises del Manual v2 (globals.css), en ARGB ────────────────
 const GRIS = {
@@ -206,7 +209,15 @@ function escribirMovimiento(ws: ExcelJS.Worksheet, fila: number, f: FilaCartola)
   return fila + lineas;
 }
 
-function hojaCartola(wb: ExcelJS.Workbook, cartola: CartolaMes) {
+// "del 02-01-2026 al 05-10-2026", para el documento del año: dice hasta dónde
+// llegan las cartolas cargadas.
+function rango(cartola: CartolaConciliada): string {
+  const f = (d: Date) =>
+    `${String(d.getUTCDate()).padStart(2, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${d.getUTCFullYear()}`;
+  return cartola.desde && cartola.hasta ? `Movimientos del ${f(cartola.desde)} al ${f(cartola.hasta)}. ` : "";
+}
+
+function hojaCartola(wb: ExcelJS.Workbook, cartola: CartolaConciliada) {
   const ws = wb.addWorksheet("Cartola", {
     pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
     views: [{ state: "frozen", xSplit: 0, ySplit: 5, showGridLines: false }],
@@ -216,8 +227,9 @@ function hojaCartola(wb: ExcelJS.Workbook, cartola: CartolaMes) {
   const cuentas = cartola.cuadratura.map((q) => `${q.cuenta} ${q.numero}`).join(" y ");
   titulo(
     ws,
-    `Cartola conciliada · ${cartola.mesNombre} ${cartola.year}`,
-    `Cuentas corrientes Santander ${cuentas}. Cada movimiento del banco, en orden, con lo que lo explica.`
+    `Cartola conciliada · ${cartola.periodo}`,
+    `Cuentas corrientes Santander ${cuentas}. ${cartola.esAño ? rango(cartola) : ""}` +
+      "Cada movimiento del banco, en orden, con lo que lo explica."
   );
 
   const FILA_ENC = 5;
@@ -260,7 +272,7 @@ function hojaCartola(wb: ExcelJS.Workbook, cartola: CartolaMes) {
   });
   fila += 1;
 
-  const rango = (col: number) => {
+  const columna = (col: number) => {
     const letra = ws.getColumn(col).letter;
     return `${letra}$${primeraDato}:${letra}$${ultimaDato}`;
   };
@@ -274,8 +286,8 @@ function hojaCartola(wb: ExcelJS.Workbook, cartola: CartolaMes) {
     col(1).value = q.saldoInicial;
     // Abonos y cargos se suman de la tabla de arriba: si el contador borra o
     // agrega una fila, la cuadratura se recalcula sola.
-    formula(col(2), `SUMIFS(${rango(C.abono)},${letraCuenta}$${primeraDato}:${letraCuenta}$${ultimaDato},"${q.cuenta}")`, q.entradas);
-    formula(col(3), `SUMIFS(${rango(C.cargo)},${letraCuenta}$${primeraDato}:${letraCuenta}$${ultimaDato},"${q.cuenta}")`, q.salidas);
+    formula(col(2), `SUMIFS(${columna(C.abono)},${letraCuenta}$${primeraDato}:${letraCuenta}$${ultimaDato},"${q.cuenta}")`, q.entradas);
+    formula(col(3), `SUMIFS(${columna(C.cargo)},${letraCuenta}$${primeraDato}:${letraCuenta}$${ultimaDato},"${q.cuenta}")`, q.salidas);
     formula(col(4), `${L(1)}${fila}+${L(2)}${fila}-${L(3)}${fila}`, q.saldoCalculado);
     col(5).value = q.saldoFinalBanco;
     formula(col(6), `${L(5)}${fila}-${L(4)}${fila}`, q.diferencia);
@@ -290,6 +302,37 @@ function hojaCartola(wb: ExcelJS.Workbook, cartola: CartolaMes) {
     }
     fila += 1;
   }
+
+  // Año completo: la misma cuadratura mes a mes (valores, como la cartola de
+  // cada mes), para ver en qué mes no calza algo.
+  if (cartola.cuadraturaPorMes.length > 0) {
+    fila += 1;
+    const t = ws.getRow(fila).getCell(C.desc);
+    t.value = "Mes a mes";
+    aplicar(t, { size: 8, bold: true, color: GRIS[600] });
+    fila += 1;
+    for (const q of cartola.cuadraturaPorMes) {
+      const row = ws.getRow(fila);
+      const col = (k: number) => row.getCell(C.desc + k);
+      col(0).value = `${MESES[q.month - 1]} · ${q.cuenta}`;
+      aplicar(col(0), { size: 8 });
+      const valores = [q.saldoInicial, q.entradas, q.salidas, q.saldoCalculado, q.saldoFinalBanco, q.diferencia];
+      valores.forEach((v, i) => {
+        const k = i + 1;
+        col(k).value = v;
+        const descuadre = k === 6 && Math.abs(q.diferencia) > 0.5;
+        aplicar(col(k), {
+          size: 8,
+          numFmt: k === 6 ? FMT_DIFERENCIA : FMT_MONTO,
+          align: "right",
+          color: descuadre ? AMBAR : GRIS[600],
+          bold: descuadre,
+        });
+      });
+      fila += 1;
+    }
+  }
+
   const nota = ws.getRow(fila + 1).getCell(C.desc);
   nota.value =
     "Saldo inicial y final: los de la cartola del banco. Dentro de un mismo día el banco no fija el orden; " +
@@ -322,7 +365,7 @@ const P = {
   fecha: 7, cuenta: 8, n: 9, transferencia: 10, aplicado: 11, queda: 12,
 } as const;
 
-function hojaPartes(wb: ExcelJS.Workbook, cartola: CartolaMes) {
+function hojaPartes(wb: ExcelJS.Workbook, cartola: CartolaConciliada) {
   const ws = wb.addWorksheet("Pagadas en partes", {
     pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
     views: [{ state: "frozen", xSplit: 0, ySplit: 5, showGridLines: false }],
@@ -330,9 +373,10 @@ function hojaPartes(wb: ExcelJS.Workbook, cartola: CartolaMes) {
   COLS_PARTES.forEach((c, i) => (ws.getColumn(i + 1).width = c.w));
   titulo(
     ws,
-    `Facturas pagadas en partes · ${cartola.mesNombre} ${cartola.year}`,
-    "Facturas pagadas o cobradas este mes en más de una transferencia, con todas sus transferencias " +
-      "(también las de otros meses, en gris) y cuánto le queda después de cada una."
+    `Facturas pagadas en partes · ${cartola.periodo}`,
+    `Facturas pagadas o cobradas ${cartola.esAño ? "este año" : "este mes"} en más de una transferencia, ` +
+      `con todas sus transferencias (también las de ${cartola.esAño ? "otros años" : "otros meses"}, en gris) ` +
+      "y cuánto le queda después de cada una."
   );
   const FILA_ENC = 5;
   encabezado(
@@ -345,7 +389,7 @@ function hojaPartes(wb: ExcelJS.Workbook, cartola: CartolaMes) {
   let fila = FILA_ENC + 1;
   if (cartola.facturasPartidas.length === 0) {
     const c = ws.getRow(fila).getCell(1);
-    c.value = "Este mes no hay facturas pagadas en más de una transferencia.";
+    c.value = `${cartola.esAño ? "Este año" : "Este mes"} no hay facturas pagadas en más de una transferencia.`;
     aplicar(c, { italic: true, color: GRIS[500] });
     return;
   }
@@ -372,6 +416,7 @@ function hojaPartes(wb: ExcelJS.Workbook, cartola: CartolaMes) {
     fila += 1;
 
     const lineas = [
+      ...(fp.retencion > 0 ? [{ tipo: "retencion" as const }] : []),
       ...fp.pagos.map((p) => ({ tipo: "pago" as const, p })),
       ...fp.notasCredito.map((nc) => ({ tipo: "nc" as const, nc })),
     ];
@@ -382,8 +427,8 @@ function hojaPartes(wb: ExcelJS.Workbook, cartola: CartolaMes) {
       // El folio se repite en gris en cada línea, para filtrar por factura.
       row.getCell(P.folio).value = valorFolio(fp.folio);
       if (l.tipo === "pago") {
-        const otroMes = l.p.n == null;
-        const color = otroMes ? GRIS[400] : GRIS[900];
+        const fuera = l.p.n == null;
+        const color = fuera ? GRIS[400] : GRIS[900];
         row.getCell(P.fecha).value = l.p.fecha;
         row.getCell(P.cuenta).value = l.p.cuenta;
         row.getCell(P.n).value = l.p.n;
@@ -396,7 +441,24 @@ function hojaPartes(wb: ExcelJS.Workbook, cartola: CartolaMes) {
             color: k === P.folio ? GRIS[400] : color,
             numFmt: num ? FMT_MONTO : k === P.fecha ? FMT_FECHA : undefined,
             align: num || k === P.n ? "right" : "left",
-            italic: otroMes && k !== P.folio,
+            italic: fuera && k !== P.folio,
+            bottom: borde,
+          });
+        }
+      } else if (l.tipo === "retencion") {
+        // La parte de la boleta de honorarios que no se le transfiere a la
+        // persona: BLARQ la entera al SII en el F29.
+        const tasa = fp.retencionTasa != null ? ` ${(fp.retencionTasa * 100).toLocaleString("es-CL")}%` : "";
+        row.getCell(P.documento).value = "Retención";
+        row.getCell(P.razon).value = `Retención de honorarios${tasa}: la entera BLARQ en el F29`;
+        row.getCell(P.aplicado).value = fp.retencion;
+        row.getCell(P.queda).value = fp.total - fp.retencion;
+        for (let k = 1; k <= COLS_PARTES.length; k++) {
+          const num = k === P.aplicado || k === P.queda;
+          aplicar(row.getCell(k), {
+            color: k === P.folio ? GRIS[400] : GRIS[600],
+            numFmt: num ? FMT_MONTO : undefined,
+            align: num ? "right" : "left",
             bottom: borde,
           });
         }
@@ -425,7 +487,7 @@ function hojaPartes(wb: ExcelJS.Workbook, cartola: CartolaMes) {
   ws.pageSetup.printTitlesRow = `${FILA_ENC}:${FILA_ENC}`;
 }
 
-export async function buildCartolaConciliadaXLSX(cartola: CartolaMes): Promise<ArrayBuffer> {
+export async function buildCartolaConciliadaXLSX(cartola: CartolaConciliada): Promise<ArrayBuffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "BLARQ";
   wb.created = new Date();

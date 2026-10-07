@@ -2,7 +2,7 @@
 // 196). Lo consume renderPDF() (Puppeteer), en A4 apaisado.
 //
 // Es la versión PARA LEER del Excel (CartolaConciliadaXLSX.ts) y muestra lo
-// mismo, en el mismo orden:
+// mismo, en el mismo orden (por mes o por año completo):
 //   1. La cartola, cuenta por cuenta: cada movimiento del banco y, al lado, con
 //      qué se concilia (qué es, el detalle y las facturas con lo aplicado a
 //      cada una). Va PRIMERO: MJ no entendió la maqueta que arrancaba con saldos.
@@ -13,7 +13,13 @@
 // Estética del Manual v2: Nunito Sans, grises piedra, tabular-nums, ámbar solo
 // para lo que hay que mirar (pendientes y parciales).
 
-import type { CartolaMes, FilaCartola, FacturaPartida } from "@/lib/contabilidad/cartolaConciliada";
+import {
+  MESES,
+  type CartolaConciliada,
+  type CuadraturaCuenta,
+  type FacturaPartida,
+  type FilaCartola,
+} from "@/lib/contabilidad/cartolaConciliada";
 
 const BLARQ_RUT = "77.270.733-9";
 
@@ -100,13 +106,24 @@ function tablaCuenta(filas: FilaCartola[]): string {
   </table>`;
 }
 
-function bloquePartida(fp: FacturaPartida): string {
+function bloquePartida(fp: FacturaPartida, fuera: string): string {
+  const tasa = fp.retencionTasa != null ? ` ${(fp.retencionTasa * 100).toLocaleString("es-CL")}%` : "";
   const lineas = [
+    // La parte de la boleta de honorarios que no se le transfiere a la
+    // persona: BLARQ la entera al SII en el F29.
+    ...(fp.retencion > 0
+      ? [
+          `<tr>
+        <td></td><td colspan="4">Retención de honorarios${tasa}: la entera BLARQ en el F29</td>
+        <td></td><td class="num">${clp(fp.retencion)}</td><td class="num">${clp(fp.total - fp.retencion)}</td>
+      </tr>`,
+        ]
+      : []),
     ...fp.pagos.map(
       (p) => `<tr class="${p.n == null ? "otro-mes" : ""}">
         <td class="fecha">${fecha(p.fecha)}</td>
         <td>${esc(p.cuenta)}</td>
-        <td class="num">${p.n ?? "otro mes"}</td>
+        <td class="num">${p.n ?? fuera}</td>
         <td></td>
         <td class="desc">${esc(p.descripcion)}</td>
         <td class="num">${clp(Math.abs(p.montoTransferencia))}</td>
@@ -138,8 +155,20 @@ function bloquePartida(fp: FacturaPartida): string {
   </div>`;
 }
 
-export function renderCartolaConciliadaHtml(cartola: CartolaMes, emitidoEl: Date): string {
-  const periodo = `${capital(cartola.mesNombre)} ${cartola.year}`;
+function filaCuadratura(q: CuadraturaCuenta, rotulo: string): string {
+  return `<tr>
+    <td>${esc(rotulo)}</td>
+    <td class="num">${clp(q.saldoInicial)}</td>
+    <td class="num">${clp(q.entradas)}</td>
+    <td class="num">${clp(q.salidas)}</td>
+    <td class="num">${clp(q.saldoCalculado)}</td>
+    <td class="num">${clp(q.saldoFinalBanco)}</td>
+    <td class="num">${Math.abs(q.diferencia) > 0.5 ? `<span class="atn">${clp(q.diferencia)}</span>` : "cuadra"}</td>
+  </tr>`;
+}
+
+export function renderCartolaConciliadaHtml(cartola: CartolaConciliada, emitidoEl: Date): string {
+  const periodo = capital(cartola.periodo);
   const cuentas = cartola.cuadratura;
   const r = cartola.resumen;
 
@@ -148,7 +177,7 @@ export function renderCartolaConciliadaHtml(cartola: CartolaMes, emitidoEl: Date
       const filas = cartola.filas.filter((f) => f.cuenta === q.cuenta);
       return `<section class="cuenta">
         <h2>Cuenta ${esc(q.cuenta)} <span>${esc(q.numero)} · ${q.movimientos} movimientos</span></h2>
-        ${filas.length ? tablaCuenta(filas) : `<p class="vacio">Sin movimientos este mes.</p>`}
+        ${filas.length ? tablaCuenta(filas) : `<p class="vacio">Sin movimientos en el período.</p>`}
       </section>`;
     })
     .join("");
@@ -156,9 +185,10 @@ export function renderCartolaConciliadaHtml(cartola: CartolaMes, emitidoEl: Date
   const partidas = cartola.facturasPartidas.length
     ? `<section class="partidas">
         <h2>Facturas pagadas en partes</h2>
-        <p class="bajada">Facturas pagadas o cobradas este mes en más de una transferencia, con todas sus
-        transferencias (las de otros meses van en gris) y cuánto le queda después de cada una.</p>
-        ${cartola.facturasPartidas.map(bloquePartida).join("")}
+        <p class="bajada">Facturas pagadas o cobradas ${cartola.esAño ? "este año" : "este mes"} en más de una
+        transferencia, con todas sus transferencias (las de ${cartola.esAño ? "otros años" : "otros meses"} van en
+        gris) y cuánto le queda después de cada una.</p>
+        ${cartola.facturasPartidas.map((fp) => bloquePartida(fp, cartola.esAño ? "otro año" : "otro mes")).join("")}
       </section>`
     : "";
 
@@ -171,20 +201,20 @@ export function renderCartolaConciliadaHtml(cartola: CartolaMes, emitidoEl: Date
     <table class="cuad">
       <thead><tr><th>Cuenta</th><th class="num">Saldo inicial</th><th class="num">+ Abonos</th>
         <th class="num">− Cargos</th><th class="num">= Calculado</th><th class="num">Saldo final cartola</th><th class="num">Diferencia</th></tr></thead>
-      <tbody>${cuentas
-        .map(
-          (q) => `<tr>
-          <td>${esc(q.cuenta)} ${esc(q.numero)}</td>
-          <td class="num">${clp(q.saldoInicial)}</td>
-          <td class="num">${clp(q.entradas)}</td>
-          <td class="num">${clp(q.salidas)}</td>
-          <td class="num">${clp(q.saldoCalculado)}</td>
-          <td class="num">${clp(q.saldoFinalBanco)}</td>
-          <td class="num">${Math.abs(q.diferencia) > 0.5 ? `<span class="atn">${clp(q.diferencia)}</span>` : "cuadra"}</td>
-        </tr>`
-        )
-        .join("")}</tbody>
+      <tbody>${cuentas.map((q) => filaCuadratura(q, `${q.cuenta} ${q.numero}`)).join("")}</tbody>
     </table>
+    ${
+      cartola.cuadraturaPorMes.length
+        ? `<h3>Mes a mes</h3>
+    <table class="cuad">
+      <thead><tr><th>Mes</th><th class="num">Saldo inicial</th><th class="num">+ Abonos</th>
+        <th class="num">− Cargos</th><th class="num">= Calculado</th><th class="num">Saldo final cartola</th><th class="num">Diferencia</th></tr></thead>
+      <tbody>${cartola.cuadraturaPorMes
+        .map((q) => filaCuadratura(q, `${capital(MESES[q.month - 1])} · ${q.cuenta}`))
+        .join("")}</tbody>
+    </table>`
+        : ""
+    }
     <p class="nota">Saldo inicial y final: los de la cartola del banco. Dentro de un mismo día el banco no fija el
     orden; acá van primero los abonos. El saldo al cierre de cada día es el del banco.</p>
   </section>`;
@@ -275,7 +305,11 @@ export function renderCartolaConciliadaHtml(cartola: CartolaMes, emitidoEl: Date
     <div>
       <div class="marca">BLARQ</div>
       <h1>Cartola conciliada · ${esc(periodo)}</h1>
-      <div class="sub">Cuentas corrientes Santander ${cuentas.map((q) => `${esc(q.cuenta)} ${esc(q.numero)}`).join(" y ")}</div>
+      <div class="sub">Cuentas corrientes Santander ${cuentas.map((q) => `${esc(q.cuenta)} ${esc(q.numero)}`).join(" y ")}${
+        cartola.esAño && cartola.desde && cartola.hasta
+          ? ` · movimientos del ${fecha(cartola.desde)} al ${fecha(cartola.hasta)}`
+          : ""
+      }</div>
     </div>
     <div class="head-der">Emitido ${fechaLocal(emitidoEl)}<br>BLARQ SpA · RUT ${BLARQ_RUT}</div>
   </div>
@@ -289,10 +323,10 @@ export function renderCartolaConciliadaHtml(cartola: CartolaMes, emitidoEl: Date
 }
 
 // Pie de página: el período a la izquierda, la página a la derecha.
-export function pieCartolaConciliada(cartola: CartolaMes): string {
+export function pieCartolaConciliada(cartola: CartolaConciliada): string {
   return `<div style="font-family: Arial, Helvetica, sans-serif; font-size: 6.5pt; color: #9B9182;
       width: 100%; padding: 0 10mm; display: flex; justify-content: space-between;">
-    <span>BLARQ · Cartola conciliada ${capital(cartola.mesNombre)} ${cartola.year}</span>
+    <span>BLARQ · Cartola conciliada ${capital(cartola.periodo)}</span>
     <span>Página <span class="pageNumber"></span> de <span class="totalPages"></span></span>
   </div>`;
 }

@@ -1,8 +1,11 @@
 # WIP — Work In Progress
 
-Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-10-05.
+Estado actual del trabajo. **Leer al inicio de cada sesión.** Actualizar al cierre de cada sesión productiva. Última actualización: 2026-10-07.
 
 ---
+
+- **Excel del Cuadro Resumen sin "Inmovilizar paneles" (2026-10-07, pendiente 197, PR #485, a prod el 2026-10-07 con OK de MJ: «ahi esta bien, pasalo a prod»)**: MJ bajó el Excel de Cocina Candelaria y vio una línea gris bajo el encabezado que cruzaba la hoja entera, fuera de la tabla. Era el corte del encabezado congelado (`ySplit: 6`); el comentario decía que no se veía, y sí se veía. Ahora la hoja no congela nada, igual que "Me paso a Sueldos" (el #469 ya había sacado el corte vertical). Probado con Candelaria (base viva, solo lectura): la hoja 1 ya no trae `<pane`, el resto del archivo idéntico byte a byte; capturas antes/ahora en Excel de Mac. **No volver a congelar filas ni columnas en este Excel.**
+  - Visto de paso, sin tocar: Excel marca con un triangulito verde la celda TOTAL PAGOS de Muebles (I12) en Candelaria, antes y después del cambio. Es un aviso de Excel sobre la fórmula; no se revisó qué aviso es.
 
 - **Columna UTILIDAD en Proyectos → Terminados (2026-10-05, pendiente 195, PR #483, a prod el 2026-10-05 con OK de MJ: «si a prod»; verificado en la app en vivo)**: MJ quería ver cuánta plata le quedó en cada obra sin entrar una por una. Lo eligió viendo sus datos: **solo en Terminados, y la REAL** (cobrado neto − gastado, `utilidadReal` de `metrics.ts`, que no se tocó). En ejecución no se agregó: la proyectada da casi todo lo vendido en obras que recién parten (Algarrobos $94,8M, Candelaria $50,1M) y la real cuenta como ganancia anticipos que aún no se gastan (Sena $50M).
   - **"—" cuando VENDIDO también es "—"** (sin presupuesto cargado): las 17 obras viejas. Con la real sí tendrían número (12 positivas; 5 negativas o sin cobros, ej. Williamson y Didyk con $0 cobrado), pero MJ decidió mantener el "—": son datos de antes de la app, sin revisar.

@@ -327,11 +327,16 @@ export function formatRut(rut: string | null | undefined): string | null {
 // transferencias que salen, pero en las que ENTRAN ("0180239839 Transf. Maria
 // Blanco Ro") suele quedar null: ahí se lee de los dígitos con que arranca la
 // glosa — el mismo patrón que usa la deduplicación (banco/dedup.ts).
-function rutDeContraparte(m: MovimientoCartolaInput): string | null {
+// También lo usan las rendiciones de los socios (rendiciones.ts).
+export function rutDeMovimiento(m: { counterpartyRut: string | null; description: string }): string | null {
   const guardado = rutComparable(m.counterpartyRut);
   if (guardado) return guardado;
   const lider = m.description.match(/^(\d{8,11}[K\d])\s+Transf/i)?.[1];
   return rutComparable(lider);
+}
+
+function rutDeContraparte(m: MovimientoCartolaInput): string | null {
+  return rutDeMovimiento(m);
 }
 
 // Nombre de la contraparte tal como lo trae la glosa, sin el RUT ni el "Transf a".
@@ -355,11 +360,11 @@ function nombrePeriodo(ym: string, yearInforme: number): string {
   return y === yearInforme ? mes : `${mes} ${y}`;
 }
 
-function esSinRespaldo(d: DocumentoCartola): boolean {
+function esSinRespaldo(d: Pick<DocumentoCartola, "origin">): boolean {
   return d.origin === "sin_respaldo" || d.origin === "maxxa_sin_respaldo";
 }
 
-function etiquetaDocumento(d: DocumentoCartola): string {
+export function etiquetaDocumento(d: Pick<DocumentoCartola, "tipoDoc" | "origin">): string {
   if (d.tipoDoc === 1043) {
     if (d.origin === "gasto_boleta") return "Boleta";
     if (d.origin === "gasto_internacional") return "Gasto internacional";

@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-10-07 — Rendiciones de gastos de los socios
+
+- Pestaña Contabilidad → Rendiciones (pedido del contador): por mes o año, un Excel (una hoja por socio) y un PDF con firmas. Cada reembolso de BLARQ a MJ o JT con los documentos que lo respaldan (obra y categoría), lo que falta respaldar y la nota de MJ cuando falta. Solo lee.
+- Un reembolso es una salida a un socio conciliada a documentos recibidos de otro emisor (mismo criterio de RUT que la cartola conciliada). Ordenado por reembolso y con "CASA" como gasto de BLARQ, por decisión de MJ.
+- El período y el selector de mes/año quedan compartidos con Cartola (`lib/contabilidad/periodo.ts`, `SelectorPeriodo`). La barra de pestañas de Contabilidad se desliza en el celular.
+
 ## 2026-10-07 — Cartola conciliada para el contador (PR #487, en prod)
 
 - **Pendiente 196**: pestaña Contabilidad → Cartola. Por mes o año completo baja un Excel (hoja "Cartola" + hoja "Pagadas en partes") y un PDF: cada movimiento del banco en orden, con las facturas que paga (y cuánto a cada una) o qué es cuando no tiene factura (sueldo de qué mes, Previred, F29, reembolso a socio, traspaso, préstamo). Solo lee; no toca `metrics.ts` ni el estado de los movimientos.

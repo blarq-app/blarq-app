@@ -9,58 +9,9 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import type { ObraItemComponent } from "@prisma/client";
-
-function effectiveTotal(
-  comp: ObraItemComponent,
-  all: ObraItemComponent[]
-): number {
-  const pct = comp.quantity || 0;
-
-  if (comp.unit !== "%") {
-    return (comp.quantity || 0) * (comp.unitCost || 0);
-  }
-
-  if (comp.type === "perdida") {
-    // Pérdida % sobre UN material concreto.
-    if (comp.appliedToComponentId) {
-      const target = all.find((c) => c.id === comp.appliedToComponentId);
-      if (!target) return 0;
-      return effectiveTotal(target, all) * (pct / 100);
-    }
-    // Pérdida % sobre TODOS los materiales (Paso 4): % sobre la suma de
-    // todas las líneas de tipo material.
-    if (comp.appliedToType === "material") {
-      const matBase = all
-        .filter((c) => c.type === "material" && c.id !== comp.id)
-        .reduce((s, c) => s + effectiveTotal(c, all), 0);
-      return matBase * (pct / 100);
-    }
-    // Pérdida % sin objetivo = $0 (no se asume sobre qué aplica).
-    return 0;
-  }
-
-  if (comp.type === "mano_obra" && comp.appliedToType === "mano_obra") {
-    const moBase = all
-      .filter(
-        (c) => c.type === "mano_obra" && c.unit !== "%" && c.id !== comp.id
-      )
-      .reduce((s, c) => s + effectiveTotal(c, all), 0);
-    return moBase * (pct / 100);
-  }
-
-  if (comp.type === "margen") {
-    const base = all
-      .filter(
-        (c) =>
-          c.id !== comp.id && c.type !== "margen" && c.type !== "perdida"
-      )
-      .reduce((s, c) => s + effectiveTotal(c, all), 0);
-    return base * (pct / 100);
-  }
-
-  return (comp.quantity || 0) * (comp.unitCost || 0);
-}
+// La cuenta de cada línea vive en effectiveTotal.ts (sin base de datos) para
+// que la conversión a GL calcule exactamente igual antes de escribir.
+import { effectiveTotal } from "@/lib/catalog/effectiveTotal";
 
 /**
  * Convierte los montos globales (costMaterial, costLabor, etc.) de un ObraItem

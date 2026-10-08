@@ -103,6 +103,11 @@ export default function GuardarAlCatalogoButton(p: Props) {
   // Ya hay un molde con ese nombre en esa categoría. No se ofrece el botón: se
   // muestra cuál es, para que MJ decida (renombrar la partida, o actualizar el
   // molde desde el propio catálogo).
+  //
+  // El rótulo dice "Solo de este presupuesto" (antes: "Ya está en el
+  // catálogo: X"): esta partida NO está enganchada a ese molde. Pasa sobre todo
+  // después de cambiarle la unidad (pendiente 156), cuando la partida se suelta
+  // del catálogo a propósito, y el rótulo viejo hacía pensar lo contrario.
   if (!estado.puede && estado.motivo === "nombre-repetido") {
     return (
       <div className="flex justify-end">
@@ -111,9 +116,9 @@ export default function GuardarAlCatalogoButton(p: Props) {
           target="_blank"
           rel="noopener noreferrer"
           className="text-xs text-gray-500 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-2 py-0.5 rounded-lg transition-colors whitespace-nowrap"
-          title={`Ya hay una partida "${estado.moldeNombre}" en la categoría ${estado.categoria} del catálogo. Para no duplicarla, esta no se guarda: cambiale el nombre, o actualizá la del catálogo desde ahí.`}
+          title={`Esta partida es solo de este presupuesto. En el catálogo hay otra con el mismo nombre ("${estado.moldeNombre}", categoría ${estado.categoria}); para no duplicarla, esta no se guarda allá: cambiale el nombre, o actualizá la del catálogo desde ahí.`}
         >
-          Ya está en el catálogo: {estado.moldeNombre} ↗
+          Solo de este presupuesto · ver la del catálogo ↗
         </a>
       </div>
     );

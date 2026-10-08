@@ -21,6 +21,9 @@ import BudgetAuditBanner from "@/components/presupuesto/BudgetAuditBanner";
 import ObraItemComponentsEditor from "@/components/presupuesto/ObraItemComponentsEditor";
 import CostoDirectoDetalle from "@/components/presupuesto/CostoDirectoDetalle";
 import PartidaExpandedPanel from "@/components/presupuesto/PartidaExpandedPanel";
+import CambiarUnidadDialog, {
+  type PartidaActualizada,
+} from "@/components/presupuesto/CambiarUnidadDialog";
 import RichTextEditor from "@/components/presupuesto/RichTextEditor";
 import { sanitizeRichTextHtml, isRichTextEmpty } from "@/lib/richText";
 import {
@@ -444,6 +447,12 @@ export default function ObraEditor({
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSaveRef = useRef<{ itemId: string; item: ObraItem } | null>(null);
+  // Cambio de unidad en curso (la ventana de confirmación está abierta).
+  const [cambioUnidad, setCambioUnidad] = useState<{
+    itemId: string;
+    itemName: string;
+    unidad: string;
+  } | null>(null);
   // Id del capítulo cuyo formulario "+ Agregar partida" está abierto.
   const [addingChapter, setAddingChapter] = useState<string | null>(null);
   const [showChapterPicker, setShowChapterPicker] = useState(false);
@@ -1419,6 +1428,49 @@ export default function ObraEditor({
     }, 600);
   }
 
+  // Cambiar la unidad de una partida (pendiente 156). Antes de abrir la
+  // ventana se guarda lo que esté pendiente de ESA partida: si no, el guardado
+  // diferido (600 ms) podría llegar después y pisar la unidad y la cantidad
+  // nuevas con las viejas.
+  async function abrirCambioUnidad(item: ObraItem, unidad: string) {
+    if (unidad === item.unit) return;
+    const pendiente = pendingSaveRef.current;
+    if (pendiente && pendiente.itemId === item.id) {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      pendingSaveRef.current = null;
+      await flushSave(pendiente.itemId, pendiente.item);
+    }
+    setCambioUnidad({ itemId: item.id, itemName: item.name, unidad });
+  }
+
+  // Deja la partida como la devolvió el servidor: unidad, cantidad, P.U.,
+  // montos, desglose y ya sin molde de catálogo (quedó solo de este
+  // presupuesto).
+  function aplicarCambioUnidad(fresco: PartidaActualizada) {
+    setItems((curr) =>
+      curr.map((it) =>
+        it.id === fresco.id
+          ? {
+              ...it,
+              unit: fresco.unit,
+              quantity: fresco.quantity,
+              unitPrice: fresco.unitPrice,
+              total: fresco.total,
+              costMaterial: fresco.costMaterial,
+              costLabor: fresco.costLabor,
+              costTools: fresco.costTools,
+              costSubcontract: fresco.costSubcontract,
+              costLoss: fresco.costLoss,
+              costMargin: fresco.costMargin,
+              catalogPartidaId: fresco.catalogPartidaId,
+              components: fresco.components as ObraItemComponent[],
+            }
+          : it
+      )
+    );
+    setCambioUnidad(null);
+  }
+
   async function handleSaveConfig() {
     setSaving(true);
     try {
@@ -1456,6 +1508,16 @@ export default function ObraEditor({
 
   return (
     <div className="space-y-3">
+      {cambioUnidad && (
+        <CambiarUnidadDialog
+          budgetId={initialBudget.id}
+          itemId={cambioUnidad.itemId}
+          itemName={cambioUnidad.itemName}
+          unidadNueva={cambioUnidad.unidad}
+          onClose={() => setCambioUnidad(null)}
+          onDone={aplicarCambioUnidad}
+        />
+      )}
       <BudgetAuditBanner
         budgetId={initialBudget.id}
         status={initialBudget.status}
@@ -2012,12 +2074,30 @@ export default function ObraEditor({
                         )}
                       </td>
                       <td className="px-2 py-0.5 align-top text-center">
-                        {/* Unidad NO editable — viene de la PartidaCatalog
-                            y mantenerla acá editable confunde porque cada
-                            proyecto podría tener una unidad distinta para
-                            la misma partida. Si hay que cambiarla, se
-                            edita en el catálogo. */}
-                        <span className="text-force-11 text-gray-700">{item.unit}</span>
+                        {/* Unidad: se cambia acá y vale SOLO para este
+                            presupuesto (pendiente 156). Antes estaba
+                            bloqueada porque el catálogo empujaba sus cambios
+                            a las cotizaciones; esa propagación está apagada
+                            desde 2026-06-06. El cambio pasa por una ventana
+                            que muestra la cuenta: pasar a GL convierte el
+                            desglose sin mover el total, y la partida se
+                            suelta del catálogo. */}
+                        {canEditDetail ? (
+                          <select
+                            value={item.unit}
+                            onChange={(e) => abrirCambioUnidad(item, e.target.value)}
+                            title="Cambiar la unidad (solo en este presupuesto)"
+                            className="text-force-11 appearance-none bg-transparent border-0 p-0 text-center text-gray-700 cursor-pointer hover:underline focus:ring-0 outline-none"
+                          >
+                            {(UNITS.includes(item.unit) ? UNITS : [item.unit, ...UNITS]).map((u) => (
+                              <option key={u} value={u}>
+                                {u}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-force-11 text-gray-700">{item.unit}</span>
+                        )}
                       </td>
                       <td className="px-2 py-0.5 align-top">
                         {/* Cantidad: guarda AL TERMINAR (al salir del campo o
@@ -2026,6 +2106,10 @@ export default function ObraEditor({
                             no dejaba escribir tranquila. `defaultValue` +
                             `onBlur` = el número final es exactamente el escrito. */}
                         <input
+                          // La key con la cantidad hace que el campo muestre
+                          // la nueva si cambia desde afuera (pasar a GL la
+                          // deja en 1); con defaultValue solo no se entera.
+                          key={`${item.id}-${item.quantity}`}
                           type="number"
                           step="0.01"
                           defaultValue={item.quantity}
@@ -2202,6 +2286,9 @@ export default function ObraEditor({
                             </span>
                           </label>
                           <PartidaExpandedPanel
+                            // Cambiar la unidad reescribe el desglose en el
+                            // servidor: la key lo vuelve a cargar.
+                            key={`${item.id}-${item.unit}-${item.quantity}`}
                             item={item}
                             saveStatus={saveStatus}
                             budgetId={initialBudget.id}

@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-10-08 — Unidad de la partida editable en la cotización (pendiente 156)
+
+- La unidad de una partida de obra se cambia en su fila del editor y vale solo para ese presupuesto: la partida se suelta del catálogo (`catalogPartidaId = null`) y los botones "↑ … a catálogo" ya no pueden pisar el molde con un desglose en otra unidad. Nuevo `POST /api/presupuestos/[id]/partidas/[itemId]/unidad` (con `simular`) + `CambiarUnidadDialog`.
+- Pasar a GL convierte: cada línea que no es "%" multiplica su cantidad por la de la partida y la partida queda en 1; el total no cambia (`lib/presupuesto/partidaGlobal.ts`, verifica antes de escribir). Con cantidad 0 queda en 1 GL sin multiplicar. Volver de GL u otro cambio solo cambia el nombre. Si la partida tiene avance en un estado de pago, no se convierte.
+- `effectiveTotal` salió de `recalcObraItem.ts` a `lib/catalog/effectiveTotal.ts` sin cambios, para calcular sin base de datos. Regresión: `scripts/test-partida-global.ts`; barrido en memoria sobre la viva (`scripts/diag-156-barrido.ts`): 1.555 de 1.567 partidas conservan el total, 12 en cantidad 0, ninguna lo movería.
+
 ## 2026-10-07 — Rendiciones de gastos de los socios
 
 - Pestaña Contabilidad → Rendiciones (pedido del contador): por mes o año, un Excel (una hoja por socio) y un PDF con firmas. Cada reembolso de BLARQ a MJ o JT con los documentos que lo respaldan (obra y categoría), lo que falta respaldar y la nota de MJ cuando falta. Solo lee.

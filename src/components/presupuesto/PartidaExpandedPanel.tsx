@@ -59,6 +59,9 @@ interface Props {
     lineaIds: string[];
   } | null;
   onPasarAGL?: () => void;
+  // La cruz del aviso: no volver a mostrarlo en esta partida (hasta que el
+  // aviso cambie).
+  onDescartarAvisoGL?: () => void;
 }
 
 // Los 6 rubros del desglose de costo de la partida (por unidad).
@@ -155,16 +158,29 @@ export default function PartidaExpandedPanel(p: Props) {
               <span className="tabular-nums"> Hoy suma {formatCLP(p.avisoGL.monto)}.</span>
             )}
           </span>
-          {p.canEdit && p.onPasarAGL && (
-            <button
-              type="button"
-              onClick={p.onPasarAGL}
-              className="shrink-0 whitespace-nowrap text-xs text-gray-700 hover:text-gray-900 border border-amber-300 hover:border-amber-500 bg-white px-2 py-0.5 rounded-lg transition-colors"
-              title="Deja la partida en 1 GL y pasa cada línea a lo de toda la partida. El total no cambia."
-            >
-              Pasar la partida a 1 GL
-            </button>
-          )}
+          <span className="flex shrink-0 items-center gap-2">
+            {p.canEdit && p.onPasarAGL && (
+              <button
+                type="button"
+                onClick={p.onPasarAGL}
+                className="shrink-0 whitespace-nowrap text-xs text-gray-700 hover:text-gray-900 border border-amber-300 hover:border-amber-500 bg-white px-2 py-0.5 rounded-lg transition-colors"
+                title="Deja la partida en 1 GL y pasa cada línea a lo de toda la partida. El total no cambia."
+              >
+                Pasar la partida a 1 GL
+              </button>
+            )}
+            {p.canEdit && p.onDescartarAvisoGL && (
+              <button
+                type="button"
+                onClick={p.onDescartarAvisoGL}
+                aria-label="No volver a mostrar este aviso"
+                title="No volver a mostrar este aviso en esta partida. Si la partida cambia (otra cantidad u otra línea en GL), vuelve a avisar."
+                className="shrink-0 text-amber-700/70 hover:text-amber-900 text-sm leading-none px-0.5"
+              >
+                ×
+              </button>
+            )}
+          </span>
         </div>
       )}
 

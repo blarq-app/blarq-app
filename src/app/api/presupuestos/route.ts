@@ -229,6 +229,12 @@ export async function POST(request: NextRequest) {
               // haber cambiado de precio o cantidad. Decidido con MJ
               // 2026-07-27 — si alguien lo "arregla" copiándolo, va a arrastrar
               // tildes de una versión a otra sin que nadie las haya mirado.
+              //
+              // El aviso de GL descartado SÍ viaja: MJ lo cerró porque "no lo
+              // necesito ver más" (pendiente 156). Si la partida cambia en la
+              // versión nueva, el texto del aviso cambia y vuelve a salir solo.
+              // En modo plantilla no: es otra obra.
+              avisoGLDescartado: isTemplateMode ? null : item.avisoGLDescartado,
               sortOrder: item.sortOrder,
             },
           });

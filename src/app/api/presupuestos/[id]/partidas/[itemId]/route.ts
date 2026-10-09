@@ -136,11 +136,13 @@ export async function PUT(
 }
 
 // PATCH parcial: flags sueltos de la partida — `noCobrado` (BLARQ absorbe el
-// costo, no se le cobra al cliente) y `revisado` (marca interna de "esto ya lo
-// miramos", solo para MJ y JT). Son toggles livianos — no queremos mandar toda
-// la partida (como hace el PUT) solo para marcar/desmarcar esto.
+// costo, no se le cobra al cliente), `revisado` (marca interna de "esto ya lo
+// miramos", solo para MJ y JT) y `avisoGLDescartado` (el texto del aviso ámbar
+// de GL que MJ cerró con la cruz; null lo vuelve a mostrar). Son toggles
+// livianos — no queremos mandar toda la partida (como hace el PUT) solo para
+// marcar/desmarcar esto.
 //
-// A propósito NO seteamos `isCustomized` acá: ninguno de los dos flags cambia
+// A propósito NO seteamos `isCustomized` acá: ninguno de estos flags cambia
 // precios ni cantidades, así que no deben bloquear el refresco desde catálogo.
 export async function PATCH(
   request: NextRequest,
@@ -155,13 +157,16 @@ export async function PATCH(
 
     // Solo escribimos los flags que vinieron en el payload. Así el toggle de
     // "revisado" no pisa `noCobrado` (ni al revés) por mandar undefined.
-    const update: { noCobrado?: boolean; revisado?: boolean } = {};
+    const update: { noCobrado?: boolean; revisado?: boolean; avisoGLDescartado?: string | null } = {};
     if (typeof data.noCobrado === "boolean") update.noCobrado = data.noCobrado;
     if (typeof data.revisado === "boolean") update.revisado = data.revisado;
+    if (data.avisoGLDescartado === null) update.avisoGLDescartado = null;
+    else if (typeof data.avisoGLDescartado === "string")
+      update.avisoGLDescartado = data.avisoGLDescartado.slice(0, 500);
 
     if (Object.keys(update).length === 0) {
       return NextResponse.json(
-        { error: "Se espera noCobrado y/o revisado como booleano" },
+        { error: "Se espera noCobrado o revisado (booleano), o avisoGLDescartado (texto o null)" },
         { status: 400 }
       );
     }

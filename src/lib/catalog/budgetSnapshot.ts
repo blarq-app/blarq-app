@@ -177,7 +177,7 @@ export async function restoreObraFromSnapshot(versionId: string) {
       (
         await tx.obraItem.findMany({
           where: { budgetVersionId: versionId },
-          select: { lineageId: true, maestroId: true, noCobrado: true, revisado: true },
+          select: { lineageId: true, maestroId: true, noCobrado: true, revisado: true, avisoGLDescartado: true },
         })
       ).map((i) => [i.lineageId, i])
     );
@@ -237,8 +237,10 @@ export async function restoreObraFromSnapshot(versionId: string) {
           isCustomized: it.isCustomized,
           maestroId, noCobrado,
           // La marca de revisión no es parte de lo enviado: sobrevive tal
-          // cual estaba, no se restaura desde la foto.
+          // cual estaba, no se restaura desde la foto. Igual el aviso de GL
+          // descartado (pendiente 156).
           revisado: previo?.revisado ?? false,
+          avisoGLDescartado: previo?.avisoGLDescartado ?? null,
         },
       });
       // Crear componentes; guardar localId -> id real para re-vincular pérdidas.

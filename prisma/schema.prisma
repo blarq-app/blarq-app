@@ -363,6 +363,13 @@ model ObraItem {
   // noCobrado): una versión nueva se revisa de cero, porque las partidas
   // pueden haber cambiado de precio o cantidad. Decidido con MJ 2026-07-27.
   revisado          Boolean @default(false)
+  // Aviso ámbar de GL descartado con la cruz (pendiente 156): guarda el TEXTO
+  // del aviso que MJ cerró ("La partida está en GL con cantidad 10: se cobra
+  // 10 veces."). El aviso no se muestra mientras diga exactamente lo mismo;
+  // si la situación cambia (otra cantidad, otra línea en GL) el texto cambia
+  // y vuelve a aparecer. null = nunca descartado. Marca de pantalla: no entra
+  // en ningún cálculo ni PDF. Viaja al duplicar la versión.
+  avisoGLDescartado String?
   // Maestro que ejecuta esta partida (una partida = un solo maestro). null =
   // sin asignar → queda fuera de todo alcance/EP de maestro hasta repartirla.
   // Se asigna desde la zona "Maestros" de la obra (selector de partidas), NO

@@ -335,6 +335,9 @@ interface ObraItem {
   // Solo se dibuja en este editor — no sale en ningún PDF ni la ve el
   // cliente o el maestro. No entra en ningún cálculo.
   revisado?: boolean;
+  // Texto del aviso ámbar de GL que MJ cerró con la cruz. Mientras el aviso
+  // diga lo mismo, no se muestra (ver partidaGlobal.ts).
+  avisoGLDescartado?: string | null;
   components?: ObraItemComponent[];
 }
 
@@ -1128,6 +1131,31 @@ export default function ObraEditor({
   // interna (MJ y JT): no la ve el cliente ni el maestro, no sale en PDFs y
   // no toca ningún total. Mismo PATCH liviano que noCobrado, con update
   // optimista para que el tilde responda al instante.
+  // Cerrar (con la cruz) el aviso ámbar de GL de una partida. Se guarda el
+  // texto del aviso: si la partida cambia y el aviso pasa a decir otra cosa,
+  // vuelve a aparecer solo. Mismo camino liviano que "revisada".
+  async function handleDescartarAvisoGL(itemId: string, texto: string) {
+    setItems((curr) =>
+      curr.map((i) => (i.id === itemId ? { ...i, avisoGLDescartado: texto } : i))
+    );
+    setAvisoSinCobrarHover(null);
+    setSaveStatus("saving");
+    try {
+      await fetch(
+        `/api/presupuestos/${initialBudget.id}/partidas/${itemId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ avisoGLDescartado: texto }),
+        }
+      );
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 1500);
+    } catch {
+      setSaveStatus("idle");
+    }
+  }
+
   async function handleToggleRevisado(itemId: string, value: boolean) {
     setItems((curr) =>
       curr.map((i) => (i.id === itemId ? { ...i, revisado: value } : i))
@@ -1753,7 +1781,13 @@ export default function ObraEditor({
                     // con cantidad ≠ 1, o una línea GL adentro de una partida
                     // con cantidad ≠ 1). Ámbar, mismo gesto que el de arriba.
                     // El criterio vive en partidaGlobal.ts (pendiente 156).
-                    const avisoGL = avisoGlobal(item, item.components);
+                    // Si MJ lo cerró con la cruz y dice lo mismo, no se muestra.
+                    const avisoGLCrudo = avisoGlobal(item, item.components);
+                    const avisoGL =
+                      avisoGLCrudo &&
+                      textoAvisoGlobal(avisoGLCrudo) !== item.avisoGLDescartado
+                        ? avisoGLCrudo
+                        : null;
                     return (
                     <Fragment key={item.id}>
                     {showSubHeader && (
@@ -2355,6 +2389,10 @@ export default function ObraEditor({
                                 : null
                             }
                             onPasarAGL={() => abrirCambioUnidad(item, "GL")}
+                            onDescartarAvisoGL={() =>
+                              avisoGL &&
+                              handleDescartarAvisoGL(item.id, textoAvisoGlobal(avisoGL))
+                            }
                           />
                         </td>
                       </tr>

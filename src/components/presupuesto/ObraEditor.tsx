@@ -1127,10 +1127,6 @@ export default function ObraEditor({
     }
   }
 
-  // Marcar/desmarcar una partida como REVISADA. Es una marca de trabajo
-  // interna (MJ y JT): no la ve el cliente ni el maestro, no sale en PDFs y
-  // no toca ningún total. Mismo PATCH liviano que noCobrado, con update
-  // optimista para que el tilde responda al instante.
   // Cerrar (con la cruz) el aviso ámbar de GL de una partida. Se guarda el
   // texto del aviso: si la partida cambia y el aviso pasa a decir otra cosa,
   // vuelve a aparecer solo. Mismo camino liviano que "revisada".
@@ -1156,6 +1152,10 @@ export default function ObraEditor({
     }
   }
 
+  // Marcar/desmarcar una partida como REVISADA. Es una marca de trabajo
+  // interna (MJ y JT): no la ve el cliente ni el maestro, no sale en PDFs y
+  // no toca ningún total. Mismo PATCH liviano que noCobrado, con update
+  // optimista para que el tilde responda al instante.
   async function handleToggleRevisado(itemId: string, value: boolean) {
     setItems((curr) =>
       curr.map((i) => (i.id === itemId ? { ...i, revisado: value } : i))

@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-10-09 — Aviso ámbar de GL que se cobra varias veces (pendiente 156)
+
+- Punto ámbar en la fila, línea marcada "se cobra N veces" en el desglose y frase con "Pasar la partida a 1 GL" cuando una partida en GL tiene cantidad ≠ 1 o una línea en GL está en una partida con cantidad ≠ 1. Mismo patrón que el aviso de material sin cobrar. Excluye las líneas "(monto original)" sembradas desde montos (son por unidad).
+- Regla pura en `lib/presupuesto/partidaGlobal.ts` (`avisoGlobal`, `textoAvisoGlobal`). Solo mira: no toca montos ni `metrics.ts`.
+- Cruz para cerrarlo por partida: columna nueva `ObraItem.avisoGLDescartado` (guarda el texto del aviso cerrado; si el aviso cambia, vuelve). Viaja al duplicar la versión. Aplicada a la viva con SQL aditivo (`prisma/sql/156-aviso-gl-descartado.sql`), no con `db push`.
+
 ## 2026-10-09 — Unidad de la partida editable en la cotización (pendiente 156, en prod)
 
 - La unidad de una partida de obra se cambia en su fila del editor y vale solo para ese presupuesto: la partida se suelta del catálogo (`catalogPartidaId = null`) y los botones "↑ … a catálogo" ya no pueden pisar el molde con un desglose en otra unidad. Nuevo `POST /api/presupuestos/[id]/partidas/[itemId]/unidad` (con `simular`) + `CambiarUnidadDialog`.

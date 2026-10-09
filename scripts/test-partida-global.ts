@@ -11,6 +11,8 @@ import {
   pasarAGlobal,
   reescalarPartida,
   lineasGlobalesMultiplicadas,
+  avisoGlobal,
+  textoAvisoGlobal,
   type PartidaReescalable,
 } from "../src/lib/presupuesto/partidaGlobal";
 import { precioPorUnidad, type ComponenteCalculable } from "../src/lib/catalog/effectiveTotal";
@@ -204,6 +206,52 @@ console.log("\n7. Aviso de línea GL multiplicada:");
   assert(lineasGlobalesMultiplicadas(10, comps).map((x) => x.description).join() === "MAESTRO", "cantidad 10: avisa el MAESTRO GL (no la línea en $0)");
   assert(lineasGlobalesMultiplicadas(1, comps).length === 0, "cantidad 1: no avisa");
   assert(lineasGlobalesMultiplicadas(10, [c("mano_obra", "x", 1, "gl", 5)]).length === 1, "reconoce \"gl\" en minúscula");
+  assert(lineasGlobalesMultiplicadas(0, comps).length === 0, "cantidad 0: no avisa (todavía no se cobra nada)");
+  assert(
+    lineasGlobalesMultiplicadas(3, [
+      c("mano_obra", "Mano de obra (monto original)", 1, "GL", 25000),
+      c("margen", "Margen (monto original)", 1, "GL", 3000),
+    ]).length === 0,
+    "no avisa las líneas \"(monto original)\" que la app sembró: son por unidad"
+  );
+}
+
+console.log("\n7b. Aviso ámbar completo (avisoGlobal + texto):");
+{
+  const comps = [
+    c("material", "PLACA", 0.5, "UN", 20160),
+    c("mano_obra", "MAESTRO", 1, "GL", 60000),
+    c("margen", "MARGEN", 20, "%", 0),
+  ];
+  const techumbre = avisoGlobal({ unit: "GL", quantity: 10 }, comps);
+  assert(!!techumbre && techumbre.partidaEnGL, "TECHUMBRE 10 GL: avisa por la partida");
+  assert(techumbre?.montoLineas === 600000, "y el MAESTRO GL suma $600.000 en la partida");
+  assert(
+    !!techumbre && textoAvisoGlobal(techumbre) === "La partida está en GL con cantidad 10: se cobra 10 veces.",
+    "texto de la partida en GL"
+  );
+  const porcelanato = avisoGlobal({ unit: "M2", quantity: 2.7 }, [
+    c("material", "PORCELANATO", 1, "M2", 25000),
+    c("mano_obra", "CERAMISTA", 1, "GL", 130000),
+  ]);
+  assert(!!porcelanato && !porcelanato.partidaEnGL, "partida en M2 con una línea GL: avisa por la línea");
+  assert(
+    !!porcelanato && textoAvisoGlobal(porcelanato) === "CERAMISTA está en GL y se cobra 2,7 veces.",
+    "texto de una línea (con coma decimal)"
+  );
+  assert(cerca(porcelanato?.montoLineas ?? 0, 351000), "el CERAMISTA suma $351.000 en la partida");
+  const dos = avisoGlobal({ unit: "UN", quantity: 4 }, [
+    c("mano_obra", "MAESTRO", 1, "GL", 20000),
+    c("mano_obra", "PINTOR", 1, "GL", 120000),
+  ]);
+  assert(
+    !!dos && textoAvisoGlobal(dos) === "MAESTRO y PINTOR están en GL y se cobran 4 veces.",
+    "texto de dos líneas"
+  );
+  assert(avisoGlobal({ unit: "GL", quantity: 1 }, comps) === null, "1 GL: sin aviso");
+  assert(avisoGlobal({ unit: "M2", quantity: 48 }, [c("material", "X", 0.7, "UN", 6800)]) === null, "48 M2 sin líneas GL: sin aviso");
+  const bano = avisoGlobal({ unit: "GL", quantity: 3 }, [c("mano_obra", "Mano de obra (monto original)", 1, "GL", 88000)]);
+  assert(!!bano && bano.partidaEnGL && bano.lineas.length === 0, "baño 3 GL con monto original: avisa por la partida, no por la línea");
 }
 
 console.log("\n8. Datos reales — Casa Los Algarrobos V4, 2.3 TECHUMBRE (10 GL, $1.115.048):");

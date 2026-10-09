@@ -189,15 +189,83 @@ export function esGlobal(unidad: string | null | undefined): boolean {
   return (unidad ?? "").trim().toUpperCase() === "GL";
 }
 
+// Líneas que la app sembró sola al pasar montos a mano a desglose
+// (seedObraItemComponentsFromLumps: "Mano de obra (monto original)", "Margen
+// (% original)"). Llevan rótulo GL pero son POR UNIDAD de la partida: no son
+// un global multiplicado por error. Medido en la viva el 2026-10-08: 91
+// partidas editables las tienen; sin esta excepción el aviso saldría en todas.
+const SEMBRADA_DESDE_MONTO = /\((monto|%) original\)\s*$/i;
+
 /**
  * Líneas en "GL" adentro de una partida con cantidad ≠ 1: se están cobrando
- * tantas veces como diga la cantidad, aunque digan "global". Es la señal del
- * aviso en el editor. Una partida en GL con cantidad 1 no tiene problema.
+ * tantas veces como diga la cantidad, aunque digan "global". Una partida con
+ * cantidad 1 no tiene problema; con cantidad 0 todavía no se cobra nada (el
+ * aviso aparece cuando MJ pone la cantidad). Fuera: las líneas en $0 y las
+ * sembradas desde un monto (arriba).
  */
 export function lineasGlobalesMultiplicadas<C extends ComponenteCalculable & { description?: string }>(
   cantidadPartida: number,
-  comps: C[]
+  comps: readonly C[]
 ): C[] {
-  if ((cantidadPartida ?? 0) === 1) return [];
-  return comps.filter((c) => esGlobal(c.unit) && effectiveTotal(c, comps) !== 0);
+  const q = cantidadPartida ?? 0;
+  if (!(q > 0) || q === 1) return [];
+  return comps.filter(
+    (c) =>
+      esGlobal(c.unit) &&
+      !SEMBRADA_DESDE_MONTO.test(c.description ?? "") &&
+      effectiveTotal(c, comps as C[]) !== 0
+  );
+}
+
+export interface AvisoGlobal<C> {
+  // La partida misma dice GL pero tiene cantidad ≠ 1 (TECHUMBRE 10 GL, baños
+  // en 3 GL): todo el desglose se cobra esa cantidad de veces.
+  partidaEnGL: boolean;
+  // Cuántas veces se cobra (la cantidad de la partida).
+  veces: number;
+  // Las líneas en GL que se multiplican (pueden venir vacías si el aviso es
+  // solo por la partida).
+  lineas: C[];
+  // Lo que suman hoy esas líneas en la partida (costo × cantidad), sin margen.
+  montoLineas: number;
+}
+
+/**
+ * Aviso ámbar del editor de obra (pendiente 156, opción A que eligió MJ):
+ * algo en GL se está cobrando más de una vez. Dos casos:
+ *   - la partida está en GL con cantidad ≠ 1 ("global es 1", regla de MJ);
+ *   - una línea en GL adentro de una partida con cantidad ≠ 1.
+ * Solo mira y avisa: no calcula plata de la partida ni toca metrics.ts.
+ */
+export function avisoGlobal<C extends ComponenteCalculable & { description?: string }>(
+  item: { unit: string; quantity: number },
+  comps: readonly C[] | null | undefined
+): AvisoGlobal<C> | null {
+  const q = item.quantity ?? 0;
+  if (!(q > 0) || q === 1) return null;
+  const todas = comps ?? [];
+  const partidaEnGL = esGlobal(item.unit);
+  const lineas = lineasGlobalesMultiplicadas(q, todas);
+  if (!partidaEnGL && lineas.length === 0) return null;
+  const montoLineas = lineas.reduce((s, c) => s + effectiveTotal(c, todas as C[]), 0) * q;
+  return { partidaEnGL, veces: q, lineas, montoLineas };
+}
+
+// "2,7" · "10" — la cantidad como la escribe MJ.
+function veces(n: number): string {
+  return n.toLocaleString("es-CL", { maximumFractionDigits: 4 });
+}
+
+/**
+ * El texto corto del aviso (globito del punto ámbar y frase del panel). Corto
+ * a propósito: con el aviso de material sin cobrar MJ pidió "solamente decir
+ * que X está en cero", sin explicaciones.
+ */
+export function textoAvisoGlobal(aviso: AvisoGlobal<{ description?: string }>): string {
+  const v = veces(aviso.veces);
+  if (aviso.partidaEnGL) return `La partida está en GL con cantidad ${v}: se cobra ${v} veces.`;
+  const nombres = aviso.lineas.map((c) => c.description ?? "");
+  if (nombres.length === 1) return `${nombres[0]} está en GL y se cobra ${v} veces.`;
+  if (nombres.length === 2) return `${nombres[0]} y ${nombres[1]} están en GL y se cobran ${v} veces.`;
+  return `${nombres.length} líneas están en GL y se cobran ${v} veces: ${nombres.join(", ")}.`;
 }

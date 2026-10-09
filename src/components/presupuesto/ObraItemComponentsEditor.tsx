@@ -115,6 +115,8 @@ export default function ObraItemComponentsEditor({
   itemId,
   canEdit,
   catalogPartidaId,
+  lineasAvisoGL,
+  vecesAvisoGL,
   onChanged,
   onCountChange,
   dense = false,
@@ -125,6 +127,10 @@ export default function ObraItemComponentsEditor({
   // Si la partida viene del catálogo, habilita el botón "↑ al catálogo" por
   // línea. Si es null (partida 100% manual), no se muestra.
   catalogPartidaId?: string | null;
+  // Líneas en GL que se cobran varias veces (aviso ámbar, pendiente 156) y
+  // cuántas veces. Las calcula el editor con partidaGlobal.ts.
+  lineasAvisoGL?: string[];
+  vecesAvisoGL?: number;
   onChanged?: () => void;
   // Reporta la cantidad de componentes cada vez que se (re)cargan. Lo usa el
   // panel para decidir si muestra la fila de totales (redundante con el
@@ -416,6 +422,9 @@ export default function ObraItemComponentsEditor({
             // 0? O sea: se compra y no se cobra. Se marca en ámbar acá adentro
             // para que la línea culpable se vea de una, no solo la partida.
             const noSeCobra = materialesSinCobrar([c]).length > 0;
+            // Línea en GL que se cobra tantas veces como la cantidad de la
+            // partida (aviso ámbar, pendiente 156).
+            const glMultiplicada = !!lineasAvisoGL?.includes(c.id);
             const meta = typeMeta(c.type);
             const isPct = c.unit === "%";
             // Provisión al cliente: material marcado isProvision en el catálogo.
@@ -436,7 +445,7 @@ export default function ObraItemComponentsEditor({
                 key={c.id}
                 className={`border-b last:border-0 ${
                   dense ? "border-gray-100" : "border-gray-50"
-                } ${noSeCobra ? "bg-amber-50/70" : ""}`}
+                } ${noSeCobra || glMultiplicada ? "bg-amber-50/70" : ""}`}
               >
                 <td className={`py-1 px-2 ${isNestedPerdida ? "pl-6" : ""}`}>
                   {isNestedPerdida && (
@@ -512,6 +521,14 @@ export default function ObraItemComponentsEditor({
                       title="En cantidad 0: no se le cobra al cliente."
                     >
                       no se cobra
+                    </span>
+                  )}
+                  {glMultiplicada && (
+                    <span
+                      className="shrink-0 whitespace-nowrap rounded bg-amber-100 px-1 py-0.5 text-[9px] uppercase text-amber-800"
+                      title="Está en GL, pero la partida no está en 1: este monto se multiplica por la cantidad de la partida. Si es para toda la partida, pasala a 1 GL; si es por unidad, cambiá la unidad de esta línea."
+                    >
+                      se cobra {(vecesAvisoGL ?? 0).toLocaleString("es-CL", { maximumFractionDigits: 4 })} veces
                     </span>
                   )}
                   {c.referenceLink && (

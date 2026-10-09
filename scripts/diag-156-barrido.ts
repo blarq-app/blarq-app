@@ -8,7 +8,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { readFileSync } from "fs";
-import { pasarAGlobal, lineasGlobalesMultiplicadas } from "../src/lib/presupuesto/partidaGlobal";
+import { pasarAGlobal, avisoGlobal, textoAvisoGlobal } from "../src/lib/presupuesto/partidaGlobal";
 
 const envPath = process.argv[2];
 if (!envPath) throw new Error("uso: <ruta-env>");
@@ -34,16 +34,16 @@ async function main() {
     if (r.ok) ok++;
     else if ((it.quantity ?? 0) <= 0) cero++;
     else malas.push(`${it.budgetVersion.project.name} ${it.budgetVersion.version} · ${it.name}: ${r.error}`);
-    const gl = lineasGlobalesMultiplicadas(it.quantity, it.components);
-    if (gl.length > 0 && ["borrador", "enviado"].includes(it.budgetVersion.status)) {
+    const aviso = avisoGlobal(it, it.components);
+    if (aviso && ["borrador", "enviado"].includes(it.budgetVersion.status)) {
       conAviso.push(
-        `${it.budgetVersion.project.name} ${it.budgetVersion.version} (${it.budgetVersion.status}) · ${it.name} · ${it.quantity} ${it.unit} · ${gl.map((g) => `${g.description} ${g.quantity} GL × $${Math.round(g.unitCost)}`).join(", ")} · total partida $${Math.round(it.total)}`
+        `${it.budgetVersion.project.name} ${it.budgetVersion.version} (${it.budgetVersion.status}) · ${it.name} · ${textoAvisoGlobal(aviso)}`
       );
     }
   }
   console.log(`partidas: ${items.length} · se conserva el total: ${ok} · cantidad 0 (se niega): ${cero} · movería el total: ${malas.length}`);
   for (const m of malas) console.log("  ✗", m);
-  console.log(`\nPartidas editables (borrador/enviado) que mostrarían el aviso de línea GL: ${conAviso.length}`);
+  console.log(`\nPartidas editables (borrador/enviado) con el aviso ámbar de GL: ${conAviso.length}`);
   for (const a of conAviso) console.log("  ·", a);
 }
 

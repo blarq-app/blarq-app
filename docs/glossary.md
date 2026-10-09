@@ -22,6 +22,7 @@ Términos del dominio que un externo no entendería. Una línea por término. Cu
 - **IVA** — 19% sobre Costo Neto. La app distingue siempre `netAmount` y `totalAmount` por factura.
 - **Neto / c/IVA** — Indicadores explícitos en la UI para que MJ sepa qué representa cada cifra. Las etiquetas se agregaron en abril 2026 tras un bug de cálculo.
 - **P.U. (Precio Unitario)** — Por unidad de partida. P.U. = Σ (cantidad × precio neto) de los conceptos de la partida.
+- **GL (global)** — Partida que se cobra como un todo: **cantidad 1** (regla de MJ, 2026-10-08; 415 de 446 partidas en GL la cumplen). Su desglose es "de toda la partida" (33,6 sacos y 48 M2 de maestro, no 0,7 saco y 1 M2 por m²). La unidad de cada LÍNEA del desglose es solo el nombre de lo que cuenta su cantidad: la cuenta es siempre cantidad × costo, salvo las líneas "%" (leyes, pérdida, margen). Por eso una línea "GL" adentro de una partida de 2,7 M2 se cobra 2,7 veces. "Pasar a GL" en el editor convierte el desglose sin mover el total (pendiente 156).
 
 ## Cobros del cliente
 

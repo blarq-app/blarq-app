@@ -4,7 +4,7 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
-## 2026-10-08 — Unidad de la partida editable en la cotización (pendiente 156)
+## 2026-10-09 — Unidad de la partida editable en la cotización (pendiente 156, en prod)
 
 - La unidad de una partida de obra se cambia en su fila del editor y vale solo para ese presupuesto: la partida se suelta del catálogo (`catalogPartidaId = null`) y los botones "↑ … a catálogo" ya no pueden pisar el molde con un desglose en otra unidad. Nuevo `POST /api/presupuestos/[id]/partidas/[itemId]/unidad` (con `simular`) + `CambiarUnidadDialog`.
 - Pasar a GL convierte: cada línea que no es "%" multiplica su cantidad por la de la partida y la partida queda en 1; el total no cambia (`lib/presupuesto/partidaGlobal.ts`, verifica antes de escribir). Con cantidad 0 queda en 1 GL sin multiplicar. Volver de GL u otro cambio solo cambia el nombre. Si la partida tiene avance en un estado de pago, no se convierte.

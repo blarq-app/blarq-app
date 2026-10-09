@@ -48,6 +48,17 @@ interface Props {
   // Tras guardar una partida nueva al catálogo: el editor recarga la partida
   // para que quede con su catalogPartidaId y aparezcan los botones de siempre.
   onSavedToCatalog: (catalogPartidaId: string) => void;
+  // Aviso ámbar de GL que se cobra varias veces (pendiente 156). Lo calcula
+  // el editor con partidaGlobal.ts; acá solo se dibuja. null = sin aviso.
+  avisoGL?: {
+    texto: string;
+    // Lo que suman hoy las líneas GL en la partida; null si el aviso es por
+    // la partida entera en GL.
+    monto: number | null;
+    veces: number;
+    lineaIds: string[];
+  } | null;
+  onPasarAGL?: () => void;
 }
 
 // Los 6 rubros del desglose de costo de la partida (por unidad).
@@ -132,6 +143,31 @@ export default function PartidaExpandedPanel(p: Props) {
 
       <CatalogButtons {...p} />
 
+      {/* Aviso ámbar: algo en GL se cobra más de una vez. El botón abre la
+          misma ventana de "Pasar a GL" del selector de unidad (convierte sin
+          mover el total). Si el monto era por unidad, se arregla cambiando la
+          unidad de la LÍNEA y el aviso se va solo. */}
+      {p.avisoGL && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] leading-snug text-amber-900">
+          <span>
+            {p.avisoGL.texto}
+            {p.avisoGL.monto !== null && (
+              <span className="tabular-nums"> Hoy suma {formatCLP(p.avisoGL.monto)}.</span>
+            )}
+          </span>
+          {p.canEdit && p.onPasarAGL && (
+            <button
+              type="button"
+              onClick={p.onPasarAGL}
+              className="shrink-0 whitespace-nowrap text-xs text-gray-700 hover:text-gray-900 border border-amber-300 hover:border-amber-500 bg-white px-2 py-0.5 rounded-lg transition-colors"
+              title="Deja la partida en 1 GL y pasa cada línea a lo de toda la partida. El total no cambia."
+            >
+              Pasar la partida a 1 GL
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Desglose por componente — editable si el presupuesto está en borrador. */}
       <div className="pt-1.5 border-t border-gray-200">
         <ObraItemComponentsEditor
@@ -139,6 +175,8 @@ export default function PartidaExpandedPanel(p: Props) {
           itemId={item.id}
           canEdit={p.canEdit}
           catalogPartidaId={item.catalogPartidaId}
+          lineasAvisoGL={p.avisoGL?.lineaIds}
+          vecesAvisoGL={p.avisoGL?.veces}
           onChanged={p.onComponentsChanged}
           onCountChange={setCompCount}
           dense

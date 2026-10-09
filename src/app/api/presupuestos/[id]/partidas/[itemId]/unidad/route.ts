@@ -109,7 +109,7 @@ export async function POST(
       .join(", ");
     const bloqueo =
       cambiaCantidad && avance.length > 0
-        ? `Esta partida ya tiene avance en ${enQueEP}, medido en ${item.unit}. Si pasa a ${cantidadNueva} ${unidadNueva}, el estado de pago mediría otra cosa. No se cambió nada.`
+        ? `Esta partida ya tiene avance en ${enQueEP}, medido en ${item.unit}. Si pasa a ${cantidadNueva} ${unidadNueva}, el estado de pago mediría otra cosa; por eso no se puede convertir. Sí se le puede cambiar solo el nombre de la unidad.`
         : null;
     const avisoEP =
       !cambiaCantidad && avance.length > 0

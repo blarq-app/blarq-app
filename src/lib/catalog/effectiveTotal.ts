@@ -25,8 +25,10 @@ export interface ComponenteCalculable {
   unit: string;
   quantity: number;
   unitCost: number;
-  appliedToComponentId: string | null;
-  appliedToType: string | null;
+  // Opcionales: el editor de obra los trae como `?:` (no siempre vienen en
+  // el dato de la fila). Sin objetivo, la cuenta los trata igual que null.
+  appliedToComponentId?: string | null;
+  appliedToType?: string | null;
 }
 
 export function effectiveTotal<C extends ComponenteCalculable>(

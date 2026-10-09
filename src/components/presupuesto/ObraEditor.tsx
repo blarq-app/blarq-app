@@ -24,6 +24,11 @@ import PartidaExpandedPanel from "@/components/presupuesto/PartidaExpandedPanel"
 import CambiarUnidadDialog, {
   type PartidaActualizada,
 } from "@/components/presupuesto/CambiarUnidadDialog";
+import {
+  avisoGlobal,
+  esGlobal,
+  textoAvisoGlobal,
+} from "@/lib/presupuesto/partidaGlobal";
 import RichTextEditor from "@/components/presupuesto/RichTextEditor";
 import { sanitizeRichTextHtml, isRichTextEmpty } from "@/lib/richText";
 import {
@@ -476,7 +481,8 @@ export default function ObraEditor({
   const [zoneDraft, setZoneDraft] = useState("");
   // Selección múltiple para asignar zona en bulk. MJ habilita checkbox por
   // fila, selecciona varias y aplica una zona desde la barra flotante.
-  // Globito del aviso de material sin cobrar. Va en estado y se dibuja al
+  // Globito de los avisos ámbar de la fila (material sin cobrar y GL que se
+  // cobra varias veces). Va en estado y se dibuja al
   // FINAL del componente, fuera de la tabla, porque las filas llevan `opacity`
   // inline (dnd-kit, y el 0.6 de "revisada"): cualquier hijo de la fila hereda
   // esa transparencia y además queda atrapado en su contexto de apilamiento,
@@ -1433,7 +1439,10 @@ export default function ObraEditor({
   // diferido (600 ms) podría llegar después y pisar la unidad y la cantidad
   // nuevas con las viejas.
   async function abrirCambioUnidad(item: ObraItem, unidad: string) {
-    if (unidad === item.unit) return;
+    // La misma unidad no hace nada, salvo GL con cantidad ≠ 1: el botón del
+    // aviso ámbar "Pasar la partida a 1 GL" en una partida que ya dice GL
+    // (TECHUMBRE 10 GL) la deja en 1 y convierte el desglose.
+    if (unidad === item.unit && !(esGlobal(unidad) && item.quantity !== 1)) return;
     const pendiente = pendingSaveRef.current;
     if (pendiente && pendiente.itemId === item.id) {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -1740,6 +1749,11 @@ export default function ObraEditor({
                     // puede estar bien puesto, pero MJ tiene que decidirlo
                     // ella. El criterio vive en materialSinCobrar.ts.
                     const sinCobrar = materialesSinCobrar(item.components);
+                    // Algo en GL que se cobra más de una vez (partida en GL
+                    // con cantidad ≠ 1, o una línea GL adentro de una partida
+                    // con cantidad ≠ 1). Ámbar, mismo gesto que el de arriba.
+                    // El criterio vive en partidaGlobal.ts (pendiente 156).
+                    const avisoGL = avisoGlobal(item, item.components);
                     return (
                     <Fragment key={item.id}>
                     {showSubHeader && (
@@ -2212,6 +2226,29 @@ export default function ObraEditor({
                               className="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500 hover:ring-2 hover:ring-amber-200"
                             />
                           )}
+                          {avisoGL && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedItems((prev) => ({
+                                  ...prev,
+                                  [item.id]: true,
+                                }))
+                              }
+                              onMouseEnter={(e) => {
+                                const r =
+                                  e.currentTarget.getBoundingClientRect();
+                                setAvisoSinCobrarHover({
+                                  texto: textoAvisoGlobal(avisoGL),
+                                  x: r.right,
+                                  y: r.bottom + 6,
+                                });
+                              }}
+                              onMouseLeave={() => setAvisoSinCobrarHover(null)}
+                              aria-label="Algo en GL se está cobrando más de una vez"
+                              className="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500 hover:ring-2 hover:ring-amber-200"
+                            />
+                          )}
                           {formatCLP(item.total)}
                         </div>
                       </td>
@@ -2305,6 +2342,19 @@ export default function ObraEditor({
                             onSavedToCatalog={(catalogPartidaId) =>
                               marcarConMolde(item.id, catalogPartidaId)
                             }
+                            avisoGL={
+                              avisoGL
+                                ? {
+                                    texto: textoAvisoGlobal(avisoGL),
+                                    // En la partida en GL el monto de las
+                                    // líneas no agrega nada: todo se cobra N.
+                                    monto: avisoGL.partidaEnGL ? null : avisoGL.montoLineas,
+                                    veces: avisoGL.veces,
+                                    lineaIds: avisoGL.lineas.map((c) => c.id),
+                                  }
+                                : null
+                            }
+                            onPasarAGL={() => abrirCambioUnidad(item, "GL")}
                           />
                         </td>
                       </tr>

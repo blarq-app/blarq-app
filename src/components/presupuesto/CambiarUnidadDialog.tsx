@@ -149,6 +149,10 @@ export default function CambiarUnidadDialog({
   const aGlobal = unidadNueva === "GL";
   const titulo = aGlobal ? "Pasar a GL" : `Cambiar la unidad a ${unidadNueva}`;
   const ua = s?.unidadAntes ?? "";
+  // Una partida que ya dice GL con cantidad ≠ 1 (TECHUMBRE 10 GL) se convierte
+  // desde el aviso ámbar: "por cada GL" no se entiende, se dice "por cada una".
+  const yaEraGL = ua.trim().toUpperCase() === "GL";
+  const porCada = yaEraGL ? "por cada una" : `por cada ${ua}`;
 
   return (
     <Modal open onClose={guardando ? () => {} : onClose} size="md">
@@ -159,16 +163,26 @@ export default function CambiarUnidadDialog({
         {s?.modo === "convierte" && (
           <div className="space-y-3 text-sm text-gray-800">
             <p>
-              Hoy el desglose es <b>por cada {ua}</b> y se multiplica por{" "}
-              <b className="tabular-nums">{cant(s.cantidadAntes)}</b>. En GL queda en{" "}
-              <b>1</b>, así que cada línea pasa a ser <b>lo de toda la partida</b>. El total no
-              cambia.
+              {yaEraGL ? (
+                <>
+                  Hoy la partida dice{" "}
+                  <b className="tabular-nums">{cant(s.cantidadAntes)} GL</b>: el desglose se
+                  multiplica por {cant(s.cantidadAntes)}.
+                </>
+              ) : (
+                <>
+                  Hoy el desglose es <b>por cada {ua}</b> y se multiplica por{" "}
+                  <b className="tabular-nums">{cant(s.cantidadAntes)}</b>.
+                </>
+              )}{" "}
+              En GL queda en <b>1</b>, así que cada línea pasa a ser{" "}
+              <b>lo de toda la partida</b>. El total no cambia.
             </p>
             <table className="w-full text-xs tabular-nums border-collapse">
               <thead>
                 <tr className="bg-gray-100 text-[10px] uppercase tracking-wide text-gray-500">
                   <th className="text-left font-normal px-2 py-1">Línea</th>
-                  <th className="text-right font-normal px-2 py-1">Hoy · por cada {ua}</th>
+                  <th className="text-right font-normal px-2 py-1">Hoy · {porCada}</th>
                   <th className="text-right font-normal px-2 py-1">En GL · toda la partida</th>
                 </tr>
               </thead>

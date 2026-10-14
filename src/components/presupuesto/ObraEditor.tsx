@@ -404,6 +404,40 @@ const DEFAULT_PAYMENT_TERMS = [
   { stage: "Saldo final", percentage: 10 },
 ];
 
+// Anchos de columna del editor de obra: UNA sola definición que usan el
+// encabezado y cada capítulo, todos con `table-fixed`.
+//
+// Por qué: el encabezado es una tabla aparte y cada capítulo es otra. Con el
+// reparto automático del navegador, cada tabla acomodaba las columnas según
+// su propio contenido y nunca calzaban entre sí: a pantalla completa todos
+// los capítulos quedaban ~23 px corridos del encabezado y, con la ventana
+// angosta (Claude al lado, 1.100 px), más de 100 px ("Cant." quedaba encima
+// de la M.O.). Con `table-fixed` las columnas miden lo que dice acá, sin
+// mirar el contenido, así que todas las tablas quedan iguales a cualquier
+// ancho. Partida y Descripción se reparten lo que sobra (20% y 32%).
+//
+// Las columnas de números están medidas para que quepa lo más grande que
+// hay en los datos ($14.456.710 de P.U., $9.000.000 de M.O., un total de 9
+// cifras con un punto de aviso). Si una columna nueva no cabe, se ensancha
+// ACÁ (vale para todas las tablas a la vez), no en la celda.
+function ColumnasObra() {
+  return (
+    <colgroup>
+      <col className="w-8" />
+      <col className="w-18" />
+      <col style={{ width: "20%" }} />
+      <col style={{ width: "32%" }} />
+      <col className="w-10" />
+      <col className="w-16" />
+      <col className="w-18" />
+      <col className="w-20" />
+      <col className="w-26" />
+      <col className="w-8" />
+      <col className="w-9" />
+    </colgroup>
+  );
+}
+
 export default function ObraEditor({
   budget: initialBudget,
   projectId,
@@ -1561,12 +1595,16 @@ export default function ObraEditor({
         onSynced={() => router.refresh()}
       />
       {/* Header de tabla — UNA sola vez arriba, después chapters y items
-          forman una tabla continua estilo Excel maestro. */}
+          forman una tabla continua estilo Excel maestro. Comparte los
+          anchos con cada capítulo (ColumnasObra) y los mismos márgenes
+          internos que sus celdas, así cada título queda justo sobre su
+          columna. */}
       <div className="bg-white border border-gray-200 rounded-t-xl overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full table-fixed text-sm">
+          <ColumnasObra />
           <thead>
             <tr className="border-b-2 border-gray-900 bg-white">
-              <th className="px-2 py-0.5 w-8 text-center">
+              <th className="px-2 py-0.5 text-center">
                 {/* Select all / deselect all visible partidas. Indeterminado
                     cuando hay selección parcial. */}
                 <input
@@ -1592,22 +1630,22 @@ export default function ObraEditor({
                   title="Seleccionar todas"
                 />
               </th>
-              <th className="text-center px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-10">Item</th>
-              <th className="text-left px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "20%" }}>Partida</th>
-              <th className="text-left px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" style={{ width: "32%" }}>Descripcion</th>
-              <th className="text-center px-1 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-12">Un.</th>
-              <th className="text-right px-1 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-16">Cant.</th>
-              <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-20" title="Mano de obra por unidad — lo que pagás al maestro">M.O.</th>
-              <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-24">P.U.</th>
-              <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-28">Total</th>
+              <th className="text-left px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider">Item</th>
+              <th className="text-left px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider">Partida</th>
+              <th className="text-left px-3 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider">Descripcion</th>
+              <th className="text-center px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider">Un.</th>
+              <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider">Cant.</th>
+              <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider" title="Mano de obra por unidad — lo que pagás al maestro">M.O.</th>
+              <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider">P.U.</th>
+              <th className="text-right px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider">Total</th>
               {/* Marca interna de revisión (MJ + JT). No sale en ningún PDF. */}
               <th
-                className="text-center px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider w-10"
+                className="text-center px-2 py-0.5 text-[10px] font-bold text-gray-900 uppercase tracking-wider"
                 title="Revisada — marca interna nuestra. No la ve el cliente ni el maestro y no sale en ningún PDF."
               >
                 Rev.
               </th>
-              <th className="w-6"></th>
+              <th></th>
             </tr>
           </thead>
         </table>
@@ -1741,20 +1779,8 @@ export default function ObraEditor({
 
           {chapter.items.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <colgroup>
-                  <col className="w-8" />
-                  <col className="w-10" />
-                  <col style={{ width: "20%" }} />
-                  <col style={{ width: "32%" }} />
-                  <col className="w-12" />
-                  <col className="w-16" />
-                  <col className="w-20" />
-                  <col className="w-24" />
-                  <col className="w-28" />
-                  <col className="w-10" />
-                  <col className="w-6" />
-                </colgroup>
+              <table className="w-full table-fixed text-sm">
+                <ColumnasObra />
                 <tbody className="divide-y divide-gray-50">
                   {chapter.items.map((item, itemIdx) => {
                     const chg = changeMarkers.get(item.lineageId);
@@ -2158,14 +2184,14 @@ export default function ObraEditor({
                             no dejaba escribir tranquila. `defaultValue` +
                             `onBlur` = el número final es exactamente el escrito.
 
-                            min-w-[3rem]: cada capítulo es su propia tabla y,
-                            cuando la ventana es angosta (MJ trabaja con Claude
-                            al lado), la tabla achica columnas para que quepa.
-                            Este campo no tenía piso: con `min-w-0` podía
-                            quedar en 0 px y la cantidad desaparecía (se veía
-                            "M2" y al lado directo la M.O.). 3rem + el padding
-                            de la celda = el ancho de la columna (w-16), así en
-                            pantalla ancha no se mueve nada (pendiente 198). */}
+                            min-w-[3rem]: cuando cada capítulo repartía sus
+                            columnas por su cuenta, con la ventana angosta la
+                            tabla achicaba este campo hasta 0 px y la cantidad
+                            desaparecía (se veía "M2" y al lado directo la
+                            M.O., pendiente 198). Hoy la columna es fija
+                            (ColumnasObra) y el piso queda como resguardo:
+                            3rem + el padding de la celda = el ancho de la
+                            columna (w-16). */}
                         <input
                           // La key con la cantidad hace que el campo muestre
                           // la nueva si cambia desde afuera (pasar a GL la
@@ -2191,8 +2217,16 @@ export default function ObraEditor({
                           desglose, el encabezado es un ESPEJO de la suma del
                           desglose → solo lectura (se edita abajo, en el
                           detalle). Si todavía no tiene desglose, se pueden
-                          cargar a mano acá (estado transitorio). */}
-                      <td className="px-3 py-0.5 align-top" title="Mano de obra por unidad — lo que pagás al maestro por cada m²/un/ml">
+                          cargar a mano acá (estado transitorio).
+
+                          Los campos de las partidas sin desglose miden lo que
+                          mide su número (field-sizing-content), con un mínimo
+                          para poder hacerles clic cuando están en 0. Antes
+                          tenían ancho fijo (w-16 / w-20 + el "$") y una sola
+                          partida así ensanchaba M.O. y P.U. de TODO su
+                          capítulo: en Algarrobos la 4.21 dejaba la Partida
+                          del capítulo 4 en 56 px a 1.100 px de ventana. */}
+                      <td className="px-2 py-0.5 align-top" title="Mano de obra por unidad — lo que pagás al maestro por cada m²/un/ml">
                         {(item.components?.length ?? 0) > 0 ? (
                           <div className="text-right text-sm text-amber-800/80 tabular-nums" title="Viene del desglose — se edita abajo">
                             {formatCLP(item.costLabor ?? 0)}
@@ -2203,12 +2237,12 @@ export default function ObraEditor({
                             <MoneyInput
                               value={item.costLabor ?? 0}
                               onChange={(v) => handleUpdateItem(item.id, "costLabor", v)}
-                              className="w-16 bg-transparent border-0 p-0 text-right text-sm text-amber-800 tabular-nums focus:ring-0 outline-none"
+                              className="field-sizing-content min-w-8 bg-transparent border-0 p-0 text-right text-sm text-amber-800 tabular-nums focus:ring-0 outline-none"
                             />
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-0.5 align-top">
+                      <td className="px-2 py-0.5 align-top">
                         {(item.components?.length ?? 0) > 0 ? (
                           <div className="text-right text-sm text-gray-900 tabular-nums" title="Viene del desglose — se edita abajo">
                             {formatCLP(item.unitPrice)}
@@ -2219,12 +2253,12 @@ export default function ObraEditor({
                             <MoneyInput
                               value={item.unitPrice}
                               onChange={(v) => handleUpdateItem(item.id, "unitPrice", v)}
-                              className="w-20 bg-transparent border-0 p-0 text-right text-sm text-gray-900 tabular-nums focus:ring-0 outline-none"
+                              className="field-sizing-content min-w-8 bg-transparent border-0 p-0 text-right text-sm text-gray-900 tabular-nums focus:ring-0 outline-none"
                             />
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-0.5 align-top text-right text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap">
+                      <td className="px-2 py-0.5 align-top text-right text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
                           {saveStatus === "saving" && (
                             <span className="text-[10px] text-gray-400 animate-pulse hidden group-hover:inline">guardando…</span>

@@ -20,8 +20,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { PROFESIONAL_DISENO } from "@/lib/pdf/profesionales";
 
-const PROFESSIONAL = "MARÍA JOSÉ BLANCO";
+const PROFESSIONAL = PROFESIONAL_DISENO;
 
 const DEFAULT_PAYMENT_TERMS = [
   { stage: "Anticipo", percentage: 60 },

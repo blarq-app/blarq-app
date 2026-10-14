@@ -30,8 +30,9 @@ import path from "node:path";
 import { sanitizeRichTextHtml, plainTextToHtml } from "@/lib/richText";
 import { groupByChapter, type ChapterLike } from "@/lib/presupuesto/chapters";
 import { annotateZones } from "@/lib/presupuesto/zones";
+import { PROFESIONAL_OBRA } from "@/lib/pdf/profesionales";
 
-const PROFESSIONAL = "JOSÉ TOMÁS LARRAÍN";
+const PROFESSIONAL = PROFESIONAL_OBRA;
 
 export interface ObraMaestroItemInput {
   chapterId: string | null;

@@ -25,8 +25,9 @@ import { groupByChapter } from "@/lib/presupuesto/chapters";
 import { annotateZones } from "@/lib/presupuesto/zones";
 import { renderCondicionesHTML } from "@/lib/pdf/condicionesBlock";
 import type { Condicion } from "@/lib/presupuesto/condiciones";
+import { PROFESIONAL_OBRA } from "@/lib/pdf/profesionales";
 
-const PROFESSIONAL = "JOSÉ TOMÁS LARRAÍN";
+const PROFESSIONAL = PROFESIONAL_OBRA;
 
 const DEFAULT_PAYMENT_TERMS = [
   { stage: "Anticipo", percentage: 40 },

@@ -11,8 +11,9 @@ import { formatHerrajeName } from "@/lib/presupuesto/herrajeNombre";
 import { renderCondicionesHTML } from "@/lib/pdf/condicionesBlock";
 import type { Condicion } from "@/lib/presupuesto/condiciones";
 import { soloLoQueCambia } from "@/lib/presupuesto/muebleItems";
+import { PROFESIONAL_DISENO } from "@/lib/pdf/profesionales";
 
-const PROFESSIONAL = "MARÍA JOSÉ BLANCO";
+const PROFESSIONAL = PROFESIONAL_DISENO;
 
 const DEFAULT_PAYMENT_TERMS = [
   { stage: "Anticipo", percentage: 60 },

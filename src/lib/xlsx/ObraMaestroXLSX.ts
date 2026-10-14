@@ -40,8 +40,9 @@ import path from "node:path";
 import { groupByChapter, type ChapterLike } from "@/lib/presupuesto/chapters";
 import { annotateZones } from "@/lib/presupuesto/zones";
 import { richTextToPlainText } from "@/lib/richText";
+import { PROFESIONAL_OBRA } from "@/lib/pdf/profesionales";
 
-const PROFESSIONAL = "JOSE TOMAS LARRAIN";
+const PROFESSIONAL = PROFESIONAL_OBRA;
 
 export interface ObraMaestroXLSXItemInput {
   chapterId: string | null;

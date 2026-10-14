@@ -2129,13 +2129,17 @@ export default function ObraEditor({
                             desde 2026-06-06. El cambio pasa por una ventana
                             que muestra la cuenta: pasar a GL convierte el
                             desglose sin mover el total, y la partida se
-                            suelta del catálogo. */}
+                            suelta del catálogo.
+                            field-sizing-content: el <select> mide lo que
+                            mide la unidad elegida ("M2"), no la opción más
+                            larga de la lista ("DIA"). Ese ancho de más se lo
+                            sacaba a la Cantidad (pendiente 198). */}
                         {canEditDetail ? (
                           <select
                             value={item.unit}
                             onChange={(e) => abrirCambioUnidad(item, e.target.value)}
                             title="Cambiar la unidad (solo en este presupuesto)"
-                            className="text-force-11 appearance-none bg-transparent border-0 p-0 text-center text-gray-700 cursor-pointer hover:underline focus:ring-0 outline-none"
+                            className="text-force-11 field-sizing-content appearance-none bg-transparent border-0 p-0 text-center text-gray-700 cursor-pointer hover:underline focus:ring-0 outline-none"
                           >
                             {(UNITS.includes(item.unit) ? UNITS : [item.unit, ...UNITS]).map((u) => (
                               <option key={u} value={u}>
@@ -2152,7 +2156,16 @@ export default function ObraEditor({
                             Enter), no en cada tecla. Sin esto, tipear cifras de
                             varios dígitos recalculaba el total tecla a tecla y
                             no dejaba escribir tranquila. `defaultValue` +
-                            `onBlur` = el número final es exactamente el escrito. */}
+                            `onBlur` = el número final es exactamente el escrito.
+
+                            min-w-[3rem]: cada capítulo es su propia tabla y,
+                            cuando la ventana es angosta (MJ trabaja con Claude
+                            al lado), la tabla achica columnas para que quepa.
+                            Este campo no tenía piso: con `min-w-0` podía
+                            quedar en 0 px y la cantidad desaparecía (se veía
+                            "M2" y al lado directo la M.O.). 3rem + el padding
+                            de la celda = el ancho de la columna (w-16), así en
+                            pantalla ancha no se mueve nada (pendiente 198). */}
                         <input
                           // La key con la cantidad hace que el campo muestre
                           // la nueva si cambia desde afuera (pasar a GL la
@@ -2171,7 +2184,7 @@ export default function ObraEditor({
                             if (e.key === "Enter")
                               (e.target as HTMLInputElement).blur();
                           }}
-                          className="text-force-11 w-full min-w-0 bg-transparent border-0 p-0 text-right text-gray-900 tabular-nums focus:ring-0 outline-none"
+                          className="text-force-11 w-full min-w-[3rem] bg-transparent border-0 p-0 text-right text-gray-900 tabular-nums focus:ring-0 outline-none"
                         />
                       </td>
                       {/* Mano de obra y P. Unitario: cuando la partida TIENE

@@ -4,6 +4,12 @@ Log cronológico de cambios estructurales. 3-5 líneas por entrada, las más nue
 
 ---
 
+## 2026-10-15 — Listado de herrajes del mueblista con la marca v2 (pendiente 201, PR #496, en prod)
+
+- `MueblistaPDF` deja el formato viejo (Montserrat, logo PNG, raya negra) y usa la hoja de detalle del presupuesto de muebles sin portada: mismo encabezado, `@page`, banda de capítulo y filetes. Sin la nota "Listado sin precios…".
+- Títulos de columna una sola vez y filas a 7,5 pt: Algarrobos V4 (29 líneas) pasa de 2 hojas a 1. Mismas columnas y datos.
+- La ruta del PDF lo renderiza con `preferCSSPageSize` (entra en `isBrandObra`), igual que el de muebles al cliente. Queda en formato viejo solo `ObraMaestroPDF` entre los "sin precios".
+
 ## 2026-10-09 — Aviso ámbar de GL que se cobra varias veces (pendiente 156)
 
 - Punto ámbar en la fila, línea marcada "se cobra N veces" en el desglose y frase con "Pasar la partida a 1 GL" cuando una partida en GL tiene cantidad ≠ 1 o una línea en GL está en una partida con cantidad ≠ 1. Mismo patrón que el aviso de material sin cobrar. Excluye las líneas "(monto original)" sembradas desde montos (son por unidad).

@@ -314,15 +314,16 @@ export async function GET(
     // corte contra el borde) y laterales 0 — el aire lateral lo pone el padding
     // de la plantilla. La portada calcula su alto contra estos 14mm+14mm.
     // Muebles/artefactos siguen con el formato previo hasta migrar.
-    // El PDF mueblista (herrajes con su ubicación, sin precios) sigue con el formato
-    // previo; el de muebles al cliente ya usa la marca v2 como obra.
+    // El PDF mueblista (herrajes con su ubicación, sin precios) usa desde el
+    // pendiente 201 la hoja de detalle de muebles sin portada: define su @page
+    // como el de muebles al cliente, así que entra en isBrandObra.
     // La orden de compra al proveedor es un documento corrido (sin portada) y
     // no define @page en su CSS: los márgenes se los tiene que poner la opción
     // `margin` de Puppeteer, no el CSS. Por eso queda FUERA de isBrandObra.
     const isBrandObra =
       budget.type === "obra" ||
       (budget.type === "artefactos" && tipo !== "orden-compra") ||
-      (budget.type === "muebles" && tipo !== "mueblista");
+      budget.type === "muebles";
     const pdfBuffer = await renderPDF(html, {
       format: "A4",
       // La orden de compra sale en UNA SOLA HOJA de alto variable: se lee en

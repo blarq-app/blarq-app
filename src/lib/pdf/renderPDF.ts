@@ -34,6 +34,55 @@ function mmDe(valor: string | number | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+// De dónde sale el ejecutable de Chromium en Vercel, en este orden:
+//
+//  1. Ya descomprimido en /tmp/chromium (invocación tibia): lo devuelve
+//     executablePath() al toque, sin argumentos.
+//  2. Los .br que viajan dentro del deployment (node_modules/@sparticuz/
+//     chromium/bin, forzados por outputFileTracingIncludes en next.config).
+//     Es el camino normal: sin red, ~2-3 s de descompresión.
+//  3. Plan B: bajar el release de GitHub (~68 MB, +~10 s). Solo si el bin
+//     no viajó (p. ej. si Next volviera a dejar de copiarlo). Se reintenta
+//     hasta 3 veces porque el 2026-09-21 GitHub respondió 504 una vez y
+//     eso tumbó TODOS los PDFs de la app hasta que MJ volvió a probar.
+//
+// Los reintentos tienen que caber en el maxDuration=60 s de las rutas: tres
+// descargas de ~10 s más la descompresión entran con margen.
+const CHROMIUM_URL =
+  "https://github.com/Sparticuz/chromium/releases/download/v147.0.0/chromium-v147.0.0-pack.x64.tar";
+const INTENTOS_DESCARGA = 3;
+
+type ChromiumPkg = typeof import("@sparticuz/chromium").default;
+
+async function resolverChromium(chromium: ChromiumPkg): Promise<string> {
+  try {
+    // Sin argumento: usa /tmp/chromium si existe, si no el bin empaquetado.
+    return await chromium.executablePath();
+  } catch (err) {
+    // Solo caemos al plan B si el problema es que el bin no viajó. Cualquier
+    // otro error (disco lleno, binario corrupto) se propaga tal cual.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes("does not exist")) throw err;
+    console.warn(
+      "[renderPDF] El bin de Chromium no viajó en el deployment; bajando de GitHub."
+    );
+  }
+
+  let ultimoError: unknown;
+  for (let intento = 1; intento <= INTENTOS_DESCARGA; intento++) {
+    try {
+      return await chromium.executablePath(CHROMIUM_URL);
+    } catch (err) {
+      ultimoError = err;
+      console.warn(
+        `[renderPDF] Descarga de Chromium falló (intento ${intento}/${INTENTOS_DESCARGA}):`,
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
+  throw ultimoError;
+}
+
 // En Vercel (serverless) el bundle de chromium completo no entra ni
 // arranca. Usamos @sparticuz/chromium (binario optimizado para Lambda)
 // + puppeteer-core. En local seguimos usando el `puppeteer` con su
@@ -47,16 +96,9 @@ async function launchBrowser(): Promise<Browser> {
       import("@sparticuz/chromium"),
       import("puppeteer-core"),
     ]);
-    // El binario local /node_modules/@sparticuz/chromium/bin no se está
-    // copiando al bundle de Vercel pese a outputFileTracingIncludes.
-    // Workaround: pasar la URL del release de GitHub a executablePath()
-    // — descarga el .tar.br comprimido a /tmp/chromium en cold start
-    // (+~10s la primera vez) y lo reusa entre invocaciones tibias.
-    const CHROMIUM_URL =
-      "https://github.com/Sparticuz/chromium/releases/download/v147.0.0/chromium-v147.0.0-pack.x64.tar";
     return puppeteerCore.default.launch({
       args: chromium.args,
-      executablePath: await chromium.executablePath(CHROMIUM_URL),
+      executablePath: await resolverChromium(chromium),
       headless: true,
     }) as unknown as Promise<Browser>;
   }
